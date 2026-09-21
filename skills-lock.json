@@ -66,6 +66,19 @@
       "mode": {
         "cline": "canonical"
       }
+    },
+    "zustand": {
+      "source": "registry:bobmatnyc/zustand",
+      "commit_sha": "5784cf8e03fffe7495bbc1ea6e4cb92d0d0e46c1",
+      "digest": "sha256:a4423ad19260d9f363d33729b4d6440b4a292b5cd5154632871d9009018f98d0",
+      "agents": [
+        "opencode",
+        "cline"
+      ],
+      "mode": {
+        "opencode": "symlink",
+        "cline": "canonical"
+      }
     }
   }
 }

@@ -1,21 +1,67 @@
-import React, { useState } from 'react';
-import { Container, TextInput, PasswordInput, Button, Text, Group } from '@mantine/core';
-import { Link } from 'react-router-dom';
+import React, { useState } from "react";
+import {
+  Container,
+  TextInput,
+  PasswordInput,
+  Button,
+  Text,
+  Group,
+  Alert,
+} from "@mantine/core";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { auth } from "../../services/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Get the intended destination from the location state, fallback to dashboard
+  const from = location.state?.from?.pathname || "/manage";
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Login logic would go here
-    console.log('Login attempt with:', email, password);
+    setError(null);
+    setLoading(true);
+
+    try {
+      // Sign in with email and password using Firebase
+      await signInWithEmailAndPassword(auth, email, password);
+
+      // Redirect to the intended destination after successful login
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      console.error("Login error:", err);
+      if (err.code === "auth/user-not-found") {
+        setError("No account found with this email address.");
+      } else if (err.code === "auth/wrong-password") {
+        setError("Incorrect password.");
+      } else if (err.code === "auth/invalid-email") {
+        setError("Invalid email address format.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
-      <Text size="h2" align="center">Login to Custodia</Text>
-      
+    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+      <Text size="h2" align="center">
+        Login to Custodia
+      </Text>
+
+      {error && (
+        <Alert severity="error" mt="md">
+          {error}a
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit}>
         <TextInput
           label="Email"
@@ -25,7 +71,7 @@ const LoginPage: React.FC = () => {
           required
           mt="md"
         />
-        
+
         <PasswordInput
           label="Password"
           placeholder="••••••••"
@@ -34,12 +80,14 @@ const LoginPage: React.FC = () => {
           required
           mt="md"
         />
-        
+
         <Group position="center" mt="xl">
-          <Button type="submit">Login</Button>
+          <Button type="submit" loading={loading}>
+            Login
+          </Button>
         </Group>
       </form>
-      
+
       <Text align="center" mt="xl">
         Don't have an account? <Link to="/">Learn more</Link>
       </Text>
