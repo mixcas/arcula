@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "skills": {
+    "firebaseui-web-getting-started": {
+      "source": "registry:firebase/firebaseui-web-getting-started",
+      "commit_sha": "6febb8a88f0e4aee077ebddac7af9b754adc07da",
+      "digest": "sha256:7541e41de63401ec4b548d0cc811952503513064e8a5a18153ae901fb0bd41e2",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    },
+    "mantine-ui": {
+      "source": "registry:ericbsantana/mantine-ui",
+      "commit_sha": "c4470e8ecb9e1871499d227bb294a53abec4fdb7",
+      "digest": "sha256:51344e3eb62968b9abb8d5f036ea2b2a7eb63eb8d58be270eac60bd19a872ed4",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    },
+    "react-19": {
+      "source": "registry:fusengine/react-19",
+      "commit_sha": "6929ff655fb4e581be051fc2172af7be3cf30c6e",
+      "digest": "sha256:931f1e6aadf5d0cb9ada437431dc55c00f19ee0c87c4277820c7fc34718b237b",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    },
+    "react-testing": {
+      "source": "registry:fusengine/react-testing",
+      "commit_sha": "75ae7eefd56d55a5bf92489e57cc53012bedf1d0",
+      "digest": "sha256:b92c7b1f67031565054ed087bc0d88c54590b81df0f107b38b32ea8624255f80",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    },
+    "solid-react": {
+      "source": "registry:fusengine/solid-react",
+      "commit_sha": "87fab71f4d5ff78d78852f978d9a722c0d01260b",
+      "digest": "sha256:a4ab38f46db73991887d53933367b6a005a628f6ced9c51657ee030d708c1eae",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    },
+    "vite": {
+      "source": "registry:joshuashepherd/vite",
+      "commit_sha": "78d4659f0eb77d019e80c58ea5b2ab588ae38ef1",
+      "digest": "sha256:145de6c4e4e6c795cb71995219c36dd757be749fb870cb7f9ee9b053d0b2fc7a",
+      "agents": [
+        "cline"
+      ],
+      "mode": {
+        "cline": "canonical"
+      }
+    }
+  }
+}
