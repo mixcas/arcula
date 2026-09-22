@@ -7,6 +7,7 @@ import CollectionPage from "./components/manage/CollectionPage";
 import ArtworkAddPage from "./components/manage/ArtworkAddPage";
 import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
+import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
@@ -27,6 +28,14 @@ const App: React.FC = () => {
               <ManagePage />
             </ProtectedRoute>
           } 
+        />
+        <Route
+          path="/manage/collection/new"
+          element={
+            <ProtectedRoute>
+              <NewCollectionPage />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/manage/collection/:collectionId"
