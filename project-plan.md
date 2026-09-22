@@ -7,6 +7,7 @@ Custodia is an art collection management software that will allow users to manag
 ## Status Update
 
 We have implemented the core frontend structure, including:
+
 - Complete routing system
 - All major components (Login, Product Page, Management pages, Public Collection views)
 - Firebase service integration (Firestore, Authentication, Storage)
@@ -292,6 +293,12 @@ List view: Expanded list of all artworks
 `/manage`
 Main management page. Nothing much for now but the list of current collections
 
+`/manage/collection/new`
+Form page to create a new Collection:
+
+- Name
+- Public status
+
 `/manage/collection/${URLized collection name}-${collection ID}`
 Main management page for a collection. List/Mosaic view of Artworks in Collection, with Edit button. Button to add Artworks. Link to Collection Settings
 
@@ -307,4 +314,3 @@ Page to manage collection settings:
 - Edit collection title
 - Edit collection privacy settings (public/private)
   -- Private allow for a password protected collection: When this is enabled the public page for a collection would be password protected
-

@@ -89,6 +89,9 @@ const ManagePage: React.FC = () => {
       <Group position="apart" mb="xl">
         <Text size="h2">My Collections</Text>
         <Group>
+          <Button component={Link} to="/manage/collection/new" variant="outline">
+            Add Collection
+          </Button>
           <Menu shadow="md" width={200}>
             <Menu.Target>
               <Button variant="subtle">
