@@ -88,22 +88,6 @@ const ManagePage: React.FC = () => {
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
       <Group position="apart" mb="xl">
         <Text size="h2">My Collections</Text>
-        <Group>
-          <Button component={Link} to="/manage/collection/new" variant="outline">
-            Add Collection
-          </Button>
-          <Menu shadow="md" width={200}>
-            <Menu.Target>
-              <Button variant="subtle">
-                <Avatar size="sm" radius="xl" />
-                {currentUser?.email || "User"}
-              </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item onClick={handleLogout}>Logout</Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        </Group>
       </Group>
 
       {collections.length === 0 ? (

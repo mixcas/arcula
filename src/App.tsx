@@ -8,6 +8,7 @@ import ArtworkAddPage from "./components/manage/ArtworkAddPage";
 import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
+import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
@@ -25,7 +26,9 @@ const App: React.FC = () => {
           path="/manage" 
           element={
             <ProtectedRoute>
-              <ManagePage />
+              <ManageLayout>
+                <ManagePage />
+              </ManageLayout>
             </ProtectedRoute>
           } 
         />
@@ -33,7 +36,9 @@ const App: React.FC = () => {
           path="/manage/collection/new"
           element={
             <ProtectedRoute>
-              <NewCollectionPage />
+              <ManageLayout>
+                <NewCollectionPage />
+              </ManageLayout>
             </ProtectedRoute>
           }
         />
@@ -41,7 +46,9 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId"
           element={
             <ProtectedRoute>
-              <CollectionPage />
+              <ManageLayout>
+                <CollectionPage />
+              </ManageLayout>
             </ProtectedRoute>
           }
         />
@@ -49,7 +56,9 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId/artwork/add"
           element={
             <ProtectedRoute>
-              <ArtworkAddPage />
+              <ManageLayout>
+                <ArtworkAddPage />
+              </ManageLayout>
             </ProtectedRoute>
           }
         />
@@ -57,7 +66,9 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId/artwork/:artworkId"
           element={
             <ProtectedRoute>
-              <ArtworkEditPage />
+              <ManageLayout>
+                <ArtworkEditPage />
+              </ManageLayout>
             </ProtectedRoute>
           }
         />
@@ -65,7 +76,9 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId/settings"
           element={
             <ProtectedRoute>
-              <CollectionSettingsPage />
+              <ManageLayout>
+                <CollectionSettingsPage />
+              </ManageLayout>
             </ProtectedRoute>
           }
         />
