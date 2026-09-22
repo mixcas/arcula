@@ -1,5 +1,5 @@
 import React from 'react';
-import { Group, Button, Menu, Avatar } from '@mantine/core';
+import { Group, Button, Menu, Avatar, Text } from '@mantine/core';
 import { useAuth } from '../../../context/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../../services/firebase';
@@ -19,7 +19,8 @@ const ManageNavBar: React.FC = () => {
   };
 
   return (
-    <Group h="100%" px="md">
+    <Group h="100%" px="md" justify='space-between'>
+      <Text size='lg'>Custodia</Text>
       <Menu shadow="md" width={200}>
         <Menu.Target>
           <Button variant="subtle">

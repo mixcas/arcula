@@ -2,6 +2,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc, 
   doc, 
   updateDoc, 
   deleteDoc,
@@ -50,7 +51,7 @@ export const collectionService = {
   async getCollection(collectionId: string): Promise<Collection | null> {
     try {
       const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
-      const docSnap = await getDocs(docRef);
+      const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
         return {
