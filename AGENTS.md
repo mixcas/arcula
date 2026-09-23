@@ -4,9 +4,9 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 
 ## Key Commands
 
-- `npm run dev` - Start development server (port 3000)
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
+- `bun run dev` - Start development server (port 3000)
+- `bun run build` - Build for production
+- `bun run preview` - Preview production build
 
 ## Project Structure
 

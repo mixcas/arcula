@@ -60,9 +60,7 @@ cd custodia
 
 2. Install dependencies:
 ```bash
-npm install
-# or
-yarn install
+bun install
 ```
 
 3. Create a `.env` file in the root directory with your Firebase configuration:
@@ -77,9 +75,7 @@ VITE_FIREBASE_APP_ID=your_app_id
 
 4. Start the development server:
 ```bash
-npm run dev
-# or
-yarn dev
+bun run dev
 ```
 
 ## Firebase Setup
@@ -93,10 +89,9 @@ This application uses Firebase for authentication and data storage. You'll need 
 
 ## Available Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run code linting
+- `bun run dev` - Start development server
+- `bun run build` - Build for production
+- `bun run preview` - Preview production build
 
 ## Folder Structure Explanation
 
