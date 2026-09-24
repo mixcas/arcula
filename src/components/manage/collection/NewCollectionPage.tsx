@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Container,
   Text,
   Button,
   Group,
@@ -81,7 +80,7 @@ const NewCollectionPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Group position="apart" mb="xl">
         <Text size="h2">Create New Collection</Text>
         <Button variant="subtle" onClick={handleLogout}>
@@ -125,7 +124,7 @@ const NewCollectionPage: React.FC = () => {
           </Button>
         </Group>
       </form>
-    </Container>
+    </>
   );
 };
 

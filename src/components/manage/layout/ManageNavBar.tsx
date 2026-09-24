@@ -4,6 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../../services/firebase';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 const ManageNavBar: React.FC = () => {
   const { currentUser } = useAuth();
@@ -20,7 +21,9 @@ const ManageNavBar: React.FC = () => {
 
   return (
     <Group h="100%" px="md" justify='space-between'>
-      <Text size='lg'>Custodia</Text>
+      <Link to="/manage">
+        <Text size='lg'>Custodia</Text>
+      </Link>
       <Menu shadow="md" width={200}>
         <Menu.Target>
           <Button variant="subtle">

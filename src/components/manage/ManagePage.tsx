@@ -1,23 +1,12 @@
 import React, { useState, useEffect } from "react";
-import {
-  Container,
-  Text,
-  Button,
-  Group,
-  Card,
-  Menu,
-  Avatar,
-  Loader,
-} from "@mantine/core";
-import { Link, useNavigate } from "react-router-dom";
+import { Text, Button, Group, Card, Loader } from "@mantine/core";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { signOut, getAuth } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
 
 const ManagePage: React.FC = () => {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const [collections, setCollections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,44 +37,24 @@ const ManagePage: React.FC = () => {
     fetchCollections();
   }, [currentUser.uid]);
 
-  const handleLogout = async () => {
-    try {
-      const auth = getAuth();
-      await signOut(auth);
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
-  };
-
   if (loading) {
     return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Group position="center">
-          <Loader />
-        </Group>
-      </Container>
+      <Group position="center">
+        <Loader />
+      </Group>
     );
   }
 
   if (error) {
     return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Text color="red" align="center">
-          {error}
-        </Text>
-      </Container>
+      <Text color="red" align="center">
+        {error}
+      </Text>
     );
   }
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Group position="apart" mb="xl">
         <Text size="h2">My Collections</Text>
       </Group>
@@ -111,7 +80,7 @@ const ManagePage: React.FC = () => {
           ))}
         </div>
       )}
-    </Container>
+    </>
   );
 };
 
