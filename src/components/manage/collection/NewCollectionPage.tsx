@@ -81,7 +81,7 @@ const NewCollectionPage: React.FC = () => {
 
   return (
     <>
-      <Group position="apart" mb="xl">
+      <Group mb="xl">
         <Text size="h2">Create New Collection</Text>
         <Button variant="subtle" onClick={handleLogout}>
           Logout
@@ -118,7 +118,7 @@ const NewCollectionPage: React.FC = () => {
           mb="md"
         />
 
-        <Group position="right" mt="md">
+        <Group mt="md">
           <Button type="submit" disabled={loading}>
             {loading ? <Loader size="sm" /> : "Create Collection"}
           </Button>

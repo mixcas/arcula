@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { Container, Text, Button, Group, Card, Avatar } from "@mantine/core";
+import {
+  Container,
+  Text,
+  Button,
+  Group,
+  Card,
+  Avatar,
+  PasswordInput,
+} from "@mantine/core";
 import { Carousel } from "@mantine/carousel";
 
 import { Link, useParams } from "react-router-dom";
@@ -49,7 +57,7 @@ const PublicCollectionPage: React.FC = () => {
 
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
-      <Group position="apart" mb="xl">
+      <Group mb="xl">
         <Text size="h2">{collection.name}</Text>
         <Group>
           <Button
@@ -66,10 +74,8 @@ const PublicCollectionPage: React.FC = () => {
       {/* Password prompt modal */}
       {showPasswordPrompt && (
         <Card shadow="sm" p="lg" mb="md">
-          <Text size="h3" align="center">
-            Password Protected Collection
-          </Text>
-          <Text align="center" mb="md">
+          <Text size="h3">Password Protected Collection</Text>
+          <Text mb="md">
             Please enter the password to access this collection.
           </Text>
 
@@ -82,7 +88,7 @@ const PublicCollectionPage: React.FC = () => {
               mb="md"
             />
 
-            <Group position="center">
+            <Group>
               <Button type="submit">Unlock Collection</Button>
               <Button
                 variant="outline"
@@ -97,17 +103,17 @@ const PublicCollectionPage: React.FC = () => {
 
       {/* Collection content */}
       {collection.isPrivate ? (
-        <Text align="center">This collection is private.</Text>
+        <Text>This collection is private.</Text>
       ) : collection.passwordProtected && showPasswordPrompt ? (
         /* Password prompt already shown above */
-        <Text align="center">Enter the password to view this collection.</Text>
+        <Text>Enter the password to view this collection.</Text>
       ) : (
         <>
           {viewMode === "list" ? (
             <div>
               {artworks.map((artwork) => (
                 <Card key={artwork.id} shadow="sm" p="lg" mb="md">
-                  <Group position="apart" mb="md">
+                  <Group mb="md">
                     <div>
                       <Text size="h3">{artwork.title}</Text>
                       <Text>{artwork.artistName}</Text>
@@ -139,7 +145,7 @@ const PublicCollectionPage: React.FC = () => {
               ))}
             </div>
           ) : (
-            <Group position="center">
+            <Group>
               {artworks.map((artwork) => (
                 <Card
                   key={artwork.id}
@@ -158,12 +164,8 @@ const PublicCollectionPage: React.FC = () => {
                     radius="xl"
                     mb="md"
                   />
-                  <Text size="sm" align="center">
-                    {artwork.title}
-                  </Text>
-                  <Text size="xs" align="center">
-                    {artwork.artistName}
-                  </Text>
+                  <Text size="sm">{artwork.title}</Text>
+                  <Text size="xs">{artwork.artistName}</Text>
                 </Card>
               ))}
             </Group>
@@ -172,7 +174,7 @@ const PublicCollectionPage: React.FC = () => {
       )}
 
       {!collection.isPrivate && !collection.passwordProtected && (
-        <Group position="center" mt="xl">
+        <Group mt="xl">
           <Button component={Link} to="/login" variant="outline">
             Login to manage this collection
           </Button>

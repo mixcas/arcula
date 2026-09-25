@@ -204,7 +204,7 @@ const ArtworkAddPage: React.FC = () => {
             mb="md"
           />
 
-          <Group position="center" mt="xl">
+          <Group mt="xl">
             <Button type="submit">Save Artwork</Button>
             <Button
               component={Link}

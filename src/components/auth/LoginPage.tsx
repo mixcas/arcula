@@ -52,15 +52,9 @@ const LoginPage: React.FC = () => {
 
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
-      <Text size="h2" align="center">
-        Login to Custodia
-      </Text>
+      <Text size="h2">Login to Custodia</Text>
 
-      {error && (
-        <Alert severity="error" mt="md">
-          {error}a
-        </Alert>
-      )}
+      {error && <Alert mt="md">{error}a</Alert>}
 
       <form onSubmit={handleSubmit}>
         <TextInput
@@ -81,14 +75,14 @@ const LoginPage: React.FC = () => {
           mt="md"
         />
 
-        <Group position="center" mt="xl">
+        <Group mt="xl">
           <Button type="submit" loading={loading}>
             Login
           </Button>
         </Group>
       </form>
 
-      <Text align="center" mt="xl">
+      <Text mt="xl">
         Don't have an account? <Link to="/">Learn more</Link>
       </Text>
     </Container>

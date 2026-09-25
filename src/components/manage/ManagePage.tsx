@@ -55,19 +55,17 @@ const ManagePage: React.FC = () => {
 
   return (
     <>
-      <Group position="apart" mb="xl">
+      <Group mb="xl">
         <Text size="h2">My Collections</Text>
       </Group>
 
       {collections.length === 0 ? (
-        <Text align="center">
-          No collections yet. Create your first collection!
-        </Text>
+        <Text>No collections yet. Create your first collection!</Text>
       ) : (
         <div>
           {collections.map((collection) => (
             <Card key={collection.id} shadow="sm" p="lg" mb="md">
-              <Group position="apart">
+              <Group>
                 <Text size="h3">{collection.name}</Text>
                 <Button
                   component={Link}
