@@ -12,9 +12,9 @@ Custodia is a web application for managing art collections. It provides users wi
 
 ## Tech Stack
 
-- **Frontend**: React 18 with TypeScript
-- **UI Framework**: Mantine UI Components
-- **Routing**: React Router v6
+- **Frontend**: React 19 with TypeScript
+- **UI Framework**: Mantine UI Components (v9)
+- **Routing**: React Router v7
 - **State Management**: React Hooks and Context API
 - **Authentication**: Firebase Authentication
 - **Database**: Firestore
@@ -47,8 +47,7 @@ src/
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
-- npm or yarn
+- [Bun](https://bun.sh)
 
 ### Installation
 
