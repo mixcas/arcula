@@ -23,11 +23,13 @@ export interface Artwork {
   serie: string;
   artistName: string;
   dateOfCreation: string;
-  medium: string;
+  media: string;
   dimensions: string;
+  editions?: string;
   acquisitionDate: string;
   acquisitionPrice: number;
   placeOfOrigin: string;
+  provenance?: string;
   certificates: FileReference[]; // Array of file references
   notes: string;
   condition: string;

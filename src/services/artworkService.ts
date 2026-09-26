@@ -1,26 +1,30 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  getDoc,
+  getDocs,
+  doc,
+  updateDoc,
   deleteDoc,
   query,
-  where
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { Artwork } from '../types';
+  where,
+} from "firebase/firestore";
+import { db } from "./firebase";
+import { Artwork } from "../types";
 
-const ARTWORKS_COLLECTION = 'artworks';
+const ARTWORKS_COLLECTION = "artworks";
 
 export const artworkService = {
   // Create a new artwork
-  async createArtwork(artworkData: Omit<Artwork, 'id'>): Promise<string> {
+  async createArtwork(artworkData: Omit<Artwork, "id">): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, ARTWORKS_COLLECTION), artworkData);
+      const docRef = await addDoc(
+        collection(db, ARTWORKS_COLLECTION),
+        artworkData,
+      );
       return docRef.id;
     } catch (error) {
-      console.error('Error creating artwork:', error);
+      console.error("Error creating artwork:", error);
       throw error;
     }
   },
@@ -30,16 +34,16 @@ export const artworkService = {
     try {
       const q = query(
         collection(db, ARTWORKS_COLLECTION),
-        where("collectionId", "==", collectionId)
+        where("collectionId", "==", collectionId),
       );
-      
+
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
+      return querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       })) as Artwork[];
     } catch (error) {
-      console.error('Error fetching collection artworks:', error);
+      console.error("Error fetching collection artworks:", error);
       throw error;
     }
   },
@@ -48,29 +52,32 @@ export const artworkService = {
   async getArtwork(artworkId: string): Promise<Artwork | null> {
     try {
       const docRef = doc(db, ARTWORKS_COLLECTION, artworkId);
-      const docSnap = await getDocs(docRef);
-      
+      const docSnap = await getDoc(docRef);
+
       if (docSnap.exists()) {
         return {
           id: docSnap.id,
-          ...docSnap.data()
+          ...docSnap.data(),
         } as Artwork;
       }
-      
+
       return null;
     } catch (error) {
-      console.error('Error fetching artwork:', error);
+      console.error("Error fetching artwork:", error);
       throw error;
     }
   },
 
   // Update an artwork
-  async updateArtwork(artworkId: string, updateData: Partial<Artwork>): Promise<void> {
+  async updateArtwork(
+    artworkId: string,
+    updateData: Partial<Artwork>,
+  ): Promise<void> {
     try {
       const docRef = doc(db, ARTWORKS_COLLECTION, artworkId);
       await updateDoc(docRef, updateData);
     } catch (error) {
-      console.error('Error updating artwork:', error);
+      console.error("Error updating artwork:", error);
       throw error;
     }
   },
@@ -81,8 +88,8 @@ export const artworkService = {
       const docRef = doc(db, ARTWORKS_COLLECTION, artworkId);
       await deleteDoc(docRef);
     } catch (error) {
-      console.error('Error deleting artwork:', error);
+      console.error("Error deleting artwork:", error);
       throw error;
     }
-  }
+  },
 };

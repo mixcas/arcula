@@ -25,11 +25,13 @@ const ArtworkEditPage: React.FC = () => {
     serie: "Night Skies",
     artistName: "Vincent van Gogh",
     dateOfCreation: "1889",
-    medium: "Oil on canvas",
+    media: "Oil on canvas",
     dimensions: "73.7 x 92.1 cm",
+    editions: "",
     acquisitionDate: "2023-05-15",
     acquisitionPrice: "50000",
     placeOfOrigin: "France",
+    provenance: "",
     notes: "This is a famous painting by Van Gogh.",
     condition: "Excellent",
     currentValue: "75000",
@@ -107,10 +109,10 @@ const ArtworkEditPage: React.FC = () => {
           />
 
           <TextInput
-            label="Medium"
-            placeholder="Painting, Sculpture, etc."
-            value={artworkData.medium}
-            onChange={(e) => handleChange("medium", e.target.value)}
+            label="Media"
+            placeholder="e.g. Oil on canvas, Bronze, Mixed media"
+            value={artworkData.media}
+            onChange={(e) => handleChange("media", e.target.value)}
             mb="md"
           />
 
@@ -119,6 +121,14 @@ const ArtworkEditPage: React.FC = () => {
             placeholder="e.g. 100x80 cm"
             value={artworkData.dimensions}
             onChange={(e) => handleChange("dimensions", e.target.value)}
+            mb="md"
+          />
+
+          <TextInput
+            label="Editions"
+            placeholder="e.g. 3/10, Open edition"
+            value={artworkData.editions}
+            onChange={(e) => handleChange("editions", e.target.value)}
             mb="md"
           />
 
@@ -155,6 +165,14 @@ const ArtworkEditPage: React.FC = () => {
             placeholder="City, Country"
             value={artworkData.placeOfOrigin}
             onChange={(e) => handleChange("placeOfOrigin", e.target.value)}
+            mb="md"
+          />
+
+          <TextInput
+            label="Provenance"
+            placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
+            value={artworkData.provenance}
+            onChange={(e) => handleChange("provenance", e.target.value)}
             mb="md"
           />
 

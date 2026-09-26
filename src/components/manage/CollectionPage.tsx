@@ -117,6 +117,8 @@ const CollectionPage: React.FC = () => {
                   <Text size="h3">{artwork.title}</Text>
                   <Text>{artwork.artistName}</Text>
                   <Text>{artwork.dateOfCreation}</Text>
+                  {artwork.editions ? <Text>Editions: {artwork.editions}</Text> : null}
+                  {artwork.provenance ? <Text>Provenance: {artwork.provenance}</Text> : null}
                 </div>
                 <Button
                   component={Link}

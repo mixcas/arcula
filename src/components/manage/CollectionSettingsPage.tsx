@@ -1,43 +1,113 @@
-import React, { useState } from 'react';
-import { 
-  Container, 
-  Text, 
-  TextInput, 
-  Switch, 
-  PasswordInput, 
-  Button, 
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Text,
+  TextInput,
+  Switch,
+  PasswordInput,
+  Button,
   Group,
   Card,
-  Divider
+  Divider,
+  Alert,
+  Loader
 } from '@mantine/core';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { collectionService } from '../../services/collectionService';
 
 const CollectionSettingsPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
-  
-  const [collectionName, setCollectionName] = useState('My First Collection');
+  const navigate = useNavigate();
+
+  const [collectionName, setCollectionName] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // The actual Firestore document id. The route param can be formatted as
+  // "{urlized-name}-{id}", so we capture the real id from the fetch and use
+  // it (rather than the raw param) when updating the document.
+  const [docId, setDocId] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!collectionId) {
+      setError('Invalid collection id');
+      setLoading(false);
+      return;
+    }
+
+    const fetchCollection = async () => {
+      try {
+        const collectionData = await collectionService.getCollection(collectionId);
+        if (!collectionData) {
+          setError('Collection not found');
+        } else {
+          setCollectionName(collectionData.name ?? '');
+          setIsPublic(Boolean(collectionData.isPublic));
+          setDocId(collectionData.id);
+        }
+      } catch (err) {
+        console.error('Error fetching collection:', err);
+        setError('Failed to load collection settings. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCollection();
+  }, [collectionId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Form submission logic would go here
-    console.log('Settings saved:', { collectionName, isPublic, requirePassword, password });
+
+    // Fall back to the raw route param if we never captured the real id.
+    const targetId = docId ?? collectionId;
+    if (!targetId) {
+      setError('Invalid collection id');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await collectionService.updateCollection(targetId, {
+        name: collectionName.trim(),
+        isPublic,
+      });
+      navigate(`/manage/collection/${collectionId}`);
+    } catch (err) {
+      console.error('Error updating collection:', err);
+      setError('Failed to save settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleTogglePublic = () => {
-    setIsPublic(!isPublic);
-  };
+  if (loading) {
+    return (
+       <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+         <Loader />
+       </Container>
+      );
+   }
 
-  const handleTogglePassword = () => {
-    setRequirePassword(!requirePassword);
-  };
+  if (error) {
+    return (
+       <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+         <Alert color="red">{error}</Alert>
+       </Container>
+      );
+   }
 
   return (
-    <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+     <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
       <Text size="h2" mb="xl">Collection Settings</Text>
-      
+
       <Card shadow="sm" p="lg">
         <form onSubmit={handleSubmit}>
           <TextInput
@@ -48,31 +118,31 @@ const CollectionSettingsPage: React.FC = () => {
             required
             mb="md"
           />
-          
+
           <Divider mt="md" mb="md" />
-          
+
           <Text size="h3" mb="md">Privacy Settings</Text>
-          
-          <Group position="apart" mb="md">
+
+          <Group justify="space-between" mb="md">
             <Text>Make Collection Public</Text>
-            <Switch 
-              checked={isPublic} 
-              onChange={handleTogglePublic}
+            <Switch
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
               label="Visible to everyone"
             />
           </Group>
-          
+
           {isPublic && (
-            <Group position="apart" mb="md">
+            <Group justify="space-between" mb="md">
               <Text>Require Password for Access</Text>
-              <Switch 
-                checked={requirePassword} 
-                onChange={handleTogglePassword}
+              <Switch
+                checked={requirePassword}
+                onChange={(e) => setRequirePassword(e.target.checked)}
                 label="Password protected"
               />
             </Group>
           )}
-          
+
           {requirePassword && (
             <PasswordInput
               label="Password"
@@ -82,9 +152,11 @@ const CollectionSettingsPage: React.FC = () => {
               mb="md"
             />
           )}
-          
-          <Group position="center" mt="xl">
-            <Button type="submit">Save Settings</Button>
+
+          <Group justify="center" mt="xl">
+            <Button type="submit" loading={saving}>
+              Save Settings
+            </Button>
             <Button component={Link} to={`/manage/collection/${collectionId}`} variant="outline">
               Cancel
             </Button>
@@ -92,7 +164,7 @@ const CollectionSettingsPage: React.FC = () => {
         </form>
       </Card>
     </Container>
-  );
+   );
 };
 
 export default CollectionSettingsPage;

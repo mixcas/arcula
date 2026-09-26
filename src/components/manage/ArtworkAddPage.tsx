@@ -21,11 +21,13 @@ const ArtworkAddPage: React.FC = () => {
     serie: "",
     artistName: "",
     dateOfCreation: "",
-    medium: "",
+    media: "",
     dimensions: "",
+    editions: "",
     acquisitionDate: "",
     acquisitionPrice: "",
     placeOfOrigin: "",
+    provenance: "",
     notes: "",
     condition: "",
     currentValue: "",
@@ -103,10 +105,10 @@ const ArtworkAddPage: React.FC = () => {
           />
 
           <TextInput
-            label="Medium"
-            placeholder="Painting, Sculpture, etc."
-            value={formData.medium}
-            onChange={(e) => handleChange("medium", e.target.value)}
+            label="Media"
+            placeholder="e.g. Oil on canvas, Bronze, Mixed media"
+            value={formData.media}
+            onChange={(e) => handleChange("media", e.target.value)}
             mb="md"
           />
 
@@ -115,6 +117,14 @@ const ArtworkAddPage: React.FC = () => {
             placeholder="e.g. 100x80 cm"
             value={formData.dimensions}
             onChange={(e) => handleChange("dimensions", e.target.value)}
+            mb="md"
+          />
+
+          <TextInput
+            label="Editions"
+            placeholder="e.g. 3/10, Open edition"
+            value={formData.editions}
+            onChange={(e) => handleChange("editions", e.target.value)}
             mb="md"
           />
 
@@ -151,6 +161,14 @@ const ArtworkAddPage: React.FC = () => {
             placeholder="City, Country"
             value={formData.placeOfOrigin}
             onChange={(e) => handleChange("placeOfOrigin", e.target.value)}
+            mb="md"
+          />
+
+          <TextInput
+            label="Provenance"
+            placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
+            value={formData.provenance}
+            onChange={(e) => handleChange("provenance", e.target.value)}
             mb="md"
           />
 
