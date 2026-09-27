@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Match the project's formatter (Prettier, default config) after write/edit/patch.
+  // `true` enables every built-in, but OpenCode only runs a formatter whose
+  // requirements are met — for this JS/TS project that's Prettier, which reads
+  // the same `prettier` dependency + default settings as `bun run format`.
+  "formatter": true,
+}
