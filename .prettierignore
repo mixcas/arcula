@@ -1,0 +1,25 @@
+# Generated / dependency / build artifacts.
+# Prettier honors .gitignore (so these are usually skipped already), but we list
+# them explicitly so formatting is safe and self-contained even when a file is
+# passed directly — e.g. OpenCode's built-in Prettier formatter targets an
+# explicit path rather than a directory walk.
+node_modules
+dist
+build
+coverage
+.pnp
+
+# Lockfiles are generated and should never be (re)formatted.
+# `bun.lock` is present locally but NOT git-ignored, and Prettier has no parser
+# for it, so an explicit `prettier bun.lock` would error.
+bun.lock
+
+# Vendored / locked skill assets. `.agents/skills/**` is tracked and pinned by
+# `skills-lock.json` digests (registry content); reformatting it just drifts from
+# upstream, so keep it out of Prettier.
+.agents/
+
+# Env / secrets. Not a Prettier extension today, but keep them out of any
+# formatter (e.g. OpenCode) as a guard against a future workflow touching them.
+.env
+.env.*
