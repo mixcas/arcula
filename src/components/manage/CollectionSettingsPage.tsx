@@ -15,9 +15,12 @@ import {
 } from "@mantine/core";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { collectionService } from "../../services/collectionService";
+import { collectionSlug, parseId } from "../../utils/slug";
 
 const CollectionSettingsPage: React.FC = () => {
-  const { collectionId } = useParams<{ collectionId: string }>();
+  const { collectionId: param } = useParams<{ collectionId: string }>();
+  // Routes carry "{slug}-{id}" but Firestore needs the id alone.
+  const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
 
   const [collectionName, setCollectionName] = useState("");
@@ -25,10 +28,11 @@ const CollectionSettingsPage: React.FC = () => {
   const [requirePassword, setRequirePassword] = useState(false);
   const [password, setPassword] = useState("");
 
-  // The actual Firestore document id. The route param can be formatted as
-  // "{urlized-name}-{id}", so we capture the real id from the fetch and use
-  // it (rather than the raw param) when updating the document.
-  const [docId, setDocId] = useState<string | null>(null);
+  // The name as loaded, kept apart from `collectionName` above — that one is
+  // the editable buffer, and rewriting the URL from it would fire on every
+  // keystroke. Null until the fetch succeeds, which is also what stops the
+  // canonicalization below for a collection that could not be loaded.
+  const [loadedName, setLoadedName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,8 +51,8 @@ const CollectionSettingsPage: React.FC = () => {
           setError("Collection not found");
         } else {
           setCollectionName(collectionData.name ?? "");
+          setLoadedName(collectionData.name ?? "");
           setIsPublic(Boolean(collectionData.isPublic));
-          setDocId(collectionData.id);
         }
       } catch (err) {
         console.error("Error fetching collection:", err);
@@ -61,12 +65,26 @@ const CollectionSettingsPage: React.FC = () => {
     void fetchCollection();
   }, [collectionId]);
 
+  // Put the canonical "{slug}-{id}" in the address bar once the name is known,
+  // keeping this page's own /settings suffix. `replace` swaps the current
+  // history entry rather than adding one.
+  useEffect(() => {
+    if (!param || loadedName === null) {
+      return;
+    }
+    const canonical = collectionSlug(loadedName, collectionId);
+    if (canonical === param) {
+      return;
+    }
+    void navigate(`/manage/collection/${canonical}/settings`, {
+      replace: true,
+    });
+  }, [param, loadedName, collectionId, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Fall back to the raw route param if we never captured the real id.
-    const targetId = docId ?? collectionId;
-    if (!targetId) {
+    if (!collectionId) {
       setError("Invalid collection id");
       return;
     }
@@ -75,11 +93,14 @@ const CollectionSettingsPage: React.FC = () => {
     setError(null);
 
     try {
-      await collectionService.updateCollection(targetId, {
-        name: collectionName.trim(),
+      const name = collectionName.trim();
+      await collectionService.updateCollection(collectionId, {
+        name,
         isPublic,
       });
-      void navigate(`/manage/collection/${collectionId}`);
+      // Build the slug from the name just saved, so the URL reflects the rename
+      // rather than carrying the old one.
+      void navigate(`/manage/collection/${collectionSlug(name, collectionId)}`);
     } catch (err) {
       console.error("Error updating collection:", err);
       setError("Failed to save settings. Please try again.");
@@ -187,7 +208,7 @@ const CollectionSettingsPage: React.FC = () => {
             </Button>
             <Button
               component={Link}
-              to={`/manage/collection/${collectionId}`}
+              to={`/manage/collection/${param}`}
               variant="outline"
             >
               Cancel

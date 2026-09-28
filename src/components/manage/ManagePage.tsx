@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { collectionSlug } from "@/utils/slug";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import type { Collection } from "@/types";
@@ -78,7 +79,7 @@ const ManagePage: React.FC = () => {
                 <Text size="h3">{collection.name}</Text>
                 <Button
                   component={Link}
-                  to={`/manage/collection/${collection.id}`}
+                  to={`/manage/collection/${collectionSlug(collection.name, collection.id)}`}
                 >
                   View
                 </Button>

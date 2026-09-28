@@ -55,7 +55,7 @@ const LoginPage: React.FC = () => {
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
       <Text size="h2">Login to Custodia</Text>
 
-      {error && <Alert mt="md">{error}a</Alert>}
+      {error && <Alert mt="md">{error}</Alert>}
 
       <form onSubmit={handleSubmit}>
         <TextInput

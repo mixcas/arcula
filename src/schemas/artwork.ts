@@ -167,8 +167,9 @@ export const toNewArtwork = (
   // overriding the ownership fields below.
   title: payload.title ?? "",
   artistName: payload.artistName ?? "",
-  // Stored in the "{urlized-name}-{docId}" form defined in FULLSPEC §10.
-  // Read paths must query artworks by this same composite value.
+  // The bare Firestore document id, never the "{slug}-{id}" route param from
+  // FULLSPEC §10. A slug is cosmetic and changes when the collection is
+  // renamed, so storing one would orphan the artwork on the next rename.
   collectionId,
   userId,
   // TODO: upload to Firebase Storage per FULLSPEC §8 and store the resulting

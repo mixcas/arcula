@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { collectionSlug } from "@/utils/slug";
 import { collectionService } from "@/services/collectionService";
 import { signOut, getAuth } from "firebase/auth";
 
@@ -47,15 +48,8 @@ const NewCollectionPage: React.FC = () => {
         userId: currentUser.uid,
       });
 
-      // Generate URLized name for redirect
-      const urlizedName = name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
-
       // Redirect to the newly created collection page
-      void navigate(`/manage/collection/${urlizedName}-${newId}`);
+      void navigate(`/manage/collection/${collectionSlug(name, newId)}`);
       setSuccess(true);
     } catch (err) {
       console.error("Error creating collection:", err);

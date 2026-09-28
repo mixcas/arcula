@@ -24,9 +24,13 @@ import {
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@/schemas/artwork";
+import { artworkSlug, parseId } from "@/utils/slug";
 
 const ArtworkAddPage: React.FC = () => {
-  const { collectionId } = useParams<{ collectionId: string }>();
+  const { collectionId: param } = useParams<{ collectionId: string }>();
+  // The route carries "{slug}-{id}"; the artwork must store the bare id, or the
+  // dashboard — which looks collections up by id — would not find it.
+  const collectionId = parseId(param ?? "");
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -87,11 +91,16 @@ const ArtworkAddPage: React.FC = () => {
             setError(null);
 
             try {
-              const newId = await artworkService.createArtwork(
-                toNewArtwork(payload, collectionId, currentUser.uid),
+              const artwork = toNewArtwork(
+                payload,
+                collectionId,
+                currentUser.uid,
               );
+              const newId = await artworkService.createArtwork(artwork);
+              // Slugged from the document that was just written rather than
+              // from the form, so the URL can never disagree with Firestore.
               void navigate(
-                `/manage/collection/${collectionId}/artwork/${newId}`,
+                `/manage/collection/${param}/artwork/${artworkSlug(artwork.title, newId)}`,
               );
             } catch (err) {
               console.error("Error creating artwork:", err);
@@ -250,7 +259,7 @@ const ArtworkAddPage: React.FC = () => {
             </Button>
             <Button
               component={Link}
-              to={`/manage/collection/${collectionId}`}
+              to={`/manage/collection/${param}`}
               variant="outline"
             >
               Cancel

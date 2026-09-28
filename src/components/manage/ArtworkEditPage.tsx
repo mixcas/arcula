@@ -24,12 +24,17 @@ import {
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@/schemas/artwork";
+import { artworkSlug, parseId } from "@/utils/slug";
 
 const ArtworkEditPage: React.FC = () => {
-  const { collectionId, artworkId } = useParams<{
+  const { collectionId: collectionParam, artworkId: artworkParam } = useParams<{
     collectionId: string;
     artworkId: string;
   }>();
+  // Either segment may be a bare id or a "{slug}-{id}" param. Firestore needs
+  // the artwork id alone; `collectionParam` stays a passthrough because nothing
+  // on this page looks a collection up by id.
+  const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
@@ -49,6 +54,12 @@ const ArtworkEditPage: React.FC = () => {
   // react-hooks/refs rejects reading a ref there.
   const [loadedValues, setLoadedValues] =
     useState<ArtworkFormValues>(EMPTY_ARTWORK_FORM);
+
+  // The title as loaded, kept apart from the form's own `title` field — that is
+  // the editable buffer, and rewriting the URL from it would fire on every
+  // keystroke. Null until the fetch succeeds, which is also what stops an
+  // artwork that failed to load from being rewritten to a guessed slug.
+  const [loadedTitle, setLoadedTitle] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   // Kept separate from `error`: a load failure means there is nothing to edit,
@@ -76,6 +87,7 @@ const ArtworkEditPage: React.FC = () => {
 
         const values = fromArtwork(artwork);
         setLoadedValues(values);
+        setLoadedTitle(values.title);
         // In uncontrolled mode this bumps the form key, which is what remounts
         // the inputs with the loaded values as their new defaults.
         initialize(values);
@@ -89,6 +101,26 @@ const ArtworkEditPage: React.FC = () => {
 
     void fetchArtwork();
   }, [artworkId, initialize]);
+
+  // Put the canonical "{title}-{id}" in the address bar once the title is
+  // known, preserving the collection segment exactly as it arrived — this page
+  // never loads the collection, so it has no name to re-slug it from.
+  // `replace` swaps the current history entry rather than adding one.
+  useEffect(() => {
+    if (!artworkParam || loadedTitle === null) {
+      return;
+    }
+    const canonical = artworkSlug(loadedTitle, artworkId);
+    if (canonical === artworkParam) {
+      return;
+    }
+    void navigate(
+      `/manage/collection/${collectionParam}/artwork/${canonical}`,
+      {
+        replace: true,
+      },
+    );
+  }, [artworkParam, collectionParam, artworkId, loadedTitle, navigate]);
 
   if (!artworkId) {
     return (
@@ -141,7 +173,7 @@ const ArtworkEditPage: React.FC = () => {
                 artworkId,
                 toArtworkUpdate(loadedValues, payload),
               );
-              void navigate(`/manage/collection/${collectionId}`);
+              void navigate(`/manage/collection/${collectionParam}`);
             } catch (err) {
               console.error("Error updating artwork:", err);
               setError("Failed to save artwork. Please try again.");
@@ -299,7 +331,7 @@ const ArtworkEditPage: React.FC = () => {
             </Button>
             <Button
               component={Link}
-              to={`/manage/collection/${collectionId}`}
+              to={`/manage/collection/${collectionParam}`}
               variant="outline"
             >
               Cancel
