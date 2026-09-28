@@ -1,11 +1,23 @@
-# Custodia
+# Arcula
 
 Collection management for people who actually own the work.
 
-Custodia is a web app for cataloguing a private art collection: your collections, the
+Arcula is a web app for cataloguing a private art collection: your collections, the
 artworks in them, and the details that make each one worth recording. It is free and
 open source, self-hosted on your own Firebase project, and built for independent
 collectors rather than galleries.
+
+## Naming
+
+The product is **Arcula**, at [arcula.art](https://arcula.art). It was called
+_Custodia_ until 28 September 2026, when the domain was bought and the
+user-visible name changed with it: page title, landing page, both nav bars, and
+the web app manifest.
+
+The internal identifiers are still `custodia` — the Firebase project id, the
+emulator project id, and the package and repository names. Renaming the Firebase
+project is a migration rather than an edit, so it was deferred deliberately.
+[RENAME.md](RENAME.md) holds the checklist and the migration runbook.
 
 ## Why this exists
 
@@ -39,7 +51,7 @@ Spreadsheets do not fail at storing this. They fail silently. They let you flatt
 and then you lose the distinctions without noticing, because a spreadsheet never tells
 you that what you entered is worse than what you know.
 
-Custodia is built on the opposite assumption. The fields are the ones a collector
+Arcula is built on the opposite assumption. The fields are the ones a collector
 actually has, the types leave room for the awkward cases, and the data model refuses to
 treat an unset field and an empty field as the same thing. It is a web app, so it is
 not tied to one laptop, and it is open source, so the schema is yours to argue with.
@@ -240,6 +252,8 @@ src/
 ├── theme.ts                          # Mantine theme: fonts, sizes, spacing
 ├── components/
 │   ├── ProductPage.tsx               # Public landing page
+│   ├── AppTitle.tsx                  # The wordmark; the only place the name is written
+│   ├── PublicNavBar.tsx              # Title-only header for the landing page
 │   ├── ProtectedRoute.tsx            # Auth gate for /manage routes
 │   ├── auth/
 │   │   └── LoginPage.tsx             # Email/password sign-in

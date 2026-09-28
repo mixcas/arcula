@@ -1,6 +1,10 @@
 /**
  * Custodia Cloud Functions (scaffold).
  *
+ * TODO(arcula-rename): the product is Arcula now; this comment, the
+ * `functions/package.json` name, and its description still say Custodia. See
+ * RENAME.md.
+ *
  * This file intentionally exports nothing. The first real function to land
  * here is password protection for shared collections (FULLSPEC §9):
  *

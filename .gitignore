@@ -32,3 +32,5 @@ firebase-debug.*.log
 # Vite
 /src/assets/*/*.map
 /public/*/*.map
+
+FULLSPEC.md

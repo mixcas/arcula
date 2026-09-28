@@ -3,7 +3,10 @@
 // Executed via `bun run test:rules`, which wraps vitest in
 // `firebase emulators:exec --only firestore,auth --project demo-custodia`.
 // The PROJECT_ID here must match the emulator project so the rules-unit-testing
-// contexts talk to the same Firestore. The emulator is seeded with rules
+// contexts talk to the same Firestore. That string lives in two files — here and
+// the `test:rules` script in package.json — and they must change together.
+// TODO(arcula-rename): both still say demo-custodia; see RENAME.md.
+// The emulator is seeded with rules
 // disabled (admin credentials) and every assertion below goes through a
 // real client context so the rules are enforced.
 //

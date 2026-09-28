@@ -1,7 +1,8 @@
 import React from "react";
-import { Group, Button, Menu, Avatar, Text } from "@mantine/core";
+import { Group, Button, Menu, Avatar } from "@mantine/core";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
+import AppTitle from "@/components/AppTitle";
 
 const ManageNavBar: React.FC = () => {
   const { currentUser, logout } = useAuth();
@@ -17,9 +18,7 @@ const ManageNavBar: React.FC = () => {
   return (
     <Group h="100%" px="md" justify="space-between">
       <Button variant="subtle" component={Link} to={`/manage`}>
-        <Text size="lg" ff="heading" component="span">
-          Custodia
-        </Text>
+        <AppTitle />
       </Button>
       <Menu shadow="md" width={200}>
         <Menu.Target>

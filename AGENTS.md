@@ -80,6 +80,12 @@ Mantine guidelines are saved in `.opencode/docs/mantine-llms.txt`. Reference thi
 
 ## Custodia Firebase Integration
 
+> The product is named **Arcula** (arcula.art) as of 28 September 2026, but this
+> document and the internal identifiers still say Custodia — the Firebase project
+> (`custodia-67307`), the emulator project (`demo-custodia`), and the package and
+> repository names. That split is deliberate; see [RENAME.md](RENAME.md) before
+> renaming any of them.
+
 ### Summary
 
 Custodia is a React 19 + Vite + Mantine SPA. Firebase provides all
