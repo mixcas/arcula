@@ -1,54 +1,98 @@
 # Custodia
 
-Custodia is a web application for managing art collections. It provides users with the ability to create, organize, and share their art collections.
+Collection management for people who actually own the work.
 
-## Features
+Custodia is a web app for cataloguing a private art collection: your collections, the
+artworks in them, and the details that make each one worth recording. It is free and
+open source, self-hosted on your own Firebase project, and built for independent
+collectors rather than galleries.
 
-- User authentication and authorization
-- Collection management (create, view, edit)
-- Artwork management within collections
-- Public collection sharing
-- Responsive design for all devices
+## Why this exists
 
-## Tech Stack
+Once you own more than a handful of works, you need a record. The trouble is that the
+three usual answers each break in a different way.
 
-- **Frontend**: React 19 with TypeScript
-- **UI Framework**: Mantine UI Components (v9)
+**Commercial platforms.** Artlogic and its competitors are genuinely good software,
+built for galleries and institutions. The pricing is calibrated to that market —
+per-seat, per-year, frequently with paid modules. For a collector with forty works and
+no employees, that is a lot of money for software built around a workflow you do not
+have.
+
+**FileMaker.** Flexible, and it will fit almost anything you ask of it. It also becomes
+yours to maintain. The file lives on one machine, backups are whatever you remembered
+to schedule, and whoever built it stops being available right when you need a change. A
+database is not a plan.
+
+**A spreadsheet.** This is where most independent collectors actually land, and it is
+the worst of the three for a reason that has little to do with the software. A
+spreadsheet makes a hard promise about your collection: that it is a table. One row per
+work, one column per attribute, every value in a column the same shape as every other
+value in it.
+
+That promise is the problem, because art is not tidy data. The date is "circa 1889",
+not a date. A work may be attributed to a workshop rather than a named artist. What you
+paid and what you think it is worth now are different numbers, and a single "value"
+column destroys the distinction. Provenance is a chain, not a cell. Condition is a
+slow-moving fact about a physical object, not a property.
+
+Spreadsheets do not fail at storing this. They fail silently. They let you flatten it,
+and then you lose the distinctions without noticing, because a spreadsheet never tells
+you that what you entered is worse than what you know.
+
+Custodia is built on the opposite assumption. The fields are the ones a collector
+actually has, the types leave room for the awkward cases, and the data model refuses to
+treat an unset field and an empty field as the same thing. It is a web app, so it is
+not tied to one laptop, and it is open source, so the schema is yours to argue with.
+
+## Project status
+
+This is an early project. The private side works; the public side does not, yet. Here is
+the honest version:
+
+| Area                                           | State                          |
+| ---------------------------------------------- | ------------------------------ |
+| Email/password auth, protected routes          | Working                        |
+| Create, list, view collections                 | Working                        |
+| Rename collection, set public/private flag     | Working                        |
+| List a collection's artworks                   | Working                        |
+| Add an artwork                                 | Working                        |
+| Edit an artwork (writes to Firestore)          | Working                        |
+| **Public collection page** (`/collection/:id`) | **Mock data only**             |
+| **Password-protected collections**             | **UI only, not enforced**      |
+| **Photo and certificate uploads**              | **Not implemented**            |
+| **Deleting artworks or collections**           | Service functions exist, no UI |
+| Firestore security rules                       | Not provided, see below        |
+| Tests                                          | None yet                       |
+
+Two of those deserve emphasis because they are easy to misread from the code:
+
+- **`/collection/:id` is not connected to the database.** It renders a hardcoded
+  collection containing Van Gogh and the Mona Lisa. The public/private flag and the
+  password control on the settings page are real, stored fields, but nothing reads them
+  yet. Do not put a link to this page in front of anyone.
+- **The password control does not work.** The switch and the password field on the
+  settings page hold local component state and are never saved. `passwordHash` exists
+  in the type definition with no implementation behind it.
+
+## Tech stack
+
+- **Frontend**: React 19, TypeScript
+- **UI**: Mantine v9
+- **Forms**: `@mantine/form` with [Zod](https://zod.dev) schemas
 - **Routing**: React Router v7
-- **State Management**: React Hooks and Context API
-- **Authentication**: Firebase Authentication
+- **Auth**: Firebase Authentication (email/password)
 - **Database**: Firestore
-- **Utility Library**: Lodash
-- **Build Tool**: Vite
+- **Build**: Vite
 
-## Project Structure
+Validation lives in a single shared schema (`src/schemas/artwork.ts`) used by both the
+add and edit forms, so the two write identical documents for identical input.
 
-```
-src/
-├── components/
-│   ├── manage/                 # Management interface components
-│   │   ├── ManagePage.tsx      # Main dashboard page
-│   │   ├── CollectionPage.tsx  # Individual collection view
-│   │   ├── ArtworkAddPage.tsx  # Add artwork to collection
-│   │   ├── ArtworkEditPage.tsx # Edit artwork details
-│   │   ├── CollectionSettingsPage.tsx # Collection settings
-│   │   └── layout/            # Layout components
-│   │       └── ManageLayout.tsx  # Consistent header layout for manage routes
-│   ├── auth/                   # Authentication components
-│   │   └── LoginPage.tsx       # Login page
-│   └── ProductPage.tsx         # Public landing page
-├── context/                    # React Context providers
-│   └── AuthContext.ts          # Authentication context
-├── services/                   # Service files
-│   └── firebase.ts             # Firebase configuration and initialization
-└── App.tsx                     # Main application routing
-```
-
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
 - [Bun](https://bun.sh)
+- A Firebase project
 
 ### Installation
 
@@ -57,15 +101,11 @@ src/
 ```bash
 git clone <repository-url>
 cd custodia
-```
-
-2. Install dependencies:
-
-```bash
 bun install
 ```
 
-3. Create a `.env` file in the root directory with your Firebase configuration:
+2. Create a `.env` file in the project root with your Firebase web app config, found
+   under Project settings → Your apps in the [Firebase console](https://console.firebase.google.com/):
 
 ```env
 VITE_FIREBASE_API_KEY=your_api_key
@@ -76,61 +116,96 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 ```
 
-4. Start the development server:
+3. In the Firebase console, enable **Authentication → Email/Password** and create a
+   **Firestore Database**.
+
+4. Start the development server on [localhost:3000](http://localhost:3000):
 
 ```bash
 bun run dev
 ```
 
-## Firebase Setup
+5. Before adding real data, write Firestore security rules. See
+   [Project status](#project-status).
 
-This application uses Firebase for authentication and data storage. You'll need to:
+## Scripts
 
-1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
-2. Enable Authentication (Email/Password)
-3. Enable Firestore Database
-4. Configure the required environment variables in your `.env` file
+| Command           | Description                               |
+| ----------------- | ----------------------------------------- |
+| `bun run dev`     | Start the development server on port 3000 |
+| `bun run build`   | Typecheck and build for production        |
+| `bun run preview` | Preview the production build              |
+| `bun run check`   | Typecheck, lint, and check formatting     |
+| `bun run lint`    | ESLint, with type-aware rules             |
+| `bun run format`  | Rewrite files with Prettier               |
 
-## Available Scripts
+## Project structure
 
-- `bun run dev` - Start development server
-- `bun run build` - Build for production
-- `bun run preview` - Preview production build
+```
+src/
+├── components/
+│   ├── ProductPage.tsx              # Public landing page
+│   ├── ProtectedRoute.tsx           # Auth gate for /manage routes
+│   ├── auth/
+│   │   └── LoginPage.tsx            # Email/password sign-in
+│   ├── collection/
+│   │   └── PublicCollectionPage.tsx # NOT WIRED TO THE DATABASE YET
+│   └── manage/
+│       ├── layout/ManageLayout.tsx  # Shared header for all /manage routes
+│       ├── ManagePage.tsx           # Dashboard: your collections
+│       ├── CollectionPage.tsx       # One collection and its artworks
+│       ├── CollectionSettingsPage.tsx  # Rename, public/private
+│       ├── ArtworkAddPage.tsx       # Add an artwork
+│       ├── ArtworkEditPage.tsx      # Edit an artwork
+│       └── collection/NewCollectionPage.tsx
+├── context/AuthContext.tsx          # Auth state via useAuth()
+├── hooks/useAuth.ts                 # Context consumer hook
+├── schemas/artwork.ts               # Zod schema + Firestore payload shaping
+├── services/
+│   ├── firebase.ts                  # Firebase init, exports db/auth/storage
+│   ├── authService.ts
+│   ├── collectionService.ts
+│   └── artworkService.ts
+├── types/index.ts                   # Artwork, Collection, ArtworkUpdate
+└── App.tsx                          # Routes
+```
 
-## Folder Structure Explanation
+## Roadmap
 
-### Manage Interface (`/manage`)
+Roughly in order of how much they matter:
 
-The `/manage` routes are wrapped with a consistent layout that provides:
-
-- Header with user menu (avatar and email)
-- Logout functionality via dropdown menu
-- Consistent padding and styling
-
-### Core Pages
-
-- **ManagePage**: Main dashboard showing all collections
-- **CollectionPage**: View and manage individual collections
-- **ArtworkAddPage**: Add new artworks to collections
-- **ArtworkEditPage**: Edit artwork details
-- **CollectionSettingsPage**: Collection settings and privacy controls
+- Wire the public collection page to Firestore, and actually enforce the public flag
+- Real password protection for shared collections
+- Photo and certificate uploads to Firebase Storage
+- Delete for artworks and collections
+- Firestore security rules, plus an index on the queries the app needs
+- Search and filtering, once there are enough works for it to matter
+- Export, so you are never locked in
+- Tests around the schema and the load/save paths
 
 ## Contributing
 
+Contributions are welcome, particularly from people who collect. If something in the
+schema does not match how you actually think about your own collection, that is a bug
+worth reporting.
+
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a pull request
+2. Create a branch (`git checkout -b feature/my-change`)
+3. Commit your changes
+4. Push and open a pull request
+
+Before opening a PR, `bun run check` must pass. It runs `tsc`, ESLint with type-aware
+rules, and Prettier, so a type error, a lint warning, or a formatting diff will each
+fail it.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT. The `LICENSE` file has not been added yet, so add one before you distribute this.
 
 ## Acknowledgments
 
-- [React](https://reactjs.org/)
-- [Mantine UI](https://mantine.dev/)
+- [React](https://react.dev/)
+- [Mantine](https://mantine.dev/)
 - [Firebase](https://firebase.google.com/)
-- [Vite](https://vitejs.dev/)
-- [Lodash](https://lodash.com/)
+- [Vite](https://vite.dev/)
+- [Zod](https://zod.dev/)
