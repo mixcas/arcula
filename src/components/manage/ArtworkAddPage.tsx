@@ -9,12 +9,35 @@ import {
   Group,
   FileInput,
   Card,
+  Alert,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { artworkService } from "@/services/artworkService";
+import type { Artwork } from "@/types";
+// Subpath imports keep lodash out of the main bundle path; prefer these over
+// full-package imports (AGENTS.md).
+import mapValues from "lodash/mapValues";
+import omitBy from "lodash/omitBy";
+
+/**
+ * Parse a numeric form field. Returns undefined for blank or unparseable input
+ * so the key is omitted from the document rather than written as 0 or NaN.
+ * A real 0 is preserved, keeping "worth zero" distinct from "not set".
+ */
+const toNumber = (value: string): number | undefined => {
+  if (value.trim() === "") {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 const ArtworkAddPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -35,6 +58,8 @@ const ArtworkAddPage: React.FC = () => {
 
   const [certificates, setCertificates] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleChange = (name: string, value: string) => {
     setFormData({
@@ -56,10 +81,67 @@ const ArtworkAddPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Form submission logic would go here
-    console.log("Form submitted:", { ...formData, certificates, photos });
+
+    if (!collectionId) {
+      setError("Invalid collection id");
+      return;
+    }
+
+    if (!currentUser) {
+      setError("You must be signed in to add an artwork");
+      return;
+    }
+
+    const title = formData.title.trim();
+    const artistName = formData.artistName.trim();
+
+    if (!title || !artistName) {
+      setError("Title and artist name are required");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    // Trim every string field, then coerce the two numeric ones. Must stay a
+    // non-lodash trim and toNumber: passing `trim` straight to mapValues would
+    // feed the field name into lodash's `chars` param, and `_.toNumber("")`
+    // returns 0, silently turning blanks into zeros.
+    const values = {
+      ...mapValues(formData, (v) => v.trim()),
+      acquisitionPrice: toNumber(formData.acquisitionPrice),
+      currentValue: toNumber(formData.currentValue),
+    };
+
+    try {
+      const artwork: Omit<Artwork, "id"> = {
+        title: values.title,
+        artistName: values.artistName,
+        // Stored in the "{urlized-name}-{docId}" form defined in FULLSPEC §10.
+        // Read paths must query artworks by this same composite value.
+        collectionId,
+        userId: currentUser.uid,
+        // TODO: upload to Firebase Storage per FULLSPEC §8 and store the
+        // resulting FileReferences once a storage service exists.
+        certificates: [],
+        photos: [],
+        // Blank strings and absent numbers are dropped entirely so "not set"
+        // stays distinguishable from set-but-empty. The predicate is explicit
+        // (`=== "" || === undefined`) rather than truthiness-based because a
+        // real 0 must survive.
+        ...omitBy(values, (v) => v === "" || v === undefined),
+      };
+
+      const newId = await artworkService.createArtwork(artwork);
+      void navigate(`/manage/collection/${collectionId}/artwork/${newId}`);
+    } catch (err) {
+      console.error("Error creating artwork:", err);
+      setError("Failed to create artwork. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -69,7 +151,11 @@ const ArtworkAddPage: React.FC = () => {
       </Text>
 
       <Card shadow="sm" p="lg">
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+        >
           <TextInput
             label="Title"
             placeholder="Artwork title"
@@ -131,14 +217,8 @@ const ArtworkAddPage: React.FC = () => {
           <DateInput
             label="Acquisition Date"
             placeholder="Select date"
-            value={
-              formData.acquisitionDate
-                ? new Date(formData.acquisitionDate)
-                : null
-            }
-            onChange={(date) =>
-              handleChange("acquisitionDate", date?.toISOString() || "")
-            }
+            value={formData.acquisitionDate || null}
+            onChange={(date) => handleChange("acquisitionDate", date ?? "")}
             mb="md"
           />
 
@@ -209,6 +289,8 @@ const ArtworkAddPage: React.FC = () => {
             accept="application/pdf,image/jpeg,image/png"
             value={certificates}
             onChange={(files) => handleFileChange(files, "certificates")}
+            disabled
+            description="File uploads are not wired up yet"
             mb="md"
           />
 
@@ -219,11 +301,21 @@ const ArtworkAddPage: React.FC = () => {
             accept="image/jpeg,image/png,image/webp"
             value={photos}
             onChange={(files) => handleFileChange(files, "photos")}
+            disabled
+            description="File uploads are not wired up yet"
             mb="md"
           />
 
+          {error ? (
+            <Alert color="red" mb="md">
+              {error}
+            </Alert>
+          ) : null}
+
           <Group mt="xl">
-            <Button type="submit">Save Artwork</Button>
+            <Button type="submit" loading={submitting}>
+              Save Artwork
+            </Button>
             <Button
               component={Link}
               to={`/manage/collection/${collectionId}`}

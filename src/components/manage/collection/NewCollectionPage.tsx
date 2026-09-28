@@ -10,8 +10,7 @@ import {
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { collection, addDoc, doc, setDoc } from "firebase/firestore";
-import { db } from "../../../services/firebase";
+import { collectionService } from "@/services/collectionService";
 import { signOut, getAuth } from "firebase/auth";
 
 const NewCollectionPage: React.FC = () => {
@@ -40,16 +39,13 @@ const NewCollectionPage: React.FC = () => {
     setError(null);
 
     try {
-      // Create collection document
-      const newCollection = {
+      // Create the collection document. Defaults (isPublic/artworks) and
+      // timestamps are supplied by collectionService.
+      const newId = await collectionService.createCollection({
         name: name.trim(),
         description: description.trim(),
         userId: currentUser.uid,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const docRef = await addDoc(collection(db, "collections"), newCollection);
+      });
 
       // Generate URLized name for redirect
       const urlizedName = name
@@ -59,7 +55,7 @@ const NewCollectionPage: React.FC = () => {
         .replace(/(^-|-$)/g, "");
 
       // Redirect to the newly created collection page
-      navigate(`/manage/collection/${urlizedName}-${docRef.id}`);
+      void navigate(`/manage/collection/${urlizedName}-${newId}`);
       setSuccess(true);
     } catch (err) {
       console.error("Error creating collection:", err);
@@ -73,7 +69,7 @@ const NewCollectionPage: React.FC = () => {
     try {
       const auth = getAuth();
       await signOut(auth);
-      navigate("/login");
+      void navigate("/login");
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -83,7 +79,12 @@ const NewCollectionPage: React.FC = () => {
     <>
       <Group mb="xl">
         <Text size="h2">Create New Collection</Text>
-        <Button variant="subtle" onClick={handleLogout}>
+        <Button
+          variant="subtle"
+          onClick={() => {
+            void handleLogout();
+          }}
+        >
           Logout
         </Button>
       </Group>
@@ -100,7 +101,11 @@ const NewCollectionPage: React.FC = () => {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+      >
         <TextInput
           label="Collection Name"
           placeholder="Enter collection name"

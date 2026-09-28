@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 // User type
 export interface User {
   uid: string;
@@ -11,31 +13,45 @@ export interface Collection {
   id: string;
   name: string;
   userId: string; // Reference to the owner
-  isPublic: boolean;
+  description?: string;
+  isPublic?: boolean;
   passwordHash?: string; // Optional password protection
-  artworks: string[]; // Array of artwork IDs
+  artworks?: string[]; // Array of artwork IDs
+  // Stamped by collectionService, not by callers. Firestore returns a
+  // Timestamp on read — a `Date` written by the client comes back as one.
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // Artwork type
+//
+// Only `title` and `artistName` are required; every other descriptive field is
+// optional so an absent key can be distinguished from a set-but-empty value.
+// Certificates and photos are always written (as [] until uploads land) and
+// collectionId/userId are always supplied by the creating code path.
 export interface Artwork {
   id: string;
+  userId: string; // Reference to the owner
   title: string;
-  serie: string;
+  serie?: string;
   artistName: string;
-  dateOfCreation: string;
-  media: string;
-  dimensions: string;
+  dateOfCreation?: string;
+  media?: string;
+  dimensions?: string;
   editions?: string;
-  acquisitionDate: string;
-  acquisitionPrice: number;
-  placeOfOrigin: string;
+  acquisitionDate?: string;
+  acquisitionPrice?: number;
+  placeOfOrigin?: string;
   provenance?: string;
   certificates: FileReference[]; // Array of file references
-  notes: string;
-  condition: string;
-  currentValue: number;
+  notes?: string;
+  condition?: string;
+  currentValue?: number;
   photos: FileReference[]; // Array of file references
   collectionId: string; // Reference to parent collection
+  // Stamped by artworkService, not by callers.
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // File reference type (could be URL or metadata)

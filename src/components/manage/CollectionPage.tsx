@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Text, Button, Group, Card, Switch, Divider } from "@mantine/core";
+import { Text, Button, Group, Card } from "@mantine/core";
 import { Link, useParams } from "react-router-dom";
-import { collectionService } from "../../services/collectionService";
-import { artworkService } from "../../services/artworkService";
+import { collectionService } from "@/services/collectionService";
+import { artworkService } from "@/services/artworkService";
+import type { Artwork, Collection } from "@/types";
 
 const CollectionPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
-  const [collection, setCollection] = useState<any>(null);
-  const [artworks, setArtworks] = useState<any[]>([]);
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,25 +41,8 @@ const CollectionPage: React.FC = () => {
       }
     };
 
-    fetchCollectionData();
+    void fetchCollectionData();
   }, [collectionId]);
-
-  const handleTogglePublic = async () => {
-    if (!collection) return;
-
-    try {
-      // Update the collection privacy in Firestore
-      await collectionService.updateCollection(collection.id, {
-        isPublic: !collection.isPublic,
-      });
-
-      // Update local state
-      setCollection({ ...collection, isPublic: !collection.isPublic });
-    } catch (err) {
-      console.error("Error updating collection privacy:", err);
-      // Optionally show an error message to the user
-    }
-  };
 
   if (loading) {
     return <Text>Loading collection...</Text>;
@@ -74,7 +58,7 @@ const CollectionPage: React.FC = () => {
 
   return (
     <>
-      <Group position="apart" mb="xl">
+      <Group justify="space-between" mb="xl">
         <Text size="h2">{collection.name}</Text>
         <Button
           component={Link}
@@ -85,18 +69,7 @@ const CollectionPage: React.FC = () => {
       </Group>
 
       <Card shadow="sm" p="lg" mb="md">
-        <Group position="apart">
-          <Text>Public Collection</Text>
-          <Switch
-            checked={collection.isPublic}
-            onChange={handleTogglePublic}
-            label="Make public"
-          />
-        </Group>
-
-        <Divider mt="md" mb="md" />
-
-        <Group position="center" mb="md">
+        <Group justify="center" mb="md">
           <Button
             component={Link}
             to={`/manage/collection/${collectionId}/artwork/add`}
@@ -107,18 +80,22 @@ const CollectionPage: React.FC = () => {
       </Card>
 
       {artworks.length === 0 ? (
-        <Text align="center">No artworks in this collection yet.</Text>
+        <Text ta="center">No artworks in this collection yet.</Text>
       ) : (
         <div>
           {artworks.map((artwork) => (
             <Card key={artwork.id} shadow="sm" p="lg" mb="md">
-              <Group position="apart">
+              <Group justify="space-between">
                 <div>
                   <Text size="h3">{artwork.title}</Text>
                   <Text>{artwork.artistName}</Text>
                   <Text>{artwork.dateOfCreation}</Text>
-                  {artwork.editions ? <Text>Editions: {artwork.editions}</Text> : null}
-                  {artwork.provenance ? <Text>Provenance: {artwork.provenance}</Text> : null}
+                  {artwork.editions ? (
+                    <Text>Editions: {artwork.editions}</Text>
+                  ) : null}
+                  {artwork.provenance ? (
+                    <Text>Provenance: {artwork.provenance}</Text>
+                  ) : null}
                 </div>
                 <Button
                   component={Link}

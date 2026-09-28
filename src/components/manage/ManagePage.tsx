@@ -4,27 +4,36 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import type { Collection } from "@/types";
 
 const ManagePage: React.FC = () => {
   const { currentUser } = useAuth();
-  const [collections, setCollections] = useState<any[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Depend on the uid rather than the user object, so the effect re-runs only
+  // when the signed-in user changes and `userId` is narrowed to a string.
+  const userId = currentUser?.uid;
+
   useEffect(() => {
     const fetchCollections = async () => {
-      if (!currentUser) return;
+      if (!userId) return;
 
       try {
         const q = query(
           collection(db, "collections"),
-          where("userId", "==", currentUser.uid),
+          where("userId", "==", userId),
         );
         const querySnapshot = await getDocs(q);
-        const fetchedCollections = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        // `doc.data()` is untyped Firestore data, so the spread is asserted
+        // here — same pattern as collectionService.getUserCollections.
+        const fetchedCollections = querySnapshot.docs.map((doc) => {
+          return {
+            id: doc.id,
+            ...doc.data(),
+          } as Collection;
+        });
         setCollections(fetchedCollections);
       } catch (err) {
         console.error("Error fetching collections:", err);
@@ -34,12 +43,12 @@ const ManagePage: React.FC = () => {
       }
     };
 
-    fetchCollections();
-  }, [currentUser.uid]);
+    void fetchCollections();
+  }, [userId]);
 
   if (loading) {
     return (
-      <Group position="center">
+      <Group justify="center">
         <Loader />
       </Group>
     );
@@ -47,7 +56,7 @@ const ManagePage: React.FC = () => {
 
   if (error) {
     return (
-      <Text color="red" align="center">
+      <Text color="red" ta="center">
         {error}
       </Text>
     );

@@ -8,6 +8,7 @@ import {
   deleteDoc,
   query,
   where,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Artwork } from "../types";
@@ -18,10 +19,12 @@ export const artworkService = {
   // Create a new artwork
   async createArtwork(artworkData: Omit<Artwork, "id">): Promise<string> {
     try {
-      const docRef = await addDoc(
-        collection(db, ARTWORKS_COLLECTION),
-        artworkData,
-      );
+      // Timestamps are stamped last so a caller cannot override them.
+      const docRef = await addDoc(collection(db, ARTWORKS_COLLECTION), {
+        ...artworkData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
       return docRef.id;
     } catch (error) {
       console.error("Error creating artwork:", error);
@@ -75,7 +78,10 @@ export const artworkService = {
   ): Promise<void> {
     try {
       const docRef = doc(db, ARTWORKS_COLLECTION, artworkId);
-      await updateDoc(docRef, updateData);
+      await updateDoc(docRef, {
+        ...updateData,
+        updatedAt: serverTimestamp(),
+      });
     } catch (error) {
       console.error("Error updating artwork:", error);
       throw error;

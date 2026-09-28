@@ -1,28 +1,39 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  getDoc, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  doc,
+  updateDoc,
   deleteDoc,
   query,
   where,
-  orderBy
-} from 'firebase/firestore';
-import { db } from './firebase';
-import { Collection } from '../types';
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "./firebase";
+import { Collection } from "../types";
 
-const COLLECTIONS_COLLECTION = 'collections';
+const COLLECTIONS_COLLECTION = "collections";
 
 export const collectionService = {
   // Create a new collection
-  async createCollection(collectionData: Omit<Collection, 'id'>): Promise<string> {
+  async createCollection(
+    collectionData: Omit<Collection, "id">,
+  ): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, COLLECTIONS_COLLECTION), collectionData);
+      // Defaults first so an explicit caller value still wins; timestamps
+      // stamped last so a caller cannot override them.
+      const docRef = await addDoc(collection(db, COLLECTIONS_COLLECTION), {
+        isPublic: false,
+        artworks: [],
+        ...collectionData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
       return docRef.id;
     } catch (error) {
-      console.error('Error creating collection:', error);
+      console.error("Error creating collection:", error);
       throw error;
     }
   },
@@ -33,16 +44,16 @@ export const collectionService = {
       const q = query(
         collection(db, COLLECTIONS_COLLECTION),
         where("userId", "==", userId),
-        orderBy("name")
+        orderBy("name"),
       );
-      
+
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
+      return querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       })) as Collection[];
     } catch (error) {
-      console.error('Error fetching user collections:', error);
+      console.error("Error fetching user collections:", error);
       throw error;
     }
   },
@@ -52,28 +63,34 @@ export const collectionService = {
     try {
       const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
       const docSnap = await getDoc(docRef);
-      
+
       if (docSnap.exists()) {
         return {
           id: docSnap.id,
-          ...docSnap.data()
+          ...docSnap.data(),
         } as Collection;
       }
-      
+
       return null;
     } catch (error) {
-      console.error('Error fetching collection:', error);
+      console.error("Error fetching collection:", error);
       throw error;
     }
   },
 
   // Update a collection
-  async updateCollection(collectionId: string, updateData: Partial<Collection>): Promise<void> {
+  async updateCollection(
+    collectionId: string,
+    updateData: Partial<Collection>,
+  ): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
-      await updateDoc(docRef, updateData);
+      await updateDoc(docRef, {
+        ...updateData,
+        updatedAt: serverTimestamp(),
+      });
     } catch (error) {
-      console.error('Error updating collection:', error);
+      console.error("Error updating collection:", error);
       throw error;
     }
   },
@@ -84,8 +101,8 @@ export const collectionService = {
       const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
       await deleteDoc(docRef);
     } catch (error) {
-      console.error('Error deleting collection:', error);
+      console.error("Error deleting collection:", error);
       throw error;
     }
-  }
+  },
 };
