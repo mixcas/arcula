@@ -54,6 +54,7 @@ export const mantineTheme: MantineThemeOverride = createTheme({
     "3xl": rem("32px"),
   },
   primaryColor: "gray",
+  defaultRadius: 0,
   components: {
     /** Put your mantine component override here */
     Container: Container.extend({
