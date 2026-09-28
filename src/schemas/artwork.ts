@@ -13,47 +13,17 @@ import type { Artwork, ArtworkUpdate } from "@/types";
  * handler through `transformValues`, so there is no second conversion step.
  */
 
-const MONEY_MESSAGE = "Enter a number of 0 or more";
-
 /** Blank text becomes `undefined` so an untouched field is never written. */
 const blankText = (value: string): string | undefined =>
   value.trim() === "" ? undefined : value;
 
 /**
- * Coerce a NumberInput value to a number, or `undefined` when unset.
+ * Optional free text: trimmed, and dropped entirely when left blank.
  *
- * Hand-rolled rather than `z.coerce.number`, for two reasons. It types its
- * input as `unknown`, which breaks `.pipe` composition, and `z.coerce.number("")`
- * is `0` — that would silently turn "not set" into "worth zero", which is why
- * the existing toNumber helper existed. Unparseable input becomes NaN and is
- * rejected by the refine below, so it never reaches Firestore.
- *
- * A real 0 is preserved, keeping "worth zero" distinct from "not set".
+ * Also covers the money fields, which are stored as strings and are
+ * deliberately not format-checked — see `Artwork.acquisitionPrice`.
  */
-const toAmount = (value: number | string | undefined): number | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed === "" ? undefined : Number(trimmed);
-  }
-  return value;
-};
-
-/** Optional free text: trimmed, and dropped entirely when left blank. */
 const optionalText = z.string().trim().transform(blankText).optional();
-
-/** Optional amount. `NumberInput` emits `number | string` while typing. */
-const optionalMoney = z
-  .union([z.number(), z.string()])
-  .optional()
-  .transform(toAmount)
-  .refine(
-    (amount) =>
-      amount === undefined || (Number.isFinite(amount) && amount >= 0),
-    { message: MONEY_MESSAGE },
-  );
 
 /**
  * Optional `YYYY-MM-DD` date.
@@ -63,10 +33,14 @@ const optionalMoney = z
  * `dateOfCreation` stays free text on purpose — real artworks carry partial
  * values like "1889" or "circa 1889". `z.iso.date()` also rejects impossible
  * calendar dates such as 2023-02-30, not just malformed ones.
+ *
+ * `null` has to be in the union because that is what `clearable` makes
+ * DateInput emit — both from the clear button and from backspacing the text to
+ * empty. Without it, clearing the field fails validation with "Invalid input".
  */
 const optionalDate = z
-  .union([z.iso.date(), z.literal("")])
-  .transform((value) => (value === "" ? undefined : value))
+  .union([z.iso.date({ error: "Enter a valid date" }), z.literal(""), z.null()])
+  .transform((value) => (value === "" || value === null ? undefined : value))
   .optional();
 
 export const artworkSchema = z.object({
@@ -78,12 +52,12 @@ export const artworkSchema = z.object({
   dimensions: optionalText,
   editions: optionalText,
   acquisitionDate: optionalDate,
-  acquisitionPrice: optionalMoney,
+  acquisitionPrice: optionalText,
   placeOfOrigin: optionalText,
   provenance: optionalText,
   notes: optionalText,
   condition: optionalText,
-  currentValue: optionalMoney,
+  currentValue: optionalText,
 });
 
 /**
@@ -92,8 +66,10 @@ export const artworkSchema = z.object({
  * Hand-written rather than derived from `z.input<typeof artworkSchema>` so that
  * every text field is a required `string`: an optional field would let a value
  * be `undefined`, and `value={undefined}` makes a React input uncontrolled.
- * The money fields are `number | string` because that is exactly Mantine's
- * `NumberInputValue`.
+ *
+ * `acquisitionDate` is the one exception to "always a string", and widening it
+ * is the point: a `clearable` DateInput really does emit `null`, so a `string`
+ * type here would be a claim the component does not honour.
  */
 export interface ArtworkFormValues {
   title: string;
@@ -103,13 +79,13 @@ export interface ArtworkFormValues {
   media: string;
   dimensions: string;
   editions: string;
-  acquisitionDate: string;
-  acquisitionPrice: number | string;
+  acquisitionDate: string | null;
+  acquisitionPrice: string;
   placeOfOrigin: string;
   provenance: string;
   notes: string;
   condition: string;
-  currentValue: number | string;
+  currentValue: string;
 }
 
 /** The trimmed, validated, Firestore-ready subset of an artwork. */
@@ -233,7 +209,10 @@ export const toArtworkUpdate = (
 ): ArtworkUpdate => {
   const cleared = EDITABLE_FIELDS.filter((key) => {
     const loaded = original[key];
-    const wasSet = loaded !== undefined && loaded !== "";
+    // `null` counts as unset. A cleared `clearable` DateInput leaves the value
+    // null, and there is no stored value to remove in that case — treating it
+    // as "was set" would attach a deleteField() to a field that never had one.
+    const wasSet = loaded !== undefined && loaded !== null && loaded !== "";
     return wasSet && !(key in payload);
   });
 

@@ -40,13 +40,16 @@ export interface Artwork {
   dimensions?: string;
   editions?: string;
   acquisitionDate?: string;
-  acquisitionPrice?: number;
+  // Money is stored as the string that was typed, not as a number. Nothing
+  // does arithmetic on these yet, and keeping them textual avoids binary float
+  // drift on values that are decimal by nature.
+  acquisitionPrice?: string;
   placeOfOrigin?: string;
   provenance?: string;
   certificates: FileReference[]; // Array of file references
   notes?: string;
   condition?: string;
-  currentValue?: number;
+  currentValue?: string;
   photos: FileReference[]; // Array of file references
   collectionId: string; // Reference to parent collection
   // Stamped by artworkService, not by callers.

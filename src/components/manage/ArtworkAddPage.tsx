@@ -3,7 +3,6 @@ import {
   Container,
   Text,
   TextInput,
-  NumberInput,
   Textarea,
   Button,
   Group,
@@ -163,10 +162,11 @@ const ArtworkAddPage: React.FC = () => {
             label="Acquisition Date"
             placeholder="Select date"
             mb="md"
+            clearable
             {...form.getInputProps("acquisitionDate")}
           />
 
-          <NumberInput
+          <TextInput
             key={form.key("acquisitionPrice")}
             label="Acquisition Price"
             placeholder="Price in currency"
@@ -206,7 +206,7 @@ const ArtworkAddPage: React.FC = () => {
             {...form.getInputProps("condition")}
           />
 
-          <NumberInput
+          <TextInput
             key={form.key("currentValue")}
             label="Current Value"
             placeholder="Value in currency"
