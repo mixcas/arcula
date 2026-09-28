@@ -17,6 +17,7 @@ We have implemented the core frontend structure, including:
 
 - **Frontend**: React 19 + TypeScript + Mantine UI v9 + react-router-dom v7
 - **Backend**: Firebase (Firestore for data, Firebase Storage for files)
+- **Utility Library**: Lodash
 - **Build Tool**: Vite
 
 ## Core Data Models

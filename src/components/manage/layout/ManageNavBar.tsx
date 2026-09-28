@@ -1,28 +1,23 @@
-import React from 'react';
-import { Group, Button, Menu, Avatar, Text } from '@mantine/core';
-import { useAuth } from '../../../context/AuthContext';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../../services/firebase';
-import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Group, Button, Menu, Avatar, Text } from "@mantine/core";
+import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 
 const ManageNavBar: React.FC = () => {
-  const { currentUser } = useAuth();
-  const navigate = useNavigate();
+  const { currentUser, logout } = useAuth();
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     try {
-      await signOut(auth);
-      navigate('/login');
+      void logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     }
   };
 
   return (
-    <Group h="100%" px="md" justify='space-between'>
+    <Group h="100%" px="md" justify="space-between">
       <Link to="/manage">
-        <Text size='lg'>Custodia</Text>
+        <Text size="lg">Custodia</Text>
       </Link>
       <Menu shadow="md" width={200}>
         <Menu.Target>

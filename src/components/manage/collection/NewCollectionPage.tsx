@@ -9,7 +9,7 @@ import {
   Loader,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../context/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { collection, addDoc, doc, setDoc } from "firebase/firestore";
 import { db } from "../../../services/firebase";
 import { signOut, getAuth } from "firebase/auth";

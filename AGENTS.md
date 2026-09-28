@@ -60,6 +60,14 @@ All Firebase services are imported from `src/services/firebase.ts`:
 - TypeScript type checking included
 - React 19 with modern hooks and features
 
+## Utilities (Lodash)
+
+Lodash (`lodash@^4.18.1`) is a dependency and available for utility functions.
+
+- Prefer subpath imports for smaller bundles: `import debounce from "lodash/debounce"`.
+- Full-package imports (`import { debounce } from "lodash"`) also work but pull in more code.
+- `@types/lodash` is **not** installed — importing lodash in code will fail `bun run build` (tsc) until it is added via `bun add -d @types/lodash`.
+
 ## Mantine Context
 
 Mantine guidelines are saved in `@.opencode/docs/mantine-llms.txt`. Reference this file whenever building UI components or form controls.

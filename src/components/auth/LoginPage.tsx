@@ -9,8 +9,7 @@ import {
   Alert,
 } from "@mantine/core";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { auth } from "../../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { useAuth } from "@/hooks/useAuth";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -19,8 +18,10 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
 
   // Get the intended destination from the location state, fallback to dashboard
+  // TODO: from.pathname is not working yet
   const from = location.state?.from?.pathname || "/manage";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +31,7 @@ const LoginPage: React.FC = () => {
 
     try {
       // Sign in with email and password using Firebase
-      await signInWithEmailAndPassword(auth, email, password);
+      await login(email, password);
 
       // Redirect to the intended destination after successful login
       navigate(from, { replace: true });

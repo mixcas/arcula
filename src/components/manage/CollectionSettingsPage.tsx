@@ -1,28 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Container,
   Text,
   TextInput,
   Switch,
+  SegmentedControl,
   PasswordInput,
   Button,
   Group,
   Card,
   Divider,
   Alert,
-  Loader
-} from '@mantine/core';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { collectionService } from '../../services/collectionService';
+  Loader,
+} from "@mantine/core";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { collectionService } from "../../services/collectionService";
 
 const CollectionSettingsPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
   const navigate = useNavigate();
 
-  const [collectionName, setCollectionName] = useState('');
+  const [collectionName, setCollectionName] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [requirePassword, setRequirePassword] = useState(false);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
 
   // The actual Firestore document id. The route param can be formatted as
   // "{urlized-name}-{id}", so we capture the real id from the fetch and use
@@ -35,30 +36,29 @@ const CollectionSettingsPage: React.FC = () => {
 
   useEffect(() => {
     if (!collectionId) {
-      setError('Invalid collection id');
-      setLoading(false);
       return;
     }
 
     const fetchCollection = async () => {
       try {
-        const collectionData = await collectionService.getCollection(collectionId);
+        const collectionData =
+          await collectionService.getCollection(collectionId);
         if (!collectionData) {
-          setError('Collection not found');
+          setError("Collection not found");
         } else {
-          setCollectionName(collectionData.name ?? '');
+          setCollectionName(collectionData.name ?? "");
           setIsPublic(Boolean(collectionData.isPublic));
           setDocId(collectionData.id);
         }
       } catch (err) {
-        console.error('Error fetching collection:', err);
-        setError('Failed to load collection settings. Please try again.');
+        console.error("Error fetching collection:", err);
+        setError("Failed to load collection settings. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCollection();
+    void fetchCollection();
   }, [collectionId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,7 +67,7 @@ const CollectionSettingsPage: React.FC = () => {
     // Fall back to the raw route param if we never captured the real id.
     const targetId = docId ?? collectionId;
     if (!targetId) {
-      setError('Invalid collection id');
+      setError("Invalid collection id");
       return;
     }
 
@@ -79,37 +79,60 @@ const CollectionSettingsPage: React.FC = () => {
         name: collectionName.trim(),
         isPublic,
       });
-      navigate(`/manage/collection/${collectionId}`);
+      void navigate(`/manage/collection/${collectionId}`);
     } catch (err) {
-      console.error('Error updating collection:', err);
-      setError('Failed to save settings. Please try again.');
+      console.error("Error updating collection:", err);
+      setError("Failed to save settings. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
+  if (!collectionId) {
+    return (
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Alert color="red">Invalid collection id</Alert>
+      </Container>
+    );
+  }
+
   if (loading) {
     return (
-       <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
-         <Loader />
-       </Container>
-      );
-   }
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Loader />
+      </Container>
+    );
+  }
 
   if (error) {
     return (
-       <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
-         <Alert color="red">{error}</Alert>
-       </Container>
-      );
-   }
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Alert color="red">{error}</Alert>
+      </Container>
+    );
+  }
 
   return (
-     <Container size="sm" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
-      <Text size="h2" mb="xl">Collection Settings</Text>
+    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+      <Text size="h2" mb="xl">
+        Collection Settings
+      </Text>
 
       <Card shadow="sm" p="lg">
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+        >
           <TextInput
             label="Collection Name"
             placeholder="Name of your collection"
@@ -121,16 +144,21 @@ const CollectionSettingsPage: React.FC = () => {
 
           <Divider mt="md" mb="md" />
 
-          <Text size="h3" mb="md">Privacy Settings</Text>
+          <Text size="h3" mb="md">
+            Privacy Settings
+          </Text>
 
-          <Group justify="space-between" mb="md">
-            <Text>Make Collection Public</Text>
-            <Switch
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              label="Visible to everyone"
-            />
-          </Group>
+          <Text>Make Collection Public</Text>
+          <SegmentedControl
+            data={[
+              { label: "Private", value: "private" },
+              { label: "Public", value: "public" },
+            ]}
+            value={isPublic ? "public" : "private"}
+            onChange={(value) => setIsPublic(value === "public")}
+            fullWidth
+            mb="md"
+          />
 
           {isPublic && (
             <Group justify="space-between" mb="md">
@@ -157,14 +185,18 @@ const CollectionSettingsPage: React.FC = () => {
             <Button type="submit" loading={saving}>
               Save Settings
             </Button>
-            <Button component={Link} to={`/manage/collection/${collectionId}`} variant="outline">
+            <Button
+              component={Link}
+              to={`/manage/collection/${collectionId}`}
+              variant="outline"
+            >
               Cancel
             </Button>
           </Group>
         </form>
       </Card>
     </Container>
-   );
+  );
 };
 
 export default CollectionSettingsPage;

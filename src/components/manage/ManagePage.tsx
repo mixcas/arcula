@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader } from "@mantine/core";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
 

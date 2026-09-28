@@ -18,6 +18,7 @@ Custodia is a web application for managing art collections. It provides users wi
 - **State Management**: React Hooks and Context API
 - **Authentication**: Firebase Authentication
 - **Database**: Firestore
+- **Utility Library**: Lodash
 - **Build Tool**: Vite
 
 ## Project Structure
@@ -52,17 +53,20 @@ src/
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd custodia
 ```
 
 2. Install dependencies:
+
 ```bash
 bun install
 ```
 
 3. Create a `.env` file in the root directory with your Firebase configuration:
+
 ```env
 VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
@@ -73,6 +77,7 @@ VITE_FIREBASE_APP_ID=your_app_id
 ```
 
 4. Start the development server:
+
 ```bash
 bun run dev
 ```
@@ -95,14 +100,17 @@ This application uses Firebase for authentication and data storage. You'll need 
 ## Folder Structure Explanation
 
 ### Manage Interface (`/manage`)
+
 The `/manage` routes are wrapped with a consistent layout that provides:
+
 - Header with user menu (avatar and email)
 - Logout functionality via dropdown menu
 - Consistent padding and styling
 
 ### Core Pages
+
 - **ManagePage**: Main dashboard showing all collections
-- **CollectionPage**: View and manage individual collections  
+- **CollectionPage**: View and manage individual collections
 - **ArtworkAddPage**: Add new artworks to collections
 - **ArtworkEditPage**: Edit artwork details
 - **CollectionSettingsPage**: Collection settings and privacy controls
@@ -125,3 +133,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Mantine UI](https://mantine.dev/)
 - [Firebase](https://firebase.google.com/)
 - [Vite](https://vitejs.dev/)
+- [Lodash](https://lodash.com/)

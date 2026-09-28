@@ -1,25 +1,28 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { auth } from '../services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import React, { createContext, useState, useEffect, ReactNode } from "react";
+import { auth } from "@/services/firebase";
+import { useNavigate } from "react-router-dom";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  UserInfo,
+} from "firebase/auth";
 
 interface AuthContextType {
-  currentUser: any;
+  currentUser: UserInfo | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(
+  undefined,
+);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<any>(null);
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] =
+    useState<AuthContextType["currentUser"]>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,18 +35,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password: string) => {
-    // This will be handled by the LoginPage component
-    throw new Error('Login function should be called from LoginPage component');
+    // Sign in with email and password using Firebase
+    await signInWithEmailAndPassword(auth, email, password);
   };
 
   const logout = async () => {
     await auth.signOut();
+    await navigate("/login");
   };
 
   const value = {
     currentUser,
     login,
-    logout
+    logout,
   };
 
   return (
