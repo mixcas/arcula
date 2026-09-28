@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  Container,
   Text,
   TextInput,
   Textarea,
@@ -123,40 +122,19 @@ const ArtworkEditPage: React.FC = () => {
   }, [artworkParam, collectionParam, artworkId, loadedTitle, navigate]);
 
   if (!artworkId) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Alert color="red">Invalid artwork id</Alert>
-      </Container>
-    );
+    return <Alert color="red">Invalid artwork id</Alert>;
   }
 
   if (loading) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Loader />
-      </Container>
-    );
+    return <Loader />;
   }
 
   if (loadError) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Alert color="red">{loadError}</Alert>
-      </Container>
-    );
+    return <Alert color="red">{loadError}</Alert>;
   }
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Text size="h2" mb="xl">
         Edit Artwork
       </Text>
@@ -339,7 +317,7 @@ const ArtworkEditPage: React.FC = () => {
           </Group>
         </form>
       </Card>
-    </Container>
+    </>
   );
 };
 

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Container,
   Text,
   TextInput,
   Textarea,
@@ -67,7 +66,7 @@ const ArtworkAddPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Text size="h2" mb="xl">
         Add New Artwork
       </Text>
@@ -267,7 +266,7 @@ const ArtworkAddPage: React.FC = () => {
           </Group>
         </form>
       </Card>
-    </Container>
+    </>
   );
 };
 

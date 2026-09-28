@@ -126,7 +126,7 @@ const PublicCollectionPage: React.FC = () => {
     artwork.photos.flatMap((photo) => (photo.url ? [photo.url] : []));
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <Container size="xl" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
       {isPublic ? (
         <Group mb="xl">
           <Text size="h2">{collection?.name}</Text>
