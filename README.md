@@ -46,43 +46,48 @@ not tied to one laptop, and it is open source, so the schema is yours to argue w
 
 ## Project status
 
-This is an early project. Both sides read and write Firestore; neither side is secured.
-Here is the honest version:
+This is an early project, but access control is no longer the open gap: Firestore
+reads and writes are enforced by security rules (`firestore.rules`), and rules deploys
+are gated on a test suite run against the emulators. Here is the honest version:
 
-| Area                                                 | State                                 |
-| ---------------------------------------------------- | ------------------------------------- |
-| Email/password auth, protected routes                | Working                               |
-| Create, list, view collections                       | Working                               |
-| Rename collection, set public/private flag           | Working                               |
-| List a collection's artworks                         | Working                               |
-| Add an artwork                                       | Working                               |
-| Edit an artwork (writes to Firestore)                | Working                               |
-| Public collection page (`/collection/:collectionId`) | Reads Firestore, renders, not secured |
-| Password-protected collections                       | UI only, not enforced                 |
-| Photo and certificate uploads                        | Not implemented                       |
-| Deleting artworks or collections                     | Service functions exist, no UI        |
-| Firestore security rules                             | **Not provided — see below**          |
-| Tests                                                | None yet                              |
+| Area                                                 | State                                         |
+| ---------------------------------------------------- | --------------------------------------------- |
+| Email/password auth, protected routes                | Working                                       |
+| Sign up                                              | Not implemented (accounts are made by hand)   |
+| Account profile, change password                     | Not implemented                               |
+| Create, list, view collections                       | Working                                       |
+| Collections per account                              | Unlimited (the beta cap is interface-only)    |
+| Rename collection, set public/private flag           | Working                                       |
+| List a collection's artworks                         | Working                                       |
+| Add an artwork                                       | Working                                       |
+| Edit an artwork (writes to Firestore)                | Working                                       |
+| Per-artwork visibility flag                          | Working (independent of the collection's)     |
+| Public collection page (`/collection/:collectionId`) | Reads via rules; denied reads → private state |
+| Password-protected collections                       | UI only, not enforced                         |
+| Photo and certificate uploads                        | Not implemented                               |
+| Deleting artworks or collections                     | Service functions exist, no UI                |
+| Firestore + Storage security rules                   | Provided for collections/artworks             |
+| Rules test suite                                     | `bun run test:rules` (emulator-gated deploy)  |
 
 Two of those deserve emphasis because they are easy to misread from the code:
 
-- **There are no Firestore security rules, and the public page is now the first
-  unauthenticated reader in the app.** A rule set is the only thing that actually
-  protects anything here. The public/private flag is a _rendering gate_, not access
-  control: `PublicCollectionPage` checks `isPublic` and renders "This collection is
-  private" when it is false, but the document was already read to find that out, and
-  anyone who knows a document id can read it directly from the SDK. What the current
-  ordering does buy you is narrower than it looks — a private collection's artworks are
-  never even requested, so an unauthenticated visitor can pull down the collection
-  document and nothing else. That is the exposure reduced, not removed. Write the rules
-  before putting real data in.
+- **Access control lives in `firestore.rules`, not in the rendering gate.** Collections
+  and artworks are readable by non-owners only when explicitly public, and each artwork
+  carries its **own** `isPublic` flag, independent of its collection's: a public
+  collection may keep individual works private, and `PublicCollectionPage` only ever
+  reads a collection as an anonymous visitor, so a private collection is denied by the
+  rules _before_ its name reaches the browser. The page maps that `permission-denied`
+  to the same "This collection is private." state as the `isPublic` check. This matters
+  because the development server points at the same Firestore database the deploy
+  pipeline does — see [Deploying rules](#deploying-rules).
 - **The password control does not work.** The switch and the password field on the
   settings page hold local component state and are never saved; the page submits only
   `{ name, isPublic }`. `passwordHash` exists in the type definition, and the public
   page's prompt reads that real field, but nothing ever writes it. Note also that the
   prompt could not be a client-side check even once it is written: by the time it
   renders, the artworks are already in the browser. Real enforcement needs rules plus a
-  verification path, or a callable function.
+  verification path, or a callable function — a Cloud Functions scaffold exists
+  (`functions/`) with the callables designed but not built.
 
 The public page renders artwork metadata but no images. Firebase Storage is
 initialised and exported and then never used, so `photos` is always `[]` and the list
@@ -175,23 +180,60 @@ VITE_FIREBASE_APP_ID=your_app_id
 bun run dev
 ```
 
-5. Before adding real data, write Firestore security rules. See
-   [Project status](#project-status).
+5. Deploy the security rules once, so the database is locked down before real data
+   goes in. The test suite runs first and the deploy is refused if it fails:
+
+```bash
+bun run deploy:rules
+```
 
 ## Scripts
 
-| Command           | Description                               |
-| ----------------- | ----------------------------------------- |
-| `bun run dev`     | Start the development server on port 3000 |
-| `bun run build`   | Typecheck and build for production        |
-| `bun run preview` | Preview the production build              |
-| `bun run check`   | Typecheck, lint, and check formatting     |
-| `bun run lint`    | ESLint, with type-aware rules             |
-| `bun run format`  | Rewrite files with Prettier               |
+| Command                  | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| `bun run dev`            | Start the development server on port 3000                  |
+| `bun run build`          | Typecheck and build for production                         |
+| `bun run preview`        | Preview the production build                               |
+| `bun run check`          | Typecheck, lint, and check formatting                      |
+| `bun run lint`           | ESLint, with type-aware rules                              |
+| `bun run format`         | Rewrite files with Prettier                                |
+| `bun run test:rules`     | Run the rules suite against the Firestore/Auth emulators   |
+| `bun run emulators`      | Start the full emulator suite with the web UI (port 4000)  |
+| `bun run deploy:rules`   | Run the rules suite, then deploy Firestore + Storage rules |
+| `bun run deploy:hosting` | Build, then deploy hosting to the configured project       |
+| `bun run deploy`         | `deploy:rules` first (gated on the suite), then hosting    |
+
+## Deploying rules
+
+`bun run test:rules` runs every assertion in `tests/firestore.rules.test.ts`
+against the Firestore and Auth emulators (vitest + `@firebase/rules-unit-testing`).
+The emulators need a Java runtime; if none is installed, the Firebase CLI offers to
+download one.
+
+`bun run deploy:rules` runs that suite and then deploys
+`firebase deploy --only firestore,storage`. Because the rules test first, a broken
+rule set — one that would, say, deny the owner's own dashboard — cannot be shipped
+through this script. Every deploy script is explicitly scoped with `--only`, so a
+rules deploy never touches hosting or functions.
+
+The Firebase project is pinned in `.firebaserc` (`custodia-67307`) and the emulator
+scripts above use a throwaway `demo-custodia` project, so tests never touch real data.
+Keep `bun run check` passing before and after any rules change; the build output will
+fail loudly on a malformed rule file.
 
 ## Project structure
 
 ```
+firebase.json                          # Rules, emulators, hosting, functions config
+firestore.rules                        # Collections/artworks access control
+firestore.indexes.json                 # Composite query indexes
+storage.rules                         # Storage access (uploads not implemented yet)
+functions/                            # Cloud Functions source (scaffold only)
+  └── src/index.ts                    # No functions exported yet
+tests/
+  ├── tsconfig.json
+  └── firestore.rules.test.ts          # Rules suite (vitest + emulators)
+vitest.config.ts                       # Vitest config (rules tests, Node env)
 src/
 ├── main.tsx                          # Entry point; wires theme + router
 ├── App.tsx                           # Routes
@@ -222,7 +264,9 @@ src/
 │   ├── collectionService.ts
 │   └── artworkService.ts
 ├── types/index.ts                    # Artwork, Collection, ArtworkUpdate, FileReference
-└── utils/slug.ts                     # {slug}-{id} route params ⇄ bare document ids
+└── utils/
+    ├── slug.ts                       # {slug}-{id} route params ⇄ bare document ids
+    └── firestoreErrors.ts            # isPermissionDenied() helper
 ```
 
 There is no global stylesheet. Typography, spacing and component defaults all come from
@@ -234,17 +278,38 @@ initialised and never used, which is why every artwork's `photos` array is empty
 
 ## Roadmap
 
+### For the beta release
+
+- **Sign up** — a `/signup` page beside `/login`, so a new collector can enroll
+  without opening the Firebase console
+- **One collection per account** — capped in the interface during the beta, raised when
+  account tiers arrive. The cap is a product limit, not access control: nothing stops a
+  second collection being written, so the dashboard still has to cope with a second one
+  existing
+- **Account profiles** — name and last name on a `users/{uid}` document, a page to edit
+  it, and change password
+
+### Everything else
+
 Roughly in order of how much they matter:
 
-- Firestore security rules, and an index on any query that needs one — the public page
-  reads without authentication, so this is the gap that matters most
+- ✅ Firestore security rules with an emulator-gated deploy (`deploy:rules`) — the
+  public page now reads through rules rather than around them
+- ✅ Per-artwork visibility flag, independent of the collection's
 - Real password protection for shared collections, with a server-side verification path
-  rather than a prompt
+  — the functions scaffold in `functions/` is built for this (bcrypt + short-lived
+  grants, requiring the Blaze plan and Anonymous Auth)
 - Photo and certificate uploads to Firebase Storage
 - Delete for artworks and collections
+- Account tiers and billing — this is what turns the collection cap above into a quota
+  the rules can actually check
 - Export, so you are never locked in
 - Search and filtering, once there are enough works for it to matter
-- Tests around the schema and the load/save paths
+- Tests around the app itself (schema and load/save paths) — the rules are covered;
+  the components are not
+
+The design decisions behind the beta items, and the ones that are still open, are
+written up in [project-plan.md](project-plan.md).
 
 ## Contributing
 

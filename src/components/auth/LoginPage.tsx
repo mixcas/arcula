@@ -22,7 +22,9 @@ const LoginPage: React.FC = () => {
 
   // Get the intended destination from the location state, fallback to dashboard
   // TODO: from.pathname is not working yet
-  const from = location.state?.from?.pathname || "/manage";
+  const fromState = location.state as
+    { from?: { pathname?: string } } | null | undefined;
+  const from = fromState?.from?.pathname || "/manage";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,14 +36,21 @@ const LoginPage: React.FC = () => {
       await login(email, password);
 
       // Redirect to the intended destination after successful login
-      navigate(from, { replace: true });
-    } catch (err: any) {
+      void navigate(from, { replace: true });
+    } catch (err: unknown) {
       console.error("Login error:", err);
-      if (err.code === "auth/user-not-found") {
+      // Firebase auth errors carry a machine-readable code on the thrown
+      // value; anything else (or a missing code) falls through to the
+      // generic message.
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? (err as { code?: unknown }).code
+          : undefined;
+      if (code === "auth/user-not-found") {
         setError("No account found with this email address.");
-      } else if (err.code === "auth/wrong-password") {
+      } else if (code === "auth/wrong-password") {
         setError("Incorrect password.");
-      } else if (err.code === "auth/invalid-email") {
+      } else if (code === "auth/invalid-email") {
         setError("Invalid email address format.");
       } else {
         setError("Login failed. Please try again.");
@@ -57,7 +66,7 @@ const LoginPage: React.FC = () => {
 
       {error && <Alert mt="md">{error}</Alert>}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={(e) => void handleSubmit(e)}>
         <TextInput
           label="Email"
           placeholder="your@email.com"

@@ -20,6 +20,7 @@ export default tseslint.config(
     "dist/**",
     "public/**",
     "node_modules/**",
+    "functions/lib/**",
     "eslint.config.mjs",
   ]),
 
@@ -74,6 +75,18 @@ export default tseslint.config(
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+    },
+  },
+
+  // Node-context TypeScript — functions and rules tests. Keeps the same
+  // type-aware settings as the block above (each file resolves its nearest
+  // tsconfig: functions/tsconfig.json, tests/tsconfig.json) but swaps the
+  // browser globals for Node's.
+  {
+    name: "ts/node",
+    files: ["functions/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
 

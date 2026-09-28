@@ -52,6 +52,12 @@ export interface Artwork {
   currentValue?: string;
   photos: FileReference[]; // Array of file references
   collectionId: string; // Reference to parent collection
+  // Public visibility, owned by the artwork — independent of its collection's
+  // isPublic. A public collection may keep individual works private (and, by
+  // symmetry, a work flagged public stays readable by direct id even inside a
+  // private collection; the collection gate hides it from the page). Always
+  // written — see the schema in src/schemas/artwork.ts.
+  isPublic: boolean;
   // Stamped by artworkService, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

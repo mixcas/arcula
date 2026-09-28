@@ -20,17 +20,17 @@ const App: React.FC = () => {
         {/* Public Routes */}
         <Route path="/" element={<ProductPage />} />
         <Route path="/login" element={<LoginPage />} />
-        
+
         {/* Protected Routes */}
-        <Route 
-          path="/manage" 
+        <Route
+          path="/manage"
           element={
             <ProtectedRoute>
               <ManageLayout>
                 <ManagePage />
               </ManageLayout>
             </ProtectedRoute>
-          } 
+          }
         />
         <Route
           path="/manage/collection/new"
@@ -88,7 +88,7 @@ const App: React.FC = () => {
           path="/collection/:collectionId"
           element={<PublicCollectionPage />}
         />
-        
+
         {/* Redirect all other routes to homepage */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

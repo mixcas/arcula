@@ -8,6 +8,7 @@ import {
   FileInput,
   Card,
   Alert,
+  Switch,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
@@ -107,6 +108,14 @@ const ArtworkAddPage: React.FC = () => {
             }
           })}
         >
+          <Switch
+            key={form.key("isPublic")}
+            label="Public"
+            description="Anyone with the collection link can see this artwork. Independent of the collection's own public setting — a public collection may keep individual works private."
+            mb="md"
+            {...form.getInputProps("isPublic", { type: "checkbox" })}
+          />
+
           <TextInput
             key={form.key("title")}
             label="Title"

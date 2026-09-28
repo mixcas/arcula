@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Text, Button, Group, Card } from "@mantine/core";
+import { Text, Button, Group, Card, Badge } from "@mantine/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
 import { artworkSlug, collectionSlug, parseId } from "@/utils/slug";
@@ -13,6 +14,8 @@ const CollectionPage: React.FC = () => {
   // rewrite below change the URL without re-triggering the fetch.
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const userId = currentUser?.uid;
   const [collection, setCollection] = useState<Collection | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,7 @@ const CollectionPage: React.FC = () => {
   useEffect(() => {
     const fetchCollectionData = async () => {
       if (!collectionId) return;
+      if (!userId) return;
 
       try {
         // Fetch the collection
@@ -34,9 +38,13 @@ const CollectionPage: React.FC = () => {
 
         setCollection(fetchedCollection);
 
-        // Fetch artworks for this collection
-        const fetchedArtworks =
-          await artworkService.getCollectionArtworks(collectionId);
+        // Fetch artworks for this collection. Scoped to the owner so the
+        // rules can authorize it with a plain userId check; the owner sees
+        // every artwork, public or private.
+        const fetchedArtworks = await artworkService.getCollectionArtworks(
+          collectionId,
+          userId,
+        );
         setArtworks(fetchedArtworks);
 
         setLoading(false);
@@ -48,7 +56,7 @@ const CollectionPage: React.FC = () => {
     };
 
     void fetchCollectionData();
-  }, [collectionId]);
+  }, [collectionId, userId]);
 
   // Once the name is known, put the canonical "{slug}-{id}" in the address bar
   // so a link written with only the id still resolves to a readable URL.
@@ -109,6 +117,11 @@ const CollectionPage: React.FC = () => {
             <Card key={artwork.id} shadow="sm" p="lg" mb="md">
               <Group justify="space-between">
                 <div>
+                  {artwork.isPublic !== true ? (
+                    <Badge color="gray" variant="light" mb="xs">
+                      Private
+                    </Badge>
+                  ) : null}
                   <Text size="h3">{artwork.title}</Text>
                   <Text>{artwork.artistName}</Text>
                   <Text>{artwork.dateOfCreation}</Text>

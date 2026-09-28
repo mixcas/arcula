@@ -18,6 +18,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
 import { collectionSlug, parseId } from "@/utils/slug";
+import { isPermissionDenied } from "@/utils/firestoreErrors";
 import type { Artwork, Collection } from "@/types";
 
 const PublicCollectionPage: React.FC = () => {
@@ -30,17 +31,22 @@ const PublicCollectionPage: React.FC = () => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Rules deny the read of a private collection outright (firestore.rules).
+  // The denied case is its own state — not `error` — so the page can render
+  // the private message instead of a failure alert.
+  const [denied, setDenied] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "mosaic">("list");
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [password, setPassword] = useState("");
 
   // createCollection defaults isPublic to false, so only an explicit true
   // grants access — a collection written before the field existed reads as
-  // private. NOTE: this is a rendering gate, not access control. There are no
-  // Firestore security rules in this repo, so the reads above are unguarded
-  // and anyone who knows a document id can make them directly. This page is
-  // the first unauthenticated reader in the app; see the sequencing in the
-  // fetch effect for what that currently costs.
+  // private. This check is a rendering gate, not access control: Firestore
+  // rules deny the underlying read of a private collection outright, and a
+  // denied read is mapped to this same private state in the fetch effect. An
+  // unauthenticated visitor can only ever fetch one published collection, and
+  // even then only its public artworks (see the sequencing in the fetch
+  // effect).
   const isPublic = collection?.isPublic === true;
   // Nothing writes passwordHash — CollectionSettingsPage saves only
   // {name, isPublic} — so this is currently always false. It is wired to the
@@ -66,28 +72,34 @@ const PublicCollectionPage: React.FC = () => {
         setCollection(fetched);
 
         // Sequenced rather than parallel: a private collection's artworks are
-        // never requested at all, so the only thing an unauthenticated visitor
-        // can pull down for one is its name. This narrows the exposure but does
-        // not close it — without security rules the collection document is
-        // readable either way. Costs one round trip, and it is the natural
-        // order anyway since the header needs the collection before anything
-        // else can render.
+        // never requested at all — the rules deny the collection read before
+        // this point, so a an anonymous visitor cannot even pull a private
+        // collection's name down. For a published collection this second round
+        // trip fetches only the works the owner marked public. Costs one round
+        // trip, and it is the natural order anyway since the header needs the
+        // collection before anything else can render.
         if (fetched.isPublic !== true) {
           return;
         }
 
         const fetchedArtworks =
-          await artworkService.getCollectionArtworks(collectionId);
-        // Sorted here rather than with orderBy: the service query is a where()
-        // on collectionId, and adding an orderBy on a different field would
-        // require a composite index. title is required on Artwork, so it is
-        // always safe to compare.
+          await artworkService.getPublicCollectionArtworks(collectionId);
+        // Sorted here rather than with orderBy: the service query carries two
+        // where() constraints, and adding an orderBy on a different field
+        // would require yet another composite index. title is required on
+        // Artwork, so it is always safe to compare.
         setArtworks(
           [...fetchedArtworks].sort((a, b) => a.title.localeCompare(b.title)),
         );
       } catch (err) {
         console.error("Error fetching public collection:", err);
-        setError("Failed to load this collection. Please try again.");
+        // A denied read is the rules doing their job — the collection is
+        // private — not a failure. Map it to the private state below.
+        if (isPermissionDenied(err)) {
+          setDenied(true);
+        } else {
+          setError("Failed to load this collection. Please try again.");
+        }
       } finally {
         setLoading(false);
       }
@@ -183,12 +195,12 @@ const PublicCollectionPage: React.FC = () => {
         <Loader />
       ) : error ? (
         <Alert color="red">{error}</Alert>
-      ) : !collection ? (
+      ) : !collection && !denied ? (
         <Alert color="red">Collection not available</Alert>
       ) : !isPublic ? (
         <Text>This collection is private.</Text>
       ) : artworks.length === 0 ? (
-        <Text ta="center">No artworks in this collection yet.</Text>
+        <Text ta="center">No public artworks in this collection yet.</Text>
       ) : viewMode === "list" ? (
         <div>
           {artworks.map((artwork) => {

@@ -1,19 +1,23 @@
-import { 
-  signInWithEmailAndPassword, 
+import {
+  signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  User
-} from 'firebase/auth';
-import { auth } from './firebase';
+  User,
+} from "firebase/auth";
+import { auth } from "./firebase";
 
 export const authService = {
   // Login user
   async login(email: string, password: string): Promise<User> {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
       return userCredential.user;
     } catch (error) {
-      console.error('Error logging in:', error);
+      console.error("Error logging in:", error);
       throw error;
     }
   },
@@ -23,7 +27,7 @@ export const authService = {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error("Error logging out:", error);
       throw error;
     }
   },
@@ -31,5 +35,5 @@ export const authService = {
   // Listen to authentication state changes
   onAuthChange(callback: (user: User | null) => void) {
     return onAuthStateChanged(auth, callback);
-  }
+  },
 };

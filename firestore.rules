@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- access helpers ----------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // Privileged read: rule `get`/`exists` resolve with service credentials,
+    // so this works for a document the caller may not read. Used only on the
+    // artwork *create* path (the target collection's owner) — never on a read
+    // path, keeping list evaluations free of dependent reads.
+    function ownerOfCollection(collectionId) {
+      return get(/databases/$(database)/documents/collections/$(collectionId))
+        .data.userId;
+    }
+
+    // Server-stamped metadata — stamped last by the service layer, resolved to
+    // request.time by rules, and never spoofable by the client.
+    function timestampsValid() {
+      return request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // ---- collections -------------------------------------------------
+
+    match /collections/{collectionId} {
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && timestampsValid();
+
+      allow get, delete: if isOwner(resource.data.userId);
+      // update carries a fresh server timestamp
+      allow update: if isOwner(resource.data.userId)
+                    && request.resource.data.updatedAt == request.time;
+
+      // List: rules are not filters — every matched document must satisfy
+      // this rule or the whole query is denied (it fails outright, it does
+      // not silently trim rows). The client's list query therefore carries
+      // `where("userId","==",uid)` so its result set never spans another
+      // user's collections. Per-document field check: no dependent reads,
+      // and it runs unchanged on the emulator (which does not populate
+      // `request.query.where`, so query-constraint rules are untestable and
+      // deliberately not used here).
+      allow list: if isOwner(resource.data.userId);
+
+      // Logged-out visitors: exactly one published collection by id. This is
+      // the page-level gate — a private collection is unreadable outright,
+      // so its name and description never reach an unauthenticated client.
+      allow get: if resource.data.isPublic == true;
+    }
+
+    // ---- artworks ----------------------------------------------------
+
+    match /artworks/{artworkId} {
+      allow create: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && ownerOfCollection(request.resource.data.collectionId)
+                       == request.auth.uid
+                    && timestampsValid();
+
+      allow get, delete: if isOwner(resource.data.userId);
+      // update carries a fresh server timestamp
+      allow update: if isOwner(resource.data.userId)
+                    && request.resource.data.updatedAt == request.time;
+
+      // Visitor reads an artwork by its *own* flag, independent of the parent
+      // collection's isPublic: a public collection may keep individual works
+      // private (and, by symmetry, a work flagged public remains readable by
+      // direct id even inside a private collection — the collection gate on
+      // the page level is what hides it from the UI).
+      allow get: if resource.data.isPublic == true;
+
+      // Lists split by caller. Rules are not filters: every matched document
+      // must satisfy the rule or the entire query is denied, so a query that
+      // spans a document the caller may not read fails outright rather than
+      // dropping rows. The client queries carry the matching constraints:
+      //   - owner list   -> where("userId","==",uid)
+      //   - visitor list -> where("isPublic","==",true)
+      // (Per-document checks again: emulator-validatable, no dependent reads.)
+      allow list: if isOwner(resource.data.userId)
+                  || resource.data.isPublic == true;
+    }
+  }
+}

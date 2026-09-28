@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // No upload service exists in the app yet (FULLSPEC §8), so the default
+    // deny below is the whole point for now. These match blocks target the
+    // path scheme the upload flow will use and stay inert until that lands.
+    //
+    // TODO(§8): `read` must also open for visitors once public collections
+    // render photos (firestore.get(...collectionId...).data.isPublic == true
+    // or the artwork's own isPublic for per-work images).
+    match /artworks/{userId}/{collectionId}/{artworkId}/{allPaths=**} {
+      allow read, write: if firestore.get(
+        /databases/(default)/documents/artworks/$(artworkId)
+      ).data.userId == request.auth.uid
+      // Uploads only: 10 MiB cap; images and certificates (the two kinds the
+      // Add Artwork form accepts).
+      && request.resource.size < 10 * 1024 * 1024
+      && request.resource.contentType.matches('image/.*|application/pdf');
+    }
+  }
+}

@@ -7,6 +7,12 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 - `bun run dev` - Start development server (port 3000)
 - `bun run build` - Build for production
 - `bun run preview` - Preview production build
+- `bun run check` - Typecheck, lint, and check formatting
+- `bun run test:rules` - Run the Firestore rules suite against the emulators (needs Java)
+- `bun run emulators` - Start the full emulator suite with web UI (port 4000)
+- `bun run deploy:rules` - Test rules, then deploy `firebase deploy --only firestore,storage`
+- `bun run deploy:hosting` - Build, then deploy hosting
+- `bun run deploy` - Rules first (gated on the suite), then hosting
 
 ## Project Structure
 
@@ -21,7 +27,7 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 
 - **Entry Point**: `src/App.tsx` - Main routing configuration
 - **Firebase Setup**: Configured in `src/services/firebase.ts`
-- **Authentication Context**: `src/context/AuthContext.ts`
+- **Authentication Context**: `src/context/AuthContext.tsx`
 - **Management Interface**: All `/manage` routes use `src/components/manage/layout/ManageLayout.tsx` for consistent header with user menu and logout
 
 ## Key Files
@@ -70,7 +76,7 @@ Lodash (`lodash@^4.18.1`) is a dependency and available for utility functions.
 
 ## Mantine Context
 
-Mantine guidelines are saved in `@.opencode/docs/mantine-llms.txt`. Reference this file whenever building UI components or form controls.
+Mantine guidelines are saved in `.opencode/docs/mantine-llms.txt`. Reference this file whenever building UI components or form controls.
 
 ## Custodia Firebase Integration
 
@@ -80,6 +86,9 @@ Custodia is a React 19 + Vite + Mantine SPA. Firebase provides all
 persistence and auth. Firebase is initialized once in
 `src/services/firebase.ts` from `VITE_FIREBASE_*` env vars and exposes
 `db` (Firestore), `auth`, and `storage` (Storage, wired but unused).
+Firestore access is enforced by `firestore.rules` (with
+`firestore.indexes.json` for composite queries); the rule suite in
+`tests/` runs against the emulators and gates every rules deploy.
 
 ### When to use
 
@@ -87,6 +96,11 @@ persistence and auth. Firebase is initialized once in
 - Reading/writing the `collections` or `artworks` Firestore data
 - Touching any file that imports from `src/services/firebase`
 - Adding new collections, storage uploads, or security rules
+- Changing read/write patterns that the rules must authorize (rules live
+  in `firestore.rules`; list rules are per-document field checks, so keep
+  the client's `where(...)` filters in sync — a list whose result set spans
+  a document the caller may not read fails the whole query)
+- Running or extending the rules suite (`tests/firestore.rules.test.ts`)
 
 ### Where to find it
 
@@ -94,7 +108,38 @@ persistence and auth. Firebase is initialized once in
 - Auth: `src/services/authService.ts`, `src/context/AuthContext.tsx` (useAuth)
 - Data: `src/services/collectionService.ts`, `src/services/artworkService.ts`
 - Types: `src/types/index.ts` (User, Collection, Artwork, FileReference)
+- Rules: `firestore.rules`, `firestore.indexes.json`, `storage.rules`
+- Tests: `tests/firestore.rules.test.ts` (run via `bun run test:rules`)
 - Env vars: `.env`, `.env.development` (VITE_FIREBASE_*)
+
+### Security rules model
+
+The rules authorize list queries with per-document field checks
+(`resource.data.userId`, `resource.data.isPublic`) rather than
+`request.query.where(...)` constraints. Reason: rules are not filters, so a
+per-document rule already denies any list whose result set could span a
+document the caller may not read — and the emulator (which runs the
+deploy-gating suite) does not populate `request.query.where`, so
+query-constraint rules would be untestable. No `get()`/`exists()` on any
+read path (that keeps list evaluation free of dependent document reads):
+
+- `collections`: owner lists add `where("userId","==",uid)`; visitors can
+  only `get` one document whose `isPublic == true`.
+- `artworks`: owner (list/get/update/delete) vs `isPublic == true`
+  (visitor get/list). One `get()` only exists — on the artwork `create`
+  path, to prove the parent collection belongs to the writer.
+- `isPublic` is per-artwork and independent of the collection's flag by
+  design (no sync/cascade). Default is `false` in every write path.
+- The service layer is where server timestamps get stamped
+  (`serverTimestamp()` last), and the rules verify
+  `createdAt/updatedAt == request.time` on create/update so the client
+  cannot spoof them.
+- `bun run test:rules` starts Firestore+Auth emulators with a throwaway
+  `demo-custodia` project (`.firebaserc` pins the real one for deploys)
+  and asserts every rule above. `bun run deploy:rules` runs the suite
+  first, so a failing rule set is never deployed.
+- Deploys are always `--only` scoped: `deploy:rules` =
+  `--only firestore,storage`, `deploy:hosting` = hosting only.
 
 ### Access patterns (IMPORTANT)
 
@@ -126,6 +171,17 @@ Two patterns coexist; follow the surrounding code:
   and return `docRef.id`.
 - Route link for a collection: `/manage/collection/{urlizedName}-{docId}`
   (urlize: lowercase, non-alphanumerics -> "-", trim hyphens).
+- `Artwork.isPublic` is a per-work boolean, **independent** of the
+  collection's `isPublic`. Default is `false` on every write path
+  (`src/schemas/artwork.ts` keeps it in the schema and payloads). The
+  rules authorize the public reads on this field alone.
+- Artwork reads split by caller (both in `src/services/artworkService.ts`):
+  - owner: `getCollectionArtworks(collectionId, userId)` — where()
+    `collectionId` + `userId` (needs the `(collectionId, userId)` index)
+  - visitor: `getPublicCollectionArtworks(collectionId)` — where()
+    `collectionId` + `isPublic == true` (needs the
+    `(collectionId, isPublic)` index)
+    Both indexes are declared in `firestore.indexes.json`.
 
 ### Gotchas
 
@@ -135,14 +191,34 @@ Two patterns coexist; follow the surrounding code:
   real values.
 - `storage` is exported but unused; `Artwork.photos`/`certificates`
   (`FileReference[]`) are the most likely place storage will be used next.
-- No Firestore security rules exist in the repo — client reads are
-  unguarded; flag before exposing data.
+  `storage.rules` currently admits **no** uploads until that path lands.
+- Firestore rules exist now and are enforced. Pre-rule client reads are
+  gone; list rules are per-document field checks and **rules are not
+  filters**, so **every client list query must carry the matching
+  `where(...)` filter the rules check** (`where userId` for owner queries,
+  `where isPublic == true` for visitor queries). A list that would span a
+  document the caller may not read is denied outright, not silently
+  trimmed.
+- `createdAt`/`updatedAt` are server-stamped by the service layer and the
+  rules verify `== request.time`; never write them from a component.
+- Creating an artwork requires owning the parent collection — the rules
+  `get()` that document during the create write.
+- `PublicCollectionPage` maps Firestore `permission-denied` to the
+  "This collection is private." state via `isPermissionDenied` in
+  `src/utils/firestoreErrors.ts`.
 - `AGENTS.md` lists `AuthContext.ts`; the real file is `.tsx`.
-- No tests for the Firebase layer; "dev" = run `bun run build`
-  (tsc typecheck) to validate.
+- Rules suite: `bun run test:rules` needs a Java runtime for the
+  emulators; firebase-tools offers to download one if missing. The suite
+  uses a throwaway `demo-custodia` project and never touches real data.
+- The emulator does not build the composite indexes from
+  `firestore.indexes.json`; the list tests deliberately use single-field
+  queries. Composite-query validation happens at deploy time.
 
 ### Validation
 
 - `bun run build` (runs `tsc && vite build`) for typecheck.
+- `bun run check` (tsc + eslint + prettier) must pass before and after a
+  rules change.
+- `bun run test:rules` for the security rules suite against the emulators.
 - Confirm no second `initializeApp` and that new code imports `db`/`auth`
   from the shared module.

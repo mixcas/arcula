@@ -58,6 +58,8 @@ export const artworkSchema = z.object({
   notes: optionalText,
   condition: optionalText,
   currentValue: optionalText,
+  // Per-artwork public visibility, independent of the collection's own flag.
+  isPublic: z.boolean().default(false),
 });
 
 /**
@@ -86,6 +88,7 @@ export interface ArtworkFormValues {
   notes: string;
   condition: string;
   currentValue: string;
+  isPublic: boolean;
 }
 
 /** The trimmed, validated, Firestore-ready subset of an artwork. */
@@ -118,6 +121,7 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   notes: "",
   condition: "",
   currentValue: "",
+  isPublic: false,
 };
 
 /** The fields this form owns; the only ones that may be cleared on save. */
@@ -172,6 +176,7 @@ export const toNewArtwork = (
   // renamed, so storing one would orphan the artwork on the next rename.
   collectionId,
   userId,
+  isPublic: payload.isPublic ?? false,
   // TODO: upload to Firebase Storage per FULLSPEC §8 and store the resulting
   // FileReferences once a storage service exists.
   certificates: [],
@@ -194,6 +199,7 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   notes: artwork.notes ?? "",
   condition: artwork.condition ?? "",
   currentValue: artwork.currentValue ?? "",
+  isPublic: artwork.isPublic ?? false,
 });
 
 /**

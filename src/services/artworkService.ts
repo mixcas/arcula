@@ -32,12 +32,20 @@ export const artworkService = {
     }
   },
 
-  // Get all artworks for a collection
-  async getCollectionArtworks(collectionId: string): Promise<Artwork[]> {
+  // Get a collection's artworks for its owner.
+  //
+  // Filters on the owner too so the rules can authorize the query with a pure
+  // `isOwner(resource.data.userId)` field check rather than a dependent read.
+  // This needs the (collectionId, userId) composite index.
+  async getCollectionArtworks(
+    collectionId: string,
+    userId: string,
+  ): Promise<Artwork[]> {
     try {
       const q = query(
         collection(db, ARTWORKS_COLLECTION),
         where("collectionId", "==", collectionId),
+        where("userId", "==", userId),
       );
 
       const querySnapshot = await getDocs(q);
@@ -47,6 +55,30 @@ export const artworkService = {
       })) as Artwork[];
     } catch (error) {
       console.error("Error fetching collection artworks:", error);
+      throw error;
+    }
+  },
+
+  // Get the publicly visible artworks of a collection, for a logged-out
+  // visitor. isPublic is each artwork's own flag (independent of the
+  // collection's); the rules authorize this share of the list with a pure
+  // `resource.data.isPublic == true` check. Needs the (collectionId, isPublic)
+  // composite index.
+  async getPublicCollectionArtworks(collectionId: string): Promise<Artwork[]> {
+    try {
+      const q = query(
+        collection(db, ARTWORKS_COLLECTION),
+        where("collectionId", "==", collectionId),
+        where("isPublic", "==", true),
+      );
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Artwork[];
+    } catch (error) {
+      console.error("Error fetching public collection artworks:", error);
       throw error;
     }
   },
