@@ -46,46 +46,96 @@ not tied to one laptop, and it is open source, so the schema is yours to argue w
 
 ## Project status
 
-This is an early project. The private side works; the public side does not, yet. Here is
-the honest version:
+This is an early project. Both sides read and write Firestore; neither side is secured.
+Here is the honest version:
 
-| Area                                           | State                          |
-| ---------------------------------------------- | ------------------------------ |
-| Email/password auth, protected routes          | Working                        |
-| Create, list, view collections                 | Working                        |
-| Rename collection, set public/private flag     | Working                        |
-| List a collection's artworks                   | Working                        |
-| Add an artwork                                 | Working                        |
-| Edit an artwork (writes to Firestore)          | Working                        |
-| **Public collection page** (`/collection/:id`) | **Mock data only**             |
-| **Password-protected collections**             | **UI only, not enforced**      |
-| **Photo and certificate uploads**              | **Not implemented**            |
-| **Deleting artworks or collections**           | Service functions exist, no UI |
-| Firestore security rules                       | Not provided, see below        |
-| Tests                                          | None yet                       |
+| Area                                                 | State                                 |
+| ---------------------------------------------------- | ------------------------------------- |
+| Email/password auth, protected routes                | Working                               |
+| Create, list, view collections                       | Working                               |
+| Rename collection, set public/private flag           | Working                               |
+| List a collection's artworks                         | Working                               |
+| Add an artwork                                       | Working                               |
+| Edit an artwork (writes to Firestore)                | Working                               |
+| Public collection page (`/collection/:collectionId`) | Reads Firestore, renders, not secured |
+| Password-protected collections                       | UI only, not enforced                 |
+| Photo and certificate uploads                        | Not implemented                       |
+| Deleting artworks or collections                     | Service functions exist, no UI        |
+| Firestore security rules                             | **Not provided — see below**          |
+| Tests                                                | None yet                              |
 
 Two of those deserve emphasis because they are easy to misread from the code:
 
-- **`/collection/:id` is not connected to the database.** It renders a hardcoded
-  collection containing Van Gogh and the Mona Lisa. The public/private flag and the
-  password control on the settings page are real, stored fields, but nothing reads them
-  yet. Do not put a link to this page in front of anyone.
+- **There are no Firestore security rules, and the public page is now the first
+  unauthenticated reader in the app.** A rule set is the only thing that actually
+  protects anything here. The public/private flag is a _rendering gate_, not access
+  control: `PublicCollectionPage` checks `isPublic` and renders "This collection is
+  private" when it is false, but the document was already read to find that out, and
+  anyone who knows a document id can read it directly from the SDK. What the current
+  ordering does buy you is narrower than it looks — a private collection's artworks are
+  never even requested, so an unauthenticated visitor can pull down the collection
+  document and nothing else. That is the exposure reduced, not removed. Write the rules
+  before putting real data in.
 - **The password control does not work.** The switch and the password field on the
-  settings page hold local component state and are never saved. `passwordHash` exists
-  in the type definition with no implementation behind it.
+  settings page hold local component state and are never saved; the page submits only
+  `{ name, isPublic }`. `passwordHash` exists in the type definition, and the public
+  page's prompt reads that real field, but nothing ever writes it. Note also that the
+  prompt could not be a client-side check even once it is written: by the time it
+  renders, the artworks are already in the browser. Real enforcement needs rules plus a
+  verification path, or a callable function.
+
+The public page renders artwork metadata but no images. Firebase Storage is
+initialised and exported and then never used, so `photos` is always `[]` and the list
+view shows placeholder blocks where a carousel will eventually go.
 
 ## Tech stack
 
 - **Frontend**: React 19, TypeScript
 - **UI**: Mantine v9
-- **Forms**: `@mantine/form` with [Zod](https://zod.dev) schemas
+- **Forms**: `@mantine/form` with [Zod](https://zod.dev) v4 schemas
 - **Routing**: React Router v7
 - **Auth**: Firebase Authentication (email/password)
 - **Database**: Firestore
 - **Build**: Vite
+- **Typography**: [Poppins](https://fonts.google.com/specimen/Poppins) for body text and
+  [Gravitas One](https://fonts.google.com/specimen/Gravitas+One) for headings, loaded
+  via `<link>` in `index.html` and applied in `src/theme.ts`
 
 Validation lives in a single shared schema (`src/schemas/artwork.ts`) used by both the
 add and edit forms, so the two write identical documents for identical input.
+
+## URL scheme
+
+Every collection and artwork route carries a readable segment alongside the document
+id:
+
+```
+/manage/collection/van-gogh-collection-7aV9xKqL2mP4nR8tY1zC
+/manage/collection/van-gogh-collection-7aV9xKqL2mP4nR8tY1zC/artwork/the-potato-eaters-Yh8kD2mL5vN9qR
+```
+
+The name is cosmetic. **Firestore only ever stores the raw document id** — the slug
+lives in the URL and nowhere else, and that is what makes a rename safe: changing a
+collection's name cannot orphan the artworks that point at it. Three consequences
+worth knowing:
+
+- **Bare ids still work.** An older link of the form
+  `/collection/7aV9xKqL2mP4nR8tY1zC` loads fine and the page rewrites the address bar to
+  the canonical slug using `replace`, so it corrects in place rather than pushing a
+  history entry.
+- **Parsing splits on the last hyphen**, not at a fixed offset, so it depends on neither
+  the length nor the alphabet of the id, and a param with no hyphen in it comes back
+  unchanged.
+- **The slug is never a lookup key.** Pass the parsed id to Firestore and the route
+  param to `Link`/`navigate()`. Reversing those two is how a slug once ended up written
+  into documents as a `collectionId`.
+
+`src/utils/slug.ts` is the only place that knows how the two relate. The convention is
+specified in [FULLSPEC.md](FULLSPEC.md) §10.
+
+One migration note, if you already have data: a document written before this change may
+hold a slug in its `collectionId`, in which case a bare-id query will not find it. Check
+existing artworks for a `collectionId` that is not a plain Firestore auto-id.
 
 ## Getting started
 
@@ -143,44 +193,57 @@ bun run dev
 
 ```
 src/
+├── main.tsx                          # Entry point; wires theme + router
+├── App.tsx                           # Routes
+├── theme.ts                          # Mantine theme: fonts, sizes, spacing
 ├── components/
-│   ├── ProductPage.tsx              # Public landing page
-│   ├── ProtectedRoute.tsx           # Auth gate for /manage routes
+│   ├── ProductPage.tsx               # Public landing page
+│   ├── ProtectedRoute.tsx            # Auth gate for /manage routes
 │   ├── auth/
-│   │   └── LoginPage.tsx            # Email/password sign-in
+│   │   └── LoginPage.tsx             # Email/password sign-in
 │   ├── collection/
-│   │   └── PublicCollectionPage.tsx # NOT WIRED TO THE DATABASE YET
+│   │   └── PublicCollectionPage.tsx  # Unauthenticated view of a public collection
 │   └── manage/
-│       ├── layout/ManageLayout.tsx  # Shared header for all /manage routes
-│       ├── ManagePage.tsx           # Dashboard: your collections
-│       ├── CollectionPage.tsx       # One collection and its artworks
-│       ├── CollectionSettingsPage.tsx  # Rename, public/private
-│       ├── ArtworkAddPage.tsx       # Add an artwork
-│       ├── ArtworkEditPage.tsx      # Edit an artwork
+│       ├── layout/
+│       │   ├── ManageLayout.tsx      # Shared shell for all /manage routes
+│       │   └── ManageNavBar.tsx      # Header, user menu, sign out
+│       ├── ManagePage.tsx            # Dashboard: your collections
+│       ├── CollectionPage.tsx        # One collection and its artworks
+│       ├── CollectionSettingsPage.tsx # Rename, public/private
+│       ├── ArtworkAddPage.tsx        # Add an artwork
+│       ├── ArtworkEditPage.tsx       # Edit an artwork
 │       └── collection/NewCollectionPage.tsx
-├── context/AuthContext.tsx          # Auth state via useAuth()
-├── hooks/useAuth.ts                 # Context consumer hook
-├── schemas/artwork.ts               # Zod schema + Firestore payload shaping
+├── context/AuthContext.tsx           # Auth state provider, read via useAuth()
+├── hooks/useAuth.ts                  # Context consumer hook
+├── schemas/artwork.ts                # Zod schema + Firestore payload shaping
 ├── services/
-│   ├── firebase.ts                  # Firebase init, exports db/auth/storage
+│   ├── firebase.ts                   # Firebase init, exports db/auth/storage
 │   ├── authService.ts
 │   ├── collectionService.ts
 │   └── artworkService.ts
-├── types/index.ts                   # Artwork, Collection, ArtworkUpdate
-└── App.tsx                          # Routes
+├── types/index.ts                    # Artwork, Collection, ArtworkUpdate, FileReference
+└── utils/slug.ts                     # {slug}-{id} route params ⇄ bare document ids
 ```
+
+There is no global stylesheet. Typography, spacing and component defaults all come from
+the Mantine theme, so a change to a font or size is a one-line change in `src/theme.ts`
+rather than a hunt through CSS.
+
+`firebase.ts` exports `db`, `auth` and `storage`. `storage` is the odd one out: it is
+initialised and never used, which is why every artwork's `photos` array is empty.
 
 ## Roadmap
 
 Roughly in order of how much they matter:
 
-- Wire the public collection page to Firestore, and actually enforce the public flag
-- Real password protection for shared collections
+- Firestore security rules, and an index on any query that needs one — the public page
+  reads without authentication, so this is the gap that matters most
+- Real password protection for shared collections, with a server-side verification path
+  rather than a prompt
 - Photo and certificate uploads to Firebase Storage
 - Delete for artworks and collections
-- Firestore security rules, plus an index on the queries the app needs
-- Search and filtering, once there are enough works for it to matter
 - Export, so you are never locked in
+- Search and filtering, once there are enough works for it to matter
 - Tests around the schema and the load/save paths
 
 ## Contributing
@@ -200,12 +263,15 @@ fail it.
 
 ## License
 
-MIT. The `LICENSE` file has not been added yet, so add one before you distribute this.
+MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
 - [React](https://react.dev/)
 - [Mantine](https://mantine.dev/)
+- [React Router](https://reactrouter.com/)
 - [Firebase](https://firebase.google.com/)
 - [Vite](https://vite.dev/)
 - [Zod](https://zod.dev/)
+- [Poppins](https://fonts.google.com/specimen/Poppins) and
+  [Gravitas One](https://fonts.google.com/specimen/Gravitas+One)

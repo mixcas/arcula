@@ -16,9 +16,11 @@ const ManageNavBar: React.FC = () => {
 
   return (
     <Group h="100%" px="md" justify="space-between">
-      <Link to="/manage">
-        <Text size="lg">Custodia</Text>
-      </Link>
+      <Button variant="subtle" component={Link} to={`/manage`}>
+        <Text size="lg" ff="heading" component="span">
+          Custodia
+        </Text>
+      </Button>
       <Menu shadow="md" width={200}>
         <Menu.Target>
           <Button variant="subtle">
