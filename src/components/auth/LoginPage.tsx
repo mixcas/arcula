@@ -62,10 +62,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
-      {/* TODO(arcula-rename): this page is public and pre-auth, so by the
-          "Arcula is the public name" rule it should read Arcula. Left as
-          Custodia when the rename was scoped to the nav bars. See RENAME.md. */}
-      <Text size="h2">Login to Custodia</Text>
+      <Text size="h2">Login to Arcula</Text>
 
       {error && <Alert mt="md">{error}</Alert>}
 
