@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Artwork } from "../types";
+import { Artwork, ArtworkUpdate } from "../types";
 
 const ARTWORKS_COLLECTION = "artworks";
 
@@ -72,9 +72,15 @@ export const artworkService = {
   },
 
   // Update an artwork
+  //
+  // Takes ArtworkUpdate rather than Partial<Artwork> so callers can pass a
+  // deleteField() sentinel for a field they cleared — `updateDoc` merges, so
+  // merely omitting a key would leave the stored value in place. `updatedAt`
+  // is stamped last so a caller cannot override it, but a `deleteField()` for
+  // that exact key would still take precedence; no caller sends one.
   async updateArtwork(
     artworkId: string,
-    updateData: Partial<Artwork>,
+    updateData: ArtworkUpdate,
   ): Promise<void> {
     try {
       const docRef = doc(db, ARTWORKS_COLLECTION, artworkId);

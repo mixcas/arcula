@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase/firestore";
+import { FieldValue, Timestamp } from "firebase/firestore";
 
 // User type
 export interface User {
@@ -53,6 +53,18 @@ export interface Artwork {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
+
+// Payload for artworkService.updateArtwork.
+//
+// `updateDoc` merges, so a key that is simply absent leaves the stored field
+// alone — which would make it impossible to clear a value once it is set. Any
+// field may therefore also carry a `deleteField()` sentinel to remove it.
+// Written as a mapped type rather than `Record<string, unknown>` so the usual
+// type checking survives: a wrong value type or an unknown key is still an
+// error, it just widens to accept the sentinel.
+export type ArtworkUpdate = {
+  [K in keyof Omit<Artwork, "id">]?: Artwork[K] | FieldValue;
+};
 
 // File reference type (could be URL or metadata)
 export interface FileReference {

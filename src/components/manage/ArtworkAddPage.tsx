@@ -12,61 +12,43 @@ import {
   Alert,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
+import { useForm } from "@mantine/form";
+import { schemaResolver } from "@mantine/form";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { artworkService } from "@/services/artworkService";
-import type { Artwork } from "@/types";
-// Subpath imports keep lodash out of the main bundle path; prefer these over
-// full-package imports (AGENTS.md).
-import mapValues from "lodash/mapValues";
-import omitBy from "lodash/omitBy";
-
-/**
- * Parse a numeric form field. Returns undefined for blank or unparseable input
- * so the key is omitted from the document rather than written as 0 or NaN.
- * A real 0 is preserved, keeping "worth zero" distinct from "not set".
- */
-const toNumber = (value: string): number | undefined => {
-  if (value.trim() === "") {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
+import {
+  EMPTY_ARTWORK_FORM,
+  artworkSchema,
+  toArtworkPayload,
+  toNewArtwork,
+  type ArtworkFormValues,
+  type ArtworkPayload,
+} from "@/schemas/artwork";
 
 const ArtworkAddPage: React.FC = () => {
   const { collectionId } = useParams<{ collectionId: string }>();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    title: "",
-    serie: "",
-    artistName: "",
-    dateOfCreation: "",
-    media: "",
-    dimensions: "",
-    editions: "",
-    acquisitionDate: "",
-    acquisitionPrice: "",
-    placeOfOrigin: "",
-    provenance: "",
-    notes: "",
-    condition: "",
-    currentValue: "",
+  const form = useForm<ArtworkFormValues, ArtworkPayload>({
+    mode: "uncontrolled",
+    initialValues: EMPTY_ARTWORK_FORM,
+    validateInputOnBlur: true,
+    // zod's standard-schema validate is synchronous, so `sync: true` keeps
+    // form.validate() synchronous instead of resolving a promise per check.
+    validate: schemaResolver(artworkSchema, { sync: true }),
+    // The schema's output *is* the payload, so there is no second conversion
+    // step: what reaches onSubmit is already trimmed, coerced and stripped of
+    // blank fields.
+    transformValues: toArtworkPayload,
   });
 
+  // File uploads are not part of the payload yet (FULLSPEC §8), so these stay
+  // out of the form.
   const [certificates, setCertificates] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleChange = (name: string, value: string) => {
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-  };
 
   const handleFileChange = (
     files: File[] | null,
@@ -81,69 +63,6 @@ const ArtworkAddPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!collectionId) {
-      setError("Invalid collection id");
-      return;
-    }
-
-    if (!currentUser) {
-      setError("You must be signed in to add an artwork");
-      return;
-    }
-
-    const title = formData.title.trim();
-    const artistName = formData.artistName.trim();
-
-    if (!title || !artistName) {
-      setError("Title and artist name are required");
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
-    // Trim every string field, then coerce the two numeric ones. Must stay a
-    // non-lodash trim and toNumber: passing `trim` straight to mapValues would
-    // feed the field name into lodash's `chars` param, and `_.toNumber("")`
-    // returns 0, silently turning blanks into zeros.
-    const values = {
-      ...mapValues(formData, (v) => v.trim()),
-      acquisitionPrice: toNumber(formData.acquisitionPrice),
-      currentValue: toNumber(formData.currentValue),
-    };
-
-    try {
-      const artwork: Omit<Artwork, "id"> = {
-        title: values.title,
-        artistName: values.artistName,
-        // Stored in the "{urlized-name}-{docId}" form defined in FULLSPEC §10.
-        // Read paths must query artworks by this same composite value.
-        collectionId,
-        userId: currentUser.uid,
-        // TODO: upload to Firebase Storage per FULLSPEC §8 and store the
-        // resulting FileReferences once a storage service exists.
-        certificates: [],
-        photos: [],
-        // Blank strings and absent numbers are dropped entirely so "not set"
-        // stays distinguishable from set-but-empty. The predicate is explicit
-        // (`=== "" || === undefined`) rather than truthiness-based because a
-        // real 0 must survive.
-        ...omitBy(values, (v) => v === "" || v === undefined),
-      };
-
-      const newId = await artworkService.createArtwork(artwork);
-      void navigate(`/manage/collection/${collectionId}/artwork/${newId}`);
-    } catch (err) {
-      console.error("Error creating artwork:", err);
-      setError("Failed to create artwork. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
       <Text size="h2" mb="xl">
@@ -152,134 +71,147 @@ const ArtworkAddPage: React.FC = () => {
 
       <Card shadow="sm" p="lg">
         <form
-          onSubmit={(e) => {
-            void handleSubmit(e);
-          }}
+          // Uncontrolled mode repaints a field by remounting it, which is what
+          // form.key is for. It is a function of the field path, not a value.
+          onSubmit={form.onSubmit(async (payload) => {
+            // Not field validation, so these guards stay out of the schema.
+            if (!collectionId) {
+              setError("Invalid collection id");
+              return;
+            }
+
+            if (!currentUser) {
+              setError("You must be signed in to add an artwork");
+              return;
+            }
+
+            setError(null);
+
+            try {
+              const newId = await artworkService.createArtwork(
+                toNewArtwork(payload, collectionId, currentUser.uid),
+              );
+              void navigate(
+                `/manage/collection/${collectionId}/artwork/${newId}`,
+              );
+            } catch (err) {
+              console.error("Error creating artwork:", err);
+              setError("Failed to create artwork. Please try again.");
+            }
+          })}
         >
           <TextInput
+            key={form.key("title")}
             label="Title"
             placeholder="Artwork title"
-            value={formData.title}
-            onChange={(e) => handleChange("title", e.target.value)}
             required
             mb="md"
+            {...form.getInputProps("title")}
           />
 
           <TextInput
+            key={form.key("serie")}
             label="Serie"
             placeholder="Serie name"
-            value={formData.serie}
-            onChange={(e) => handleChange("serie", e.target.value)}
             mb="md"
+            {...form.getInputProps("serie")}
           />
 
           <TextInput
+            key={form.key("artistName")}
             label="Artist Name"
             placeholder="Artist's full name"
-            value={formData.artistName}
-            onChange={(e) => handleChange("artistName", e.target.value)}
             required
             mb="md"
+            {...form.getInputProps("artistName")}
           />
 
           <TextInput
+            key={form.key("dateOfCreation")}
             label="Date of Creation"
             placeholder="YYYY-MM-DD"
-            value={formData.dateOfCreation}
-            onChange={(e) => handleChange("dateOfCreation", e.target.value)}
             mb="md"
+            {...form.getInputProps("dateOfCreation")}
           />
 
           <TextInput
+            key={form.key("media")}
             label="Media"
             placeholder="e.g. Oil on canvas, Bronze, Mixed media"
-            value={formData.media}
-            onChange={(e) => handleChange("media", e.target.value)}
             mb="md"
+            {...form.getInputProps("media")}
           />
 
           <TextInput
+            key={form.key("dimensions")}
             label="Dimensions"
             placeholder="e.g. 100x80 cm"
-            value={formData.dimensions}
-            onChange={(e) => handleChange("dimensions", e.target.value)}
             mb="md"
+            {...form.getInputProps("dimensions")}
           />
 
           <TextInput
+            key={form.key("editions")}
             label="Editions"
             placeholder="e.g. 3/10, Open edition"
-            value={formData.editions}
-            onChange={(e) => handleChange("editions", e.target.value)}
             mb="md"
+            {...form.getInputProps("editions")}
           />
 
           <DateInput
+            key={form.key("acquisitionDate")}
             label="Acquisition Date"
             placeholder="Select date"
-            value={formData.acquisitionDate || null}
-            onChange={(date) => handleChange("acquisitionDate", date ?? "")}
             mb="md"
+            {...form.getInputProps("acquisitionDate")}
           />
 
           <NumberInput
+            key={form.key("acquisitionPrice")}
             label="Acquisition Price"
             placeholder="Price in currency"
-            value={
-              formData.acquisitionPrice
-                ? parseFloat(formData.acquisitionPrice)
-                : undefined
-            }
-            onChange={(value) =>
-              handleChange("acquisitionPrice", value?.toString() || "")
-            }
             mb="md"
+            {...form.getInputProps("acquisitionPrice")}
           />
 
           <TextInput
+            key={form.key("placeOfOrigin")}
             label="Place of Origin"
             placeholder="City, Country"
-            value={formData.placeOfOrigin}
-            onChange={(e) => handleChange("placeOfOrigin", e.target.value)}
             mb="md"
+            {...form.getInputProps("placeOfOrigin")}
           />
 
           <TextInput
+            key={form.key("provenance")}
             label="Provenance"
             placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
-            value={formData.provenance}
-            onChange={(e) => handleChange("provenance", e.target.value)}
             mb="md"
+            {...form.getInputProps("provenance")}
           />
 
           <Textarea
+            key={form.key("notes")}
             label="Notes"
             placeholder="Additional information about the artwork"
-            value={formData.notes}
-            onChange={(e) => handleChange("notes", e.target.value)}
             mb="md"
+            {...form.getInputProps("notes")}
           />
 
           <TextInput
+            key={form.key("condition")}
             label="Condition"
             placeholder="Excellent, Good, Fair, etc."
-            value={formData.condition}
-            onChange={(e) => handleChange("condition", e.target.value)}
             mb="md"
+            {...form.getInputProps("condition")}
           />
 
           <NumberInput
+            key={form.key("currentValue")}
             label="Current Value"
             placeholder="Value in currency"
-            value={
-              formData.currentValue
-                ? parseFloat(formData.currentValue)
-                : undefined
-            }
-            onChange={(value) =>
-              handleChange("currentValue", value?.toString() || "")
-            }
             mb="md"
+            {...form.getInputProps("currentValue")}
           />
 
           <FileInput
@@ -313,7 +245,7 @@ const ArtworkAddPage: React.FC = () => {
           ) : null}
 
           <Group mt="xl">
-            <Button type="submit" loading={submitting}>
+            <Button type="submit" loading={form.submitting}>
               Save Artwork
             </Button>
             <Button

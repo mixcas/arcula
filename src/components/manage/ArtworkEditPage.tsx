@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Container,
   Text,
@@ -9,62 +9,120 @@ import {
   Group,
   FileInput,
   Card,
+  Alert,
+  Loader,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
-import { Link, useParams } from "react-router-dom";
+import { useForm, schemaResolver } from "@mantine/form";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { artworkService } from "@/services/artworkService";
+import {
+  EMPTY_ARTWORK_FORM,
+  artworkSchema,
+  fromArtwork,
+  toArtworkPayload,
+  toArtworkUpdate,
+  type ArtworkFormValues,
+  type ArtworkPayload,
+} from "@/schemas/artwork";
 
 const ArtworkEditPage: React.FC = () => {
   const { collectionId, artworkId } = useParams<{
     collectionId: string;
     artworkId: string;
   }>();
+  const navigate = useNavigate();
 
-  // Simulated artwork data - in reality this would be fetched from the database
-  const [artworkData, setArtworkData] = useState({
-    title: "Starry Night",
-    serie: "Night Skies",
-    artistName: "Vincent van Gogh",
-    dateOfCreation: "1889",
-    media: "Oil on canvas",
-    dimensions: "73.7 x 92.1 cm",
-    editions: "",
-    acquisitionDate: "2023-05-15",
-    acquisitionPrice: "50000",
-    placeOfOrigin: "France",
-    provenance: "",
-    notes: "This is a famous painting by Van Gogh.",
-    condition: "Excellent",
-    currentValue: "75000",
+  const form = useForm<ArtworkFormValues, ArtworkPayload>({
+    mode: "uncontrolled",
+    initialValues: EMPTY_ARTWORK_FORM,
+    validateInputOnBlur: true,
+    validate: schemaResolver(artworkSchema, { sync: true }),
+    transformValues: toArtworkPayload,
   });
+  // Destured so the effect depends on the stable callback rather than on the
+  // `form` object, which is rebuilt every render.
+  const { initialize } = form;
 
+  // Values as loaded from Firestore. Needed at save time to tell a field the
+  // user cleared apart from one that was never set — see toArtworkUpdate.
+  // State rather than a ref: the submit handler is built during render, and
+  // react-hooks/refs rejects reading a ref there.
+  const [loadedValues, setLoadedValues] =
+    useState<ArtworkFormValues>(EMPTY_ARTWORK_FORM);
+
+  const [loading, setLoading] = useState(true);
+  // Kept separate from `error`: a load failure means there is nothing to edit,
+  // but a save failure must leave the user's input on screen.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // File uploads are not part of the payload yet (FULLSPEC §8), so these stay
+  // out of the form.
   const [certificates, setCertificates] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
 
-  const handleChange = (name: string, value: string) => {
-    setArtworkData({
-      ...artworkData,
-      [name]: value,
-    });
-  };
-
-  const handleFileChange = (
-    files: File[] | null,
-    type: "certificates" | "photos",
-  ) => {
-    if (files && files.length > 0) {
-      if (type === "certificates") {
-        setCertificates(files);
-      } else {
-        setPhotos(files);
-      }
+  useEffect(() => {
+    if (!artworkId) {
+      return;
     }
-  };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Form submission logic would go here
-    console.log("Form submitted:", { ...artworkData, certificates, photos });
-  };
+    const fetchArtwork = async () => {
+      try {
+        const artwork = await artworkService.getArtwork(artworkId);
+        if (!artwork) {
+          setLoadError("Artwork not found");
+          return;
+        }
+
+        const values = fromArtwork(artwork);
+        setLoadedValues(values);
+        // In uncontrolled mode this bumps the form key, which is what remounts
+        // the inputs with the loaded values as their new defaults.
+        initialize(values);
+      } catch (err) {
+        console.error("Error fetching artwork:", err);
+        setLoadError("Failed to load artwork. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchArtwork();
+  }, [artworkId, initialize]);
+
+  if (!artworkId) {
+    return (
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Alert color="red">Invalid artwork id</Alert>
+      </Container>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Loader />
+      </Container>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Container
+        size="sm"
+        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
+      >
+        <Alert color="red">{loadError}</Alert>
+      </Container>
+    );
+  }
 
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
@@ -73,137 +131,136 @@ const ArtworkEditPage: React.FC = () => {
       </Text>
 
       <Card shadow="sm" p="lg">
-        <form onSubmit={handleSubmit}>
+        <form
+          // Uncontrolled mode repaints a field by remounting it, which is what
+          // form.key is for. It is a function of the field path, not a value.
+          onSubmit={form.onSubmit(async (payload) => {
+            setError(null);
+
+            try {
+              await artworkService.updateArtwork(
+                artworkId,
+                toArtworkUpdate(loadedValues, payload),
+              );
+              void navigate(`/manage/collection/${collectionId}`);
+            } catch (err) {
+              console.error("Error updating artwork:", err);
+              setError("Failed to save artwork. Please try again.");
+            }
+          })}
+        >
           <TextInput
+            key={form.key("title")}
             label="Title"
             placeholder="Artwork title"
-            value={artworkData.title}
-            onChange={(e) => handleChange("title", e.target.value)}
             required
             mb="md"
+            {...form.getInputProps("title")}
           />
 
           <TextInput
+            key={form.key("serie")}
             label="Serie"
             placeholder="Serie name"
-            value={artworkData.serie}
-            onChange={(e) => handleChange("serie", e.target.value)}
             mb="md"
+            {...form.getInputProps("serie")}
           />
 
           <TextInput
+            key={form.key("artistName")}
             label="Artist Name"
             placeholder="Artist's full name"
-            value={artworkData.artistName}
-            onChange={(e) => handleChange("artistName", e.target.value)}
             required
             mb="md"
+            {...form.getInputProps("artistName")}
           />
 
           <TextInput
+            key={form.key("dateOfCreation")}
             label="Date of Creation"
             placeholder="YYYY-MM-DD"
-            value={artworkData.dateOfCreation}
-            onChange={(e) => handleChange("dateOfCreation", e.target.value)}
             mb="md"
+            {...form.getInputProps("dateOfCreation")}
           />
 
           <TextInput
+            key={form.key("media")}
             label="Media"
             placeholder="e.g. Oil on canvas, Bronze, Mixed media"
-            value={artworkData.media}
-            onChange={(e) => handleChange("media", e.target.value)}
             mb="md"
+            {...form.getInputProps("media")}
           />
 
           <TextInput
+            key={form.key("dimensions")}
             label="Dimensions"
             placeholder="e.g. 100x80 cm"
-            value={artworkData.dimensions}
-            onChange={(e) => handleChange("dimensions", e.target.value)}
             mb="md"
+            {...form.getInputProps("dimensions")}
           />
 
           <TextInput
+            key={form.key("editions")}
             label="Editions"
             placeholder="e.g. 3/10, Open edition"
-            value={artworkData.editions}
-            onChange={(e) => handleChange("editions", e.target.value)}
             mb="md"
+            {...form.getInputProps("editions")}
           />
 
           <DateInput
+            key={form.key("acquisitionDate")}
             label="Acquisition Date"
             placeholder="Select date"
-            value={
-              artworkData.acquisitionDate
-                ? new Date(artworkData.acquisitionDate)
-                : null
-            }
-            onChange={(date) =>
-              handleChange("acquisitionDate", date?.toISOString() || "")
-            }
             mb="md"
+            {...form.getInputProps("acquisitionDate")}
           />
 
           <NumberInput
+            key={form.key("acquisitionPrice")}
             label="Acquisition Price"
             placeholder="Price in currency"
-            value={
-              artworkData.acquisitionPrice
-                ? parseFloat(artworkData.acquisitionPrice)
-                : undefined
-            }
-            onChange={(value) =>
-              handleChange("acquisitionPrice", value?.toString() || "")
-            }
             mb="md"
+            {...form.getInputProps("acquisitionPrice")}
           />
 
           <TextInput
+            key={form.key("placeOfOrigin")}
             label="Place of Origin"
             placeholder="City, Country"
-            value={artworkData.placeOfOrigin}
-            onChange={(e) => handleChange("placeOfOrigin", e.target.value)}
             mb="md"
+            {...form.getInputProps("placeOfOrigin")}
           />
 
           <TextInput
+            key={form.key("provenance")}
             label="Provenance"
             placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
-            value={artworkData.provenance}
-            onChange={(e) => handleChange("provenance", e.target.value)}
             mb="md"
+            {...form.getInputProps("provenance")}
           />
 
           <Textarea
+            key={form.key("notes")}
             label="Notes"
             placeholder="Additional information about the artwork"
-            value={artworkData.notes}
-            onChange={(e) => handleChange("notes", e.target.value)}
             mb="md"
+            {...form.getInputProps("notes")}
           />
 
           <TextInput
+            key={form.key("condition")}
             label="Condition"
             placeholder="Excellent, Good, Fair, etc."
-            value={artworkData.condition}
-            onChange={(e) => handleChange("condition", e.target.value)}
             mb="md"
+            {...form.getInputProps("condition")}
           />
 
           <NumberInput
+            key={form.key("currentValue")}
             label="Current Value"
             placeholder="Value in currency"
-            value={
-              artworkData.currentValue
-                ? parseFloat(artworkData.currentValue)
-                : undefined
-            }
-            onChange={(value) =>
-              handleChange("currentValue", value?.toString() || "")
-            }
             mb="md"
+            {...form.getInputProps("currentValue")}
           />
 
           <FileInput
@@ -212,7 +269,9 @@ const ArtworkEditPage: React.FC = () => {
             multiple
             accept="application/pdf,image/jpeg,image/png"
             value={certificates}
-            onChange={(files) => handleFileChange(files, "certificates")}
+            onChange={(files) => setCertificates(files ?? [])}
+            disabled
+            description="File uploads are not wired up yet"
             mb="md"
           />
 
@@ -222,12 +281,22 @@ const ArtworkEditPage: React.FC = () => {
             multiple
             accept="image/jpeg,image/png,image/webp"
             value={photos}
-            onChange={(files) => handleFileChange(files, "photos")}
+            onChange={(files) => setPhotos(files ?? [])}
+            disabled
+            description="File uploads are not wired up yet"
             mb="md"
           />
 
+          {error ? (
+            <Alert color="red" mb="md">
+              {error}
+            </Alert>
+          ) : null}
+
           <Group mt="xl">
-            <Button type="submit">Save Changes</Button>
+            <Button type="submit" loading={form.submitting}>
+              Save Changes
+            </Button>
             <Button
               component={Link}
               to={`/manage/collection/${collectionId}`}
