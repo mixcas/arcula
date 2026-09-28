@@ -110,40 +110,19 @@ const CollectionSettingsPage: React.FC = () => {
   };
 
   if (!collectionId) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Alert color="red">Invalid collection id</Alert>
-      </Container>
-    );
+    return <Alert color="red">Invalid collection id</Alert>;
   }
 
   if (loading) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Loader />
-      </Container>
-    );
+    return <Loader />;
   }
 
   if (error) {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Alert color="red">{error}</Alert>
-      </Container>
-    );
+    return <Alert color="red">{error}</Alert>;
   }
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <Container size="sm">
       <Text size="h2" mb="xl">
         Collection Settings
       </Text>

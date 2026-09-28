@@ -82,22 +82,24 @@ const CollectionPage: React.FC = () => {
   return (
     <>
       <Group justify="space-between" mb="xl">
-        <Text size="h2">{collection.name}</Text>
-        <Button component={Link} to={`/manage/collection/${param}/settings`}>
-          Settings
-        </Button>
-      </Group>
-
-      <Card shadow="sm" p="lg" mb="md">
-        <Group justify="center" mb="md">
+        <Group>
+          <Text size="h2">{collection.name}</Text>
+          <Button variant="subtle" component={Link} to={`/collection/${param}`}>
+            View
+          </Button>
+        </Group>
+        <Group>
           <Button
             component={Link}
             to={`/manage/collection/${param}/artwork/add`}
           >
             Add Artwork
           </Button>
+          <Button component={Link} to={`/manage/collection/${param}/settings`}>
+            Settings
+          </Button>
         </Group>
-      </Card>
+      </Group>
 
       {artworks.length === 0 ? (
         <Text ta="center">No artworks in this collection yet.</Text>
