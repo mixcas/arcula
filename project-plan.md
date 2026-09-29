@@ -242,14 +242,20 @@ Firestore rules cannot count documents. That leaves two options, and this is the
 decision in the beta work worth getting right early:
 
 - Store the one collection at a deterministic id (`collections/{uid}`) and gate
-  `create` with `!exists(...)`. Race-free, no Blaze plan, and assertable in the
-  existing emulator suite. The cost is a one-time migration: existing collection
+  `create` with `!exists(...)`. Race-free and assertable in the existing emulator
+  suite, which is the part that has kept mattering: that suite covers rules and
+  nothing else, so the other option's count would be untested by it. The cost is
+  a one-time migration: existing collection
   documents move to the uid-keyed id, and every artwork's `collectionId` has to be
   repointed, which is precisely the field FULLSPEC §10 warns is silently broken by
   getting wrong. Cheap now, annoying later.
 - Move collection creation into a callable function that counts with admin
-  credentials. Authoritative, and it leaves the document ids alone — but it needs the
-  Blaze plan and the `functions/` scaffold actually built.
+  credentials. Authoritative, and it leaves the document ids alone. It was also
+  the option that needed the Blaze plan, which used to be the tie-breaker — and
+  the project is now on Blaze, so that argument is gone and the emulator
+  coverage in the option above stands. What is left to do is build the
+  `functions/` scaffold and accept that the count itself is then only testable
+  by hand.
 
 Either way the number itself should live in one place the UI reads for its messaging (a
 `COLLECTION_LIMITS` map keyed by tier), while the rules hold their own copy of the
@@ -324,8 +330,10 @@ and the profile is simply blank. That is recoverable — make the write idempote
 treat a missing document as "finish setting up your profile" rather than as an error —
 but it is a decision to make rather than to discover. The alternative is an
 `auth.onCreate` trigger in `functions/`, the only way to guarantee a document for every
-account, which needs the Blaze plan; it is worth weighing on its own merits, because
-the same trigger is where a tier claim would be assigned.
+account; the Blaze plan it used to be gated on is already in place, so what it needs now
+is the scaffold built and the trigger deployed (and it must not be reasoned about as if
+billing were still open). It is worth weighing on its own merits, because the same
+trigger is where a tier claim would be assigned.
 
 **The trap this sets for the quota.** A user whose document is missing is a user the
 rules cannot read a `tier` from. So if the `collections` `create` rule ever consults

@@ -17,7 +17,9 @@
  *                                 with an `expiresAt`) that the Firestore
  *                                 rules check before admitting artworks.
  *
- * Enabling it requires Anonymous Auth for visitors plus the Blaze plan.
+ * Enabling it requires Anonymous Auth for visitors. The Blaze plan is already
+ * in place on the project, so billing is no longer part of the question — what
+ * is missing is the Anonymous Auth provider and this scaffold's own code.
  * See PublicCollectionPage.tsx and README "Roadmap" for the design notes.
  */
 export {};

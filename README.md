@@ -159,7 +159,8 @@ existing artworks for a `collectionId` that is not a plain Firestore auto-id.
 ### Prerequisites
 
 - [Bun](https://bun.sh)
-- A Firebase project
+- A Firebase project on the [Blaze](https://firebase.google.com/pricing) plan —
+  see [Firebase plan](#firebase-plan)
 
 ### Installation
 
@@ -198,6 +199,35 @@ bun run dev
 ```bash
 bun run deploy:rules
 ```
+
+### Firebase plan
+
+Arcula is developed and deployed on the **Blaze** (pay-as-you-go) plan, and a
+project that intends to use Cloud Functions should be too. Blaze is not a
+subscription and not a feature tier: it is the plan with a payment method
+attached, and Firebase bills per use past the free quotas every plan includes.
+What it buys this project is Cloud Functions — the `functions/` scaffold, and
+the password-protection and account paths designed against it — plus the option
+of a server-side Admin SDK backfill. Everything currently built (Auth,
+Firestore, its security rules, Hosting, the emulator suite) runs on the free
+plan unchanged, so switching plans is not a prerequisite for reading or running
+the app.
+
+Two consequences are worth spelling out:
+
+- **Almost nothing that happens here bills.** `bun run test:rules` runs
+  entirely on local emulators against a throwaway project, and deploying rules
+  or static files is not a metered operation. The billable surfaces are a
+  functions deploy, function invocations, and Storage traffic once uploads land
+  — which is the argument for keeping a budget alert on the project and for
+  running the rules suite before a deploy rather than after.
+- **Enabling it is console work, not repository work.** No script here
+  provisions billing and nothing depends on it being enabled, so a self-hoster
+  can stay on the free plan and lose nothing that works today.
+
+Roadmap items that used to be described as "requiring the Blaze plan" are now
+waiting only on their other prerequisites — Anonymous Auth for the collection
+password path, and the `functions/` scaffold being actually built.
 
 ## Scripts
 
@@ -312,7 +342,8 @@ Roughly in order of how much they matter:
 - ✅ Per-artwork visibility flag, independent of the collection's
 - Real password protection for shared collections, with a server-side verification path
   — the functions scaffold in `functions/` is built for this (bcrypt + short-lived
-  grants, requiring the Blaze plan and Anonymous Auth)
+  grants; the Blaze plan is already in place, so Anonymous Auth is the only
+  outstanding prerequisite)
 - Photo and certificate uploads to Firebase Storage
 - Delete for artworks and collections
 - Account tiers and billing — this is what turns the collection cap above into a quota

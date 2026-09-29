@@ -123,6 +123,30 @@ Firestore access is enforced by `firestore.rules` (with
 - Tests: `tests/firestore.rules.test.ts` (run via `bun run test:rules`)
 - Env vars: `.env`, `.env.development` (VITE_FIREBASE_*)
 
+### Plan and billing (Blaze)
+
+The project (`custodia-67307`, pinned in `.firebaserc`) is on the **Blaze**
+(pay-as-you-go) plan, not Spark. That is already true, so Blaze is never a
+reason to choose one design over another.
+
+- Blaze is a payment method, not a subscription and not a product tier:
+  usage bills past the free quotas every plan includes. It is console state —
+  nothing in the repository provisions it, and no script depends on it.
+- What it unblocks: Cloud Functions (the `functions/` scaffold — the collection
+  password grants, an `auth.onCreate` profile trigger, a quota count with admin
+  credentials) and an Admin SDK server-side backfill. Everything built so far
+  (Auth, Firestore, rules deploys, Hosting, the emulators) runs on Spark.
+- Nothing local bills. The emulators and `bun run test:rules` are free, and
+  deploying rules or static files is not metered. The billable surfaces are a
+  functions deploy, function invocations, and Storage traffic once uploads
+  land. No script in `package.json` deploys functions at all — `deploy` is
+  `deploy:rules` then `deploy:hosting`, each `--only` scoped — which is
+  deliberate, not an oversight.
+- Consequence for prose: anywhere a note says a feature "needs the Blaze
+  plan", read that as already satisfied and look for the _other_
+  prerequisite instead (Anonymous Auth, a built `functions/` scaffold). Do not
+  re-raise billing as the open question.
+
 ### Security rules model
 
 The rules authorize list queries with per-document field checks
@@ -289,8 +313,9 @@ Scope and alternatives, for when this stops being enough:
   infrastructure, but it is not a fleet-wide backfill.
 - A server-side backfill would use the **Admin SDK** (a script with a service
   account, bypassing the rules) or a **Cloud Function** (an `onDeploy`
-  trigger). Cloud Functions require the Blaze plan, so that is a billing
-  decision, not just a technical one.
+  trigger). Both are unblocked by the Blaze plan (already in place), so what
+  is left is a credentials-and-rollout decision — who runs it, and which
+  service account it uses — not a billing one.
 
 ### Artwork table (owner view)
 
