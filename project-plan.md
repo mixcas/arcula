@@ -27,7 +27,7 @@ Everything below is a description of the code as it stands, not a target.
 - A public collection page that reads real Firestore data
 - Shared Zod schema (`src/schemas/artwork.ts`) used by both artwork forms
 - `{urlizedName}-{id}` route params throughout, with bare ids still accepted
-- Mantine theme with Poppins body text and Gravitas One headings
+- Mantine theme with Darker Grotesque body text and BBH Bartle headings
 
 **Known gaps**
 

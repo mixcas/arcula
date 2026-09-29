@@ -70,7 +70,7 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId/artwork/:artworkId"
           element={
             <ProtectedRoute>
-              <ManageLayout>
+              <ManageLayout containerProps={{ size: "xl" }}>
                 <ArtworkEditPage />
               </ManageLayout>
             </ProtectedRoute>

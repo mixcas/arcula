@@ -110,13 +110,6 @@ const MigrationsPage: React.FC = () => {
       </Group>
 
       <Stack>
-        <Text c="dimmed" maw={640}>
-          Firestore has no schema, so a field added to a document type only
-          exists on documents written after it. These steps bring existing
-          documents up to the current shape. Each one only touches your own
-          data, and re-running a step that has already run changes nothing.
-        </Text>
-
         {migrations.map((migration) => {
           const state = states[migration.id] ?? { status: "checking" };
           return (

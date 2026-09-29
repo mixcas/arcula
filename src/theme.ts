@@ -21,14 +21,17 @@ const CONTAINER_SIZES: Record<string, string> = {
 export const mantineTheme: MantineThemeOverride = createTheme({
   /** Put your mantine theme override here */
   // Body text, used by every Mantine component. Both families are loaded by
-  // <link> in index.html.
-  fontFamily: '"Poppins", sans-serif',
-  // Title, and Text size="h1".."h6". Gravitas One ships a single weight (400),
-  // so it is pinned here: Mantine defaults headings to 700, which the browser
+  // <link> in index.html. Darker Grotesque is a variable font (wght 300..900),
+  // so every weight Mantine asks for — 400 body, 500/600/700 for labels,
+  // buttons and table headers — resolves to a real instance rather than a
+  // synthesised one. Note the floor is 300, so `fontWeight: 200` would smear.
+  fontFamily: '"Darker Grotesque", sans-serif',
+  // Title, and Text size="h1".."h6". BBH Bartle ships a single weight (400), so
+  // it is pinned here: Mantine defaults headings to 700, which the browser
   // cannot satisfy and would answer with a synthesised faux bold, smearing the
   // display letterforms.
   headings: {
-    fontFamily: '"Gravitas One", serif',
+    fontFamily: '"BBH Bartle", sans-serif',
     fontWeight: "400",
   },
   fontSizes: {

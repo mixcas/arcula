@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import AppTitle from "@/components/AppTitle";
 
 const ManageNavBar: React.FC = () => {
-  const { currentUser, logout } = useAuth();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
     try {
@@ -24,7 +24,6 @@ const ManageNavBar: React.FC = () => {
         <Menu.Target>
           <Button variant="subtle">
             <Avatar size="sm" radius="xl" />
-            {currentUser?.email || "User"}
           </Button>
         </Menu.Target>
         <Menu.Dropdown>

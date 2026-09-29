@@ -114,9 +114,9 @@ view shows placeholder blocks where a carousel will eventually go.
 - **Auth**: Firebase Authentication (email/password)
 - **Database**: Firestore
 - **Build**: Vite
-- **Typography**: [Poppins](https://fonts.google.com/specimen/Poppins) for body text and
-  [Gravitas One](https://fonts.google.com/specimen/Gravitas+One) for headings, loaded
-  via `<link>` in `index.html` and applied in `src/theme.ts`
+- **Typography**: [Darker Grotesque](https://fonts.google.com/specimen/Darker+Grotesque)
+  for body text and [BBH Bartle](https://fonts.google.com/specimen/BBH+Bartle) for
+  headings, loaded via `<link>` in `index.html` and applied in `src/theme.ts`
 
 Validation lives in a single shared schema (`src/schemas/artwork.ts`) used by both the
 add and edit forms, so the two write identical documents for identical input.
@@ -352,5 +352,5 @@ MIT. See [LICENSE](LICENSE).
 - [Firebase](https://firebase.google.com/)
 - [Vite](https://vite.dev/)
 - [Zod](https://zod.dev/)
-- [Poppins](https://fonts.google.com/specimen/Poppins) and
-  [Gravitas One](https://fonts.google.com/specimen/Gravitas+One)
+- [Darker Grotesque](https://fonts.google.com/specimen/Darker+Grotesque) and
+  [BBH Bartle](https://fonts.google.com/specimen/BBH+Bartle)
