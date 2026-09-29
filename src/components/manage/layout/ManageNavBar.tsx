@@ -22,7 +22,7 @@ const ManageNavBar: React.FC = () => {
       </Button>
       <Menu shadow="md" width={200}>
         <Menu.Target>
-          <Button variant="subtle">
+          <Button variant="transparent">
             <Avatar size="sm" radius="xl" />
           </Button>
         </Menu.Target>

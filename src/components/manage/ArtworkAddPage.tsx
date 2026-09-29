@@ -4,9 +4,9 @@ import {
   TextInput,
   Textarea,
   Button,
+  Grid,
   Group,
   FileInput,
-  Card,
   Alert,
   Switch,
 } from "@mantine/core";
@@ -53,228 +53,218 @@ const ArtworkAddPage: React.FC = () => {
   const [photos, setPhotos] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileChange = (
-    files: File[] | null,
-    type: "certificates" | "photos",
-  ) => {
-    if (files && files.length > 0) {
-      if (type === "certificates") {
-        setCertificates(files);
-      } else {
-        setPhotos(files);
-      }
-    }
-  };
-
   return (
     <>
       <Text size="h2" mb="xl">
         Add New Artwork
       </Text>
 
-      <Card shadow="sm" p="lg">
-        <form
-          // Uncontrolled mode repaints a field by remounting it, which is what
-          // form.key is for. It is a function of the field path, not a value.
-          onSubmit={form.onSubmit(async (payload) => {
-            // Not field validation, so these guards stay out of the schema.
-            if (!collectionId) {
-              setError("Invalid collection id");
-              return;
-            }
+      <form
+        // Uncontrolled mode repaints a field by remounting it, which is what
+        // form.key is for. It is a function of the field path, not a value.
+        onSubmit={form.onSubmit(async (payload) => {
+          // Not field validation, so these guards stay out of the schema.
+          if (!collectionId) {
+            setError("Invalid collection id");
+            return;
+          }
 
-            if (!currentUser) {
-              setError("You must be signed in to add an artwork");
-              return;
-            }
+          if (!currentUser) {
+            setError("You must be signed in to add an artwork");
+            return;
+          }
 
-            setError(null);
+          setError(null);
 
-            try {
-              const artwork = toNewArtwork(
-                payload,
-                collectionId,
-                currentUser.uid,
-              );
-              const newId = await artworkService.createArtwork(artwork);
-              // Slugged from the document that was just written rather than
-              // from the form, so the URL can never disagree with Firestore.
-              void navigate(
-                `/manage/collection/${param}/artwork/${artworkSlug(artwork.title, newId)}`,
-              );
-            } catch (err) {
-              console.error("Error creating artwork:", err);
-              setError("Failed to create artwork. Please try again.");
-            }
-          })}
-        >
-          <Switch
-            key={form.key("isPublic")}
-            label="Public"
-            description="On by default — anyone with the collection link can see this artwork. Independent of the collection's own public setting: a public collection may keep individual works private."
-            mb="md"
-            {...form.getInputProps("isPublic", { type: "checkbox" })}
-          />
+          try {
+            const artwork = toNewArtwork(
+              payload,
+              collectionId,
+              currentUser.uid,
+            );
+            const newId = await artworkService.createArtwork(artwork);
+            // Slugged from the document that was just written rather than
+            // from the form, so the URL can never disagree with Firestore.
+            void navigate(
+              `/manage/collection/${param}/artwork/${artworkSlug(artwork.title, newId)}`,
+            );
+          } catch (err) {
+            console.error("Error creating artwork:", err);
+            setError("Failed to create artwork. Please try again.");
+          }
+        })}
+      >
+        <Grid gap="xl">
+          <Grid.Col span={8}>
+            <TextInput
+              key={form.key("title")}
+              label="Title"
+              placeholder="Artwork title"
+              required
+              mb="md"
+              {...form.getInputProps("title")}
+            />
 
-          <TextInput
-            key={form.key("title")}
-            label="Title"
-            placeholder="Artwork title"
-            required
-            mb="md"
-            {...form.getInputProps("title")}
-          />
+            <TextInput
+              key={form.key("artistName")}
+              label="Artist Name"
+              placeholder="Artist's full name"
+              required
+              mb="md"
+              {...form.getInputProps("artistName")}
+            />
 
-          <TextInput
-            key={form.key("serie")}
-            label="Serie"
-            placeholder="Serie name"
-            mb="md"
-            {...form.getInputProps("serie")}
-          />
+            <TextInput
+              key={form.key("serie")}
+              label="Serie"
+              placeholder="Serie name"
+              mb="md"
+              {...form.getInputProps("serie")}
+            />
 
-          <TextInput
-            key={form.key("artistName")}
-            label="Artist Name"
-            placeholder="Artist's full name"
-            required
-            mb="md"
-            {...form.getInputProps("artistName")}
-          />
+            <TextInput
+              key={form.key("media")}
+              label="Media"
+              placeholder="e.g. Oil on canvas, Bronze, Mixed media"
+              mb="md"
+              {...form.getInputProps("media")}
+            />
 
-          <TextInput
-            key={form.key("dateOfCreation")}
-            label="Date of Creation"
-            placeholder="YYYY-MM-DD"
-            mb="md"
-            {...form.getInputProps("dateOfCreation")}
-          />
+            <TextInput
+              key={form.key("dimensions")}
+              label="Dimensions"
+              placeholder="e.g. 100x80 cm"
+              mb="md"
+              {...form.getInputProps("dimensions")}
+            />
 
-          <TextInput
-            key={form.key("media")}
-            label="Media"
-            placeholder="e.g. Oil on canvas, Bronze, Mixed media"
-            mb="md"
-            {...form.getInputProps("media")}
-          />
+            <TextInput
+              key={form.key("editions")}
+              label="Editions"
+              placeholder="e.g. 3/10, Open edition"
+              mb="md"
+              {...form.getInputProps("editions")}
+            />
 
-          <TextInput
-            key={form.key("dimensions")}
-            label="Dimensions"
-            placeholder="e.g. 100x80 cm"
-            mb="md"
-            {...form.getInputProps("dimensions")}
-          />
+            <TextInput
+              key={form.key("dateOfCreation")}
+              label="Date of Creation"
+              placeholder="YYYY-MM-DD"
+              mb="md"
+              {...form.getInputProps("dateOfCreation")}
+            />
 
-          <TextInput
-            key={form.key("editions")}
-            label="Editions"
-            placeholder="e.g. 3/10, Open edition"
-            mb="md"
-            {...form.getInputProps("editions")}
-          />
+            <DateInput
+              key={form.key("acquisitionDate")}
+              label="Acquisition Date"
+              placeholder="Select date"
+              mb="md"
+              clearable
+              {...form.getInputProps("acquisitionDate")}
+            />
 
-          <DateInput
-            key={form.key("acquisitionDate")}
-            label="Acquisition Date"
-            placeholder="Select date"
-            mb="md"
-            clearable
-            {...form.getInputProps("acquisitionDate")}
-          />
+            <TextInput
+              key={form.key("acquisitionPrice")}
+              label="Acquisition Price"
+              placeholder="Price in currency"
+              mb="md"
+              {...form.getInputProps("acquisitionPrice")}
+            />
 
-          <TextInput
-            key={form.key("acquisitionPrice")}
-            label="Acquisition Price"
-            placeholder="Price in currency"
-            mb="md"
-            {...form.getInputProps("acquisitionPrice")}
-          />
+            <TextInput
+              key={form.key("placeOfOrigin")}
+              label="Place of Origin"
+              placeholder="City, Country"
+              mb="md"
+              {...form.getInputProps("placeOfOrigin")}
+            />
 
-          <TextInput
-            key={form.key("placeOfOrigin")}
-            label="Place of Origin"
-            placeholder="City, Country"
-            mb="md"
-            {...form.getInputProps("placeOfOrigin")}
-          />
+            <TextInput
+              key={form.key("provenance")}
+              label="Provenance"
+              placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
+              mb="md"
+              {...form.getInputProps("provenance")}
+            />
 
-          <TextInput
-            key={form.key("provenance")}
-            label="Provenance"
-            placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
-            mb="md"
-            {...form.getInputProps("provenance")}
-          />
+            <Textarea
+              key={form.key("notes")}
+              label="Notes"
+              placeholder="Additional information about the artwork"
+              mb="md"
+              {...form.getInputProps("notes")}
+            />
 
-          <Textarea
-            key={form.key("notes")}
-            label="Notes"
-            placeholder="Additional information about the artwork"
-            mb="md"
-            {...form.getInputProps("notes")}
-          />
+            <TextInput
+              key={form.key("condition")}
+              label="Condition"
+              placeholder="Excellent, Good, Fair, etc."
+              mb="md"
+              {...form.getInputProps("condition")}
+            />
 
-          <TextInput
-            key={form.key("condition")}
-            label="Condition"
-            placeholder="Excellent, Good, Fair, etc."
-            mb="md"
-            {...form.getInputProps("condition")}
-          />
+            <TextInput
+              key={form.key("currentValue")}
+              label="Current Value"
+              placeholder="Value in currency"
+              mb="md"
+              {...form.getInputProps("currentValue")}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <Switch
+              key={form.key("isPublic")}
+              label="Public"
+              description="On by default — anyone with the collection link can see this artwork. Independent of the collection's own public setting: a public collection may keep individual works private."
+              mb="md"
+              {...form.getInputProps("isPublic", { type: "checkbox" })}
+            />
 
-          <TextInput
-            key={form.key("currentValue")}
-            label="Current Value"
-            placeholder="Value in currency"
-            mb="md"
-            {...form.getInputProps("currentValue")}
-          />
+            <FileInput
+              label="Photos"
+              placeholder="Upload JPG, PNG, WebP images"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              value={photos}
+              onChange={(files) => setPhotos(files ?? [])}
+              disabled
+              description="File uploads are not wired up yet"
+              mb="md"
+            />
 
-          <FileInput
-            label="Certificates"
-            placeholder="Upload PDF, JPG, PNG files"
-            multiple
-            accept="application/pdf,image/jpeg,image/png"
-            value={certificates}
-            onChange={(files) => handleFileChange(files, "certificates")}
-            disabled
-            description="File uploads are not wired up yet"
-            mb="md"
-          />
+            <FileInput
+              label="Certificates"
+              placeholder="Upload PDF, JPG, PNG files"
+              multiple
+              accept="application/pdf,image/jpeg,image/png"
+              value={certificates}
+              onChange={(files) => setCertificates(files ?? [])}
+              disabled
+              description="File uploads are not wired up yet"
+              mb="md"
+            />
+          </Grid.Col>
+        </Grid>
 
-          <FileInput
-            label="Photos"
-            placeholder="Upload JPG, PNG, WebP images"
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            value={photos}
-            onChange={(files) => handleFileChange(files, "photos")}
-            disabled
-            description="File uploads are not wired up yet"
-            mb="md"
-          />
+        {error ? (
+          <Alert color="red" mb="md">
+            {error}
+          </Alert>
+        ) : null}
 
-          {error ? (
-            <Alert color="red" mb="md">
-              {error}
-            </Alert>
-          ) : null}
-
-          <Group mt="xl">
-            <Button type="submit" loading={form.submitting}>
-              Save Artwork
-            </Button>
-            <Button
-              component={Link}
-              to={`/manage/collection/${param}`}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-          </Group>
-        </form>
-      </Card>
+        <Group mt="xl">
+          <Button type="submit" loading={form.submitting}>
+            Save Artwork
+          </Button>
+          <Button
+            component={Link}
+            to={`/manage/collection/${param}`}
+            variant="outline"
+          >
+            Cancel
+          </Button>
+        </Group>
+      </form>
     </>
   );
 };
