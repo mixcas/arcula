@@ -251,6 +251,17 @@ Firebase has no migration runner. This app does, in three pieces:
   (protected, linked from a collection's Settings page) — lists each migration
   with its pending count and a Run button, disabled while the count is unknown
   so a migration is never run blind.
+- `src/utils/maintenanceAccess.ts` — `isMaintenanceAdmin(email)`, the
+  allowlist of who sees the maintenance screens (currently just
+  casska@gmail.com). **A UI gate, not a security boundary**, and safe as one:
+  a migration only writes the signed-in account's own documents through the
+  same owner rules as any other write, so running one you shouldn't have would
+  only rewrite your own data. `firestore.rules` is the real boundary. The check
+  is applied both to the card and to the page itself, since hiding a link does
+  nothing about someone typing the URL; a non-allowlisted user gets redirected
+  to `/manage` rather than told the tool exists. Match is case- and
+  whitespace-insensitive, because a strict compare would hide the screen from
+  its own owner over a capital letter.
 
 Rules for writing one:
 

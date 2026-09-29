@@ -15,10 +15,14 @@ import {
   Loader,
 } from "@mantine/core";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "../../services/collectionService";
+import { isMaintenanceAdmin } from "@/utils/maintenanceAccess";
 import { collectionSlug, parseId } from "../../utils/slug";
 
 const CollectionSettingsPage: React.FC = () => {
+  const { currentUser } = useAuth();
+  const canRunMigrations = isMaintenanceAdmin(currentUser?.email);
   const { collectionId: param } = useParams<{ collectionId: string }>();
   // Routes carry "{slug}-{id}" but Firestore needs the id alone.
   const collectionId = parseId(param ?? "");
@@ -214,7 +218,13 @@ const CollectionSettingsPage: React.FC = () => {
       <Divider my="xl" />
 
       <Card shadow="sm" p="lg">
-        <Group justify="space-between" align="center" gap="xl" wrap="nowrap">
+        <Group
+          grow
+          justify="space-between"
+          align="center"
+          gap="xl"
+          wrap="nowrap"
+        >
           <Box>
             <Text fw={600}>Import from CSV</Text>
             <Text size="sm" c="dimmed">
@@ -232,21 +242,29 @@ const CollectionSettingsPage: React.FC = () => {
         </Group>
       </Card>
 
-      <Card shadow="sm" p="lg" mt="lg">
-        <Group justify="space-between" align="center" gap="xl" wrap="nowrap">
-          <Box>
-            <Text fw={600}>Data migrations</Text>
-            <Text size="sm" c="dimmed">
-              Bring documents saved before a field was added up to the current
-              shape. Needed when older artworks go missing from a list after an
-              update.
-            </Text>
-          </Box>
-          <Button component={Link} to="/manage/migrations" variant="default">
-            Open
-          </Button>
-        </Group>
-      </Card>
+      {canRunMigrations && (
+        <Card shadow="sm" p="lg" mt="lg">
+          <Group
+            grow
+            justify="space-between"
+            align="center"
+            gap="xl"
+            wrap="nowrap"
+          >
+            <Box>
+              <Text fw={600}>Data migrations</Text>
+              <Text size="sm" c="dimmed">
+                Bring documents saved before a field was added up to the current
+                shape. Needed when older artworks go missing from a list after
+                an update.
+              </Text>
+            </Box>
+            <Button component={Link} to="/manage/migrations" variant="default">
+              Open
+            </Button>
+          </Group>
+        </Card>
+      )}
     </Container>
   );
 };

@@ -66,7 +66,7 @@ const ManagePage: React.FC = () => {
   return (
     <>
       <Group mb="xl">
-        <Text size="h2">My Collections</Text>
+        <Text size="h1">My Collections</Text>
       </Group>
 
       {collections.length === 0 ? (

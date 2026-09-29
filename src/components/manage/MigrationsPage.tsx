@@ -10,9 +10,11 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/services/firebase";
 import { migrations, type Migration } from "@/migrations";
+import { isMaintenanceAdmin } from "@/utils/maintenanceAccess";
 
 type MigrationState =
   | { status: "checking" }
@@ -29,6 +31,11 @@ type MigrationState =
  * documents written before it keep their old shape forever, and a query on the
  * new field quietly stops matching them. Rather than fixing that by hand in
  * the Firebase console, add a migration to the registry and run it here.
+ *
+ * Gated by `isMaintenanceAdmin`, which is a UI convenience and not a security
+ * boundary — see src/utils/maintenanceAccess.ts for why that distinction is
+ * safe here. The check is repeated here, not only on the card that links here,
+ * because hiding a link does nothing about someone typing the URL.
  */
 const MigrationsPage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -61,7 +68,7 @@ const MigrationsPage: React.FC = () => {
   }, [check, userId]);
 
   const run = async (migration: Migration) => {
-    if (!userId) return;
+    if (!userId || !isMaintenanceAdmin(currentUser?.email)) return;
     setState(migration.id, { status: "running" });
     try {
       const { updated } = await migration.run(db, userId);
@@ -87,6 +94,14 @@ const MigrationsPage: React.FC = () => {
     // success but left the data unchanged should show as pending, not done.
     await check(migration);
   };
+
+  // Anyone reaching this route without being on the allowlist gets the same
+  // empty view as an unknown URL, rather than a screen that says the tool is
+  // off limits — which would confirm it exists. `ProtectedRoute` has already
+  // established that there is a signed-in user by the time this runs.
+  if (!isMaintenanceAdmin(currentUser?.email)) {
+    return <Navigate to="/manage" replace />;
+  }
 
   return (
     <>

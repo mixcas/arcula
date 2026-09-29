@@ -70,10 +70,8 @@ export const mantineTheme: MantineThemeOverride = createTheme({
     }),
     Paper: Paper.extend({
       defaultProps: {
-        p: "md",
-        shadow: "xl",
-        radius: "md",
-        withBorder: true,
+        shadow: "sm",
+        radius: "sm",
       },
     }),
 
