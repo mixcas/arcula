@@ -28,6 +28,14 @@ vi.mock("@/services/artworkService", () => ({
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+// The failure test below drives the component's real error path, and
+// `artworkService.softDeleteArtworks` reports a rejected write with
+// `console.error`. Left unstubbed that lands on stderr during `test:rules`,
+// which is the gate in front of `deploy:rules` — so a *passing* run prints a
+// red stack trace and the deploy output trains everyone to ignore the one
+// line that matters. Captured instead of leaked; that test asserts on it.
+const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
 // mantine-datatable measures its scroll viewport on mount to drive column
 // widths, and jsdom implements no ResizeObserver. The stub satisfies the
 // observation and reports a zero-size viewport, which is all the layout needs
@@ -279,6 +287,12 @@ describe("ArtworksTable", () => {
     expect(await scope.findByText(/Nothing was deleted/)).toBeTruthy();
     expect(scope.getByRole("button", { name: "Delete" })).toBeEnabled();
     expect(onDeleted).not.toHaveBeenCalled();
+    // "Explains itself" is only half a claim if the reason never reaches the
+    // console; the dialog copy is the part a user can see.
+    expect(consoleError).toHaveBeenCalledWith(
+      "Error deleting artworks:",
+      expect.objectContaining({ message: "offline" }),
+    );
   });
 
   it("shows an empty state instead of an empty table", () => {

@@ -1,6 +1,7 @@
 import { deleteField } from "firebase/firestore";
 import { z } from "zod";
-import type { Artwork, ArtworkUpdate } from "@/types";
+import type { Artwork, ArtworkPhoto, ArtworkUpdate } from "@/types";
+import { reindexPhotos } from "@/utils/artworkPhotos";
 
 /**
  * Validation and Firestore shaping for the artwork form, shared by
@@ -175,6 +176,13 @@ export const toNewArtwork = (
   payload: ArtworkPayload,
   collectionId: string,
   userId: string,
+  // Photos cannot be part of the payload: a File is neither serialisable nor a
+  // Zod value, and the document is created before Storage has anything to
+  // record. The form therefore creates the artwork with an empty list and
+  // writes the uploaded photos in a second update. `photos` after the spread
+  // stops form data from ever setting the field, which is what kept this a
+  // hardcoded `[]` for as long as there was no storage service.
+  photos: ArtworkPhoto[] = [],
 ): Omit<Artwork, "id"> => {
   const clean = stripUndefined(payload);
   return {
@@ -191,10 +199,14 @@ export const toNewArtwork = (
     userId,
     // Public by default, matching the schema default in every write path.
     isPublic: clean.isPublic ?? true,
-    // TODO: upload to Firebase Storage per FULLSPEC §8 and store the resulting
-    // FileReferences once a storage service exists.
+    // TODO: certificate uploads per FULLSPEC §8, once a storage service
+    // handles them. They stay a flat list of attachments, unlike photos, which
+    // carry their generated variants and their order.
     certificates: [],
-    photos: [],
+    // `reindexPhotos` rather than the caller's array: `order` is derived from
+    // array position, and this is the one place a new document's sequence is
+    // established.
+    photos: reindexPhotos(photos),
   };
 };
 

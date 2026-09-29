@@ -30,7 +30,15 @@
 //      the whole query. The visitor `get` denial below is the part that is
 //      genuinely enforced here, so that is what is asserted.
 import { readFileSync } from "node:fs";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -46,6 +54,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  setLogLevel,
   where,
   writeBatch,
   type Firestore,
@@ -64,6 +73,23 @@ const RULES = readFileSync(
 );
 
 let testEnv: RulesTestEnvironment;
+
+// Every "rejects …" test below provokes a PERMISSION_DENIED, and a denied
+// request is loudly correct — the SDK logs the rule's evaluation trace, the
+// service layer logs its own `console.error`, and both land on stderr in a run
+// that passes. `test:rules` is the gate in front of `deploy:rules`, so a
+// *successful* deploy printed ten red PERMISSION_DENIED blocks; that is how
+// people learn to ignore stderr, which is exactly where a real failure would
+// land. Two separate sources, so two fixes: the SDK's own logger via
+// `setLogLevel`, and the service layer via a `console.error` spy.
+beforeAll(() => {
+  setLogLevel("silent");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterAll(() => {
+  vi.restoreAllMocks();
+});
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({

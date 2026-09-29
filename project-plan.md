@@ -37,8 +37,9 @@ Everything below is a description of the code as it stands, not a target.
 - **Password protection is not implemented.** The settings page collects a password and
   never saves it, and nothing writes `passwordHash`. The public page's prompt is wired
   to the real field but unreachable.
-- **Firebase Storage is unused.** It is initialised and exported but never called, so
-  every artwork has `photos: []` and the public list view renders placeholders.
+- **Storage is used for photos only.** Four variants plus the original are generated
+  client-side in a Web Worker and uploaded on save. `certificates` remain unwired, so
+  every artwork still has `certificates: []`.
 - **No deletes in the UI.** The service functions exist; nothing calls them.
 - **No tests.**
 - **No `users` Firestore collection.** Ownership is a `userId` field on each collection
@@ -145,7 +146,10 @@ so an unset key stays distinguishable from a set-but-empty one.
 - currentValue?
 - notes?
 - certificates (array of `FileReference`; always written, `[]` until uploads land)
-- photos (array of `FileReference`; always written, `[]` until uploads land)
+- photos (array of `ArtworkPhoto`, max 10; `order` is the sequence and index 0 is the
+  primary thumbnail app-wide; each entry carries the source dimensions, an unmodified
+  `original` and four generated `variants` — `square_lg` 800x800 cover, `square_sm`
+  400x400 cover, `large` max-1200 inside, `medium` max-800 inside)
 - collectionId (reference to the parent collection)
 - createdAt?, updatedAt? (stamped by `artworkService`)
 
@@ -177,15 +181,16 @@ so an unset key stays distinguishable from a set-but-empty one.
    - Collections per account — unlimited today; capped at one for the beta, in the
      interface only
 
-2. **Artwork Management** — _implemented, except uploads_
+2. **Artwork Management** — _implemented, except certificate uploads_
    - Detailed artwork entry forms using Mantine UI components
-   - File upload for certificates (images/PDFs) and photos (images only) — **not
-     implemented**
+   - File upload for photos (images only) — _implemented_: drag-and-drop, up to 10,
+     drag to reorder, click for a full-screen preview
+   - File upload for certificates (images/PDFs) — **not implemented**
    - Data validation for various formats — _implemented_ via the shared Zod schema
 
 3. **Data Persistence** — _partially implemented_
    - Firebase Firestore for structured data — implemented
-   - Firebase Storage for file attachments — **not implemented**
+   - Firebase Storage for artwork photos — implemented; certificates still pending
 
 4. **Authentication & Security** — _partially implemented_
    - User authentication system — implemented
@@ -517,7 +522,7 @@ Anything unmatched redirects to `/`.
      uid is the first thing the beta work adds, along with its `match /users/{userId}`
      rules (owner-only `create`/`get`/`update`, no `list`, and an `affectedKeys()`
      restriction so a user cannot raise their own `tier`)
-   - Implement file storage for certificates and photos — **not done**
+   - Implement file storage for photos — done; certificates still not done
    - Configure security rules — **not done, and the most urgent item here**
 
 2. **Authentication System**:

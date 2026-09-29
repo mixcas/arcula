@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Box,
   Text,
   TextInput,
   Textarea,
@@ -15,7 +16,11 @@ import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { artworkService } from "@/services/artworkService";
+import { imageService } from "@/services/imageService";
+import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
+
 import {
   EMPTY_ARTWORK_FORM,
   artworkSchema,
@@ -47,11 +52,13 @@ const ArtworkAddPage: React.FC = () => {
     transformValues: toArtworkPayload,
   });
 
-  // File uploads are not part of the payload yet (FULLSPEC §8), so these stay
-  // out of the form.
-  const [certificates, setCertificates] = useState<File[]>([]);
-  const [photos, setPhotos] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  // Photos live outside the form entirely — see useArtworkPhotos for why a
+  // File cannot survive `useForm` in uncontrolled mode. Certificates are still
+  // unwired (FULLSPEC §8) and keep their placeholder input.
+  const photos = useArtworkPhotos({ onError: setPhotoError });
+  const [certificates, setCertificates] = useState<File[]>([]);
 
   return (
     <>
@@ -77,12 +84,34 @@ const ArtworkAddPage: React.FC = () => {
           setError(null);
 
           try {
+            // Two writes, not one. The document has to exist before Storage
+            // has an id to put objects under, and the id cannot be known
+            // before the document exists — so the artwork is created with an
+            // empty photo list and the photos are attached immediately after.
+            // A failure between the two leaves a valid artwork with no photos,
+            // which the Edit form can fix; the reverse order would leave
+            // orphaned objects in Storage.
             const artwork = toNewArtwork(
               payload,
               collectionId,
               currentUser.uid,
             );
             const newId = await artworkService.createArtwork(artwork);
+
+            if (photos.pendingImages.length > 0) {
+              const uploaded = await imageService.uploadArtworkPhotos({
+                userId: currentUser.uid,
+                collectionId,
+                artworkId: newId,
+                // Already generated when the files were added, so the save is
+                // uploads only.
+                photos: photos.pendingImages,
+              });
+              await artworkService.updateArtwork(newId, {
+                photos: photos.mergeUploaded(uploaded),
+              });
+            }
+
             // Slugged from the document that was just written rather than
             // from the form, so the URL can never disagree with Firestore.
             void navigate(
@@ -90,7 +119,11 @@ const ArtworkAddPage: React.FC = () => {
             );
           } catch (err) {
             console.error("Error creating artwork:", err);
-            setError("Failed to create artwork. Please try again.");
+            setError(
+              photos.pendingImages.length > 0
+                ? "The artwork was saved, but its images could not be uploaded. Open it to try again."
+                : "Failed to create artwork. Please try again.",
+            );
           }
         })}
       >
@@ -220,17 +253,12 @@ const ArtworkAddPage: React.FC = () => {
               {...form.getInputProps("isPublic", { type: "checkbox" })}
             />
 
-            <FileInput
-              label="Photos"
-              placeholder="Upload JPG, PNG, WebP images"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              value={photos}
-              onChange={(files) => setPhotos(files ?? [])}
-              disabled
-              description="File uploads are not wired up yet"
-              mb="md"
-            />
+            <Box mb="md">
+              <Text size="sm" fw={500} mb={4}>
+                Photos
+              </Text>
+              <PhotoUploader photos={photos} />
+            </Box>
 
             <FileInput
               label="Certificates"
@@ -249,6 +277,12 @@ const ArtworkAddPage: React.FC = () => {
         {error ? (
           <Alert color="red" mb="md">
             {error}
+          </Alert>
+        ) : null}
+
+        {photoError ? (
+          <Alert color="red" mb="md">
+            {photoError}
           </Alert>
         ) : null}
 

@@ -27,8 +27,10 @@ export interface Collection {
 //
 // Only `title` and `artistName` are required; every other descriptive field is
 // optional so an absent key can be distinguished from a set-but-empty value.
-// Certificates and photos are always written (as [] until uploads land) and
-// collectionId/userId are always supplied by the creating code path.
+// Certificates are always written (as [] until certificate uploads land) and
+// collectionId/userId are always supplied by the creating code path. `photos`
+// is always written too — as [] when the artwork has no images — so a reader
+// never has to distinguish an absent field from an empty list.
 export interface Artwork {
   id: string;
   userId: string; // Reference to the owner
@@ -50,7 +52,7 @@ export interface Artwork {
   notes?: string;
   condition?: string;
   currentValue?: string;
-  photos: FileReference[]; // Array of file references
+  photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
   collectionId: string; // Reference to parent collection
   // Public visibility, owned by the artwork — independent of its collection's
   // isPublic. A public collection may keep individual works private (and, by
@@ -87,6 +89,12 @@ export type ArtworkUpdate = {
 };
 
 // File reference type (could be URL or metadata)
+//
+// Used by `certificates`, which is a flat list of attachments with no derived
+// sizes. `Artwork.photos` deliberately does NOT use this: an image needs its
+// generated variants and its position in the sequence, and `metadata?: any`
+// below is the wrong home for both — an untyped field is a field nothing
+// checks. See `ArtworkPhoto`.
 export interface FileReference {
   url?: string;
   name?: string;
@@ -94,4 +102,51 @@ export interface FileReference {
   type?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata?: any;
+}
+
+// The standard image variants generated for every artwork photo.
+//
+// The keys are the contract: they name the generated files in Firebase Storage
+// and they are matched by `storage.rules`, so adding a variant means changing
+// that rule too. The sizes live in `IMAGE_VARIANTS` (src/utils/imageVariants.ts)
+// — this type is only the key space.
+export type ImageVariantKey = "square_lg" | "square_sm" | "large" | "medium";
+
+// One generated derivative of an uploaded image.
+//
+// `contentType` is recorded per variant rather than assumed, because the
+// encoder is a capability check and not every browser agrees: WebP where the
+// canvas can encode it, JPEG everywhere else. See src/utils/imageProcessing.ts.
+export interface ImageVariant {
+  key: ImageVariantKey;
+  url: string; // Firebase Storage download URL
+  width: number; // Actual encoded pixels, not the nominal target
+  height: number;
+  size: number; // Bytes
+  contentType: string;
+}
+
+// An image attached to an artwork.
+//
+// `order` is the explicit sequence; index 0 is the primary thumbnail used
+// across the app. It is kept consistent with the array position by
+// `reindexPhotos` on every write — see src/utils/artworkPhotos.ts for why the
+// field and the array are not allowed to disagree.
+export interface ArtworkPhoto {
+  // Firestore-style document id, minted client-side. It appears in every
+  // generated filename, so it is what makes a photo's objects findable and
+  // safe to delete as a group.
+  id: string;
+  order: number;
+  // The user's original filename. Metadata only — it is never used to build a
+  // storage path, so no sanitization of it is needed anywhere.
+  name: string;
+  size: number; // Original bytes
+  contentType: string; // Source MIME type
+  width: number; // Source pixel dimensions
+  height: number;
+  // The unmodified upload, kept alongside the variants. For a catalogue the
+  // source is the archival record; the variants are display derivatives.
+  original: { url: string; size: number; contentType: string };
+  variants: ImageVariant[];
 }

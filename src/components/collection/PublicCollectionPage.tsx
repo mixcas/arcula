@@ -19,6 +19,7 @@ import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
 import { collectionSlug, parseId } from "@/utils/slug";
 import { isPermissionDenied } from "@/utils/firestoreErrors";
+import { photoUrl, sortPhotos } from "@/utils/artworkPhotos";
 import type { Artwork, Collection } from "@/types";
 
 const PublicCollectionPage: React.FC = () => {
@@ -133,9 +134,19 @@ const PublicCollectionPage: React.FC = () => {
     setShowPasswordPrompt(false);
   };
 
-  /** Storage is not implemented, so a real artwork has no photos at all. */
+  /**
+   * The mosaic's image URLs, in the artwork's own order.
+   *
+   * `square_lg` rather than the original: this is a grid of fixed-size tiles,
+   * and every one of them pulling a 12-megapixel source is a page that never
+   * finishes loading. `photoUrls` falls back to the original per photo, so a
+   * work whose variant failed to generate still shows something.
+   */
   const photoUrlsOf = (artwork: Artwork): string[] =>
-    artwork.photos.flatMap((photo) => (photo.url ? [photo.url] : []));
+    sortPhotos(artwork.photos).flatMap((photo) => {
+      const url = photoUrl(photo, "square_lg");
+      return url ? [url] : [];
+    });
 
   return (
     <Container size="xl" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>

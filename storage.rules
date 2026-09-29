@@ -2,21 +2,84 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // No upload service exists in the app yet (FULLSPEC §8), so the default
-    // deny below is the whole point for now. These match blocks target the
-    // path scheme the upload flow will use and stay inert until that lands.
+    // Artwork files live under a per-artwork prefix, with the photo folder
+    // flat (one object per file rather than a folder per image):
     //
-    // TODO(§8): `read` must also open for visitors once public collections
-    // render photos (firestore.get(...collectionId...).data.isPublic == true
-    // or the artwork's own isPublic for per-work images).
-    match /artworks/{userId}/{collectionId}/{artworkId}/{allPaths=**} {
-      allow read, write: if firestore.get(
+    //   artworks/{userId}/{collectionId}/{artworkId}/photos/{artworkId}_{photoId}_{key}.{ext}
+    //   artworks/{userId}/{collectionId}/{artworkId}/certificates/{fileName}
+    //
+    // `{key}` is a variant name or `original`, and it is matched below rather
+    // than accepted as anything: a client can only ever write objects whose
+    // name matches the ids it was handed, so it cannot scatter arbitrary keys
+    // under an artwork's prefix. Keep the key list in step with IMAGE_VARIANTS
+    // in src/utils/imageVariants.ts and with storage.rules in AGENTS.md.
+
+    // The artwork document, or an evaluation error when it does not exist —
+    // which denies, and is the answer we want for an unknown artwork.
+    function artworkDoc(artworkId) {
+      return firestore.get(
         /databases/(default)/documents/artworks/$(artworkId)
-      ).data.userId == request.auth.uid
-      // Uploads only: 10 MiB cap; images and certificates (the two kinds the
-      // Add Artwork form accepts).
-      && request.resource.size < 10 * 1024 * 1024
-      && request.resource.contentType.matches('image/.*|application/pdf');
+      );
+    }
+
+    function ownedByCaller(artworkId) {
+      return request.auth != null
+        && artworkDoc(artworkId).data.userId == request.auth.uid;
+    }
+
+    // Mirrors the visitor branch of the artworks rule in firestore.rules, so a
+    // photo is never more readable than the artwork it belongs to: the same
+    // two conditions, isPublic and not soft-deleted.
+    function readableByVisitor(artworkId) {
+      return artworkDoc(artworkId).data.isPublic == true
+        && artworkDoc(artworkId).data.get("deletedAt", null) == null;
+    }
+
+    // A photo object name: the artwork id, a Firestore-style id, a known key.
+    //
+    // `matches` is a partial match, which is why this is anchored on both ends.
+    // The extension list is the three formats an upload can legitimately be:
+    // the two the canvas encoder emits (a browser that cannot encode WebP
+    // produces JPEG instead) plus PNG, which only ever appears on the
+    // `original` object — a source is stored as the format it already is, so
+    // it can keep its alpha channel in the archive.
+    function isPhotoName(artworkId, fileName) {
+      return fileName.matches(
+        "^" + artworkId + "_[A-Za-z0-9]{20}_(square_lg|square_sm|large|medium|original)\\.(webp|jpg|png)$"
+      );
+    }
+
+    // The per-file ceiling, plus the two kinds the form accepts.
+    //
+    // This is a WRITE condition and it is deliberately separate from the read
+    // condition. `request.resource` is null on a read, so folding this into a
+    // combined `allow read, write` denies reads outright — the owner could
+    // upload a photo and then not read it back, and the image would render
+    // broken everywhere. It is also null on a delete, which is why the null
+    // case is admitted rather than treated as a missing size.
+    function acceptableUpload() {
+      return request.resource == null
+        || (request.resource.size <= 10 * 1024 * 1024
+          && request.resource.contentType.matches("image/.*|application/pdf"));
+    }
+
+    match /artworks/{userId}/{collectionId}/{artworkId}/photos/{fileName} {
+      // Owners always. Visitors when the artwork is public and not deleted,
+      // which is what lets the public collection page render images.
+      allow read: if ownedByCaller(artworkId) || readableByVisitor(artworkId);
+
+      allow write: if ownedByCaller(artworkId)
+        && acceptableUpload()
+        // A delete carries no resource and no new name to check, so the name
+        // rule applies to uploads only.
+        && (request.resource == null || isPhotoName(artworkId, fileName));
+    }
+
+    // Certificates keep their own block rather than riding on a wildcard,
+    // so the photo rules above can never be widened to cover them by accident.
+    match /artworks/{userId}/{collectionId}/{artworkId}/certificates/{fileName} {
+      allow read: if ownedByCaller(artworkId);
+      allow write: if ownedByCaller(artworkId) && acceptableUpload();
     }
   }
 }
