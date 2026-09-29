@@ -36,6 +36,11 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 - `src/components/manage/layout/ManageLayout.tsx` - Consistent header layout for management interface
 - `src/components/manage/ManagePage.tsx` - Main dashboard showing collections
 - `src/components/manage/collection/NewCollectionPage.tsx` - New collection creation form
+- `src/components/manage/CollectionPage.tsx` - Collection detail; loads the collection + its live artworks
+- `src/components/manage/collection/ArtworksTable.tsx` - Sortable/selectable artwork table, batch soft delete
+- `src/migrations/index.ts` - Data migration registry (see Migrations)
+- `src/components/manage/MigrationsPage.tsx` - Runs pending migrations for the signed-in account
+- `src/services/artworkService.ts` - Artwork reads (owner vs visitor) and `softDeleteArtworks`
 
 ## Firebase Integration
 
@@ -135,7 +140,10 @@ read path (that keeps list evaluation free of dependent document reads):
   (visitor get/list). One `get()` only exists — on the artwork `create`
   path, to prove the parent collection belongs to the writer.
 - `isPublic` is per-artwork and independent of the collection's flag by
-  design (no sync/cascade). Default is `false` in every write path.
+  design (no sync/cascade). Default is `true` in every write path — new
+  collections and artworks are publicly reachable unless flipped off via
+  Settings (collections) or the Add/Edit form Switch (artworks). The
+  rules never validate the flag on write; visitor reads gate on it.
 - The service layer is where server timestamps get stamped
   (`serverTimestamp()` last), and the rules verify
   `createdAt/updatedAt == request.time` on create/update so the client
@@ -178,16 +186,163 @@ Two patterns coexist; follow the surrounding code:
 - Route link for a collection: `/manage/collection/{urlizedName}-{docId}`
   (urlize: lowercase, non-alphanumerics -> "-", trim hyphens).
 - `Artwork.isPublic` is a per-work boolean, **independent** of the
-  collection's `isPublic`. Default is `false` on every write path
-  (`src/schemas/artwork.ts` keeps it in the schema and payloads). The
+  collection's `isPublic`. Default is `true` on every write path
+  (`src/schemas/artwork.ts` keeps it in the schema and payloads;
+  `artworkService.createArtworks` inherits it for CSV imports). The
   rules authorize the public reads on this field alone.
 - Artwork reads split by caller (both in `src/services/artworkService.ts`):
   - owner: `getCollectionArtworks(collectionId, userId)` — where()
-    `collectionId` + `userId` (needs the `(collectionId, userId)` index)
+    `collectionId` + `userId` + `deletedAt == null` (needs the
+    `(collectionId, userId, deletedAt)` index)
   - visitor: `getPublicCollectionArtworks(collectionId)` — where()
-    `collectionId` + `isPublic == true` (needs the
-    `(collectionId, isPublic)` index)
-    Both indexes are declared in `firestore.indexes.json`.
+    `collectionId` + `isPublic == true` + `deletedAt == null` (needs the
+    `(collectionId, isPublic, deletedAt)` index)
+    Both indexes are declared in `firestore.indexes.json`. The `deletedAt`
+    clause is mandatory, not cosmetic: see Soft delete below.
+
+### Soft delete (artworks)
+
+Artworks are never removed from Firestore. `Artwork.deletedAt` is a
+`Timestamp | null`, and **live means `deletedAt == null`**. The owner's
+collection page lists only live works, so a soft-deleted row leaves the table
+but stays in the database.
+
+- **Every create path writes `deletedAt: null` explicitly** (never omits the
+  field). This is the crux, and it cuts both ways: reading an absent field in a
+  _rule_ is an evaluation error that denies, and `where("deletedAt","==",null)`
+  does not match an absent field either (verified against the emulator:
+  explicit nulls only). The rules tolerate legacy documents through
+  `resource.data.get("deletedAt", null) == null`, but the **query** does not —
+  so every artwork written before this field existed was hidden in the app
+  until `backfillArtworkDeletedAt` ran. Adding a field to a document type is
+  a schema change even though Firestore has no schema: see Migrations below.
+- `artworkService.softDeleteArtworks(ids)` — `writeBatch` in chunks of 400,
+  stamping `deletedAt: serverTimestamp()` with `updatedAt: serverTimestamp()`
+  last. The hard `deleteArtwork` remains exported but unused; same for
+  `collectionService.deleteCollection`. Do not reach for them.
+- Restoring is `updateArtwork(id, { deletedAt: null })` — deliberately _not_
+  `deleteField()`, for the reason above. There is no trash/restore UI yet.
+- The rules gate only the **visitor** branches of `match /artworks` (the `get`
+  and the `isPublic` list) on `resource.data.get("deletedAt", null) == null`.
+  Owner branches are untouched, so a future trash view over
+  `where("deletedAt","!="...)` needs no rules work.
+- Not built yet (deliberately): a trash/restore view, a `deletedAt != null`
+  index, a public single-artwork route (which is why the row **View** button
+  is disabled), and a Cloud Function that purges long-dead works.
+
+### Migrations
+
+**Adding a field to a document type is a schema change, even though Firestore
+has no schema.** Nothing backfills: documents written before the field existed
+keep their old shape forever, and nothing complains — a query on the new field
+just quietly stops matching them. The symptom ("all my artworks are gone")
+looks nothing like the cause, so treat "data written before this change" as a
+first-class suspect whenever a list comes back unexpectedly empty.
+
+Firebase has no migration runner. This app does, in three pieces:
+
+- `src/migrations/types.ts` — the `Migration` shape: `id`, `label`,
+  `description`, `countPending(db, userId)`, `run(db, userId)`. The `Firestore`
+  instance is a _parameter_, never the app's imported `db`, so the rules suite
+  can point a migration at the emulator.
+- `src/migrations/index.ts` — the registry, oldest first. Append new entries;
+  never renumber or reorder an existing `id`.
+- `src/components/manage/MigrationsPage.tsx`, routed at `/manage/migrations`
+  (protected, linked from a collection's Settings page) — lists each migration
+  with its pending count and a Run button, disabled while the count is unknown
+  so a migration is never run blind.
+
+Rules for writing one:
+
+- **Idempotent, always.** `countPending` is a _content_ check ("how many
+  documents still have the old shape"), not a "has run" marker: the data says
+  whether it is current, so there is no bookkeeping to keep in sync and no
+  second place for the truth to be wrong. `tests/firestore.rules.test.ts`
+  asserts a second run updates nothing.
+- **Select on `userId` alone, with no filter on the field being migrated.**
+  That is the only way to reach a legacy document: the app's own list queries
+  filter on the new field and therefore cannot see the documents that lack it.
+  A `where("userId","==",uid)` list is single-field (automatic index) and
+  passes `isOwner` for every document it returns.
+- **Writes still go through the rules**, so a migration is an ordinary owner
+  update: stamp `updatedAt: serverTimestamp()` last, batch in chunks of 400.
+  A migration that needs to bypass the rules is out of scope for this design —
+  that would need the Admin SDK, below.
+- Write the field as an explicit `null`/default, never `deleteField()`: a
+  missing field is exactly what this whole mechanism exists to remove.
+
+Scope and alternatives, for when this stops being enough:
+
+- These run as the **signed-in owner**, so each account migrates its own
+  documents from its own browser. That is fine for this app and needs no
+  infrastructure, but it is not a fleet-wide backfill.
+- A server-side backfill would use the **Admin SDK** (a script with a service
+  account, bypassing the rules) or a **Cloud Function** (an `onDeploy`
+  trigger). Cloud Functions require the Blaze plan, so that is a billing
+  decision, not just a technical one.
+
+### Artwork table (owner view)
+
+`src/components/manage/CollectionPage.tsx` renders
+`src/components/manage/collection/ArtworksTable.tsx` (it replaced the Card
+list). The datatable itself does **neither sorting nor pagination** — the
+caller sorts the full dataset and then slices the page:
+
+- Sort state lives in the table (`useState<DataTableSortStatus<Artwork>>`,
+  default `{ columnAccessor: "title", direction: "asc" }`); a new sort resets
+  `page` to 1. Comparison is `Intl.Collator(undefined, { sensitivity: "base",
+numeric: true })` with an `id` tie-break — titles are free text in any
+  language, so `<`/`>` would sort "Study 10" before "Study 2".
+- A column must declare `sortable: true` to be clickable. It is **not** the
+  default: without it the header renders as plain text and clicking it does
+  nothing at all. The actions column is `sortable: false`,
+  `pinned: "right"` (this version has no `frozen` prop), `width: 220`.
+- Selection is held as `string[]` of ids rather than record objects, so the
+  post-delete refetch cannot silently empty it. Cancelling the confirm dialog
+  deliberately leaves the selection alone.
+- Every delete goes through `modals.openConfirmModal` with a stable
+  `DELETE_MODAL_ID`, so a second click cannot stack dialogs. `ConfirmModal`
+  ignores the promise returned by `onConfirm` and closes immediately, so the
+  modal uses `closeOnConfirm: false` and drives `loading` / error state
+  itself via `modals.updateModal`, then `modals.close(DELETE_MODAL_ID)`.
+  `loadArtworks` in `CollectionPage` (passed as `onDeleted`) reports its own
+  failure instead of throwing — a rejection there would be caught by the
+  delete handler and misreported as a failed delete.
+
+### CSV import (artworks)
+
+The `{urlizedName}-{id}` pattern extends to
+`/manage/collection/{urlizedName}-{id}/import/csv` (a single protected,
+ManageLayout route added in `src/App.tsx`).
+
+- Entry point from CollectionSettingsPage; flow lives in
+  `src/components/manage/import/` (`CsvImportPage` + four Stepper steps +
+  `EditableCell`). State is in-memory only — leaving the URL discards the
+  whole import, and the file itself is parsed in-browser and never
+  uploaded (`@mantine/dropzone` + papaparse in `src/utils/csv.ts`).
+- Pure logic is testable and lives in `src/schemas/artworkImport.ts`:
+  header matching/auto-map, `parseAcquisitionDate` (bare year →
+  `YYYY-01-01`, year-first and DMY/MDY heuristics — both-≤-12 reads
+  day-first — each conversion flagged as "converted from …" for the
+  review step), row building/validation (reuses `artworkSchema` with
+  `isPublic: true`).
+- The review step is a `mantine-datatable`; rows are editable cell by
+  cell, all selected by default, and Confirm stays blocked while any
+  _selected_ row has a validation issue (fix in-cell or deselect).
+  Duplicate titles are **never** compared — same-title works are
+  legitimate in art and placeholder phrasing varies by language, so the
+  only title rule is that a Title exists (blank rows are flagged by the
+  schema and block import until filled, by the user or the CSV).
+- `isPublic` is **not** a mappable column; imported artworks inherit the
+  public default via `toImportArtwork`.
+- Bulk write is `artworkService.createArtworks()` — `writeBatch` chunks
+  of 400 docs with `serverTimestamp()` stamped last. The rules suite
+  asserts batch + timestamp guards pass (`tests/firestore.rules.test.ts`
+  has explicit batch-create cases), so no client-side fallback is needed.
+- Keeping the accepted `acquisitionDate` value strict `YYYY-MM-DD` is
+  deliberate; `dateOfCreation` stays free text. Schema (`artworkSchema`)
+  still validates import rows, so a pure-logic change that drifts from
+  the schema is caught by `tests/artworkImport.test.ts` at CI time.
 
 ### Gotchas
 
@@ -202,9 +357,19 @@ Two patterns coexist; follow the surrounding code:
   gone; list rules are per-document field checks and **rules are not
   filters**, so **every client list query must carry the matching
   `where(...)` filter the rules check** (`where userId` for owner queries,
-  `where isPublic == true` for visitor queries). A list that would span a
+  `where isPublic == true` for visitor queries, plus
+  `where deletedAt == null` for both artwork lists). A list that would span a
   document the caller may not read is denied outright, not silently
   trimmed.
+- Reading an **absent** field in a rules expression is an evaluation error
+  that denies the request — `resource.data.deletedAt == null` is not the same
+  as `resource.data.get("deletedAt", null) == null`, and the first one breaks
+  on legacy documents written before the field existed. Always use
+  `map.get(key, default)`.
+- The two new artwork composites (`(collectionId, userId, deletedAt)` and
+  `(collectionId, isPublic, deletedAt)`) must be deployed with
+  `bun run deploy:rules` before the three-clause artwork queries work in
+  production. They are not built locally.
 - `createdAt`/`updatedAt` are server-stamped by the service layer and the
   rules verify `== request.time`; never write them from a component.
 - Creating an artwork requires owning the parent collection — the rules
@@ -219,6 +384,33 @@ Two patterns coexist; follow the surrounding code:
 - The emulator does not build the composite indexes from
   `firestore.indexes.json`; the list tests deliberately use single-field
   queries. Composite-query validation happens at deploy time.
+- Two emulator behaviours diverge from production, both measured and both
+  documented at the top of `tests/firestore.rules.test.ts`: `where(field,
+"==", null)` does **not** match an absent field there, and the emulator
+  does not enforce the soft-delete clause per-document on a list (an
+  anonymous `where isPublic == true` returns a soft-deleted work, where
+  production denies the whole query). So the rules suite does not replay the
+  app's exact three-clause query — read that header before adding a list test.
+- Component tests run per file with a `// @vitest-environment jsdom`
+  docblock, and `vitest.config.ts` deliberately does **not** set `globals`, so
+  Testing Library's automatic cleanup never registers. Every component test
+  file needs an explicit `afterEach(cleanup)`, or each render stays in the
+  document and the next test's queries match the previous test's rows and
+  dialogs. DOM matchers come from `import "@testing-library/jest-dom/vitest"`.
+- In jsdom, a `matchMedia` stub that answers `matches: false` for everything
+  makes every `mantine-datatable` column vanish, leaving only the selection
+  column. The datatable resolves a column's `visibleMediaQuery` through
+  Mantine's `useMediaQuery`, which for a column without one calls
+  `window.matchMedia("")` in an effect and overwrites its optimistic `true`
+  with the stub's answer; Chrome answers an empty query with `true` (verified
+  in Chrome). Stub `matches: query === ""`.
+- `useModals()` throws without `ModalsProvider`, so any component under test
+  that (transitively) renders a `modals.openConfirmModal` call needs
+  `MantineProvider` + `ModalsProvider` + `MemoryRouter` wrapped around it.
+- `@mantine/modals` ships **no** stylesheet in v9 — Modal and Overlay styles
+  come from `@mantine/core/styles.css`. `@mantine/notifications` does ship
+  one, and `<Notifications />` must be mounted (it is, in `src/main.tsx`)
+  for `notifications.show` to render.
 
 ### Validation
 
@@ -226,5 +418,8 @@ Two patterns coexist; follow the surrounding code:
 - `bun run check` (tsc + eslint + prettier) must pass before and after a
   rules change.
 - `bun run test:rules` for the security rules suite against the emulators.
+  It starts the emulators and then runs **all** tests, including the
+  pure-logic and component ones (`npx vitest run tests/<file>` runs a single
+  file with no emulators, which is the fast loop for UI work).
 - Confirm no second `initializeApp` and that new code imports `db`/`auth`
   from the shared module.

@@ -111,7 +111,7 @@ const ArtworkAddPage: React.FC = () => {
           <Switch
             key={form.key("isPublic")}
             label="Public"
-            description="Anyone with the collection link can see this artwork. Independent of the collection's own public setting — a public collection may keep individual works private."
+            description="On by default — anyone with the collection link can see this artwork. Independent of the collection's own public setting: a public collection may keep individual works private."
             mb="md"
             {...form.getInputProps("isPublic", { type: "checkbox" })}
           />

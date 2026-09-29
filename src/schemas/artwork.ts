@@ -59,7 +59,9 @@ export const artworkSchema = z.object({
   condition: optionalText,
   currentValue: optionalText,
   // Per-artwork public visibility, independent of the collection's own flag.
-  isPublic: z.boolean().default(false),
+  // Public by default — a work is visible to visitors unless the owner
+  // explicitly turns it off in the Add/Edit form.
+  isPublic: z.boolean().default(true),
 });
 
 /**
@@ -121,7 +123,7 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   notes: "",
   condition: "",
   currentValue: "",
-  isPublic: false,
+  isPublic: true,
 };
 
 /** The fields this form owns; the only ones that may be cleared on save. */
@@ -159,29 +161,42 @@ const stripUndefined = (payload: Record<string, unknown>): ArtworkPayload =>
 export const toArtworkPayload = (values: ArtworkFormValues): ArtworkPayload =>
   stripUndefined(artworkSchema.parse(values));
 
-/** Build the payload for a new document, where every required field is set. */
+/**
+ * Build the payload for a new document, where every required field is set.
+ *
+ * Blank optional fields parse (via the schema's `blankText` transform) to
+ * `undefined`, and Firestore rejects an explicit `undefined` property value on
+ * write (`batch.set` throws "Unsupported field value: undefined"). The
+ * single-artwork path strips before calling this, but the CSV import path
+ * hands over the raw schema output — stripping here once makes every caller
+ * safe, and is a no-op when the payload is already clean.
+ */
 export const toNewArtwork = (
   payload: ArtworkPayload,
   collectionId: string,
   userId: string,
-): Omit<Artwork, "id"> => ({
-  ...payload,
-  // Re-narrow: the payload types these as optional, but the schema guarantees
-  // them. Listing them after the spread also stops form data from ever
-  // overriding the ownership fields below.
-  title: payload.title ?? "",
-  artistName: payload.artistName ?? "",
-  // The bare Firestore document id, never the "{slug}-{id}" route param from
-  // FULLSPEC §10. A slug is cosmetic and changes when the collection is
-  // renamed, so storing one would orphan the artwork on the next rename.
-  collectionId,
-  userId,
-  isPublic: payload.isPublic ?? false,
-  // TODO: upload to Firebase Storage per FULLSPEC §8 and store the resulting
-  // FileReferences once a storage service exists.
-  certificates: [],
-  photos: [],
-});
+): Omit<Artwork, "id"> => {
+  const clean = stripUndefined(payload);
+  return {
+    ...clean,
+    // Re-narrow: the payload types these as optional, but the schema guarantees
+    // them. Listing them after the spread also stops form data from ever
+    // overriding the ownership fields below.
+    title: clean.title ?? "",
+    artistName: clean.artistName ?? "",
+    // The bare Firestore document id, never the "{slug}-{id}" route param from
+    // FULLSPEC §10. A slug is cosmetic and changes when the collection is
+    // renamed, so storing one would orphan the artwork on the next rename.
+    collectionId,
+    userId,
+    // Public by default, matching the schema default in every write path.
+    isPublic: clean.isPublic ?? true,
+    // TODO: upload to Firebase Storage per FULLSPEC §8 and store the resulting
+    // FileReferences once a storage service exists.
+    certificates: [],
+    photos: [],
+  };
+};
 
 /** Populate the form from a stored artwork. */
 export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
@@ -199,7 +214,9 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   notes: artwork.notes ?? "",
   condition: artwork.condition ?? "",
   currentValue: artwork.currentValue ?? "",
-  isPublic: artwork.isPublic ?? false,
+  // A stored work without the field predates the public default; treat it as
+  // public, consistent with how new works are written.
+  isPublic: artwork.isPublic ?? true,
 });
 
 /**

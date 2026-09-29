@@ -13,7 +13,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "collectionId", "order": "ASCENDING" },
-        { "fieldPath": "userId", "order": "ASCENDING" }
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "deletedAt", "order": "ASCENDING" }
       ]
     },
     {
@@ -21,7 +22,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "collectionId", "order": "ASCENDING" },
-        { "fieldPath": "isPublic", "order": "ASCENDING" }
+        { "fieldPath": "isPublic", "order": "ASCENDING" },
+        { "fieldPath": "deletedAt", "order": "ASCENDING" }
       ]
     }
   ],

@@ -55,9 +55,20 @@ export interface Artwork {
   // Public visibility, owned by the artwork — independent of its collection's
   // isPublic. A public collection may keep individual works private (and, by
   // symmetry, a work flagged public stays readable by direct id even inside a
-  // private collection; the collection gate hides it from the page). Always
-  // written — see the schema in src/schemas/artwork.ts.
+  // private collection; the collection gate hides it from the page). Public
+  // by default in every write path — see the schema in src/schemas/artwork.ts.
+  // Always written by the creating paths.
   isPublic: boolean;
+  // Soft delete. `null` means live; a timestamp means deleted and the document
+  // is kept (reversible). Stamped and cleared by artworkService only — the
+  // Add/Edit form has no such field, so editing a deleted work leaves it
+  // deleted. Written explicitly as null by every create path: the list queries
+  // filter on `deletedAt == null`, and a *missing* field is not equivalent to
+  // null there (the emulator does not match it at all), so leaving it out would
+  // risk hiding the work from every list. Artworks written before this field
+  // existed have no `deletedAt`; rules tolerate that via
+  // data.get("deletedAt", null), so they stay publicly readable.
+  deletedAt?: Timestamp | null;
   // Stamped by artworkService, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

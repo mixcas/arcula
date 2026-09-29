@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
+  Box,
   Container,
   Text,
   TextInput,
@@ -24,7 +25,11 @@ const CollectionSettingsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [collectionName, setCollectionName] = useState("");
-  const [isPublic, setIsPublic] = useState(false);
+  // The public/private default for a brand-new collection is public
+  // (collectionService.createCollection); until the fetch resolves nothing is
+  // rendered anyway (loading gate below), so this initial value only matters as
+  // the pre-fetch state that the loaded value always overrides.
+  const [isPublic, setIsPublic] = useState(true);
   const [requirePassword, setRequirePassword] = useState(false);
   const [password, setPassword] = useState("");
 
@@ -36,6 +41,10 @@ const CollectionSettingsPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Kept apart: a load failure means the form should not render, but a save
+  // failure must leave the user's input on screen (same split as
+  // ArtworkEditPage).
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,7 +57,7 @@ const CollectionSettingsPage: React.FC = () => {
         const collectionData =
           await collectionService.getCollection(collectionId);
         if (!collectionData) {
-          setError("Collection not found");
+          setLoadError("Collection not found");
         } else {
           setCollectionName(collectionData.name ?? "");
           setLoadedName(collectionData.name ?? "");
@@ -56,7 +65,7 @@ const CollectionSettingsPage: React.FC = () => {
         }
       } catch (err) {
         console.error("Error fetching collection:", err);
-        setError("Failed to load collection settings. Please try again.");
+        setLoadError("Failed to load collection settings. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -117,12 +126,12 @@ const CollectionSettingsPage: React.FC = () => {
     return <Loader />;
   }
 
-  if (error) {
-    return <Alert color="red">{error}</Alert>;
+  if (loadError) {
+    return <Alert color="red">{loadError}</Alert>;
   }
 
   return (
-    <Container size="sm">
+    <Container size="xl">
       <Text size="h2" mb="xl">
         Collection Settings
       </Text>
@@ -181,6 +190,12 @@ const CollectionSettingsPage: React.FC = () => {
             />
           )}
 
+          {error ? (
+            <Alert color="red" mb="md">
+              {error}
+            </Alert>
+          ) : null}
+
           <Group justify="center" mt="xl">
             <Button type="submit" loading={saving}>
               Save Settings
@@ -194,6 +209,43 @@ const CollectionSettingsPage: React.FC = () => {
             </Button>
           </Group>
         </form>
+      </Card>
+
+      <Divider my="xl" />
+
+      <Card shadow="sm" p="lg">
+        <Group justify="space-between" align="center" gap="xl" wrap="nowrap">
+          <Box>
+            <Text fw={600}>Import from CSV</Text>
+            <Text size="sm" c="dimmed">
+              Add artworks in bulk from a comma-separated values file. The file
+              is parsed in this browser tab — nothing is uploaded until you
+              confirm the import.
+            </Text>
+          </Box>
+          <Button
+            component={Link}
+            to={`/manage/collection/${param}/import/csv`}
+          >
+            Import
+          </Button>
+        </Group>
+      </Card>
+
+      <Card shadow="sm" p="lg" mt="lg">
+        <Group justify="space-between" align="center" gap="xl" wrap="nowrap">
+          <Box>
+            <Text fw={600}>Data migrations</Text>
+            <Text size="sm" c="dimmed">
+              Bring documents saved before a field was added up to the current
+              shape. Needed when older artworks go missing from a list after an
+              update.
+            </Text>
+          </Box>
+          <Button component={Link} to="/manage/migrations" variant="default">
+            Open
+          </Button>
+        </Group>
       </Card>
     </Container>
   );

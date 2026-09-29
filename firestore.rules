@@ -76,17 +76,37 @@ service cloud.firestore {
       // private (and, by symmetry, a work flagged public remains readable by
       // direct id even inside a private collection — the collection gate on
       // the page level is what hides it from the UI).
-      allow get: if resource.data.isPublic == true;
+      //
+      // Soft-delete gate. The `get` form is load-bearing and was not obvious:
+      // reading `resource.data.deletedAt` on a document that has no such field
+      // is an *evaluation error* in rules, which denies — an absent field does
+      // NOT come back as null. `get` with a default answers null for both an
+      // absent field and an explicit null, so the rules side needs no backfill
+      // to keep older works readable.
+      //
+      // The *query* side is the opposite, and this is the trap: the client list
+      // filters on `where("deletedAt","==",null)`, which does NOT match a
+      // missing field, so every artwork written before the field existed is
+      // invisible in the app until it is backfilled. `backfillArtworkDeletedAt`
+      // in src/migrations does that, and tests/firestore.rules.test.ts pins
+      // the behaviour both ways.
+      //
+      // The owner branches above are deliberately untouched: an owner keeps
+      // full access to their own deleted works, which is what a future
+      // trash/restore view needs.
+      allow get: if resource.data.isPublic == true
+                 && resource.data.get("deletedAt", null) == null;
 
       // Lists split by caller. Rules are not filters: every matched document
       // must satisfy the rule or the entire query is denied, so a query that
       // spans a document the caller may not read fails outright rather than
       // dropping rows. The client queries carry the matching constraints:
-      //   - owner list   -> where("userId","==",uid)
-      //   - visitor list -> where("isPublic","==",true)
+      //   - owner list   -> where("userId","==",uid) + where("deletedAt","==",null)
+      //   - visitor list -> where("isPublic","==",true) + where("deletedAt","==",null)
       // (Per-document checks again: emulator-validatable, no dependent reads.)
       allow list: if isOwner(resource.data.userId)
-                  || resource.data.isPublic == true;
+                  || (resource.data.isPublic == true
+                      && resource.data.get("deletedAt", null) == null);
     }
   }
 }

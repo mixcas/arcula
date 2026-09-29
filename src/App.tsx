@@ -7,6 +7,8 @@ import CollectionPage from "./components/manage/CollectionPage";
 import ArtworkAddPage from "./components/manage/ArtworkAddPage";
 import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
+import CsvImportPage from "./components/manage/import/CsvImportPage";
+import MigrationsPage from "./components/manage/MigrationsPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
@@ -46,7 +48,9 @@ const App: React.FC = () => {
           path="/manage/collection/:collectionId"
           element={
             <ProtectedRoute>
-              <ManageLayout>
+              {/* xl, not the default container: the artwork table needs the
+                  width for its title, artist and action columns side by side. */}
+              <ManageLayout containerProps={{ size: "xl" }}>
                 <CollectionPage />
               </ManageLayout>
             </ProtectedRoute>
@@ -78,6 +82,26 @@ const App: React.FC = () => {
             <ProtectedRoute>
               <ManageLayout>
                 <CollectionSettingsPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/collection/:collectionId/import/csv"
+          element={
+            <ProtectedRoute>
+              <ManageLayout containerProps={{ fluid: true }}>
+                <CsvImportPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/migrations"
+          element={
+            <ProtectedRoute>
+              <ManageLayout>
+                <MigrationsPage />
               </ManageLayout>
             </ProtectedRoute>
           }

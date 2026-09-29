@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { Text, Button, Group, Card, Badge } from "@mantine/core";
+import React, { useState, useEffect, useCallback } from "react";
+import { Text, Button, Group } from "@mantine/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
-import { artworkSlug, collectionSlug, parseId } from "@/utils/slug";
+import { collectionSlug, parseId } from "@/utils/slug";
+import ArtworksTable from "./collection/ArtworksTable";
 import type { Artwork, Collection } from "@/types";
 
 const CollectionPage: React.FC = () => {
@@ -20,6 +21,29 @@ const CollectionPage: React.FC = () => {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Split out of the effect below so the artwork table can ask for a refresh
+  // after a delete. It reports its own failure rather than throwing: the table
+  // awaits this as `onDeleted`, and a rejected promise there would be caught by
+  // the delete's error handler and reported as a failed delete — which would be
+  // a lie, since the write already went through.
+  const loadArtworks = useCallback(async () => {
+    if (!collectionId || !userId) return;
+    try {
+      // Scoped to the owner so the rules can authorize it with a plain userId
+      // check; the owner sees every artwork, public or private, and never the
+      // soft-deleted ones (the service filters those out).
+      const fetchedArtworks = await artworkService.getCollectionArtworks(
+        collectionId,
+        userId,
+      );
+      setArtworks(fetchedArtworks);
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching artworks:", err);
+      setError("Failed to fetch artworks");
+    }
+  }, [collectionId, userId]);
 
   useEffect(() => {
     const fetchCollectionData = async () => {
@@ -37,15 +61,7 @@ const CollectionPage: React.FC = () => {
         }
 
         setCollection(fetchedCollection);
-
-        // Fetch artworks for this collection. Scoped to the owner so the
-        // rules can authorize it with a plain userId check; the owner sees
-        // every artwork, public or private.
-        const fetchedArtworks = await artworkService.getCollectionArtworks(
-          collectionId,
-          userId,
-        );
-        setArtworks(fetchedArtworks);
+        await loadArtworks();
 
         setLoading(false);
       } catch (err) {
@@ -56,7 +72,7 @@ const CollectionPage: React.FC = () => {
     };
 
     void fetchCollectionData();
-  }, [collectionId, userId]);
+  }, [collectionId, userId, loadArtworks]);
 
   // Once the name is known, put the canonical "{slug}-{id}" in the address bar
   // so a link written with only the id still resolves to a readable URL.
@@ -109,40 +125,11 @@ const CollectionPage: React.FC = () => {
         </Group>
       </Group>
 
-      {artworks.length === 0 ? (
-        <Text ta="center">No artworks in this collection yet.</Text>
-      ) : (
-        <div>
-          {artworks.map((artwork) => (
-            <Card key={artwork.id} shadow="sm" p="lg" mb="md">
-              <Group justify="space-between">
-                <div>
-                  {artwork.isPublic !== true ? (
-                    <Badge color="gray" variant="light" mb="xs">
-                      Private
-                    </Badge>
-                  ) : null}
-                  <Text size="h3">{artwork.title}</Text>
-                  <Text>{artwork.artistName}</Text>
-                  <Text>{artwork.dateOfCreation}</Text>
-                  {artwork.editions ? (
-                    <Text>Editions: {artwork.editions}</Text>
-                  ) : null}
-                  {artwork.provenance ? (
-                    <Text>Provenance: {artwork.provenance}</Text>
-                  ) : null}
-                </div>
-                <Button
-                  component={Link}
-                  to={`/manage/collection/${param}/artwork/${artworkSlug(artwork.title, artwork.id)}`}
-                >
-                  Edit
-                </Button>
-              </Group>
-            </Card>
-          ))}
-        </div>
-      )}
+      <ArtworksTable
+        artworks={artworks}
+        collectionParam={param ?? ""}
+        onDeleted={loadArtworks}
+      />
     </>
   );
 };

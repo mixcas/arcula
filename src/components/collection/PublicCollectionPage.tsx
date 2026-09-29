@@ -39,14 +39,14 @@ const PublicCollectionPage: React.FC = () => {
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [password, setPassword] = useState("");
 
-  // createCollection defaults isPublic to false, so only an explicit true
-  // grants access — a collection written before the field existed reads as
-  // private. This check is a rendering gate, not access control: Firestore
-  // rules deny the underlying read of a private collection outright, and a
-  // denied read is mapped to this same private state in the fetch effect. An
-  // unauthenticated visitor can only ever fetch one published collection, and
-  // even then only its public artworks (see the sequencing in the fetch
-  // effect).
+  // createCollection defaults isPublic to true, so a fresh collection is
+  // publicly reachable unless the owner makes it private; a collection written
+  // before the field existed reads as private. This check is a rendering gate,
+  // not access control: Firestore rules deny the underlying read of a private
+  // collection outright, and a denied read is mapped to this same private state
+  // in the fetch effect. An unauthenticated visitor can only ever fetch one
+  // published collection, and even then only its public artworks (see the
+  // sequencing in the fetch effect).
   const isPublic = collection?.isPublic === true;
   // Nothing writes passwordHash — CollectionSettingsPage saves only
   // {name, isPublic} — so this is currently always false. It is wired to the

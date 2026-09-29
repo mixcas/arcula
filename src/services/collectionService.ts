@@ -23,9 +23,10 @@ export const collectionService = {
   ): Promise<string> {
     try {
       // Defaults first so an explicit caller value still wins; timestamps
-      // stamped last so a caller cannot override them.
+      // stamped last so a caller cannot override them. Collections are public
+      // by default — flip Privacy in Settings to make one private.
       const docRef = await addDoc(collection(db, COLLECTIONS_COLLECTION), {
-        isPublic: false,
+        isPublic: true,
         artworks: [],
         ...collectionData,
         createdAt: serverTimestamp(),
