@@ -4,7 +4,13 @@ import { photoUrl } from "@/utils/artworkPhotos";
 import type { ArtworkPhoto } from "@/types";
 
 interface PhotoPreviewModalProps {
-  photo: ArtworkPhoto | null;
+  /**
+   * A `Pick`, not an `ArtworkPhoto`: an image attached as a document has the
+   * same variants, original and name but no `order`. This modal reads only those
+   * three — the sequence lives in the `position` prop — so naming them is what
+   * lets a document open in here without carrying a field it cannot maintain.
+   */
+  photo: Pick<ArtworkPhoto, "name" | "variants" | "original"> | null;
   /** The photo's 1-based position, for the counter in the footer. */
   position?: { current: number; total: number };
   onClose: () => void;

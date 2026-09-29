@@ -75,7 +75,12 @@ export const photoUrls = (artwork: Pick<Artwork, "photos">): string[] =>
  * the biggest available image, not the smallest.
  */
 export const photoUrl = (
-  photo: ArtworkPhoto | null,
+  // A `Pick`, not an `ArtworkPhoto`: an image attached as a document has the
+  // same variants and original but no `order` — this list has no sequence and no
+  // primary thumbnail, so there would be nothing for that field to mean. Naming
+  // the two fields this function actually reads lets such an image reuse the
+  // whole ladder without carrying a number nobody maintains.
+  photo: Pick<ArtworkPhoto, "variants" | "original"> | null,
   key: ImageVariantKey,
 ): string | null => {
   if (!photo) {

@@ -6,13 +6,15 @@ service firebase.storage {
     // flat (one object per file rather than a folder per image):
     //
     //   artworks/{userId}/{collectionId}/{artworkId}/photos/{artworkId}_{photoId}_{key}.{ext}
-    //   artworks/{userId}/{collectionId}/{artworkId}/certificates/{fileName}
+    //   artworks/{userId}/{collectionId}/{artworkId}/documents/{artworkId}_{docId}_{key}.{ext}
     //
-    // `{key}` is a variant name or `original`, and it is matched below rather
-    // than accepted as anything: a client can only ever write objects whose
-    // name matches the ids it was handed, so it cannot scatter arbitrary keys
-    // under an artwork's prefix. Keep the key list in step with IMAGE_VARIANTS
-    // in src/utils/imageVariants.ts and with storage.rules in AGENTS.md.
+    // Both folders use one flat name shape and the same `{key}` vocabulary, so a
+    // single delete sweep serves either. `{key}` is a variant name or `original`,
+    // and it is matched below rather than accepted as anything: a client can
+    // only ever write objects whose name matches the ids it was handed, so it
+    // cannot scatter arbitrary keys under an artwork's prefix. Keep the key list
+    // in step with IMAGE_VARIANTS in src/utils/imageVariants.ts and with
+    // storage.rules in AGENTS.md.
 
     // The artwork document, or an evaluation error when it does not exist —
     // which denies, and is the answer we want for an unknown artwork.
@@ -49,17 +51,50 @@ service firebase.storage {
       );
     }
 
-    // The per-file ceiling, plus the two kinds the form accepts.
+    // A document object name: the artwork id, a Firestore-style id, a known key.
     //
-    // This is a WRITE condition and it is deliberately separate from the read
-    // condition. `request.resource` is null on a read, so folding this into a
-    // combined `allow read, write` denies reads outright — the owner could
-    // upload a photo and then not read it back, and the image would render
-    // broken everywhere. It is also null on a delete, which is why the null
-    // case is admitted rather than treated as a missing size.
-    function acceptableUpload() {
+    // The photo shape plus one extension. A document is either an image, whose
+    // original carries whichever of the three image formats the browser reported
+    // it as, or a PDF, whose extension is the only thing that distinguishes it —
+    // so `pdf` joins the alternation and nothing else does.
+    //
+    // That single added extension is load-bearing. This list is the only check
+    // on what gets served out of the storage origin, and a client-supplied
+    // contentType can be forged: what the rule *can* bind the declared type to is
+    // the name it is being written under. Allowing `svg` or `html` here would
+    // mean a stored-XSS primitive — an uploaded SVG navigated to directly executes
+    // in the storage origin. Neither is accepted by the form, and neither is
+    // permitted here, so a hand-rolled client cannot add them either.
+    function isDocumentName(artworkId, fileName) {
+      return fileName.matches(
+        "^" + artworkId + "_[A-Za-z0-9]{20}_(square_lg|square_sm|large|medium|original)\\.(webp|jpg|png|pdf)$"
+      );
+    }
+
+    // The per-file ceiling for a photo, plus the type it must be.
+    //
+    // A WRITE condition, and deliberately separate from the read condition.
+    // `request.resource` is null on a read, so folding this into a combined
+    // `allow read, write` denies reads outright — the owner could upload a photo
+    // and then not read it back, and the image would render broken everywhere.
+    // It is also null on a delete, which is why the null case is admitted rather
+    // than treated as a missing size.
+    function acceptablePhotoUpload() {
       return request.resource == null
         || (request.resource.size <= 10 * 1024 * 1024
+          && request.resource.contentType.matches("image/.*"));
+    }
+
+    // The same for a document, with a larger ceiling.
+    //
+    // Two functions rather than one taking a size, because a rules language with
+    // no closures makes a parameter read like configuration — and then nobody
+    // can see from the block which ceiling it is actually under. The difference
+    // is real: a scanned catalogue raisonné or a high-resolution condition
+    // report is a normal attachment and is routinely larger than a photograph.
+    function acceptableDocumentUpload() {
+      return request.resource == null
+        || (request.resource.size <= 25 * 1024 * 1024
           && request.resource.contentType.matches("image/.*|application/pdf"));
     }
 
@@ -69,17 +104,24 @@ service firebase.storage {
       allow read: if ownedByCaller(artworkId) || readableByVisitor(artworkId);
 
       allow write: if ownedByCaller(artworkId)
-        && acceptableUpload()
+        && acceptablePhotoUpload()
         // A delete carries no resource and no new name to check, so the name
         // rule applies to uploads only.
         && (request.resource == null || isPhotoName(artworkId, fileName));
     }
 
-    // Certificates keep their own block rather than riding on a wildcard,
-    // so the photo rules above can never be widened to cover them by accident.
-    match /artworks/{userId}/{collectionId}/{artworkId}/certificates/{fileName} {
+    // Documents keep their own block rather than riding on a wildcard, so the
+    // photo rules above can never be widened to cover them by accident.
+    //
+    // Owner only, read and write. This is the whole reason documents are private
+    // and it is enforced here rather than merely left out of the public pages:
+    // a document is a condition report, a receipt, a provenance note. A UI that
+    // forgot to hide it would leak nothing, because these rules still say no.
+    match /artworks/{userId}/{collectionId}/{artworkId}/documents/{fileName} {
       allow read: if ownedByCaller(artworkId);
-      allow write: if ownedByCaller(artworkId) && acceptableUpload();
+      allow write: if ownedByCaller(artworkId)
+        && acceptableDocumentUpload()
+        && (request.resource == null || isDocumentName(artworkId, fileName));
     }
   }
 }

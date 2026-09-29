@@ -27,10 +27,9 @@ export interface Collection {
 //
 // Only `title` and `artistName` are required; every other descriptive field is
 // optional so an absent key can be distinguished from a set-but-empty value.
-// Certificates are always written (as [] until certificate uploads land) and
-// collectionId/userId are always supplied by the creating code path. `photos`
-// is always written too — as [] when the artwork has no images — so a reader
-// never has to distinguish an absent field from an empty list.
+// `documents` and `photos` are always written — as [] when the artwork has
+// none — so a reader never has to distinguish an absent field from an empty
+// list, and collectionId/userId are always supplied by the creating code path.
 export interface Artwork {
   id: string;
   userId: string; // Reference to the owner
@@ -48,7 +47,10 @@ export interface Artwork {
   acquisitionPrice?: string;
   placeOfOrigin?: string;
   provenance?: string;
-  certificates: FileReference[]; // Array of file references
+  // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public collection
+  // page, not in the public artwork view, and refused by storage.rules to
+  // anyone but the owner.
+  documents: ArtworkDocument[];
   notes?: string;
   condition?: string;
   currentValue?: string;
@@ -88,21 +90,44 @@ export type ArtworkUpdate = {
   [K in keyof Omit<Artwork, "id">]?: Artwork[K] | FieldValue;
 };
 
-// File reference type (could be URL or metadata)
-//
-// Used by `certificates`, which is a flat list of attachments with no derived
-// sizes. `Artwork.photos` deliberately does NOT use this: an image needs its
-// generated variants and its position in the sequence, and `metadata?: any`
-// below is the wrong home for both — an untyped field is a field nothing
-// checks. See `ArtworkPhoto`.
-export interface FileReference {
-  url?: string;
-  name?: string;
-  size?: number;
-  type?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  metadata?: any;
+// Fields shared by both kinds of "other document".
+interface ArtworkDocumentBase {
+  // Firestore-style id, minted client-side. It appears in every generated
+  // filename, which is what makes a document's objects findable and safe to
+  // delete as a group.
+  id: string;
+  // The user's original filename, preserved. This field cares about it, unlike
+  // photos, where it is only a label. Still metadata only — it is never used to
+  // build a storage path, so no sanitization of it is needed anywhere.
+  name: string;
+  size: number;
+  contentType: string;
+  // The unmodified upload. For an image this is the archival source; the
+  // variants beside it are display derivatives.
+  original: { url: string; size: number; contentType: string };
 }
+
+// A non-image attachment (a PDF, today). No variants, no dimensions, no
+// `order`: this list has no sequence and no primary thumbnail, so there is
+// nothing for those fields to mean.
+export interface ArtworkDocumentFile extends ArtworkDocumentBase {
+  kind: "file";
+}
+
+// An image attached as a document. Structurally a photo minus `order`, which
+// is what lets it reuse `photoUrl` and the preview modal — both of which are
+// typed on the variants, not on the sequence.
+export interface ArtworkDocumentImage extends ArtworkDocumentBase {
+  kind: "image";
+  width: number;
+  height: number;
+  variants: ImageVariant[];
+}
+
+// A discriminated union rather than one shape with optional fields: "does this
+// have variants" decides both the tile and the open behaviour, and making them
+// optional would mean re-checking the same condition at every call site.
+export type ArtworkDocument = ArtworkDocumentFile | ArtworkDocumentImage;
 
 // The standard image variants generated for every artwork photo.
 //

@@ -7,7 +7,6 @@ import {
   Button,
   Grid,
   Group,
-  FileInput,
   Alert,
   Switch,
 } from "@mantine/core";
@@ -17,9 +16,12 @@ import { schemaResolver } from "@mantine/form";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
+import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { artworkService } from "@/services/artworkService";
 import { imageService } from "@/services/imageService";
+import { documentService } from "@/services/documentService";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
+import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
 
 import {
   EMPTY_ARTWORK_FORM,
@@ -54,11 +56,11 @@ const ArtworkAddPage: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  // Photos live outside the form entirely — see useArtworkPhotos for why a
-  // File cannot survive `useForm` in uncontrolled mode. Certificates are still
-  // unwired (FULLSPEC §8) and keep their placeholder input.
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  // Photos and documents live outside the form entirely — see useArtworkPhotos
+  // for why a File cannot survive `useForm` in uncontrolled mode.
   const photos = useArtworkPhotos({ onError: setPhotoError });
-  const [certificates, setCertificates] = useState<File[]>([]);
+  const documents = useArtworkDocuments({ onError: setDocumentError });
 
   return (
     <>
@@ -83,6 +85,15 @@ const ArtworkAddPage: React.FC = () => {
 
           setError(null);
 
+          // Which write was in flight when something threw.
+          //
+          // Not inferable from the pending lists: those still hold their files
+          // after a successful upload, so "photos.pendingImages is non-empty"
+          // cannot tell you the photos were the thing that failed. It says only
+          // that some were queued, which is true of the artwork even when every
+          // one of them uploaded fine and the *documents* are what broke.
+          let stage: "create" | "photos" | "documents" = "create";
+
           try {
             // Two writes, not one. The document has to exist before Storage
             // has an id to put objects under, and the id cannot be known
@@ -99,6 +110,7 @@ const ArtworkAddPage: React.FC = () => {
             const newId = await artworkService.createArtwork(artwork);
 
             if (photos.pendingImages.length > 0) {
+              stage = "photos";
               const uploaded = await imageService.uploadArtworkPhotos({
                 userId: currentUser.uid,
                 collectionId,
@@ -112,6 +124,26 @@ const ArtworkAddPage: React.FC = () => {
               });
             }
 
+            // A second update rather than one merged with the photos above, on
+            // purpose. If documents were written in the same call, a document
+            // failure would land after the photos were already recorded and
+            // report the whole save as failed — or, if swallowed to avoid that,
+            // leave the photo references unrecorded and the objects orphaned.
+            // Two independent updates means each field is either right or
+            // untouched, and the message below can say which went wrong.
+            if (documents.pendingUploads.length > 0) {
+              stage = "documents";
+              const uploaded = await documentService.uploadArtworkDocuments({
+                userId: currentUser.uid,
+                collectionId,
+                artworkId: newId,
+                documents: documents.pendingUploads,
+              });
+              await artworkService.updateArtwork(newId, {
+                documents: documents.mergeUploaded(uploaded),
+              });
+            }
+
             // Slugged from the document that was just written rather than
             // from the form, so the URL can never disagree with Firestore.
             void navigate(
@@ -119,10 +151,20 @@ const ArtworkAddPage: React.FC = () => {
             );
           } catch (err) {
             console.error("Error creating artwork:", err);
+            // The artwork exists by the time either upload can fail, so the
+            // message has to distinguish "nothing was saved" from "saved, minus
+            // some files" — the second is recoverable from the Edit form, and
+            // saying "failed" would send the user looking for a missing record.
+            //
+            // Keyed on the stage rather than on the pending lists, so a document
+            // failure after the photos landed does not tell the user their
+            // images are missing.
             setError(
-              photos.pendingImages.length > 0
+              stage === "photos"
                 ? "The artwork was saved, but its images could not be uploaded. Open it to try again."
-                : "Failed to create artwork. Please try again.",
+                : stage === "documents"
+                  ? "The artwork was saved, but its documents could not be uploaded. Open it to try again."
+                  : "Failed to create artwork. Please try again.",
             );
           }
         })}
@@ -260,17 +302,15 @@ const ArtworkAddPage: React.FC = () => {
               <PhotoUploader photos={photos} />
             </Box>
 
-            <FileInput
-              label="Certificates"
-              placeholder="Upload PDF, JPG, PNG files"
-              multiple
-              accept="application/pdf,image/jpeg,image/png"
-              value={certificates}
-              onChange={(files) => setCertificates(files ?? [])}
-              disabled
-              description="File uploads are not wired up yet"
-              mb="md"
-            />
+            <Box mb="md">
+              <Text size="sm" fw={500} mb={4}>
+                Other Documents
+              </Text>
+              <DocumentsUploader
+                documents={documents}
+                description="Condition reports, receipts, provenance notes. Only you can see these."
+              />
+            </Box>
           </Grid.Col>
         </Grid>
 
@@ -283,6 +323,12 @@ const ArtworkAddPage: React.FC = () => {
         {photoError ? (
           <Alert color="red" mb="md">
             {photoError}
+          </Alert>
+        ) : null}
+
+        {documentError ? (
+          <Alert color="red" mb="md">
+            {documentError}
           </Alert>
         ) : null}
 

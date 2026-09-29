@@ -7,7 +7,6 @@ import {
   Button,
   Grid,
   Group,
-  FileInput,
   Alert,
   Loader,
   Switch,
@@ -16,9 +15,12 @@ import { DateInput } from "@mantine/dates";
 import { useForm, schemaResolver } from "@mantine/form";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
+import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { artworkService } from "@/services/artworkService";
 import { imageService } from "@/services/imageService";
+import { documentService } from "@/services/documentService";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
+import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
 
 import {
   EMPTY_ARTWORK_FORM,
@@ -72,11 +74,6 @@ const ArtworkEditPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Certificates are still unwired (FULLSPEC §8) and keep their placeholder
-  // input. Photos are handled by the hook — see useArtworkPhotos for why they
-  // cannot live in the form.
-  const [certificates, setCertificates] = useState<File[]>([]);
-
   // The storage path needs the real collection id and the owner's uid, and
   // neither is reliable from the route: `collectionParam` may be a slug, and
   // the route carries no user at all. Both are read off the loaded document,
@@ -88,10 +85,13 @@ const ArtworkEditPage: React.FC = () => {
 
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photos = useArtworkPhotos({ onError: setPhotoError });
-  // Destured for the same reason as `initialize` above: the load effect must
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const documents = useArtworkDocuments({ onError: setDocumentError });
+  // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each
   // render.
   const { hydrate: photosHydrate } = photos;
+  const { hydrate: documentsHydrate } = documents;
 
   useEffect(() => {
     if (!artworkId) {
@@ -117,6 +117,10 @@ const ArtworkEditPage: React.FC = () => {
         // an existing image re-orderable and removable rather than only
         // appendable.
         photosHydrate(artwork.photos);
+        // The same for documents, so an existing one is removable rather than
+        // only appendable. `sortDocuments` is what makes an artwork written
+        // before the field existed read as an empty list instead of throwing.
+        documentsHydrate(artwork.documents);
         // In uncontrolled mode this bumps the form key, which is what remounts
         // the inputs with the loaded values as their new defaults.
         initialize(values);
@@ -129,7 +133,7 @@ const ArtworkEditPage: React.FC = () => {
     };
 
     void fetchArtwork();
-  }, [artworkId, initialize, photosHydrate]);
+  }, [artworkId, initialize, photosHydrate, documentsHydrate]);
 
   // Put the canonical "{title}-{id}" in the address bar once the title is
   // known, preserving the collection segment exactly as it arrived — this page
@@ -174,6 +178,7 @@ const ArtworkEditPage: React.FC = () => {
         onSubmit={form.onSubmit(async (payload) => {
           setError(null);
           setPhotoError(null);
+          setDocumentError(null);
 
           try {
             // Upload and sweep Storage BEFORE the Firestore write, never
@@ -218,6 +223,42 @@ const ArtworkEditPage: React.FC = () => {
                   owner.collectionId,
                   artworkId,
                   photos.removedStoredIds,
+                );
+              }
+
+              // The same two steps, in the same order, for documents. Separate
+              // from the photos above rather than merged into one update: each
+              // field is written only once its own objects are on disk, so a
+              // document failure cannot leave the photo references unrecorded.
+              if (documents.pendingUploads.length > 0) {
+                const uploaded = await documentService.uploadArtworkDocuments({
+                  userId: owner.userId,
+                  collectionId: owner.collectionId,
+                  artworkId,
+                  // Images already generated when they were added; the rest go
+                  // up exactly as they were picked.
+                  documents: documents.pendingUploads,
+                });
+                await artworkService.updateArtwork(artworkId, {
+                  documents: documents.mergeUploaded(uploaded),
+                });
+              } else {
+                // `commit` returns null when nothing changed, leaving the field
+                // out of the update entirely.
+                const changed = documents.commit();
+                if (changed) {
+                  await artworkService.updateArtwork(artworkId, {
+                    documents: changed,
+                  });
+                }
+              }
+
+              if (documents.removedStoredIds.length > 0) {
+                await documentService.deleteArtworkDocuments(
+                  owner.userId,
+                  owner.collectionId,
+                  artworkId,
+                  documents.removedStoredIds,
                 );
               }
             }
@@ -364,17 +405,15 @@ const ArtworkEditPage: React.FC = () => {
               </Text>
               <PhotoUploader photos={photos} />
             </Box>
-            <FileInput
-              label="Certificates"
-              placeholder="Upload PDF, JPG, PNG files"
-              multiple
-              accept="application/pdf,image/jpeg,image/png"
-              value={certificates}
-              onChange={(files) => setCertificates(files ?? [])}
-              disabled
-              description="File uploads are not wired up yet"
-              mb="md"
-            />
+            <Box mb="md">
+              <Text size="sm" fw={500} mb={4}>
+                Other Documents
+              </Text>
+              <DocumentsUploader
+                documents={documents}
+                description="Condition reports, receipts, provenance notes. Only you can see these."
+              />
+            </Box>
           </Grid.Col>
         </Grid>
 
@@ -387,6 +426,12 @@ const ArtworkEditPage: React.FC = () => {
         {photoError ? (
           <Alert color="red" mb="md">
             {photoError}
+          </Alert>
+        ) : null}
+
+        {documentError ? (
+          <Alert color="red" mb="md">
+            {documentError}
           </Alert>
         ) : null}
 

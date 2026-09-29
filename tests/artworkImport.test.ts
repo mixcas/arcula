@@ -254,7 +254,7 @@ describe("toImportArtwork", () => {
     expect(doc.collectionId).toBe("collection-1");
     expect(doc.userId).toBe("user-1");
     expect(doc.isPublic).toBe(true);
-    expect(doc.certificates).toEqual([]);
+    expect(doc.documents).toEqual([]);
     expect(doc.photos).toEqual([]);
     expect(doc.title).toBe("Nocturne");
     expect(doc.artistName).toBe("Whistler");

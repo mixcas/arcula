@@ -199,10 +199,11 @@ export const toNewArtwork = (
     userId,
     // Public by default, matching the schema default in every write path.
     isPublic: clean.isPublic ?? true,
-    // TODO: certificate uploads per FULLSPEC §8, once a storage service
-    // handles them. They stay a flat list of attachments, unlike photos, which
-    // carry their generated variants and their order.
-    certificates: [],
+    // Always written, as [] when the artwork has none. The form uploads after
+    // the document exists (Storage needs an id to put objects under), so the
+    // second write sets the real list — same two-write shape as `photos`, and
+    // for the same reason.
+    documents: [],
     // `reindexPhotos` rather than the caller's array: `order` is derived from
     // array position, and this is the one place a new document's sequence is
     // established.

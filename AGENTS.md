@@ -124,7 +124,7 @@ Firestore access is enforced by `firestore.rules` (with
 - Init + exports: `src/services/firebase.ts` (do NOT re-initialize the app)
 - Auth: `src/services/authService.ts`, `src/context/AuthContext.tsx` (useAuth)
 - Data: `src/services/collectionService.ts`, `src/services/artworkService.ts`
-- Types: `src/types/index.ts` (User, Collection, Artwork, FileReference)
+- Types: `src/types/index.ts` (User, Collection, Artwork, ArtworkPhoto, ArtworkDocument)
 - Rules: `firestore.rules`, `firestore.indexes.json`, `storage.rules`
 - Tests: `tests/firestore.rules.test.ts`, `tests/storage.rules.test.ts` (via `bun run test:rules`)
 - Env vars: `.env`, `.env.development` (VITE_FIREBASE_*)
@@ -388,11 +388,11 @@ ManageLayout route added in `src/App.tsx`).
 
 ### Artwork photos (uploads, variants, ordering)
 
-`Artwork.photos` is an `ArtworkPhoto[]`, **not** `FileReference[]`.
-`certificates` keeps `FileReference[]` and is still unwired. The split is
-deliberate: a photo needs its generated sizes and its position in the
-sequence, and `FileReference.metadata?: any` - the codebase's only `any` - is
-the wrong home for both, because an untyped field is a field nothing checks.
+`Artwork.photos` is an `ArtworkPhoto[]`, and `Artwork.documents` is an
+`ArtworkDocument[]` - two shapes, not one. The split is deliberate: a photo
+needs its generated sizes **and** its position in the sequence, so it carries
+`order`; a document has neither, and giving it an `order` would be a field
+nobody can maintain honestly. See **Artwork documents** below.
 
 **The data shape.** Each entry has `id`, `order`, `name`, the source
 `width`/`height`, an unmodified `original`, and `variants[]`
@@ -513,9 +513,9 @@ style choice.** The previous rule combined them into one `allow read, write`
 whose condition dereferenced `request.resource.size`. `request.resource` is
 `null` on a read _and_ on a delete, so `null.size` is an evaluation error and
 the whole request is denied: the owner could upload a photo and then never
-read it back, and every rendered image would break. `acceptableUpload()`
-admits the `null` case explicitly. Never fold a read and a write back into one
-condition.
+read it back, and every rendered image would break. `acceptablePhotoUpload()`
+and `acceptableDocumentUpload()` each admit the `null` case explicitly. Never
+fold a read and a write back into one condition.
 
 **Storage reads mirror the Firestore visitor rule** - `isPublic == true` and
 `deletedAt == null` - so a photo is never more readable than the artwork it
@@ -591,14 +591,164 @@ into the payload at submit.
   class of bug described above. Worth stealing, and now taken: it checks
   `blob.type !== mime` and throws rather than trusting the request.
 
+### Artwork documents ("Other Documents")
+
+`Artwork.documents` is the former `certificates`, renamed when uploads landed.
+`FileReference` is deleted rather than deprecated - it had exactly one consumer
+and carried the codebase's only `any` (`metadata?: any`). **No migration
+exists and none is needed**: the field was written as `[]` by every code path
+and uploads were never wired, so every stored value is provably empty. Readers
+still go through `sortDocuments(artwork.documents)`, which treats an absent
+field as `[]`, because artworks written before the rename have no `documents`
+key at all and a reader should not have to know that.
+
+**`ArtworkDocument` is a union on `kind`**, not one shape with optionals:
+`{kind: "file", ...}` carries no variants, `kind: "image"` carries `variants`
+plus source dimensions. A union mirrors the `PhotoEntry` precedent and means
+"does this have a thumbnail" is decided once, at the type, rather than
+re-checked with `&&` at every call site.
+
+**Documents have no `order`, and that is not an oversight.** There is no
+sequence and no primary thumbnail, so there is nothing for an index to mean -
+which is exactly the invariant `artworkPhotos.ts` spends its `reindexPhotos` /
+`sortPhotos` pair maintaining. A shared generic hook with a config object was
+rejected: the config would have been most of the code, and the parts it
+switched on are the parts a reader needs to see side by side. So
+`useArtworkDocuments` is a separate hook, and the object-URL lifecycle (~20
+lines) is the one thing deliberately duplicated - it is the part that leaks if
+it is wrong.
+
+**The storage path mirrors photos exactly**, one object per generated file:
+
+```
+artworks/{userId}/{collectionId}/{artworkId}/documents/{artworkId}_{docId}_{key}.{ext}
+```
+
+`key` is `original` always, plus variant keys for images, so one filename
+regex and one delete sweep serve both features. The shared machinery - prefix
+building, `objectName`, `newEntryId`, `uploadAll` and the list-and-filter
+`deleteEntries` - was lifted out of `imageService` into
+`src/services/artworkFiles.ts` rather than copied into a document service;
+two `uploadAll`s to keep in step is two chances to drift.
+
+**The filename is metadata only, never in the object path.** This field cares
+about the original filename, but "cares about" means preserved and displayed,
+not interpolated into a path. User-controlled path segments bring traversal,
+length limits, and collisions (two files both called `scan.pdf` would overwrite
+each other) - and the `{docId}` in the name is what makes an object
+self-describing without any of that.
+
+**Images get only `square_sm` and `large`** (`DOCUMENT_IMAGE_VARIANT_KEYS`) -
+the two a document actually renders: the list tile and the preview modal.
+`square_lg` and `medium` exist for the public collection grid, and a document
+is refused to visitors outright, so generating them would write up to two
+objects per image that nothing can ever read. It is a _subset_ of the photo
+table rather than a second table, so the geometry stays defined once and
+`isDocumentName` - which permits the full key list - needs no matching change.
+
+**Never public, and that is enforced rather than merely omitted.**
+`storage.rules` gives `documents/` its own block reading `ownedByCaller` only,
+for read and write. A future UI that forgot to hide documents would render
+broken rather than leak. The rules suite seeds a **public** artwork for every
+visitor-denial case on purpose: on a private one the assertion would pass even
+if the block were widened to the visitor rule, and would keep passing.
+
+**Two upload functions, not one taking a size.** `acceptablePhotoUpload()` is
+10 MiB and `image/.*`; `acceptableDocumentUpload()` is 25 MiB and
+`image/.*|application/pdf`. A rules language with no closures makes a parameter
+read like configuration, after which nobody can see from the block which ceiling
+it is under. The photo block also _loses_ `application/pdf` in the same change,
+a drive-by tightening with identical behaviour since `isPhotoName` already
+made a `.pdf` name impossible there. `MAX_DOCUMENT_BYTES` in
+`src/utils/artworkDocuments.ts` must match the 25 MiB rule exactly; the suite
+pins both directions (a 20 MB PDF accepted as a document and rejected as a
+photo, 26 MB rejected as a document).
+
+**The extension allowlist in `isDocumentName` is an XSS control.** `pdf` joins
+the three image formats, and nothing else does. `contentType` is
+client-supplied and forgeable, so the only thing the rules _can_ bind it to is
+the name being written - which is what makes the allowlist load-bearing. An
+uploaded SVG or HTML file navigated to directly executes in the storage
+origin. Neither is accepted by the form and neither is permitted by the rules,
+so a hand-rolled client cannot add one either. It is a speed bump, not a
+guarantee: the `getDownloadURL` bearer token is long-lived, so a pasted link is
+shareable. That is pre-existing from photos, not new here.
+
+**Never widen `isDocumentName` to make a client error go away.** Documents were
+the first feature to route a _non-image_ through the image pipeline's naming, and
+it cost a 403 on 100% of PDFs: `uploadFile` asked `extensionFor` — which knows
+three image types and answers `bin` for anything else — so a perfectly valid
+`Get_Started_With_Smallpdf.pdf` went up as `{artworkId}_{docId}_original.bin` and
+`isDocumentName` denied it. The fix is on the client, and adding `bin` to the
+allowlist would have "fixed" it by deleting the XSS control: `contentType` is
+forgeable, so the extension is the only thing binding the declared type to the
+name. A `text/html` payload named `.bin` is storable, and that is precisely the
+stored-XSS primitive the allowlist exists to block.
+
+`documentExtension(name, type)` in `src/utils/artworkDocuments.ts` is the one
+place a document's stored extension is decided: the filename first, and the
+reported type only when the name has no extension at all. It returns `null` rather
+than guessing, and `uploadFile` throws on `null`. Images are deliberately _not_
+resolved there — `uploadImage` names each object from the reported type, so a
+`.jpg` which is really a PNG is stored as the PNG it is, and routing that through
+a name-based function would lose it.
+
+**The gap that let the `.bin` bug through: nothing compared the name the client
+produces with the name the rules accept.** Every rules case hand-wrote its
+fixture names with a local `documentName(…, "pdf")` helper (the rules side, written
+out to match) and every component test stubbed the service, so 21 rule cases and
+27 component cases could all be green while every PDF failed in production. Two
+tests now close it, and both are worth keeping:
+
+- `tests/storage.rules.test.ts` "uploads a picked PDF under a name the rules
+  accept" drives the **real `documentService`** with a real `File` and asserts
+  the object exists. This is the one that fails the way production did, which is
+  why `UploadDocumentsOptions` takes an optional `client` — a parameter with a
+  `storage` default, the same reason `Migration.run` takes the `Firestore` it
+  runs against.
+- `tests/artworkDocuments.test.ts` "never derives `bin`, whatever the file" states
+  the property rather than the case, over a name × type matrix, so a refactor of
+  the function body cannot reintroduce a fallback. Verified red by reintroducing
+  the `extensionFor` call: the rules suite failed with the same
+  `storage/unauthorized` and the same `.bin` filename as the original report.
+
+Note the empty-type branch is **not** a real case. `file-selector` backfills a
+MIME type from the filename's extension before the Dropzone's `onDrop` fires
+(measured: a `File` constructed with `type: ""` arrives as `application/pdf`), so
+a typeless file only ever reaches the hook when its name has no dot — and the hook
+rejects those. `isAcceptedDocumentType("")` is `false` and that is correct.
+
+**Add is three writes, not one merged write**: create, then upload+record
+photos, then upload+record documents. Merging the last two would mean a
+document failure either reports a save that partly succeeded, or - if swallowed
+to avoid that - leaves the photo references unrecorded and the photo objects
+orphaned. Separately, `ArtworkAddPage` tracks a `stage` variable rather than
+inferring which upload failed from the pending lists: those still hold their
+files after a successful upload, so "photos are pending" cannot distinguish
+"the photos failed" from "the documents did".
+
+**`documents` is written on save only when it changed** (`commit()` returns
+`null` otherwise), and the comparison is a _set_ of ids rather than photos'
+ordered one - reordering the UI is not a change worth rewriting every storage
+URL for. `mergeUploaded` walks the working list for the same reason photos'
+does: concatenating puts every new document at the front.
+
+**Rejections are surfaced, on both paths.** `addFiles` reports an unsupported
+type and an undecodable image, and the component _also_ handles Dropzone's
+`onReject` - which is the path that actually fires for an oversized file, since
+Dropzone checks `maxSize` itself and never calls `onDrop`. Dropping that
+handler is how a 30 MB condition report produces a one-frame flicker and a
+file that silently does not appear.
+
 ### Gotchas
 
 - Never re-run `initializeApp`; import `db`/`auth`/`storage` from
   `src/services/firebase.ts`.
 - Config comes from `VITE_FIREBASE_*` env vars — never hardcode or copy
   real values.
-- `storage` is used for `Artwork.photos`; `certificates` are still unwired
-  (`[]`). See **Artwork photos** below.
+- `storage` backs both `Artwork.photos` and `Artwork.documents`, through the
+  shared machinery in `src/services/artworkFiles.ts`. See **Artwork photos**
+  and **Artwork documents** below.
 - Firestore rules exist now and are enforced. Pre-rule client reads are
   gone; list rules are per-document field checks and **rules are not
   filters**, so **every client list query must carry the matching

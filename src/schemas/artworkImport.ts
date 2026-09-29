@@ -21,7 +21,7 @@ import type { Artwork } from "@/types";
  *      against each other or against the collection's existing artworks.
  *   4. `toImportArtwork` — build the Firestore payload via the shared
  *      `toNewArtwork` path so an imported artwork is byte-identical to one
- *      created by hand (ownership, `certificates`/`photos`, public default).
+ *      created by hand (ownership, `documents`/`photos`, public default).
  *
  * `isPublic` is intentionally NOT a mappable column: imported works inherit the
  * app-wide public-by-default posture and can be flipped per-work afterwards.
@@ -526,7 +526,7 @@ export const validateImportRow = (
 /**
  * Shape a (valid) import row into the exact document the single-artwork path
  * would write: shared schema parse for trimming/coercion, then `toNewArtwork`
- * for ownership, `certificates`/`photos`, and the public-by-default flag.
+ * for ownership, `documents`/`photos`, and the public-by-default flag.
  */
 export const toImportArtwork = (
   values: ImportRowValues,

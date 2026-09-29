@@ -72,6 +72,25 @@ export const VARIANT_KEYS: readonly ImageVariantKey[] = IMAGE_VARIANTS.map(
   (variant) => variant.key,
 );
 
+/**
+ * The subset an image gets when it is attached as a *document* rather than as
+ * a photo.
+ *
+ * Two of the four, and the two that documents actually use: `square_sm` renders
+ * the list tile, `large` fills the preview modal. `square_lg` and `medium` exist
+ * for the public collection grid, and a document never appears there — it is
+ * refused to visitors by `storage.rules`. Generating them anyway would write up
+ * to two objects per image that nothing can ever read.
+ *
+ * A subset rather than a second table: the geometry stays defined once, and
+ * `isDocumentName` in `storage.rules` already permits the full key list, so
+ * narrowing the set here needs no matching rule change.
+ */
+export const DOCUMENT_IMAGE_VARIANT_KEYS: readonly ImageVariantKey[] = [
+  "square_sm",
+  "large",
+] as const;
+
 /** The output dimensions a variant produces for a given source size. */
 export interface VariantSize {
   width: number;
