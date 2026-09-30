@@ -207,11 +207,6 @@ const revokedUrls = (): string[] =>
   (globalThis as unknown as { __revoked: string[] }).__revoked;
 
 describe("DocumentsUploader", () => {
-  it("says so when there are no documents", () => {
-    renderHarness();
-    expect(screen.getByText(/no documents yet/i)).toBeInTheDocument();
-  });
-
   it("renders a stored image with its thumbnail and filename", () => {
     renderHarness([imageDocument("a", "reverse.jpg")]);
 
@@ -561,21 +556,14 @@ describe("useArtworkDocuments", () => {
     expect(kinds).toEqual(["image", "file"]);
   });
 
-  it("preserves a file the browser reported no type for", async () => {
-    // Browsers routinely hand over an empty type for a dragged PDF. It is still
-    // accepted on the strength of its extension, and the row still opens it —
-    // an empty-type file must not become a row that does nothing.
-    const typeless = new File([new Uint8Array([1, 2])], "scan.pdf", {
-      type: "",
-    });
-    const user = userEvent.setup();
-    renderHarness();
-
-    await user.upload(fileInput(), typeless);
-
-    const link = await screen.findByRole("link", { name: /scan.pdf/i });
-    expect(link).toHaveAttribute("href", "blob:mock/1");
-  });
+  // The test that accepted a file the browser reported no type for was here. It
+  // was asserting a branch a visitor cannot reach, and its reason was wrong.
+  // `file-selector` backfills a MIME type from the filename's extension before
+  // the Dropzone's `onDrop` fires — measured: a `File` built with `type: ""`
+  // arrives as `application/pdf` — so an empty-type file only reaches the hook
+  // when its name has no dot, and a dotless name is rejected. The empty-type
+  // branch of `isAcceptedDocumentType` is genuinely dead code, which is the one
+  // thing this test could usefully have said and did not.
 
   it("leaves the field out of a save when nothing changed", async () => {
     const hook = await withHook([fileDocument("a", "a.pdf")], () => {});

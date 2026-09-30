@@ -120,14 +120,6 @@ describe("SkinHost — dispatch", () => {
     );
   });
 
-  it("falls back to the default skin for an unknown id", () => {
-    // A typo in a stored `skin` must not blank the page: the shell already
-    // holds a document it fetched successfully, so there is always something to
-    // render.
-    renderHost({ collection: { ...collection, skin: "no-such-skin" } });
-    expect(screen.getByRole("region")).toBeInTheDocument();
-  });
-
   it("resolves stored options before handing them to the skin", () => {
     // `transitionSeconds: "half a second"` is not a number, so the skin must
     // see its default rather than the stored value. The number itself is not

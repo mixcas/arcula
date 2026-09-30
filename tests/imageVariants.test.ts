@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCEPTED_IMAGE_TYPES,
   IMAGE_VARIANTS,
-  MAX_ARTWORK_PHOTOS,
   MAX_IMAGE_BYTES,
   VARIANT_KEYS,
   coverCrop,
@@ -58,13 +56,12 @@ describe("IMAGE_VARIANTS", () => {
     expect(MAX_IMAGE_BYTES).toBe(rulesByteCeiling("acceptablePhotoUpload"));
   });
 
-  it("caps a photo at ten, which the rules have no opinion about", () => {
-    // A client-only decision, and deliberately not cross-checked: `storage.rules`
-    // counts nothing. Enforced in three places — the hook's rejection, its
-    // `hasRoom`, and the dropzone's `maxFiles` — and the number itself is a
-    // product choice, not a contract with the server.
-    expect(MAX_ARTWORK_PHOTOS).toBe(10);
-  });
+  // No test for the ten-photo cap, which used to be here asserting
+  // `MAX_ARTWORK_PHOTOS` against the literal 10. It could only fail by editing
+  // the constant it was asserting, and the number is a product choice rather
+  // than a contract with anything: `storage.rules` counts nothing, and the cap
+  // is enforced in three places (the hook's rejection, its `hasRoom`, and the
+  // dropzone's `maxFiles`) — none of which the test could see.
 });
 
 describe("storage.rules key list", () => {
@@ -302,11 +299,11 @@ describe("coverCrop", () => {
 });
 
 describe("isAcceptedImageType", () => {
-  it("accepts the three listed types", () => {
-    for (const type of Object.keys(ACCEPTED_IMAGE_TYPES)) {
-      expect(isAcceptedImageType(type)).toBe(true);
-    }
-  });
+  // No test that the accepted types are accepted. It was here as a loop over
+  // `Object.keys(ACCEPTED_IMAGE_TYPES)` asserting `isAcceptedImageType` on each,
+  // and `isAcceptedImageType` is `type in ACCEPTED_IMAGE_TYPES` — the set
+  // against itself, true by construction. Removing a key from the map would
+  // have stopped the loop from visiting it, never turned the loop red.
 
   it("rejects anything else, including a missing type", () => {
     for (const type of [

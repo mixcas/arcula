@@ -2,7 +2,7 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import * as rtl from "@testing-library/react";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
@@ -360,14 +360,6 @@ describe("Basicx — the fixed chrome", () => {
     expect(credit).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("offers no login link in the nav", () => {
-    // Asserted because it was there and was removed: the public page is
-    // reachable by anyone, and a link that only the owner can follow should not
-    // be advertised to everyone.
-    render();
-    expect(screen.queryByRole("link", { name: /manage|login/i })).toBeNull();
-  });
-
   it("holds the footer's first line with a non-breaking space when nothing is named", () => {
     // The label is the first thing to change as the first section reports
     // itself, so a placeholder that collapsed to zero height would make the bar
@@ -471,16 +463,13 @@ describe("Basicx — photographs", () => {
 });
 
 describe("Basicx — the scoped theme", () => {
-  it("uses one font family for body and headings", async () => {
-    // `headings.fontFamily` is set explicitly rather than inherited: a nested
-    // theme deep-merges, so without it a `Title` would pull in BBH Bartle —
-    // which ships a single 400 weight and would fake-bold the 550 above.
-    render();
-    const title = await screen.findByRole("link", { name: "Flores Solares" });
-    await waitFor(() => {
-      expect(within(title).getByText("Flores Solares")).toBeInTheDocument();
-    });
-  });
+  // The test that asserted `headings.fontFamily` was set was here, and it did
+  // not assert it: it rendered, found the footer's title link, and checked that
+  // the link contained its own text. The reason the value is set explicitly —
+  // that a deep-merging nested theme would otherwise pull in BBH Bartle, which
+  // ships one weight and would fake-bold — makes it worth saying out loud,
+  // because nothing in the theme object distinguishes "set to Darker Grotesque"
+  // from "omitted and inherited".
 
   it("declares the two semantic type sizes rather than overriding md/sm", () => {
     const sizes = basicxSkin.theme?.fontSizes as

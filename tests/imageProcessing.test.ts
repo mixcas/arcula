@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  EXTENSION_BY_TYPE,
   JPEG_TYPE,
   WEBP_QUALITY,
   WEBP_TYPE,
@@ -188,11 +187,11 @@ describe("extensionFor", () => {
     expect(extensionFor("")).toBe("bin");
   });
 
-  it("has an extension for every format an upload can be", () => {
-    for (const type of [WEBP_TYPE, JPEG_TYPE, "image/png"]) {
-      expect(EXTENSION_BY_TYPE[type]).toBeDefined();
-    }
-  });
+  // No test that every listed format has an extension. It was here as a loop
+  // over `[WEBP_TYPE, JPEG_TYPE, "image/png"]`, and two of those three are the
+  // map's own keys — so it asserted that a record has the fields it is declared
+  // with. The one case worth asserting, PNG, is already the assertion directly
+  // above it.
 });
 
 /**

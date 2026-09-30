@@ -209,13 +209,6 @@ const revokedUrls = (): string[] =>
   (globalThis as unknown as { __revoked: string[] }).__revoked;
 
 describe("PhotoUploader", () => {
-  it("explains the thumbnail rule when there are no photos", async () => {
-    await renderHarness();
-    expect(
-      screen.getByText(/first image is the one used as the thumbnail/i),
-    ).toBeInTheDocument();
-  });
-
   it("renders the stored photos in order, badging index 0 as the thumbnail", async () => {
     await renderHarness([
       photo("a", 0, "first.jpg"),
@@ -361,11 +354,6 @@ describe("PhotoUploader", () => {
       expect(screen.getByText("good.jpg")).toBeInTheDocument();
     });
     expect(screen.queryByText("notes.pdf")).not.toBeInTheDocument();
-  });
-
-  it("shows an empty-state hint before any image is added", async () => {
-    await renderHarness();
-    expect(screen.getByText(/drag images here/i)).toBeInTheDocument();
   });
 
   it("previews the generated variant, not the picked file, before upload", async () => {

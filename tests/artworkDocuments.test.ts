@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_DOCUMENT_TYPES,
   DOCUMENT_EXTENSIONS,
-  MAX_ARTWORK_DOCUMENTS,
   MAX_DOCUMENT_BYTES,
   documentExtension,
   documentImageSpecs,
@@ -25,7 +24,7 @@ import {
   sortDocuments,
 } from "@/utils/artworkDocuments";
 import { extensionFor } from "@/utils/imageProcessing";
-import { MAX_ARTWORK_PHOTOS, MAX_IMAGE_BYTES } from "@/utils/imageVariants";
+import { MAX_IMAGE_BYTES } from "@/utils/imageVariants";
 import {
   rulesByteCeiling,
   rulesExtensionList,
@@ -151,13 +150,12 @@ describe("the size and count caps", () => {
     expect(MAX_DOCUMENT_BYTES).toBeGreaterThan(MAX_IMAGE_BYTES);
   });
 
-  it("caps documents and photos separately", () => {
-    // Separate caps, so a work can hold ten of each. A shared pool would make
-    // the second list's limit depend on the first, which is not a limit anyone
-    // can reason about.
-    expect(MAX_ARTWORK_DOCUMENTS).toBe(10);
-    expect(MAX_ARTWORK_PHOTOS).toBe(10);
-  });
+  // The ten-per-list caps used to be asserted here against the literal 10, in
+  // a test that also duplicated the one in `imageVariants.test.ts`. Neither
+  // could fail without editing the constant it asserted, and the caps are a
+  // product choice: `storage.rules` counts nothing, so there is nothing to
+  // cross-check them against. The separate-caps decision they were documenting
+  // is carried by the two constants themselves.
 });
 
 describe("fileExtension", () => {

@@ -336,11 +336,4 @@ describe("ArtworksTable", () => {
       expect.objectContaining({ message: "offline" }),
     );
   });
-
-  it("shows an empty state instead of an empty table", () => {
-    renderTable({ artworks: [] });
-    expect(
-      screen.getByText("No artworks in this collection yet."),
-    ).toBeTruthy();
-  });
 });

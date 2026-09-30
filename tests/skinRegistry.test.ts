@@ -46,9 +46,12 @@ describe("the registry", () => {
   it("is not empty, and the default is one of its members", () => {
     expect(SKINS.length).toBeGreaterThan(0);
     expect(SKINS).toContain(DEFAULT_SKIN);
-    // The default's id is derived from the default rather than written
-    // separately, so these cannot drift; asserted because the id is persisted.
-    expect(DEFAULT_SKIN_ID).toBe(DEFAULT_SKIN.id);
+    // `DEFAULT_SKIN_ID` was asserted to equal `DEFAULT_SKIN.id` here, which is
+    // what it is defined as — the two cannot disagree, so the test could only
+    // fail by editing the one line it read. The id matters because it is the
+    // value persisted on `Collection.skin`, and the live property of that is
+    // already covered above: `resolveSkin` is case-insensitive, so a stored id
+    // survives a change of case.
   });
 
   it("has no duplicate ids, which the persisted field requires", () => {
