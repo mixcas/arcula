@@ -587,7 +587,23 @@ the artist beneath it, dimmer because it is the quieter of the two. The title
 links to that artwork's own public view, which is what makes the homepage a way
 _into_ its works rather than only past them — and it needed no layering change,
 because the footer is a separate fixed bar at `z-index: 2` and the click zones
-sit at `1`.
+sit at `1`. It is a link on `home` only: on the artwork view that path _is_ the
+current URL, so a link there is a control that navigates nowhere, and the plain
+`Text` branch is the same line with the same styling.
+
+**Both bars are `pointer-events: none`, and every link inside one must set
+`pointerEvents: "auto"` on itself.** The property is inherited, so the bar's
+`none` reaches any link that does not override it — and the resulting bug is
+invisible: the element is still a real `<a>` with the right `href`, still
+focusable, and Mantine's `Anchor` sets `cursor: pointer` unconditionally, so it
+looks live. The click instead falls through to the section's click zones and
+_steps the carousel_, or hits nothing at all on a single-photo artwork. The
+footer title shipped this way and was unclickable until
+`tests/basicxSkin.test.tsx` asserted it. The test checks every link in the
+chrome on both views (jsdom does no hit testing, so computed `pointer-events` is
+the only signal), and a second case pins the bars at `none` — because the
+obvious wrong fix is to delete the `none` from the bar, which restores the link
+and silently breaks every click zone.
 
 The chrome takes an `artwork: { title, artistName, path } | null` view model
 rather than an `Artwork` or a pre-joined label string, so it renders three

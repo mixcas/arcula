@@ -144,6 +144,24 @@ const renderSkin = ({ options: stored, ...props }: Partial<SkinProps> = {}) => {
 /** Shorthand for the common case; the artwork view passes `view` through it. */
 const render = (props: Partial<SkinProps> = {}) => renderSkin(props);
 
+/**
+ * Whether a click on this element would actually reach it in a browser.
+ *
+ * `pointer-events` is an *inherited* property, so this is one check and not a
+ * walk up the ancestors: an element that does not set it computes to its bar's
+ * `none` all the way down, and one that sets `auto` computes to `auto` whatever
+ * its ancestors say. Both bars are `none`, so a link inside one that forgets to
+ * re-enable it swallows every click meant for it. jsdom does no hit testing, so
+ * this is the only way a test can see a link that exists, looks live, and cannot
+ * be clicked.
+ */
+const isClickable = (element: HTMLElement): boolean =>
+  window.getComputedStyle(element).pointerEvents !== "none";
+
+/** The bar a link belongs to, by tag rather than by implicit ARIA role. */
+const barOf = (element: HTMLElement): HTMLElement | null =>
+  element.closest("nav, footer");
+
 beforeEach(() => {
   mediaQueryAnswer = (query) => query === "" || query === "(min-width: 36em)";
 });
@@ -217,12 +235,63 @@ describe("Basicx — the fixed chrome", () => {
     render();
     // What makes the homepage a way *into* its works rather than only past
     // them. `artworkPath` comes from the shell, so the link is the canonical
-    // one the rewrite effect would produce.
+    // one the rewrite effect would produce. The `view` is the `home` default:
+    // the artwork view's own title is not a link — see the case below.
     const title = screen.getByRole("link", { name: "Estudio en rojo" });
     expect(title).toHaveAttribute(
       "href",
       `${COLLECTION_PATH}/artwork/Estudio en rojo-artwork-1`,
     );
+  });
+
+  it.each(["home", "artwork"] as const)(
+    "makes every link in the chrome reachable by a click on the %s view",
+    (view) => {
+      // The regression. Both bars are `pointer-events: none` so they do not
+      // swallow the slideshow's click zones, and the footer title did not
+      // re-enable it on itself — so it rendered as a real link, with a pointer
+      // cursor and the right href, that no mouse could follow, and clicking it
+      // stepped the carousel underneath instead. Asserted over *every* link
+      // rather than over that one, because a link added to a bar later fails in
+      // exactly the same way and nothing else here would notice.
+      renderSkin({ view });
+      const links = screen.getAllByRole("link");
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        expect(
+          isClickable(link),
+          `the link "${link.textContent}" should be clickable`,
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("keeps the bars transparent to clicks, so they do not eat the zones", () => {
+    // The other half of the rule the case above turns on, and the reason that
+    // fix cannot simply be removing the `none` from the bar: a bar that took
+    // its clicks back would sit over the top and bottom strips of the image and
+    // swallow every step of the slideshow. One link per bar, so each bar is
+    // reached through something that is definitely inside it.
+    render();
+    const nav = barOf(screen.getByRole("link", { name: "Flores Solares" }));
+    const footer = barOf(screen.getByRole("link", { name: "Estudio en rojo" }));
+    expect(nav?.tagName).toBe("NAV");
+    expect(footer?.tagName).toBe("FOOTER");
+    expect(window.getComputedStyle(nav!).pointerEvents).toBe("none");
+    expect(window.getComputedStyle(footer!).pointerEvents).toBe("none");
+  });
+
+  it("does not link the footer title on the view it is already on", () => {
+    // The artwork view's title is the work being looked at, so its canonical
+    // path *is* the current URL: a link there navigates nowhere. The plain
+    // branch is the same line with the same styling, so nothing shifts.
+    renderSkin({ artworks: [artwork()], view: "artwork" });
+    expect(
+      screen.queryByRole("link", { name: "Estudio en rojo" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Estudio en rojo")).toHaveStyle({
+      fontWeight: "550",
+    });
   });
 
   it("shows the title bold and the artist dimmer", () => {

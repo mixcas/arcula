@@ -15,6 +15,19 @@
  * `pointer-events: none` and only the links inside re-enable them. That is what
  * makes "overlay" mean overlay.
  *
+ * The corollary is the rule, and it is easy to break silently: **every link
+ * inside a bar has to re-enable `pointer-events` itself**, because the property
+ * is inherited and the bar is its ancestor. A link that does not is a real `<a>`
+ * with the right `href` that no mouse can reach — the click falls through to
+ * the carousel underneath, so on a multi-photo artwork it silently steps the
+ * slideshow instead of navigating, and on a single-photo one it does nothing at
+ * all. `pointer-events` is not the only thing that makes a link look live:
+ * Mantine's `Anchor` sets `cursor: pointer` unconditionally and `underline:
+ * "never"` suppresses the hover underline, so such a link is visually
+ * indistinguishable from a working one. The only defence is putting
+ * `pointerEvents: "auto"` on the link itself, and a test that walks the ancestor
+ * chain — see `tests/basicxSkin.test.tsx`.
+ *
  * ## The nav's empty second line
  *
  * The nav is left to its two-column row for now; the space for a second line
@@ -168,7 +181,17 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
       <Stack gap={0}>
         {/* A non-breaking space on each line holds its height until the first
             section reports itself, so the bar does not jump as it fills in. */}
-        {artwork?.path ? (
+        {/*
+          Linked on `home` only. On the artwork view this path is the page the
+          visitor is already on, so a link there is a control that navigates
+          nowhere — and the `Text` below is the same line, styled identically,
+          so the two branches differ in behaviour and not in appearance.
+
+          The `pointerEvents: "auto"` is not optional and neither is its absence
+          from the nav: the footer is `none`, that inherits, and without this the
+          click lands on the carousel. See the note at the top of this file.
+        */}
+        {artwork?.path && view === "home" ? (
           <Anchor
             component={Link}
             to={artwork.path}
@@ -177,6 +200,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
             fw={550}
             lh={1.2}
             c={LINK_COLOR}
+            style={{ pointerEvents: "auto" }}
           >
             {artwork.title}
           </Anchor>
