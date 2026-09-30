@@ -10,7 +10,7 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 - `bun run check` - Typecheck, lint, and check formatting
 - `bun run test:rules` - Run the Firestore + Storage rules suites against the emulators (needs Java)
 - `bun run emulators` - Start the full emulator suite with web UI (port 4000)
-- `bun run deploy:rules` - Test rules, then deploy `firebase deploy --only firestore,storage`
+- `bun run deploy:rules` - Test rules, then deploy `firebase deploy --only firestore,storage`. **Required for the `xlarge` photo variant** — its key must be in `storage.rules`, or every new photo upload 403s on that object
 - `bun run deploy:hosting` - Build, then deploy hosting
 - `bun run deploy` - Rules first (gated on the suite), then hosting
 
@@ -42,6 +42,12 @@ This is a React + TypeScript + Vite project using Firebase for authentication an
 - `src/components/manage/MigrationsPage.tsx` - Runs pending migrations for the signed-in account
 - `src/services/artworkService.ts` - Artwork reads (owner vs visitor) and `softDeleteArtworks`
 - `src/utils/imageVariants.ts` - The variant table, the geometry, and the caps
+- `src/skins/types.ts` - The skin contract (`SkinDefinition`, `SkinProps`, `SkinOptionSpec`)
+- `src/skins/registry.ts` - `SKINS`, `resolveSkin`, `resolveSkinOptions`
+- `src/skins/basicx/` - The first skin. See "Public collection views" below
+- `src/components/collection/SkinHost.tsx` - Resolves the skin and applies the scoped theme
+- `src/components/collection/usePublicCollection.ts` - The public data layer and its state union
+- `src/components/collection/PublicCollectionPage.tsx` / `PublicArtworkPage.tsx` - The two route shells
 - `src/utils/artworkPhotos.ts` - `order` invariant and the read helpers
 - `src/utils/imageRender.ts` / `imageWorker.ts` / `imageProcessing.ts` - Canvas encoding, worker, orchestrator
 - `src/services/imageService.ts` - Storage upload and delete sweeps
@@ -257,8 +263,9 @@ but stays in the database.
   Owner branches are untouched, so a future trash view over
   `where("deletedAt","!="...)` needs no rules work.
 - Not built yet (deliberately): a trash/restore view, a `deletedAt != null`
-  index, a public single-artwork route (which is why the row **View** button
-  is disabled), and a Cloud Function that purges long-dead works.
+  index, and a Cloud Function that purges long-dead works. (The public
+  single-artwork route _was_ on this list and is now built — see "Public
+  collection views" below.)
 
 ### Migrations
 
@@ -323,6 +330,63 @@ Scope and alternatives, for when this stops being enough:
   is left is a credentials-and-rollout decision — who runs it, and which
   service account it uses — not a billing one.
 
+### Artwork forms (Add and Edit)
+
+Both forms are a `<Grid>` of 14+ fields ending in `currentValue`, which is below
+the fold on a laptop. `FormActionsBar` is the fixed Save/Cancel bar both render,
+inside the `<form>` so Save is still a real submit control.
+
+**Why not `AppShell.Footer`.** `ManageLayout` is shared by every `/manage` route,
+so a footer there would put Save and Cancel on the collection page, the settings
+page and the import too. A bar the two forms choose to render is one line each
+and cannot appear where it has no meaning.
+
+**`BAR_HEIGHT` is exported and used twice**, as the bar's own height and as the
+form's `paddingBottom` (`BAR_HEIGHT + 24`). A fixed bar occupies no space in the
+flow, so without the padding it would sit permanently on top of the last field
+_and_ the error alerts — the content most needed after a failure. Two numbers that
+must agree are one constant. The alerts stay in the form flow rather than moving
+into the bar: they are content, they can be three lines tall, and the padding is
+what keeps the last one clear of the bar.
+
+**Add redirects on every outcome; Edit does not redirect at all.** Add is a
+three-write sequence (create, upload photos, upload documents), and past the
+first write the document exists — so holding the form open and saying "open it to
+try again" pointed at a page the user was not on. Instead:
+
+| outcome                  | Add does                                      | Edit shows                            |
+| ------------------------ | --------------------------------------------- | ------------------------------------- |
+| all writes succeeded     | toast, redirect                               | —                                     |
+| photos failed            | yellow toast, redirect with `?warn=photos`    | "its images could not be uploaded"    |
+| documents failed         | yellow toast, redirect with `?warn=documents` | "its documents could not be uploaded" |
+| the create itself failed | stays on the form, red alert                  | —                                     |
+
+Only the first branch stays put, and it is the only one where nothing was
+written and the form still holds everything the user typed.
+
+**The toast is raised before `navigate`**, on both pages. A notification raised
+on a page that immediately unmounts is never seen.
+
+**`?warn` is a query param, not state, and it is captured once on mount.** The
+message has to survive a refresh or a pasted URL — the user who is told "its
+images could not be uploaded" needs that warning to still be there when they come
+back — so state is wrong. But it is _read_ once: `useState(() => WARNINGS[warn])`
+rather than deriving from `searchParams` each render. Deriving it looks equivalent
+and is not: the effect below strips the param on mount, so a derived value blanks
+the message the instant it appears, and it flashes and vanishes unread. Both
+halves are mutation-tested in `tests/artworkFormSave.test.tsx`.
+
+**The param is stripped once shown, with `replace`.** `warn` says an upload
+failed and the fix is on the very page it points at, so leaving it in place would
+re-raise the warning on every refresh, long after the photos were uploaded — a
+stale alarm that teaches the reader to ignore the one message that matters.
+`replace` so it does not also spend a history entry: Back from a fixed page
+returns to wherever the user came from.
+
+**The value is read through a table lookup, not an `if`.** An unrecognised
+`?warn=anything` must render nothing at all rather than reach a visitor as an
+alert about their uploads, and `WARNINGS[warn ?? ""]` is that by construction.
+
 ### Artwork table (owner view)
 
 `src/components/manage/CollectionPage.tsx` renders
@@ -342,6 +406,18 @@ numeric: true })` with an `id` tie-break — titles are free text in any
 - Selection is held as `string[]` of ids rather than record objects, so the
   post-delete refetch cannot silently empty it. Cancelling the confirm dialog
   deliberately leaves the selection alone.
+- **`RECORDS_PER_PAGE_OPTIONS` is `[25, 50]` and the state initialises from
+  index 0**, so the default and the offered options cannot drift: a reordering
+  would silently change the page size every collection opens at. 10 is
+  deliberately absent — a 10-row page reads as empty beside a 50-row one. The
+  same array and the same coupling are in `ReviewRowsStep` for the import
+  review step.
+- **The row's View link is a plain `href` with `target="_blank"`, not a router
+  `Link`**, and the header View on `CollectionPage` is too. It leaves the app, so
+  the new tab gets a full document load and cannot be left as a half-working
+  public page under the manage session's history. `rel="noopener noreferrer"` is
+  not optional: without `noopener` the opened page gets a handle on this window
+  via `window.opener` (see the same argument in `DocumentsUploader`).
 - Every delete goes through `modals.openConfirmModal` with a stable
   `DELETE_MODAL_ID`, so a second click cannot stack dialogs. `ConfirmModal`
   ignores the promise returned by `onConfirm` and closes immediately, so the
@@ -386,6 +462,231 @@ ManageLayout route added in `src/App.tsx`).
   still validates import rows, so a pure-logic change that drifts from
   the schema is caught by `tests/artworkImport.test.ts` at CI time.
 
+### Public collection views ("skins")
+
+A collection's public view is rendered by a **skin**: a component tree that
+owns the layout, type and interaction, and nothing else. Two routes render one,
+both unwrapped by `ProtectedRoute` and `ManageLayout`:
+
+- `/collection/:collectionId` — the collection homepage
+- `/collection/:collectionId/artwork/:artworkId` — one artwork
+
+`src/skins/` holds the contract (`types.ts`), the registry (`registry.ts`) and
+one folder per skin. `SkinHost` is the whole of the boundary in the running app;
+the shell loads the data and decides what is visible, and everything past
+`SkinHost` is presentation the skin owns.
+
+**A skin is a component, not a config.** A skin is `{ id, label, options,
+theme, Home, Artwork }` — two React components and an optional nested theme.
+The alternative, one generic engine driven by JSON, would need a vocabulary for
+overlays, cursor zones and nested scroll behaviour, and that vocabulary would end
+up being most of the code while still being less expressive than React. What
+_is_ data-driven is the narrow part that varies per collection: options, which
+each skin declares for itself.
+
+**`Home` and `Artwork` are usually the same component.** They differ only in how
+many sections the shell hands over (every public work, versus a one-element
+array), which is what makes "the artwork view may show more" a property of the
+skin rather than a second code path to keep in step. A skin may still branch on
+`view` — that is what the field is for.
+
+**Options belong to the skin, not to the app.** A global option list would have
+to be honoured by every skin, so it could only grow to the _intersection_ of
+what skins can express — and an option a skin ignores is worse than one it does
+not offer, because the settings form would advertise a control that does
+nothing. `resolveSkinOptions` is a flat per-key default: unknown keys are
+dropped and reported (`dropped`, surfaced in the settings page), a wrong type
+falls back to the default, and a number outside its bounds is _clamped_ rather
+than defaulted. The settings form is generated from the specs, so a skin with
+different options needs no settings-page code.
+
+**A skin must not use a portaled Mantine component.** `Modal`, `Drawer`,
+`Menu`, `Popover`, `Select`, `Combobox`, `Tooltip` and `Notifications` all
+render into `document.body`, outside the skin's scope, and would silently pick
+up the app theme. See the scoping note below.
+
+#### The scoping mechanism (verified, and load-bearing)
+
+`MantineProvider`'s `cssVariablesSelector` **defaults to `:root`** (checked in
+`@mantine/core@9`). So a nested provider with a different theme overwrites the
+_whole app's_ `--mantine-*` variables for as long as it is mounted — a skin's
+type scale would apply to `/manage` too. `SkinHost` therefore points the
+selector at `.skin-scope` on a wrapper element, which emits the variables onto
+that subtree instead. `tests/skinHost.test.tsx` asserts this by reading the
+emitted style tags, and fails if the selector is ever set to `:root`.
+
+One limit worth stating: `@mantine/carousel/styles.css` uses hashed _global_
+classes and is imported in `main.tsx`, so the carousel's base CSS is global for
+the whole app. Nothing in `/manage` uses a `Carousel`, so there is no clash
+today — but "cannot clash" is a property of the theme, not of that stylesheet.
+
+#### `Collection.skin` needs no migration (deliberate)
+
+`skin` and `skinOptions` are optional, read off a document already fetched by
+id, and defaulted at read time. **Nothing ever queries on `skin`**, so this is
+the deliberate contrast with `deletedAt` (see **Soft delete**): the migration
+doctrine bites when a `where(...)` filter stops matching documents that lack the
+field, and there is no such filter here. A collection written before this field
+existed renders the default skin. Adding a backfill would be cargo cult.
+
+#### Basicx
+
+A full-bleed slideshow: one `100dvh` section per artwork, each containing that
+work's photos, with a fixed nav and a fixed footer pinned over the whole
+scroll. The design was built to a written spec (type scale, padding, control
+styling and image sizing, all recorded in `src/skins/basicx/theme.ts` and
+`BasicxChrome.tsx`), and the numbers are deliberately explicit constants rather
+than inherited defaults, so a future revision of the look is a diff against
+those constants instead of an archaeology exercise.
+
+The type scale is two named sizes on the theme — `bodycopy` (1.05rem / 550 /
+1.2) and `caption` (0.8rem / 450 / 1.2) — at weights the font actually has.
+Font is Darker Grotesque for body _and_ headings; the latter is set explicitly
+because a nested theme deep-merges and would otherwise inherit `BBH Bartle`,
+which ships a single 400 weight and would fake-bold the 550 above.
+
+**`Carousel` is used, not a hand-rolled slideshow**, and the sizing works out
+because `Carousel.Slide` is `flex: 0 0 var(--carousel-slide-size, 100%)` — a
+plain block with no `align-items`. So an `Image` sized `w="auto" h="auto"
+maw="100%" mah="100dvh"` keeps its aspect ratio, shrinks to fit both caps and
+sits top-left by ordinary block layout, with no `object-fit` and no alignment
+override. embla also supplies drag, `loop` and per-instance arrow keys for free.
+
+**The stage is its own scroller** (`overflow-y: auto`), _not_ the document —
+`scroll-snap-type` on `html` would apply to `/manage` too. So the document never
+scrolls, no global CSS is needed, and the observer `root` is the stage.
+
+Four things in Basicx that look like choices but are not:
+
+- **embla's `duration` counts frames, not milliseconds.** Its `ScrollBody` does
+  `scrollVelocity += displacement / scrollDuration` once per frame, so the
+  default of 25 is ~0.4s at 60fps. `transitionSeconds` converts with
+  `seconds * 60`; passing `500` for half a second would give an eight-second
+  slide. `0` is special-cased by embla into an instant jump, which is what both
+  `transitionSeconds: 0` and `prefers-reduced-motion` use.
+- **The slide _slides_; there is no crossfade.** `embla-carousel` as installed
+  ships no plugins (its only export is `EmblaCarousel` plus types), so
+  `Carousel`'s `plugins` prop cannot be given embla's `Fade`. Reproducing a
+  crossfade means dropping `Carousel` and hand-rolling on core `Transition`,
+  losing drag, loop and the arrow keys for one effect.
+- **The cursor zones are real `<button>`s** (`UnstyledButton` with an
+  `aria-label`), not `aria-hidden` divs with the carousel's own `Control`s
+  behind them. On desktop those controls are switched off, so hidden zones
+  would be the only way through and unreachable by keyboard or screen reader.
+  They cover the image, which also blocks dragging and selection on it — the
+  custom chevron cursor is what tells the visitor the image is clickable. On a
+  phone the zones are not rendered at all and the round `Control` buttons take
+  over, because a half-screen tap zone on a touchscreen is a coin flip.
+- **The footer is `position: fixed`.** With one section a footer at the end of
+  the content looks pinned anyway; with N sections a non-fixed footer would
+  scroll away after the first artwork, which is why it is explicit here rather
+  than inherited.
+
+**The footer is the artwork in view, on two lines**: the title bold on top and
+the artist beneath it, dimmer because it is the quieter of the two. The title
+links to that artwork's own public view, which is what makes the homepage a way
+_into_ its works rather than only past them — and it needed no layering change,
+because the footer is a separate fixed bar at `z-index: 2` and the click zones
+sit at `1`.
+
+The chrome takes an `artwork: { title, artistName, path } | null` view model
+rather than an `Artwork` or a pre-joined label string, so it renders three
+fields and never learns how a URL is built — `BasicxSkin` assembles it from the
+active artwork and the shell's `artworkPath`. The `+`-joined
+`"${title} + ${artistName}"` label it replaced was a stand-in for the line split
+that now exists.
+
+**The nav's right-hand slot holds a "Powered by Arcula" link to
+`https://arcula.art`, in a new tab.** It is not attribution for its own sake: it
+occupies the slot the owner link will replace. The intended behaviour is in a
+`TODO` in `BasicxChrome` — signed in _and_ owning the collection, show a link to
+the manage side (the collection page on `home`, the artwork's edit page on
+`artwork`); anyone else, the attribution. Not built, because it needs `useAuth`
+plus manage-side paths on `SkinProps`, and a second pair of paths in the contract
+is not a trade worth making before anything needs it. The slot was left
+occupied rather than hidden so the eventual change is a swap rather than a new
+element, and so the homepage nav never renders an empty right-hand column.
+
+`showPoweredBy` was **removed** for the same reason: what belongs in that slot is
+decided by _who is looking_, not by an owner preference, so an option for it
+would be a control that does nothing. Removing it left Basicx with
+`transitionSeconds` as its only option. (A collection that stored
+`showPoweredBy: true` is unaffected — it is simply reported as a dropped key by
+`resolveSkinOptions`, and the settings page says so.)
+
+**The chevron cursor is a drawn data URI, not a font glyph.** It is built once
+in `BasicxSection.tsx` to match the `Control` buttons it sits alongside
+(`rgba(255,255,255,.9)`, `stroke-width 1.5`) with `w-resize`/`e-resize` as the
+fallback for a browser that rejects an SVG cursor. The hotspot is `12 12` — the
+tip of the chevron, not the top-left of its 24x24 box — so the pointer lands
+where the visitor is aiming.
+
+`useActiveSection` mounts a section's carousel only once it has been within a
+viewport of the stage, because a fifty-artwork collection would otherwise create
+fifty embla instances and five hundred `<img>` elements up front. `nearIds` only
+ever grows: unmounting on scroll-away would hand the visitor back the first
+photo every time they scrolled back to a work they had already been through. It
+takes `ids` as an argument rather than reading them from a ref so the
+no-`IntersectionObserver` fallback works at _render_ time — jsdom reports every
+section as mounted, which is also what a browser without the API should do.
+
+**`useCarousel` does not exist in `@mantine/carousel` v9.** The index exports
+only `Carousel`, `useCarouselContext` and `CarouselSlide`; you capture the API
+with the `getEmblaApi` callback prop and hold it in a ref. (`vertical` was
+renamed `orientation` in the same version.) Planning from v7 docs gets both
+wrong.
+
+#### The public state is one union, and half of it is pure
+
+Both public pages replace a set of overlapping booleans with
+`PublicState<T>` (`usePublicCollection.ts`): `invalid | loading | error |
+private | notFound | ready`. A union is only worth having if the decisions can
+be tested, and a hook that both fetches and decides can only be tested against
+Firestore — so the _decisions_ are pure functions over already-fetched values
+(`publicCollectionState`, `publicArtworkState`, `publicFailure`) and the hooks
+are thin wrappers.
+
+- `private` is not "an error". It is the rules denying on purpose, and telling a
+  visitor a public page "failed" invites a retry that cannot succeed. It covers
+  both a denied read _and_ a readable-but-unpublished collection — which is also
+  where an owner previewing their own private collection lands, so they are told
+  the truth rather than "not available" for a document that plainly exists.
+- The collection is read **first** and the artworks requested only once it is
+  known to be published. Not latency: a private collection's name and
+  description must never reach an unauthenticated client, and the rules deny
+  that read before the second round trip is ever issued.
+- On the artwork view, a _denied_ artwork read becomes `notFound` (a refused
+  artwork may be private, soft-deleted, or absent, and saying which is a
+  disclosure) but a _transport_ failure is re-thrown and reported as an error —
+  reporting "this artwork does not exist" for a dropped connection costs the
+  visitor a retry that would have worked.
+- `publicArtworkState` compares `artwork.collectionId` to the requested one. Not
+  redundant with the rules: `firestore.rules` admits a public, un-deleted
+  artwork by id _whatever collection it is in_ (deliberate, so an owner can keep
+  one work public inside a private collection), so nothing server-side stops a
+  work rendering on the wrong URL.
+- The non-ready states render **outside the skin** in the app theme
+  (`PublicStateMessage`). They are the absence of a presentation, and a visitor
+  who hit "This collection is private." has not reached anything a skin should
+  be styling. The empty case is here too: a skin with an empty stage and a title
+  in the nav reads as a loading failure.
+
+The artwork view fetches **only the single work**, not the collection's list.
+That saves a round trip and skips the `(collectionId, isPublic, deletedAt)`
+composite index entirely, and nothing on that view needs a neighbour — there is
+no previous/next, because the artwork view offers a link back to the collection
+and nothing else. A skin wanting neighbours would need the list there, which is a
+deliberate cost, not an oversight.
+
+**The rules needed no work for the artwork view.** `firestore.rules` already
+admits a visitor `get` on a public, un-deleted artwork, and
+`artworkService.getArtwork` already existed unused. The route, the page and the
+`ArtworksTable` View link were the whole change. (The View button was `disabled`
+with a comment saying the page did not exist; that comment is gone, and
+`tests/artworksTable.test.tsx` now asserts the href rather than that the button
+is enabled — the link is the only thing in that table that leaves the app, so a
+wrong path would be silent.)
+
 ### Artwork photos (uploads, variants, ordering)
 
 `Artwork.photos` is an `ArtworkPhoto[]`, and `Artwork.documents` is an
@@ -416,10 +717,30 @@ pixel size appears. Nothing else hardcodes one:
 
 | key         | geometry                | why                                        |
 | ----------- | ----------------------- | ------------------------------------------ |
+| `xlarge`    | max side 2400, `inside` | the fullscreen slideshow                   |
 | `square_lg` | 800x800, `cover`        | thumbnail fills the box, never letterboxed |
 | `square_sm` | 400x400, `cover`        | ditto, for dense grids                     |
 | `large`     | max side 1200, `inside` | no crop, no upscale                        |
 | `medium`    | max side 800, `inside`  | no crop, no upscale                        |
+
+**`xlarge` is the newest key and the only one with a rules consequence.** It
+exists because `large`'s 1200px cap is smaller than a 1440px display and visibly
+soft on a detail-heavy painting. Two things about it:
+
+- The key list in `storage.rules` (`isPhotoName` _and_ `isDocumentName`) must
+  include it, or **every new photo upload 403s** on that object.
+  `tests/imageVariants.test.ts` reads the rules off disk and asserts the
+  alternation equals `VARIANT_KEYS`, so a forgotten edit fails CI instead of
+  production — the same client↔rules gap that once let a `.bin` PDF name
+  through. `tests/storage.rules.test.ts` also asserts the emulator admits it.
+- **Photos uploaded before it existed are not backfilled.** `photoSrcSet`
+  offers only the variants a photo actually has, so a legacy photo offers
+  `large` + the original and the browser picks. A backfill would be a
+  client-side download/re-encode/upload across every artwork — Storage egress
+  for a fidelity gain the browser already covers.
+
+It is also the one key `DOCUMENT_IMAGE_VARIANT_KEYS` excludes: `isDocumentName`
+permits the full list, so the subset needs no matching rule change.
 
 `fit: "inside"` **never enlarges**. A 300x300 book plate stays 300x300:
 scaling it to 800x800 would invent pixels that do not exist, and a catalogue
@@ -846,3 +1167,12 @@ file that silently does not appear.
   leave the app running on the main-thread fallback with no other signal.
 - Confirm no second `initializeApp` and that new code imports `db`/`auth`
   from the shared module.
+- Skin work: run `tests/skinHost.test.tsx` after touching `SkinHost` or a skin
+  theme. It is the only thing that fails if `cssVariablesSelector` is ever set
+  back to `:root`, and the leak it prevents is invisible in a screenshot of
+  `/manage`. A skin's own suite needs the repo's standard jsdom setup
+  (`// @vitest-environment jsdom`, explicit `afterEach(cleanup)`, and the
+  `matches: query === ""` matchMedia stub) plus a mock for `@mantine/carousel` —
+  embla measures real rects, so a real `Carousel` initialises against nothing in
+  jsdom. `tests/helpers/carouselMock.tsx` is that mock; it is loaded through an
+  `async` `vi.mock` factory because `vi.mock` is hoisted above the imports.

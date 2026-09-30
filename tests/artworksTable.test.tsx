@@ -169,18 +169,47 @@ describe("ArtworksTable", () => {
 
   it("slices the sorted set into pages, counting the whole set", async () => {
     const user = userEvent.setup();
-    const artworks = Array.from({ length: 12 }, (_, i) =>
+    // 30 rows against a 25-row page: the fixture has to be larger than the
+    // page for pagination to be observable at all, and 25 is the default now.
+    const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
     renderTable({ artworks });
 
-    // Default page size is 10, so the first page holds 10 of the 12.
-    expect(visibleTitles()).toHaveLength(10);
-    expect(visibleTitles()).not.toContain("Art 11");
-    expect(screen.getByText("12 artworks")).toBeTruthy();
+    // The first page holds 25 of the 30, and the count is over the whole set.
+    expect(visibleTitles()).toHaveLength(25);
+    expect(visibleTitles()).not.toContain("Art 26");
+    expect(screen.getByText("30 artworks")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "2" }));
-    await waitFor(() => expect(visibleTitles()).toEqual(["Art 11", "Art 12"]));
+    await waitFor(() =>
+      expect(visibleTitles()).toEqual([
+        "Art 26",
+        "Art 27",
+        "Art 28",
+        "Art 29",
+        "Art 30",
+      ]),
+    );
+  });
+
+  it("defaults to 25 per page", () => {
+    renderTable({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+    // The current size is the selector's own label, so this is both the default
+    // assertion and the "25 is offered" one. The two are coupled through
+    // `RECORDS_PER_PAGE_OPTIONS[0]`, so a reordering would silently change the
+    // page size every collection opens at.
+    // The size selector renders its own value as a button, so this asserts the
+    // default *and* that 25 is offered. The two are coupled through
+    // `RECORDS_PER_PAGE_OPTIONS[0]`, so a reordering would silently change the
+    // page size every collection opens at.
+    expect(screen.getByRole("button", { name: "25" })).toBeTruthy();
+    // 10 is gone on purpose: a 10-row page reads as empty next to a 50-row one,
+    // and the options only exist in the dropdown. Rather than fight Mantine's
+    // portalled Select to enumerate them, the pagination test above pins the
+    // *effect* of the default (25 of 30 on the first page) and this pins the
+    // label; together they fail if the array is reordered or 10 is re-added.
   });
 
   it("marks a private artwork in its title cell", () => {
@@ -198,9 +227,22 @@ describe("ArtworksTable", () => {
       onDeleted,
     });
 
-    // The button is disabled on purpose: there is no public page for a single
-    // artwork yet. Asserted so it is not mistaken for a styling accident.
-    expect(screen.getByRole("button", { name: "View" })).toBeDisabled();
+    // View is the public page for this one artwork. Asserted for its href
+    // rather than merely that it is enabled: the link is the only thing in this
+    // table that leaves the app, so a wrong path here is silent — the button
+    // still looks right and only the destination is wrong.
+    // The collection param is reused verbatim in the public URL, the same way
+    // the Edit link reuses it — it is the "{slug}-{id}" segment the manage route
+    // already carries, and the public route parses the id back out of it.
+    const view = screen.getByRole("link", { name: "View" });
+    expect(view.getAttribute("href")).toBe(
+      "/collection/my-collection-collection-1/artwork/art-1-a",
+    );
+    // A new tab, so the owner can check the public page without losing their
+    // place in this one. `noopener` is asserted because it is not optional:
+    // without it the opened page gets a handle on this window.
+    expect(view.getAttribute("target")).toBe("_blank");
+    expect(view.getAttribute("rel")).toBe("noopener noreferrer");
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
 

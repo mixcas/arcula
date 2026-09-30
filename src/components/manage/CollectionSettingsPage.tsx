@@ -13,12 +13,36 @@ import {
   Divider,
   Alert,
   Loader,
+  Select,
+  NumberInput,
 } from "@mantine/core";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "../../services/collectionService";
 import { isMaintenanceAdmin } from "@/utils/maintenanceAccess";
 import { collectionSlug, parseId } from "../../utils/slug";
+import {
+  DEFAULT_SKIN_ID,
+  SKINS,
+  resolveSkin,
+  resolveSkinOptions,
+} from "@/skins/registry";
+import type { SkinOptionValue } from "@/skins/types";
+import type { Collection } from "@/types";
+
+/** Shallow equality over the option bag. Order does not matter, values do. */
+const optionsChanged = (
+  next: Record<string, SkinOptionValue>,
+  loaded: Record<string, SkinOptionValue>,
+): boolean => {
+  const keys = new Set([...Object.keys(next), ...Object.keys(loaded)]);
+  for (const key of keys) {
+    if (next[key] !== loaded[key]) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const CollectionSettingsPage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -37,6 +61,18 @@ const CollectionSettingsPage: React.FC = () => {
   const [requirePassword, setRequirePassword] = useState(false);
   const [password, setPassword] = useState("");
 
+  // The skin and its options, as loaded. Kept apart from the editable buffers
+  // below for the same reason `loadedName` is: the save compares against these,
+  // and rewriting them on every keystroke would make "changed" always true.
+  const [skin, setSkin] = useState(DEFAULT_SKIN_ID);
+  const [skinOptions, setSkinOptions] = useState<
+    Record<string, SkinOptionValue>
+  >({});
+  const [loadedSkin, setLoadedSkin] = useState<string | null>(null);
+  const [loadedSkinOptions, setLoadedSkinOptions] = useState<
+    Record<string, SkinOptionValue>
+  >({});
+
   // The name as loaded, kept apart from `collectionName` above — that one is
   // the editable buffer, and rewriting the URL from it would fire on every
   // keystroke. Null until the fetch succeeds, which is also what stops the
@@ -50,6 +86,11 @@ const CollectionSettingsPage: React.FC = () => {
   // ArtworkEditPage).
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // How many stored option keys the selected skin no longer declares. Surfaced
+  // rather than silently dropped: an owner whose skin renamed an option would
+  // otherwise see the setting vanish with no explanation, and the only person
+  // who can decide what to do about it is them.
+  const [staleOptionCount, setStaleOptionCount] = useState(0);
 
   useEffect(() => {
     if (!collectionId) {
@@ -66,6 +107,21 @@ const CollectionSettingsPage: React.FC = () => {
           setCollectionName(collectionData.name ?? "");
           setLoadedName(collectionData.name ?? "");
           setIsPublic(Boolean(collectionData.isPublic));
+
+          // Resolved through the registry rather than stored raw, so the form
+          // shows the defaults for a collection written before `skin` existed
+          // and for a hand-edited value the selected skin does not declare —
+          // which is also what the save then compares against.
+          const resolved = resolveSkin(collectionData.skin);
+          setSkin(resolved.id);
+          setLoadedSkin(resolved.id);
+          const { options, dropped } = resolveSkinOptions(
+            resolved,
+            collectionData.skinOptions,
+          );
+          setSkinOptions(options);
+          setLoadedSkinOptions(options);
+          setStaleOptionCount(dropped.length);
         }
       } catch (err) {
         console.error("Error fetching collection:", err);
@@ -107,10 +163,18 @@ const CollectionSettingsPage: React.FC = () => {
 
     try {
       const name = collectionName.trim();
-      await collectionService.updateCollection(collectionId, {
-        name,
-        isPublic,
-      });
+      // `skin`/`skinOptions` are written only when they actually differ.
+      // `updateCollection` is a merge, so writing an identical bag is a wasted
+      // write, and `updatedAt` is server-stamped — a no-op save would still move
+      // it and read as a real change to anything watching the document.
+      const update: Partial<Collection> = { name, isPublic };
+      if (skin !== loadedSkin) {
+        update.skin = skin;
+      }
+      if (optionsChanged(skinOptions, loadedSkinOptions)) {
+        update.skinOptions = skinOptions;
+      }
+      await collectionService.updateCollection(collectionId, update);
       // Build the slug from the name just saved, so the URL reflects the rename
       // rather than carrying the old one.
       void navigate(`/manage/collection/${collectionSlug(name, collectionId)}`);
@@ -193,6 +257,107 @@ const CollectionSettingsPage: React.FC = () => {
               mb="md"
             />
           )}
+
+          <Divider mt="md" mb="md" />
+
+          <Text size="h3" mb="md">
+            Public View
+          </Text>
+
+          <Select
+            label="Skin"
+            description="How this collection's public pages are laid out and styled."
+            data={SKINS.map((entry) => ({
+              value: entry.id,
+              label: entry.label,
+            }))}
+            value={skin}
+            allowDeselect={false}
+            onChange={(value) => {
+              if (!value || value === skin) {
+                return;
+              }
+              // Switching skins resets the options to the new skin's defaults.
+              // Carrying the old skin's values across would write keys the new
+              // skin does not declare — which `resolveSkinOptions` would then
+              // drop again, reporting them as stale.
+              const next = resolveSkin(value);
+              setSkin(next.id);
+              setSkinOptions(resolveSkinOptions(next, undefined).options);
+            }}
+            mb="md"
+          />
+
+          {/*
+            The controls are generated from the selected skin's own option
+            vocabulary rather than hand-written per skin, which is why adding a
+            skin needs no change to this page. A skin with no options renders
+            nothing here.
+          */}
+          {resolveSkin(skin).options.map((spec) =>
+            spec.kind === "boolean" ? (
+              <Group key={spec.key} justify="space-between" mb="md">
+                <Box>
+                  <Text>{spec.label}</Text>
+                  {spec.description ? (
+                    <Text size="sm" c="dimmed">
+                      {spec.description}
+                    </Text>
+                  ) : null}
+                </Box>
+                <Switch
+                  checked={skinOptions[spec.key] === true}
+                  onChange={(e) =>
+                    setSkinOptions((current) => ({
+                      ...current,
+                      [spec.key]: e.currentTarget.checked,
+                    }))
+                  }
+                  aria-label={spec.label}
+                />
+              </Group>
+            ) : spec.kind === "number" ? (
+              <NumberInput
+                key={spec.key}
+                label={spec.label}
+                description={spec.description}
+                min={spec.min}
+                max={spec.max}
+                step={spec.step}
+                value={Number(skinOptions[spec.key] ?? spec.default)}
+                onChange={(value) =>
+                  setSkinOptions((current) => ({
+                    ...current,
+                    [spec.key]:
+                      typeof value === "number" ? value : spec.default,
+                  }))
+                }
+                mb="md"
+              />
+            ) : (
+              <TextInput
+                key={spec.key}
+                label={spec.label}
+                description={spec.description}
+                value={String(skinOptions[spec.key] ?? spec.default)}
+                onChange={(e) =>
+                  setSkinOptions((current) => ({
+                    ...current,
+                    [spec.key]: e.currentTarget.value,
+                  }))
+                }
+                mb="md"
+              />
+            ),
+          )}
+
+          {staleOptionCount > 0 ? (
+            <Alert color="yellow" mb="md" title="Unused options">
+              {staleOptionCount === 1
+                ? "One saved option is not used by this skin and will be dropped when you save."
+                : `${staleOptionCount} saved options are not used by this skin and will be dropped when you save.`}
+            </Alert>
+          ) : null}
 
           {error ? (
             <Alert color="red" mb="md">

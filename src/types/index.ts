@@ -17,6 +17,22 @@ export interface Collection {
   isPublic?: boolean;
   passwordHash?: string; // Optional password protection
   artworks?: string[]; // Array of artwork IDs
+  // Which skin renders this collection's public view. An unknown or absent id
+  // falls back to DEFAULT_SKIN_ID — see src/skins/registry.ts.
+  //
+  // Deliberately NOT a migration target, and that is a contrast with `deletedAt`
+  // worth stating: the migration doctrine bites when a `where(...)` filter stops
+  // matching documents that lack the field, which is what happened there. Nothing
+  // ever queries on `skin`. It is read off a document already fetched by id and
+  // defaulted at read time, so a collection written before this field existed
+  // simply renders the default skin. Adding a backfill for it would be cargo
+  // cult.
+  skin?: string;
+  // The chosen skin's own option vocabulary, validated at read time against
+  // that skin's `options` — an unknown key is dropped and a wrong type falls
+  // back to the default, so a stale or hand-edited value cannot corrupt a
+  // collection. Nothing outside the skin reads it.
+  skinOptions?: Record<string, boolean | number | string>;
   // Stamped by collectionService, not by callers. Firestore returns a
   // Timestamp on read — a `Date` written by the client comes back as one.
   createdAt?: Timestamp;
@@ -135,7 +151,12 @@ export type ArtworkDocument = ArtworkDocumentFile | ArtworkDocumentImage;
 // and they are matched by `storage.rules`, so adding a variant means changing
 // that rule too. The sizes live in `IMAGE_VARIANTS` (src/utils/imageVariants.ts)
 // — this type is only the key space.
-export type ImageVariantKey = "square_lg" | "square_sm" | "large" | "medium";
+//
+// `xlarge` is the fullscreen-slideshow size. It was added after the first photos
+// were uploaded, so those have only the four below it — which is why every read
+// goes through `photoUrl`/`photoSrcSet` rather than indexing `variants` by key.
+export type ImageVariantKey =
+  "xlarge" | "square_lg" | "square_sm" | "large" | "medium";
 
 // One generated derivative of an uploaded image.
 //

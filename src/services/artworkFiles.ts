@@ -27,8 +27,8 @@ import type { ImageVariantKey } from "@/types";
 /**
  * How many files upload at once.
  *
- * Ten photos is up to fifty objects (the original plus four variants each).
- * Firing all fifty at once saturates the connection, starves every other
+ * Ten photos is up to sixty objects (the original plus five variants each).
+ * Firing all sixty at once saturates the connection, starves every other
  * request the page might make, and on a phone connection is the difference
  * between finishing and appearing to hang. Three keeps the pipe full without
  * monopolising it.

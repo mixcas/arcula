@@ -108,7 +108,20 @@ const CollectionPage: React.FC = () => {
       <Group justify="space-between" mb="xl">
         <Group>
           <Text size="h2">{collection.name}</Text>
-          <Button variant="subtle" component={Link} to={`/collection/${param}`}>
+          {/*
+            Opens in a new tab, so the owner can check the public page and the
+            collection side by side without losing this one. A plain `href`
+            rather than a router `Link`: the tab is a separate document, and
+            `noopener` keeps it from reaching back through `window.opener` to
+            this session.
+          */}
+          <Button
+            variant="subtle"
+            component="a"
+            href={`/collection/${param ?? ""}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             View
           </Button>
         </Group>

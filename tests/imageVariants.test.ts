@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_IMAGE_TYPES,
@@ -30,8 +32,14 @@ const squareSpec = (key: string): SquareVariantSpec => {
 };
 
 describe("IMAGE_VARIANTS", () => {
-  it("declares the four required variants", () => {
-    expect(VARIANT_KEYS).toEqual(["square_lg", "square_sm", "large", "medium"]);
+  it("declares the five required variants", () => {
+    expect(VARIANT_KEYS).toEqual([
+      "xlarge",
+      "square_lg",
+      "square_sm",
+      "large",
+      "medium",
+    ]);
   });
 
   it("uses a distinct key per variant, which is what the rules regex relies on", () => {
@@ -41,6 +49,81 @@ describe("IMAGE_VARIANTS", () => {
   it("caps at ten photos and matches the rules' 10 MiB ceiling", () => {
     expect(MAX_ARTWORK_PHOTOS).toBe(10);
     expect(MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
+  });
+});
+
+/**
+ * The key list the storage rules accept, read out of `storage.rules` itself.
+ *
+ * This is the cross-check that was missing when a `.bin` PDF name went
+ * straight through: every rules test hand-wrote its fixture names and every
+ * component test stubbed the service, so the two sides could agree with each
+ * other and still disagree with what the client produces. Reading the rule off
+ * disk means the name the client builds and the name the rules accept are
+ * compared by a test rather than by a human remembering to edit both files.
+ */
+const rulesKeyList = (fn: "isPhotoName" | "isDocumentName"): string[] => {
+  const source = readFileSync(
+    fileURLToPath(new URL("../storage.rules", import.meta.url)),
+    "utf8",
+  );
+  const start = source.indexOf(`function ${fn}(`);
+  if (start === -1) {
+    throw new Error(`no ${fn} in storage.rules`);
+  }
+  const body = source.slice(start);
+  // The key alternation is the first `_(...)` after the function opens.
+  const alternation = /_\(([^)]+)\)/.exec(body);
+  if (!alternation) {
+    throw new Error(`could not read the key list out of ${fn}`);
+  }
+  return alternation[1].split("|");
+};
+
+describe("storage.rules key list", () => {
+  it("accepts every variant the client generates, plus `original`", () => {
+    const expected = [...VARIANT_KEYS, "original"];
+    expect(rulesKeyList("isPhotoName")).toEqual(expected);
+  });
+
+  it("accepts the same keys for documents, plus one extension", () => {
+    // Documents generate only a subset (DOCUMENT_IMAGE_VARIANT_KEYS), but the
+    // name rule permits the full list: narrowing it here would be a second key
+    // list to keep in step, and the subset is already enforced by what gets
+    // uploaded.
+    expect(rulesKeyList("isDocumentName")).toEqual([
+      ...VARIANT_KEYS,
+      "original",
+    ]);
+  });
+
+  it("lets `xlarge` through where `large` would not have matched it", () => {
+    // The regex is anchored on both ends, so `large` cannot match an `xlarge`
+    // object name — but asserting the alternation is right is only half the
+    // story. This is the shape that actually gets written.
+    const artworkId = "art1";
+    const name = `${artworkId}_aaaaaaaaaaaaaaaaaaaa_xlarge.webp`;
+    const pattern = new RegExp(
+      `^${artworkId}_[A-Za-z0-9]{20}_(xlarge|square_lg|square_sm|large|medium|original)\\.(webp|jpg|png)$`,
+    );
+    expect(pattern.test(name)).toBe(true);
+  });
+});
+
+describe("variantSize — xlarge (inside, no crop, no upscale)", () => {
+  it("scales the largest side to 2400", () => {
+    expect(variantSize(spec("xlarge"), { width: 4000, height: 3000 })).toEqual({
+      width: 2400,
+      height: 1800,
+    });
+  });
+
+  it("leaves a source already inside the box alone, like every bounded variant", () => {
+    // A 300x300 plate must not be blown up to 2400px of invented pixels.
+    expect(variantSize(spec("xlarge"), { width: 300, height: 300 })).toEqual({
+      width: 300,
+      height: 300,
+    });
   });
 });
 

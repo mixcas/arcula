@@ -72,9 +72,9 @@ const fileDocument: ArtworkDocumentFile = {
 
 describe("the document variant subset", () => {
   it("generates only the two a document actually renders", () => {
-    // `square_lg` and `medium` exist for the public collection grid, and a
-    // document is refused to visitors by the storage rules — so generating them
-    // would write up to two objects per image that nothing can ever read.
+    // `square_lg`, `medium` and `xlarge` exist for the public collection views,
+    // and a document is refused to visitors by the storage rules — so generating
+    // them would write up to three objects per image that nothing can ever read.
     expect(documentImageSpecs().map((spec) => spec.key)).toEqual([
       "square_sm",
       "large",

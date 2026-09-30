@@ -7,8 +7,8 @@
 ## Overview
 
 Custodia is an art collection management software that will allow users to manage their
-artwork collections with detailed information tracking and file attachments for
-certificates and photos. Accounts arrive through their own sign-up page and carry a
+artwork collections with detailed information tracking and file attachments for photos
+and other documents. Accounts arrive through their own sign-up page and carry a
 name; during the beta an account is capped at one collection, and multiple collections
 per user arrive with account tiers rather than at the start.
 
@@ -24,24 +24,34 @@ Everything below is a description of the code as it stands, not a target.
 - Create, list, view, rename collections; set the public/private flag
 - Add and edit artworks, with artwork list and mosaic views on both the manage and
   public pages
-- A public collection page that reads real Firestore data
+- A public collection page that reads real Firestore data, and renders artwork images
 - Shared Zod schema (`src/schemas/artwork.ts`) used by both artwork forms
 - `{urlizedName}-{id}` route params throughout, with bare ids still accepted
 - Mantine theme with Darker Grotesque body text and BBH Bartle headings
+- **Firestore and Storage security rules** (`firestore.rules`, `storage.rules`), with
+  every deploy gated on a test suite run against the emulators
+- **Photo uploads** — four variants plus the original, generated client-side in a Web
+  Worker, up to ten, reorderable, with a full-screen preview
+- **"Other Documents" uploads** — images and PDFs, up to ten, never public
+- **Soft delete for artworks**, in bulk from the collection table
+- **CSV import** for artworks, at `/manage/collection/{slug}-{id}/import/csv`
+- **A migration registry** (`src/migrations/`) with a maintenance page, because adding
+  a field to a document is a schema change even though Firestore has no schema
+- **268 assertions across 13 test files**: the rules suites, the pure logic, and the
+  components
 
 **Known gaps**
 
-- **No Firestore security rules exist.** This is the most serious gap, because the
-  public page reads Firestore without authenticating. `isPublic` is a rendering gate
-  only; see the note in **Data Flow & Architecture** below.
 - **Password protection is not implemented.** The settings page collects a password and
   never saves it, and nothing writes `passwordHash`. The public page's prompt is wired
-  to the real field but unreachable.
-- **Storage is used for photos only.** Four variants plus the original are generated
-  client-side in a Web Worker and uploaded on save. `certificates` remain unwired, so
-  every artwork still has `certificates: []`.
-- **No deletes in the UI.** The service functions exist; nothing calls them.
-- **No tests.**
+  to the real field but unreachable. Note that it could not be a client-side check even
+  once written — by the time it renders, the artworks are already in the browser.
+- **Deleting a collection has no UI.** `collectionService.deleteCollection` exists and
+  nothing calls it. Artwork delete is implemented and is a soft delete: the row leaves
+  the table and the document stays in the database with `deletedAt` stamped.
+- **No trash or restore view.** Soft-deleted artworks are unreachable from the app, and
+  nothing purges them. The owner-side rules do not filter on `deletedAt`, so a future
+  trash view needs no rules work; the visitor rules do, and already do.
 - **No `users` Firestore collection.** Ownership is a `userId` field on each collection
   and each artwork, filtered with `where("userId", "==", uid)`. The `User` type exists
   in `src/types/index.ts` but is never persisted, so there is nowhere for a profile
@@ -58,8 +68,7 @@ Everything below is a description of the code as it stands, not a target.
 ## Tech Stack
 
 - **Frontend**: React 19 + TypeScript + Mantine UI v9 + react-router-dom v7
-- **Backend**: Firebase (Firestore for data, Firebase Storage for files — wired but not
-  yet called)
+- **Backend**: Firebase (Firestore for data, Storage for artwork photos and documents)
 - **Forms**: `@mantine/form` with Zod v4
 - **Utility Library**: Lodash is a dependency but **nothing imports it yet**; treat it
   as available rather than in use
@@ -145,21 +154,44 @@ so an unset key stays distinguishable from a set-but-empty one.
 - condition?
 - currentValue?
 - notes?
-- certificates (array of `FileReference`; always written, `[]` until uploads land)
+- documents (array of `ArtworkDocument`, max 10; **never public** — see below)
 - photos (array of `ArtworkPhoto`, max 10; `order` is the sequence and index 0 is the
   primary thumbnail app-wide; each entry carries the source dimensions, an unmodified
   `original` and four generated `variants` — `square_lg` 800x800 cover, `square_sm`
   400x400 cover, `large` max-1200 inside, `medium` max-800 inside)
+- deletedAt (`Timestamp | null`; **live means `deletedAt == null`**. Every create path
+  writes it explicitly, never omitting the field — a missing key does not match a
+  `where("deletedAt", "==", null)` filter, and reading it in a rule is an evaluation
+  error that denies)
 - collectionId (reference to the parent collection)
 - createdAt?, updatedAt? (stamped by `artworkService`)
 
-### 4. FileReference
+### 4. ArtworkDocument
 
-- url? (empty for local-only entries, which is all that exist today)
-- name?
-- size?
-- type?
-- metadata?
+A discriminated union on `kind`, not one shape with optional fields, so "does this have
+variants" is decided once at the type rather than re-checked at every call site. Both
+kinds carry `id`, `name` (the user's original filename), `size`, `contentType` and an
+unmodified `original` (`url`, `size`, `contentType`).
+
+- `{ kind: "file" }` — a PDF. No variants, no dimensions.
+- `{ kind: "image" }` — adds `width`, `height` and `variants[]`.
+
+**There is no `order`, and that is not an oversight.** There is no sequence and no
+primary thumbnail for a document, so there is nothing for an index to mean — which is
+exactly the invariant `reindexPhotos`/`sortPhotos` exist to keep honest for photos.
+Array order is left alone, and the change is compared as a _set_ of ids, so reordering
+the list in the UI is not a change worth a write.
+
+**`ArtworkDocument` replaced `FileReference`**, which was deleted rather than
+deprecated: it had one consumer and carried the codebase's only `any`. No migration
+exists and none is needed — the field was written as `[]` by every code path and
+uploads were never wired, so every stored value is provably empty. The field itself
+was renamed `certificates` → `documents` in the same change.
+
+Document images get **two** variants, not four: `square_sm` for the list tile and
+`large` for the preview modal. `square_lg` and `medium` exist for the public collection
+grid, and a document is refused to visitors outright, so generating them would write
+objects nothing can ever read.
 
 ### Invariants worth stating explicitly
 
@@ -181,25 +213,36 @@ so an unset key stays distinguishable from a set-but-empty one.
    - Collections per account — unlimited today; capped at one for the beta, in the
      interface only
 
-2. **Artwork Management** — _implemented, except certificate uploads_
+2. **Artwork Management** — _implemented_
    - Detailed artwork entry forms using Mantine UI components
    - File upload for photos (images only) — _implemented_: drag-and-drop, up to 10,
      drag to reorder, click for a full-screen preview
-   - File upload for certificates (images/PDFs) — **not implemented**
+   - File upload for "Other Documents" (images and PDFs) — _implemented_: up to 10, 25 MiB
+     per file, a list rather than a grid, images opening in a modal and files in a new
+     tab. Owner-only, and enforced as such by `storage.rules` rather than merely left
+     out of the public pages
+   - Bulk soft delete of artworks — _implemented_ from the collection table
+   - CSV import of artworks — _implemented_ at
+     `/manage/collection/{slug}-{id}/import/csv`, parsed in the browser
    - Data validation for various formats — _implemented_ via the shared Zod schema
 
-3. **Data Persistence** — _partially implemented_
+3. **Data Persistence** — _implemented_
    - Firebase Firestore for structured data — implemented
-   - Firebase Storage for artwork photos — implemented; certificates still pending
+   - Firebase Storage for artwork photos and documents — implemented, flat, one object
+     per generated file under `artworks/{userId}/{collectionId}/{artworkId}/{folder}/`
+   - Soft delete rather than removal — implemented; nothing ever deletes an artwork
 
 4. **Authentication & Security** — _partially implemented_
    - User authentication system — implemented
+   - Firestore and Storage security rules — implemented, with an emulator test suite
+     gating every rules deploy
    - Private collection password protection — **UI only, not enforced**
-   - Firestore security rules — **not implemented**
 
-5. **Public Access** — _implemented, unsecured_
-   - Public collection viewing — implemented
-   - Toggle between list and mosaic views — implemented
+5. **Public Access** — _implemented, subject to the rules_
+   - Public collection viewing — implemented, read as an anonymous visitor so a private
+     collection is denied by the rules before its name reaches the browser
+   - Toggle between list and mosaic views — implemented, with artwork images
+   - Artwork documents are never public — enforced in `storage.rules`, not in the UI
    - Optional password protection — **not implemented**
 
 6. **Accounts** — _planned, next_
@@ -476,6 +519,14 @@ and `navigate()`.
   - Edit collection privacy settings (public/private)
     - Private allow for a password protected collection: When this is enabled the public
       page for a collection would be password protected
+- `/manage/collection/{collection slug}-{collection ID}/import/csv` - CSV import of
+  artworks into a collection. Four steps (file, map columns, review, run); state is
+  in-memory only, so leaving the URL discards the whole import, and the file is parsed
+  in the browser and never uploaded
+- `/manage/migrations` - Maintenance page listing each registered migration with its
+  pending count and a Run button, for the signed-in account's own documents. Gated
+  behind an email allowlist, which is a UI gate and not a security boundary — safe as
+  one, because a migration only writes the account's own documents
 - `/manage/profile` - Account settings (planned): edit name and last name, change
   password, send a password-reset email. Account-level, as distinct from the collection
   settings above
@@ -493,12 +544,26 @@ Anything unmatched redirects to `/`.
 ### Management Components:
 
 - `ManagePage` - Main dashboard showing all collections
-- `CollectionPage` - Detail view of a single collection with artworks
+- `CollectionPage` - Detail view of a single collection with its artworks
+- `ArtworksTable` - Sortable, selectable artwork table with batch soft delete
 - `ArtworkAddPage` - Form to add new artwork items
 - `ArtworkEditPage` - Form to edit existing artwork items
 - `CollectionSettingsPage` - Settings for collection privacy and protection
+- `MigrationsPage` - Lists each migration with its pending count and a Run button
+- `CsvImportPage` - Four-step CSV import, with the steps and the editable cell in
+  `import/`
 - `ProfilePage` - Account profile and password change (planned)
 - `NewCollectionPage` - Form to create a collection
+
+### Upload Components:
+
+Headless about saving in both cases — each renders whatever its hook holds and calls
+back into it, so the Add and Edit forms share the whole surface.
+
+- `PhotoUploader` - Drag-and-drop photo grid, reordering, upload warnings
+- `DocumentsUploader` - The "Other Documents" list: one row per attachment, with an
+  icon or thumbnail, the filename, and a remove button
+- `PhotoPreviewModal` - Full-screen preview, shared by photos and document images
 
 ### Public Components:
 
@@ -522,8 +587,11 @@ Anything unmatched redirects to `/`.
      uid is the first thing the beta work adds, along with its `match /users/{userId}`
      rules (owner-only `create`/`get`/`update`, no `list`, and an `affectedKeys()`
      restriction so a user cannot raise their own `tier`)
-   - Implement file storage for photos — done; certificates still not done
-   - Configure security rules — **not done, and the most urgent item here**
+   - Implement file storage for photos and documents — _done_, in flat per-artwork
+     folders, one object per generated file
+   - Configure security rules — _done_. `firestore.rules` and `storage.rules`, with
+     `firestore.indexes.json` for the composite queries. Every rules deploy runs the
+     emulator suite first, so a broken rule set cannot ship through `deploy:rules`
 
 2. **Authentication System**:
    - Implement Firebase Authentication — _done_
@@ -539,15 +607,31 @@ Anything unmatched redirects to `/`.
    - Create artworkService.ts for artwork operations — _done_
    - Create authService.ts for authentication operations — _done but imported by
      nothing_; `AuthContext` reimplements the same calls inline
+   - Create imageService.ts for photo uploads — _done_, with the shared naming,
+     concurrency and delete-sweep machinery in `artworkFiles.ts`
+   - Create documentService.ts for document uploads — _done_, on the same shared
+     machinery rather than a second copy of it
    - Create userService.ts for the profile document — **not done**. `authService` is
      where `register` and `changePassword` belong when the beta work starts
 
 4. **Security Considerations**:
-   - Configure Firestore security rules to protect data — **not done**
+   - Configure Firestore security rules to protect data — _done_. List rules are
+     per-document field checks, and **rules are not filters**, so every client list
+     query must carry the `where(...)` filter the rules check: a list whose results
+     could span a document the caller may not read is denied outright rather than
+     silently trimmed
    - Implement password protection for collections — **not done**, and it cannot be done
      client-side: a prompt gates nothing once the artworks are in the browser. Needs
      rules plus a verification path, or a callable function
-   - Secure file uploads and access — pending, since uploads are not implemented
+   - Secure file uploads and access — _done_. `storage.rules` splits reads from writes,
+     because a combined `allow read, write` whose condition dereferences
+     `request.resource.size` denies reads outright: `request.resource` is null on a
+     read, and a null dereference is an evaluation error that denies the request. The
+     documents folder is owner-only for read and write, so a document is never more
+     readable than the artwork it belongs to
+   - `createdAt`/`updatedAt` are server-stamped by the service layer and the rules
+     verify `createdAt/updatedAt == request.time` on write, so the client cannot
+     forge them
 
 ## Data Flow & Architecture
 
@@ -567,24 +651,47 @@ Anything unmatched redirects to `/`.
      applied at the entry point rather than in the rules
 
 3. **Artwork Management**:
-   - Fetch artworks for a specific collection
-   - Add artwork with all metadata fields (including certificates and photos, both
-     written as `[]`)
-   - Upload files to Firebase Storage — not implemented
-   - Save references to files in Firestore — not implemented
+   - Fetch artworks for a specific collection. Two queries, split by caller: the owner
+     filters on `collectionId` + `userId` + `deletedAt == null`, a visitor on
+     `collectionId` + `isPublic == true` + `deletedAt == null`. Each needs its own
+     composite index, declared in `firestore.indexes.json`
+   - Add artwork with all metadata fields. `photos` and `documents` are both written,
+     as `[]` when empty — an absent field does not match a `where(..., "==", null)`
+     filter, so omitting it would silently hide the artwork from its own list
+   - Upload files to Firebase Storage — implemented, and the **write order is the part
+     worth knowing**:
+     - **Add is three writes**: create the document, then upload and record photos, then
+       upload and record documents. The document must exist first, because Storage needs
+       an id to put objects under and the id is not knowable until it exists. The last
+       two are separate rather than merged, so a document failure cannot leave the photo
+       references unrecorded and the photo objects orphaned
+     - **Edit uploads and sweeps Storage _before_ the Firestore write.** The document is
+       the record of what exists, so it should only be updated once the objects it will
+       point at are there. The reverse order could delete an object a moment too early,
+       and would leave an invisible object that nothing can clean up
+   - Save references to files in Firestore — implemented. `photos` and `documents` are
+     each written only when they actually changed, since `updateDoc` merges and an
+     absent key leaves the stored array alone rather than rewriting every storage URL on
+     a save that only touched the title
+   - Soft delete rather than removal — implemented, in bulk from `ArtworksTable`. Nothing
+     ever removes an artwork from Firestore; `deletedAt` is stamped and the row leaves
+     the owner's table
 
 4. **Public Access**:
    - Check collection privacy settings on load
    - Display password protection prompt if needed — unreachable, nothing writes
      `passwordHash`
-   - Render artworks in either list or mosaic view
+   - Render artworks in either list or mosaic view, with images
 
    The fetch is sequenced rather than parallel: the collection is read first, and its
-   artworks are requested only if `isPublic === true`. So an unauthenticated visitor can
-   pull down a private collection's document but never its artworks. This narrows the
-   exposure — **it does not close it.** Without security rules the collection document
-   is readable by anyone who knows its id, so the "This collection is private" message is
-   a rendering decision, not a guarantee.
+   artworks are requested only if `isPublic === true`. The collection read is **not** a
+   privacy control — it is a real Firestore read, and it succeeds for a public
+   collection whether the visitor is signed in or not. What closes the exposure is
+   `firestore.rules`: a private collection's document is denied to a non-owner before
+   anything reaches the browser, and `PublicCollectionPage` maps that `permission-denied`
+   to the same "This collection is private." state the `isPublic` check would have
+   produced. Artwork documents are not in this path at all — `storage.rules` refuses them
+   to anyone but the owner.
 
 ## Timeline Considerations
 
@@ -598,20 +705,22 @@ Anything unmatched redirects to `/`.
    - Connect Firebase and set up authentication
 
 2. **Week 2**: Implement collection management features
-   - Full collection CRUD operations
-   - Collection settings (privacy, password protection)
-   - Public collection view with access controls — the view is built; the access controls
-     are not
+   - Full collection CRUD operations — the delete still has no UI
+   - Collection settings (privacy, password protection) — the password half is unwired
+   - Public collection view with access controls — both built; the controls are the
+     rules, and a private collection is denied before it renders
 
 3. **Week 3**: Implement artwork management + file uploads
    - Complete artwork forms with all required fields
-   - File upload components for certificates and photos — outstanding
+   - File upload components for photos and documents — both built
    - Data validation for dates, prices, etc.
 
 4. **Week 4**: Add authentication, improve UX, testing
    - Secure routing with authentication checks
    - Improve UI/UX based on user feedback
-   - Complete documentation and testing
+   - Complete documentation and testing — the rules suites and the pure logic are
+     covered, along with the photo, artwork-table and document components; the two
+     artwork forms and the CSV import run are not
 
 ## Future Enhancements
 

@@ -45,9 +45,16 @@ service firebase.storage {
     // produces JPEG instead) plus PNG, which only ever appears on the
     // `original` object — a source is stored as the format it already is, so
     // it can keep its alpha channel in the archive.
+    //
+    // The key list must stay in step with IMAGE_VARIANTS in
+    // src/utils/imageVariants.ts. `tests/imageVariants.test.ts` cross-checks the
+    // two so a forgotten edit here fails CI rather than 403ing every new upload
+    // in production — the same class of gap that once let a `.bin` PDF name
+    // through, where nothing compared the name the client produces with the name
+    // the rules accept.
     function isPhotoName(artworkId, fileName) {
       return fileName.matches(
-        "^" + artworkId + "_[A-Za-z0-9]{20}_(square_lg|square_sm|large|medium|original)\\.(webp|jpg|png)$"
+        "^" + artworkId + "_[A-Za-z0-9]{20}_(xlarge|square_lg|square_sm|large|medium|original)\\.(webp|jpg|png)$"
       );
     }
 
@@ -67,7 +74,7 @@ service firebase.storage {
     // permitted here, so a hand-rolled client cannot add them either.
     function isDocumentName(artworkId, fileName) {
       return fileName.matches(
-        "^" + artworkId + "_[A-Za-z0-9]{20}_(square_lg|square_sm|large|medium|original)\\.(webp|jpg|png|pdf)$"
+        "^" + artworkId + "_[A-Za-z0-9]{20}_(xlarge|square_lg|square_sm|large|medium|original)\\.(webp|jpg|png|pdf)$"
       );
     }
 

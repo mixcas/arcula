@@ -12,7 +12,12 @@ import { artworkService } from "@/services/artworkService";
 import { artworkSlug } from "@/utils/slug";
 import type { Artwork } from "@/types";
 
-const RECORDS_PER_PAGE_OPTIONS = [10, 25, 50];
+// 25 first, so it is also the default: the state below is initialised from
+// index 0, which keeps the default and the offered options from drifting.
+// 10 is deliberately not offered — a 25-row page is the density these tables
+// are read at, and a 10-row option only ever produced a page that looked empty
+// next to a 50-row one.
+const RECORDS_PER_PAGE_OPTIONS = [25, 50];
 
 // Stable id for the single delete dialog this component can have open. Passing
 // it to openConfirmModal means a second click cannot stack a second dialog on
@@ -52,9 +57,11 @@ interface ArtworksTableProps {
  *   kept, which is why the delete is a batch write rather than a `deleteDoc`
  *   and why it is reversible later. A future trash view will need no rules
  *   work: the owner branches of the artwork rules were left untouched.
- * - **View is disabled.** There is no public page for a single artwork yet
- *   (only the whole-collection page), so the button states the gap rather than
- *   linking nowhere.
+ * - **View leaves the app.** It is a `<Link>` to the public artwork page, not a
+ *   route under `/manage`, so the collection's own skin decides what it looks
+ *   like. The link still works for a private work or a private collection — the
+ *   public page answers "this collection is private", which is the same thing
+ *   the owner would see by pasting the URL.
  */
 const ArtworksTable: React.FC<ArtworksTableProps> = ({
   artworks,
@@ -222,11 +229,28 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         pinned: "right",
         render: (artwork) => (
           <Group gap="xs" wrap="nowrap" justify="flex-end">
+            {/*
+              The public page for a single artwork, in the collection's own
+              skin. The rules already admit a visitor to a public, un-deleted
+              artwork by id (`firestore.rules`, the `allow get` visitor branch),
+              so this link needed no rules work — only a route and a view.
+
+              A plain `href` rather than a router `Link`, because this leaves the
+              app: the new tab gets a full document load, so a skin that somehow
+              broke could not leave a half-working public page under the manage
+              session's history. `noopener` is not optional — without it the
+              opened page gets a handle on this window via `window.opener`.
+            */}
             <Button
               size="compact-xs"
               variant="default"
-              disabled
-              title="No public page for a single artwork yet"
+              component="a"
+              href={`/collection/${collectionParam}/artwork/${artworkSlug(
+                artwork.title,
+                artwork.id,
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               View
             </Button>

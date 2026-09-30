@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   photoOrderChanged,
+  photoSrcSet,
   photoUrl,
   photoUrls,
   primaryPhoto,
@@ -16,6 +17,17 @@ const variant = (key: ImageVariantKey, url: string) => ({
   height: 1,
   size: 1,
   contentType: "image/webp",
+});
+
+/** A variant with a real encoded width, which is what `srcset` publishes. */
+const sizedVariant = (
+  key: ImageVariantKey,
+  url: string,
+  width: number,
+): ArtworkPhoto["variants"][number] => ({
+  ...variant(key, url),
+  width,
+  height: Math.round(width * 0.75),
 });
 
 const photo = (id: string, order: number): ArtworkPhoto => ({
@@ -125,6 +137,61 @@ describe("photoUrl", () => {
 
   it("is null when there is no photo at all", () => {
     expect(photoUrl(null, "large")).toBeNull();
+  });
+});
+
+describe("photoSrcSet", () => {
+  const modern: ArtworkPhoto = {
+    ...photo("a", 0),
+    variants: [
+      sizedVariant("xlarge", "xl/a", 2400),
+      sizedVariant("square_lg", "sq-lg/a", 800),
+      sizedVariant("large", "large/a", 1200),
+      sizedVariant("medium", "med/a", 800),
+    ],
+  };
+  // Written before `xlarge` existed. This is the shape every existing photo has.
+  const legacy: ArtworkPhoto = {
+    ...photo("b", 0),
+    variants: [
+      sizedVariant("square_lg", "sq-lg/b", 800),
+      sizedVariant("square_sm", "sq-sm/b", 400),
+      sizedVariant("large", "large/b", 1200),
+      sizedVariant("medium", "med/b", 800),
+    ],
+  };
+
+  it("offers only the variants the photo actually has, in the order given", () => {
+    expect(photoSrcSet(modern, ["xlarge", "large"])).toBe(
+      "xl/a 2400w, large/a 1200w",
+    );
+  });
+
+  it("drops a requested key the photo was uploaded without", () => {
+    // A `srcset` may only list candidates that resolve: a 404 makes the browser
+    // reach for another and silently degrade. Filtering is the whole point.
+    expect(photoSrcSet(legacy, ["xlarge", "large"])).toBe("large/b 1200w");
+  });
+
+  it("publishes the recorded width, not the nominal target", () => {
+    // `variantSize` never enlarges, so a small plate's `xlarge` is smaller than
+    // 2400 and overstating it would make the browser upscale a candidate.
+    const plate: ArtworkPhoto = {
+      ...photo("c", 0),
+      variants: [sizedVariant("xlarge", "xl/c", 300)],
+    };
+    expect(photoSrcSet(plate, ["xlarge"])).toBe("xl/c 300w");
+  });
+
+  it("is undefined for a photo with no variants and for no photo at all", () => {
+    // The original is never substituted in: it is the archival source and can
+    // be ten megabytes. `photoUrl` still falls back to it for `src`, which is a
+    // safety net — not a display candidate. An empty `srcset` attribute would
+    // be worse than no attribute at all, hence undefined rather than "".
+    expect(photoSrcSet({ ...photo("d", 0), variants: [] }, ["xlarge"])).toBe(
+      undefined,
+    );
+    expect(photoSrcSet(null, ["xlarge", "large"])).toBe(undefined);
   });
 });
 

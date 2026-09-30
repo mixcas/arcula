@@ -193,6 +193,7 @@ describe("storage rules — owner writes", () => {
     const storage = storageFor(OWNER);
 
     for (const key of [
+      "xlarge",
       "square_lg",
       "square_sm",
       "large",
@@ -462,10 +463,11 @@ describe("storage rules — per-photo isolation", () => {
 // pass if someone widened the documents block to the visitor rule.
 describe("storage rules — other documents", () => {
   it("accepts a document image's original and both generated variants", async () => {
-    // Only two of the photo table's four keys. square_lg and medium exist for
-    // the public collection grid, and a document never appears there, so
-    // generating them would write objects nothing can read. The rules permit the
-    // full list and the app uses a subset, so the subset is all that is asserted.
+    // Only two of the photo table's five keys. square_lg, medium and xlarge
+    // exist for the public collection views, and a document never appears
+    // there, so generating them would write objects nothing can read. The rules
+    // permit the full list and the app uses a subset, so the subset is all that
+    // is asserted.
     await seedArtwork(ARTWORK_ID, {});
     const storage = storageFor(OWNER);
 

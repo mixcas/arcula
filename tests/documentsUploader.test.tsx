@@ -305,9 +305,9 @@ describe("DocumentsUploader", () => {
     await user.upload(fileInput(), jpegFile("scan.jpg"));
     await screen.findByText("scan.jpg");
 
-    // The spec list is the third argument. `square_lg` and `medium` exist for
-    // the public collection grid, and a document is never public, so generating
-    // them would write objects nothing can ever read.
+    // The spec list is the third argument. `square_lg`, `medium` and `xlarge`
+    // exist for the public collection views, and a document is never public, so
+    // generating them would write objects nothing can ever read.
     const specs = vi.mocked(processImages).mock.calls[0]?.[2] as Array<{
       key: string;
     }>;

@@ -9,7 +9,12 @@ import {
   type ReviewRow,
 } from "@/schemas/artworkImport";
 
-const RECORDS_PER_PAGE_OPTIONS = [10, 25, 50];
+// 25 first, so it is also the default: the state below is initialised from
+// index 0, which keeps the default and the offered options from drifting.
+// 10 is deliberately not offered — a 25-row page is the density these tables
+// are read at, and a 10-row option only ever produced a page that looked empty
+// next to a 50-row one.
+const RECORDS_PER_PAGE_OPTIONS = [25, 50];
 
 interface ReviewRowsStepProps {
   rows: ReviewRow[];

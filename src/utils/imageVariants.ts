@@ -60,8 +60,22 @@ export type ImageVariantSpec = SquareVariantSpec | BoundedVariantSpec;
  * 300x300 book plate must stay 300x300. Scaling it to 800x800 would invent
  * pixels that do not exist and a catalogue is a poor place to store a
  * blurry blowup of the record.
+ *
+ * `xlarge` exists for the fullscreen slideshow. `large` caps at 1200px, which
+ * is smaller than a 1440px display and visibly soft on a detail-heavy painting.
+ * The cost is one more object per photo (sixty per ten-photo artwork) and a
+ * rules change: the key list in `storage.rules` must stay in step, or every new
+ * upload 403s on that object. `tests/imageVariants.test.ts` cross-checks the
+ * two so a forgotten regex edit fails CI rather than production.
+ *
+ * Photos uploaded before `xlarge` existed have no such variant, and are NOT
+ * backfilled: `photoSrcSet` offers whatever a photo actually has, so a legacy
+ * photo offers `large` plus the original and the browser picks. A backfill would
+ * be a client-side download/re-encode/upload across every artwork — Storage
+ * egress for a fidelity gain the browser already covers.
  */
 export const IMAGE_VARIANTS: readonly ImageVariantSpec[] = [
+  { key: "xlarge", fit: "inside", max: 2400 },
   { key: "square_lg", fit: "cover", width: 800, height: 800 },
   { key: "square_sm", fit: "cover", width: 400, height: 400 },
   { key: "large", fit: "inside", max: 1200 },
@@ -76,11 +90,11 @@ export const VARIANT_KEYS: readonly ImageVariantKey[] = IMAGE_VARIANTS.map(
  * The subset an image gets when it is attached as a *document* rather than as
  * a photo.
  *
- * Two of the four, and the two that documents actually use: `square_sm` renders
- * the list tile, `large` fills the preview modal. `square_lg` and `medium` exist
- * for the public collection grid, and a document never appears there — it is
- * refused to visitors by `storage.rules`. Generating them anyway would write up
- * to two objects per image that nothing can ever read.
+ * Two of the five, and the two that documents actually use: `square_sm` renders
+ * the list tile, `large` fills the preview modal. `square_lg`, `medium` and
+ * `xlarge` exist for the public collection views, and a document never appears
+ * there — it is refused to visitors by `storage.rules`. Generating them anyway
+ * would write up to three objects per image that nothing can ever read.
  *
  * A subset rather than a second table: the geometry stays defined once, and
  * `isDocumentName` in `storage.rules` already permits the full key list, so

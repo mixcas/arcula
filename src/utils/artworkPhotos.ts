@@ -99,6 +99,41 @@ export const primaryPhotoUrl = (
 ): string | null => photoUrl(primaryPhoto(artwork), key);
 
 /**
+ * The `srcset` for a photo, built from the variants it *actually has*.
+ *
+ * A photo uploaded before a variant existed has no object for it, and a
+ * `srcset` may only list candidates that resolve: a 404 candidate makes the
+ * browser reach for a different one and silently degrade. So `keys` is filtered
+ * down to the variants present, in the order given (largest first, by
+ * convention).
+ *
+ * Each candidate is published with that variant's **recorded** width, not its
+ * nominal target. `variantSize` never enlarges, so a 300x300 plate's `xlarge`
+ * is 300w and not 2400w — and a `w` descriptor that overstates the pixels makes
+ * the browser choose a candidate it will then have to upscale.
+ *
+ * The `original` is deliberately not offered. It is the archival source and can
+ * be ten megabytes, which a public slideshow should not be handing to every
+ * visitor. `photoUrl` still falls back to it for `src` when a photo has no
+ * variants at all — a safety net, not a display choice.
+ */
+export const photoSrcSet = (
+  photo: Pick<ArtworkPhoto, "variants"> | null,
+  keys: readonly ImageVariantKey[],
+): string | undefined => {
+  if (!photo) {
+    return undefined;
+  }
+  const candidates = keys.flatMap((key) => {
+    const variant = photo.variants?.find((entry) => entry.key === key);
+    return variant?.url && variant.width > 0
+      ? [`${variant.url} ${variant.width}w`]
+      : [];
+  });
+  return candidates.length > 0 ? candidates.join(", ") : undefined;
+};
+
+/**
  * Whether the stored photos differ from a candidate ordering, by id.
  *
  * The Edit page writes `photos` only when this is true. `updateDoc` merges, so

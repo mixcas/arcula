@@ -76,12 +76,16 @@ are gated on a test suite run against the emulators. Here is the honest version:
 | Per-artwork visibility flag                          | Working (independent of the collection's)     |
 | Public collection page (`/collection/:collectionId`) | Reads via rules; denied reads → private state |
 | Password-protected collections                       | UI only, not enforced                         |
-| Photo and certificate uploads                        | Not implemented                               |
-| Deleting artworks or collections                     | Service functions exist, no UI                |
+| Photo uploads                                        | Working (4 variants + original, Web Worker)   |
+| "Other Documents" uploads (images and PDFs)          | Working; owner-only, enforced by the rules    |
+| Deleting artworks                                    | Working; soft delete, in bulk                 |
+| Deleting collections                                 | Service function exists, no UI                |
+| CSV import of artworks                               | Working                                       |
+| Artwork documents on the public pages                | Never rendered, and the rules refuse them     |
 | Firestore + Storage security rules                   | Provided for collections/artworks             |
 | Rules test suite                                     | `bun run test:rules` (emulator-gated deploy)  |
 
-Two of those deserve emphasis because they are easy to misread from the code:
+Several of those deserve emphasis, because they are easy to misread from the code:
 
 - **Access control lives in `firestore.rules`, not in the rendering gate.** Collections
   and artworks are readable by non-owners only when explicitly public, and each artwork
@@ -100,10 +104,27 @@ Two of those deserve emphasis because they are easy to misread from the code:
   renders, the artworks are already in the browser. Real enforcement needs rules plus a
   verification path, or a callable function — a Cloud Functions scaffold exists
   (`functions/`) with the callables designed but not built.
-
-The public page renders artwork metadata but no images. Firebase Storage is
-initialised and exported and then never used, so `photos` is always `[]` and the list
-view shows placeholder blocks where a carousel will eventually go.
+- **Uploads and Storage are subject to rules the same way reads are.** Photo objects
+  are readable by a non-owner exactly when the artwork is public and not soft-deleted —
+  the same two conditions the Firestore rules check, so a photo is never more readable
+  than the artwork it belongs to. **Artwork documents are owner-only for reads _and_
+  writes**, enforced in `storage.rules` rather than merely left out of the public pages:
+  a condition report, a receipt or a provenance note that a future UI forgot to hide
+  would leak nothing, because those rules still say no. The extension allowlist on
+  stored object names is a real control too, not tidiness — an uploaded SVG navigated to
+  directly executes script in the storage origin, and `contentType` is client-supplied,
+  so the filename is the only thing the rules can bind to it.
+- **The write order differs between Add and Edit, and it is not incidental.** Add is
+  three writes — create, then upload and record photos, then upload and record documents
+  — because the document must exist before Storage has an id to put objects under. Edit
+  does the opposite, uploading and sweeping Storage _before_ the Firestore write, because
+  the document is the record of what exists and should only be updated once the objects
+  it points at are there. A save also writes `photos` and `documents` only when they
+  actually changed, so a title edit does not rewrite every stored URL.
+- **Deleting an artwork does not remove it.** The row leaves the collection table and
+  `deletedAt` is stamped; nothing is ever deleted from Firestore. A visitor's reads are
+  gated on `deletedAt == null`, so a soft-deleted work disappears from the public pages
+  without the document itself going anywhere. There is no trash or restore view yet.
 
 ## Tech stack
 
@@ -231,24 +252,25 @@ password path, and the `functions/` scaffold being actually built.
 
 ## Scripts
 
-| Command                  | Description                                                |
-| ------------------------ | ---------------------------------------------------------- |
-| `bun run dev`            | Start the development server on port 3000                  |
-| `bun run build`          | Typecheck and build for production                         |
-| `bun run preview`        | Preview the production build                               |
-| `bun run check`          | Typecheck, lint, and check formatting                      |
-| `bun run lint`           | ESLint, with type-aware rules                              |
-| `bun run format`         | Rewrite files with Prettier                                |
-| `bun run test:rules`     | Run the rules suite against the Firestore/Auth emulators   |
-| `bun run emulators`      | Start the full emulator suite with the web UI (port 4000)  |
-| `bun run deploy:rules`   | Run the rules suite, then deploy Firestore + Storage rules |
-| `bun run deploy:hosting` | Build, then deploy hosting to the configured project       |
-| `bun run deploy`         | `deploy:rules` first (gated on the suite), then hosting    |
+| Command                  | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `bun run dev`            | Start the development server on port 3000                   |
+| `bun run build`          | Typecheck and build for production                          |
+| `bun run preview`        | Preview the production build                                |
+| `bun run check`          | Typecheck, lint, and check formatting                       |
+| `bun run lint`           | ESLint, with type-aware rules                               |
+| `bun run format`         | Rewrite files with Prettier                                 |
+| `bun run test:rules`     | Run every test against the Firestore/Auth/Storage emulators |
+| `bun run emulators`      | Start the full emulator suite with the web UI (port 4000)   |
+| `bun run deploy:rules`   | Run the rules suite, then deploy Firestore + Storage rules  |
+| `bun run deploy:hosting` | Build, then deploy hosting to the configured project        |
+| `bun run deploy`         | `deploy:rules` first (gated on the suite), then hosting     |
 
 ## Deploying rules
 
-`bun run test:rules` runs every assertion in `tests/firestore.rules.test.ts`
-against the Firestore and Auth emulators (vitest + `@firebase/rules-unit-testing`).
+`bun run test:rules` starts the Firestore, Auth and Storage emulators and runs **every**
+test file — the rules suites, the pure logic and the components. A single file runs
+without emulators via `npx vitest run tests/<file>`, which is the fast loop for UI work.
 The emulators need a Java runtime; if none is installed, the Firebase CLI offers to
 download one.
 
@@ -269,13 +291,17 @@ fail loudly on a malformed rule file.
 firebase.json                          # Rules, emulators, hosting, functions config
 firestore.rules                        # Collections/artworks access control
 firestore.indexes.json                 # Composite query indexes
-storage.rules                         # Storage access (uploads not implemented yet)
+storage.rules                         # Storage access for photos and documents
 functions/                            # Cloud Functions source (scaffold only)
   └── src/index.ts                    # No functions exported yet
-tests/
-  ├── tsconfig.json
-  └── firestore.rules.test.ts          # Rules suite (vitest + emulators)
-vitest.config.ts                       # Vitest config (rules tests, Node env)
+tests/                                # 13 files: rules, pure logic, components
+  ├── firestore.rules.test.ts         # Firestore rules (vitest + emulators)
+  ├── storage.rules.test.ts          # Storage rules, and the client/rules naming seam
+  ├── artworkDocuments.test.ts        # Document caps, extension derivation, change detection
+  ├── documentsUploader.test.tsx     # The "Other Documents" list
+  ├── photoUploader.test.tsx         # Photo ordering, the merge, upload failures
+  └── ...
+vitest.config.ts                       # Vitest config; no `globals`, so tests clean up explicitly
 src/
 ├── main.tsx                          # Entry point; wires theme + router
 ├── App.tsx                           # Routes
@@ -298,27 +324,55 @@ src/
 │       ├── CollectionSettingsPage.tsx # Rename, public/private
 │       ├── ArtworkAddPage.tsx        # Add an artwork
 │       ├── ArtworkEditPage.tsx       # Edit an artwork
-│       └── collection/NewCollectionPage.tsx
+│       ├── MigrationsPage.tsx        # Run pending data migrations
+│       ├── artwork/
+│       │   ├── PhotoUploader.tsx     # The photo grid: drop, reorder, preview
+│       │   ├── DocumentsUploader.tsx # The "Other Documents" list
+│       │   └── PhotoPreviewModal.tsx # Full-screen preview, shared with document images
+│       ├── collection/
+│       │   ├── NewCollectionPage.tsx
+│       │   └── ArtworksTable.tsx     # Sortable, selectable; batch soft delete
+│       └── import/                   # CSV import: CsvImportPage, four steps, EditableCell
 ├── context/AuthContext.tsx           # Auth state provider, read via useAuth()
-├── hooks/useAuth.ts                  # Context consumer hook
-├── schemas/artwork.ts                # Zod schema + Firestore payload shaping
+├── hooks/
+│   ├── useAuth.ts                    # Context consumer hook
+│   ├── useArtworkPhotos.ts           # Photo list state for the Add/Edit forms
+│   └── useArtworkDocuments.ts        # The same for documents
+├── schemas/
+│   ├── artwork.ts                    # Zod schema + Firestore payload shaping
+│   └── artworkImport.ts              # CSV header matching, coercion, row validation
 ├── services/
 │   ├── firebase.ts                   # Firebase init, exports db/auth/storage
-│   ├── authService.ts
-│   ├── collectionService.ts
-│   └── artworkService.ts
-├── types/index.ts                    # Artwork, Collection, ArtworkUpdate, FileReference
+│   ├── artworkService.ts
+│   ├── artworkFiles.ts               # Storage machinery shared by photos and documents
+│   ├── imageService.ts               # Photo uploads
+│   ├── documentService.ts            # Document uploads
+│   ├── authService.ts                # Defined but imported by nothing
+│   └── collectionService.ts
+├── types/index.ts                    # Artwork, Collection, ArtworkPhoto, ArtworkDocument
+├── migrations/                       # Data migration registry; a new field is a schema change
+│   ├── types.ts                      # The Migration shape, and why db is a parameter
+│   └── backfillArtworkDeletedAt.ts
 └── utils/
     ├── slug.ts                       # {slug}-{id} route params ⇄ bare document ids
-    └── firestoreErrors.ts            # isPermissionDenied() helper
+    ├── firestoreErrors.ts            # isPermissionDenied() helper
+    ├── imageVariants.ts              # The variant table, the geometry, and the caps
+    ├── imageRender.ts                # Canvas encoding; shared by the worker and the fallback
+    ├── imageWorker.ts                # The Web Worker itself
+    ├── imageProcessing.ts            # Spawns the worker, falls back to the main thread
+    ├── artworkPhotos.ts              # The order invariant and the photoUrl ladder
+    ├── artworkDocuments.ts           # Caps, the accepted types, and the extension allowlist
+    ├── csv.ts                        # In-browser CSV parsing
+    └── maintenanceAccess.ts          # isMaintenanceAdmin() allowlist for the maintenance screens
 ```
 
 There is no global stylesheet. Typography, spacing and component defaults all come from
 the Mantine theme, so a change to a font or size is a one-line change in `src/theme.ts`
 rather than a hunt through CSS.
 
-`firebase.ts` exports `db`, `auth` and `storage`. `storage` is the odd one out: it is
-initialised and never used, which is why every artwork's `photos` array is empty.
+`firebase.ts` exports `db`, `auth` and `storage`. All three are used; `storage` backs
+both `Artwork.photos` and `Artwork.documents`, through the shared machinery in
+`artworkFiles.ts` rather than a second copy of the naming and delete sweep.
 
 ## Roadmap
 
@@ -344,14 +398,14 @@ Roughly in order of how much they matter:
   — the functions scaffold in `functions/` is built for this (bcrypt + short-lived
   grants; the Blaze plan is already in place, so Anonymous Auth is the only
   outstanding prerequisite)
-- Photo and certificate uploads to Firebase Storage
-- Delete for artworks and collections
+- Trash and restore for soft-deleted artworks, and a purge for long-dead ones
+- Delete for collections
 - Account tiers and billing — this is what turns the collection cap above into a quota
   the rules can actually check
 - Export, so you are never locked in
 - Search and filtering, once there are enough works for it to matter
-- Tests around the app itself (schema and load/save paths) — the rules are covered;
-  the components are not
+- Tests for the two artwork forms and the CSV import run — the rules, the pure logic,
+  and the photo, artwork-table and document components are covered
 
 The design decisions behind the beta items, and the ones that are still open, are
 written up in [project-plan.md](project-plan.md).

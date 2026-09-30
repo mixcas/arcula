@@ -12,6 +12,7 @@ import MigrationsPage from "./components/manage/MigrationsPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
+import PublicArtworkPage from "./components/collection/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 
@@ -107,10 +108,15 @@ const App: React.FC = () => {
           }
         />
 
-        {/* Public Collection View */}
+        {/* Public collection view. Both routes render the collection's skin;
+            see src/skins/registry.ts. */}
         <Route
           path="/collection/:collectionId"
           element={<PublicCollectionPage />}
+        />
+        <Route
+          path="/collection/:collectionId/artwork/:artworkId"
+          element={<PublicArtworkPage />}
         />
 
         {/* Redirect all other routes to homepage */}

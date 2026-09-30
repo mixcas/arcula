@@ -4,16 +4,15 @@ import {
   Text,
   TextInput,
   Textarea,
-  Button,
   Grid,
-  Group,
   Alert,
   Loader,
   Switch,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm, schemaResolver } from "@mantine/form";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { artworkService } from "@/services/artworkService";
@@ -21,6 +20,9 @@ import { imageService } from "@/services/imageService";
 import { documentService } from "@/services/documentService";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
 import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
+import FormActionsBar, {
+  BAR_HEIGHT,
+} from "@/components/manage/artwork/FormActionsBar";
 
 import {
   EMPTY_ARTWORK_FORM,
@@ -32,6 +34,21 @@ import {
   type ArtworkPayload,
 } from "@/schemas/artwork";
 import { artworkSlug, parseId } from "@/utils/slug";
+
+/**
+ * The `warn` values the Add page can send, and what each one means.
+ *
+ * Keyed by the raw param and read through a lookup rather than an `if`, so an
+ * unrecognised value renders nothing at all. A message that cannot be triggered
+ * (a hand-edited `?warn=anything`) must not reach a visitor as an alert about
+ * their uploads.
+ */
+const WARNINGS: Record<string, string> = {
+  photos:
+    "This artwork was created, but its images could not be uploaded. Add them below and save again.",
+  documents:
+    "This artwork was created, but its documents could not be uploaded. Add them below and save again.",
+};
 
 const ArtworkEditPage: React.FC = () => {
   const { collectionId: collectionParam, artworkId: artworkParam } = useParams<{
@@ -82,6 +99,44 @@ const ArtworkEditPage: React.FC = () => {
     userId: string;
     collectionId: string;
   } | null>(null);
+
+  // Carried over from the Add page when a later upload stage failed there. It
+  // is a query param rather than state so the message survives a refresh or a
+  // pasted URL — the user who is told "its images could not be uploaded" needs
+  // that warning to still be there when they come back to fix it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const warn = searchParams.get("warn");
+  // Captured once, on mount, and never re-read.
+  //
+  // The effect below strips `warn` from the URL, so deriving the message from
+  // the search params on every render would blank it the instant it appeared —
+  // the warning would flash and vanish before it could be read, and a test
+  // polling for it would never see it either. Initialising state from the URL
+  // is what makes "shown once, then removed from the URL" actually work.
+  const [warning] = useState(() => WARNINGS[warn ?? ""]);
+
+  /**
+   * Shown once, then stripped from the URL.
+   *
+   * Removing it matters more than it looks: `warn` says an upload failed, and
+   * the fix for that is on this very page. Leaving the param in place would
+   * re-raise the warning on every refresh and every re-edit, long after the
+   * photos were uploaded — a stale alarm that trains the user to ignore the
+   * message that matters. `replace` so it does not also cost a history entry.
+   */
+  useEffect(() => {
+    if (!warn) {
+      return;
+    }
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("warn");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [warn, setSearchParams]);
 
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photos = useArtworkPhotos({ onError: setPhotoError });
@@ -173,6 +228,9 @@ const ArtworkEditPage: React.FC = () => {
         Edit Artwork
       </Text>
       <form
+        // Room for the fixed action bar, so the last field and the alerts
+        // above are never permanently behind it.
+        style={{ paddingBottom: BAR_HEIGHT + 24 }}
         // Uncontrolled mode repaints a field by remounting it, which is what
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
@@ -267,7 +325,15 @@ const ArtworkEditPage: React.FC = () => {
               artworkId,
               toArtworkUpdate(loadedValues, payload),
             );
-            void navigate(`/manage/collection/${collectionParam}`);
+            // No redirect. This form is where a failed upload from the Add page
+            // is fixed, and where a second pass over a long field list is done —
+            // leaving would throw away the scroll position and the `warn`
+            // context on every save. A toast is enough confirmation: the
+            // timestamps and the unchanged inputs are both proof it worked.
+            notifications.show({
+              title: "Artwork saved",
+              message: `"${payload.title}" was updated.`,
+            });
           } catch (err) {
             console.error("Error updating artwork:", err);
             setError("Failed to save artwork. Please try again.");
@@ -417,6 +483,18 @@ const ArtworkEditPage: React.FC = () => {
           </Grid.Col>
         </Grid>
 
+        {/*
+          The Add page's partial-failure warning, above the other alerts: it is
+          the oldest problem on the page and the one that explains why the
+          uploader is empty. `yellow`, not `red` — the artwork exists, so
+          nothing has been lost.
+        */}
+        {warning ? (
+          <Alert color="yellow" mb="md" title="Saved without everything">
+            {warning}
+          </Alert>
+        ) : null}
+
         {error ? (
           <Alert color="red" mb="md">
             {error}
@@ -435,18 +513,15 @@ const ArtworkEditPage: React.FC = () => {
           </Alert>
         ) : null}
 
-        <Group mt="xl">
-          <Button type="submit" loading={form.submitting}>
-            Save Changes
-          </Button>
-          <Button
-            component={Link}
-            to={`/manage/collection/${collectionParam}`}
-            variant="outline"
-          >
-            Cancel
-          </Button>
-        </Group>
+        {/*
+          Inside the form, so Save is still a real submit control and keeps
+          keyboard submission, validation and the `loading` state.
+        */}
+        <FormActionsBar
+          submitLabel="Save Changes"
+          submitting={form.submitting}
+          cancelTo={`/manage/collection/${collectionParam ?? ""}`}
+        />
       </form>
     </>
   );

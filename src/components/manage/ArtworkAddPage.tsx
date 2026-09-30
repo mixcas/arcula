@@ -4,16 +4,15 @@ import {
   Text,
   TextInput,
   Textarea,
-  Button,
   Grid,
-  Group,
   Alert,
   Switch,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { notifications } from "@mantine/notifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
@@ -22,6 +21,9 @@ import { imageService } from "@/services/imageService";
 import { documentService } from "@/services/documentService";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
 import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
+import FormActionsBar, {
+  BAR_HEIGHT,
+} from "@/components/manage/artwork/FormActionsBar";
 
 import {
   EMPTY_ARTWORK_FORM,
@@ -33,6 +35,16 @@ import {
 } from "@/schemas/artwork";
 import { artworkSlug, parseId } from "@/utils/slug";
 
+/**
+ * Where the Add page sends the user: the Edit page for the artwork it just
+ * created, carrying `warn` when a later upload stage failed.
+ *
+ * The param is a query rather than state because the Edit page can be reached
+ * cold — a refresh, or the URL pasted into a new tab — and a message about a
+ * failed upload has to still be there. `stage` is omitted on the success path so
+ * the URL stays clean; the Edit page strips the param once it has shown it, so
+ * a later refresh does not re-raise a warning about an upload already fixed.
+ */
 const ArtworkAddPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
   // The route carries "{slug}-{id}"; the artwork must store the bare id, or the
@@ -40,6 +52,33 @@ const ArtworkAddPage: React.FC = () => {
   const collectionId = parseId(param ?? "");
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+
+  /**
+   * Where this page sends the user: the Edit page for the artwork it just
+   * created, carrying `warn` when a later upload stage failed.
+   *
+   * A query param rather than in-memory state because the Edit page can be
+   * reached cold — a refresh, or the URL pasted into a new tab — and a message
+   * about a failed upload has to still be there. `stage` is omitted on the
+   * success path so the URL stays clean, and the Edit page strips the param
+   * once shown, so a later refresh does not re-raise a warning about an upload
+   * that is already fixed.
+   *
+   * `param` is the raw route segment rather than the parsed id, because the
+   * Edit route re-parses it itself and the manage pages have always passed the
+   * slugged form straight through.
+   */
+  const editPath = (
+    title: string,
+    artworkId: string,
+    stage?: "photos" | "documents",
+  ): string => {
+    const base = `/manage/collection/${param ?? ""}/artwork/${artworkSlug(
+      title,
+      artworkId,
+    )}`;
+    return stage ? `${base}?warn=${stage}` : base;
+  };
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
@@ -69,6 +108,10 @@ const ArtworkAddPage: React.FC = () => {
       </Text>
 
       <form
+        // Room for the fixed action bar. Without it the bar sits permanently on
+        // top of `currentValue` and the error alerts, which is exactly the
+        // content a user most needs to read after a failure.
+        style={{ paddingBottom: BAR_HEIGHT + 24 }}
         // Uncontrolled mode repaints a field by remounting it, which is what
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
@@ -93,6 +136,14 @@ const ArtworkAddPage: React.FC = () => {
           // that some were queued, which is true of the artwork even when every
           // one of them uploaded fine and the *documents* are what broke.
           let stage: "create" | "photos" | "documents" = "create";
+          // Hoisted so the catch can build the redirect. `stage !== "create"`
+          // is exactly the guarantee that this is populated: the only way past
+          // the create write is to have completed it.
+          let createdId = "";
+          // The payload as written, which is the only statement of the new
+          // artwork's title that cannot disagree with Firestore. Hoisted with
+          // `createdId` because the catch names the artwork it redirected to.
+          let title = "";
 
           try {
             // Two writes, not one. The document has to exist before Storage
@@ -107,19 +158,20 @@ const ArtworkAddPage: React.FC = () => {
               collectionId,
               currentUser.uid,
             );
-            const newId = await artworkService.createArtwork(artwork);
+            title = artwork.title;
+            createdId = await artworkService.createArtwork(artwork);
 
             if (photos.pendingImages.length > 0) {
               stage = "photos";
               const uploaded = await imageService.uploadArtworkPhotos({
                 userId: currentUser.uid,
                 collectionId,
-                artworkId: newId,
+                artworkId: createdId,
                 // Already generated when the files were added, so the save is
                 // uploads only.
                 photos: photos.pendingImages,
               });
-              await artworkService.updateArtwork(newId, {
+              await artworkService.updateArtwork(createdId, {
                 photos: photos.mergeUploaded(uploaded),
               });
             }
@@ -136,36 +188,52 @@ const ArtworkAddPage: React.FC = () => {
               const uploaded = await documentService.uploadArtworkDocuments({
                 userId: currentUser.uid,
                 collectionId,
-                artworkId: newId,
+                artworkId: createdId,
                 documents: documents.pendingUploads,
               });
-              await artworkService.updateArtwork(newId, {
+              await artworkService.updateArtwork(createdId, {
                 documents: documents.mergeUploaded(uploaded),
               });
             }
 
-            // Slugged from the document that was just written rather than
-            // from the form, so the URL can never disagree with Firestore.
-            void navigate(
-              `/manage/collection/${param}/artwork/${artworkSlug(artwork.title, newId)}`,
-            );
+            // One exit for every outcome. A partial failure lands here too and
+            // carries the reason in `warn`; the Edit page renders it. Holding
+            // the form open instead would mean the message told the user to
+            // "open it to try again" while the artwork is already saved and
+            // the only route to fixing it is the dashboard.
+            notifications.show({
+              title: "Artwork created",
+              message: `"${title}" was added to this collection.`,
+            });
+            void navigate(editPath(title, createdId));
           } catch (err) {
             console.error("Error creating artwork:", err);
             // The artwork exists by the time either upload can fail, so the
-            // message has to distinguish "nothing was saved" from "saved, minus
+            // outcome has to distinguish "nothing was saved" from "saved, minus
             // some files" — the second is recoverable from the Edit form, and
             // saying "failed" would send the user looking for a missing record.
             //
             // Keyed on the stage rather than on the pending lists, so a document
             // failure after the photos landed does not tell the user their
             // images are missing.
-            setError(
-              stage === "photos"
-                ? "The artwork was saved, but its images could not be uploaded. Open it to try again."
-                : stage === "documents"
-                  ? "The artwork was saved, but its documents could not be uploaded. Open it to try again."
-                  : "Failed to create artwork. Please try again.",
-            );
+            if (stage === "create") {
+              // Nothing was written, so the form still holds everything the user
+              // typed. Staying on it is the whole point of this branch.
+              setError("Failed to create artwork. Please try again.");
+              return;
+            }
+            // Past this point the document is written, so this form can no
+            // longer fix it. Redirect *and* say what went wrong: the message has
+            // to survive the navigation, which is what `warn` is for.
+            notifications.show({
+              title: "Artwork created",
+              color: "yellow",
+              message:
+                stage === "photos"
+                  ? "The artwork was created, but its images could not be uploaded."
+                  : "The artwork was created, but its documents could not be uploaded.",
+            });
+            void navigate(editPath(title, createdId, stage));
           }
         })}
       >
@@ -332,18 +400,16 @@ const ArtworkAddPage: React.FC = () => {
           </Alert>
         ) : null}
 
-        <Group mt="xl">
-          <Button type="submit" loading={form.submitting}>
-            Save Artwork
-          </Button>
-          <Button
-            component={Link}
-            to={`/manage/collection/${param}`}
-            variant="outline"
-          >
-            Cancel
-          </Button>
-        </Group>
+        {/*
+          Inside the form, so Save is a real submit control: keyboard
+          submission, form validation and the `loading` state all work as they
+          did when the buttons were an inline Group.
+        */}
+        <FormActionsBar
+          submitLabel="Save Artwork"
+          submitting={form.submitting}
+          cancelTo={`/manage/collection/${param ?? ""}`}
+        />
       </form>
     </>
   );
