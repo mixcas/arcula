@@ -5,10 +5,27 @@ import {
   WEBP_QUALITY,
   WEBP_TYPE,
   PROBE_SIZE,
+  decodeImage,
   probeWebpEncoding,
   probeWithCanvas,
+  releaseImage,
+  renderVariants,
+  supportsWebpEncoding,
 } from "@/utils/imageRender";
-import { extensionFor } from "@/utils/imageProcessing";
+import { extensionFor, processImages } from "@/utils/imageProcessing";
+
+// Only the four functions the main-thread fallback leans on. Everything else is
+// spread through from the real module, so the probe suites below still exercise
+// the genuine encoder path — those tests inject a canvas factory and an encoder
+// precisely so they do not need a browser, and stubbing `probeWebpEncoding`
+// away would defeat the point of having them.
+vi.mock("@/utils/imageRender", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/imageRender")>()),
+  decodeImage: vi.fn(),
+  renderVariants: vi.fn(),
+  releaseImage: vi.fn(),
+  supportsWebpEncoding: vi.fn(),
+}));
 
 const blobOfType = (type: string) =>
   new Blob([new Uint8Array([1, 2, 3])], { type });
@@ -313,5 +330,178 @@ describe("the worker path", () => {
       message: "no worker",
     });
     await expect(variantFormatIsWebp()).resolves.toBe(false);
+  });
+});
+
+/**
+ * The main-thread fallback — which, in this environment, is the default.
+ *
+ * Both jsdom and node lack `Worker` and `OffscreenCanvas`, so `workerAvailable()`
+ * is false here and every unstubbed `processImages` call takes the fallback. That
+ * makes this the honest way to test it: the branch is not a contrived
+ * arrangement injected for the tests, it is the branch this file runs by default,
+ * and the stubbing above has to remove the worker's advantage deliberately.
+ *
+ * What is under test is the orchestrator's own decisions — where it routes, what
+ * it stamps on the results, what order it pairs files in, and what it releases.
+ * How a variant is actually drawn and encoded is `imageRender`'s business, and
+ * is covered in `tests/imageVariants.test.ts`.
+ */
+describe("the main-thread fallback", () => {
+  /** A picked photo, which is all `decodeImage` is ever handed. */
+  const photoFile = (name: string) =>
+    new File([new Uint8Array([1])], name, { type: "image/jpeg" });
+
+  /**
+   * A stand-in for a decoded bitmap.
+   *
+   * `Drawable` is `ImageBitmap | HTMLImageElement`, neither of which jsdom can
+   * construct, and `releaseImage` is stubbed — so all that matters is that each
+   * decode hands back a distinguishable object, so the release assertions can
+   * prove *which* bitmaps were closed rather than merely how many.
+   */
+  const bitmap = (size: number) =>
+    ({ width: size, height: size }) as unknown as ImageBitmap;
+
+  beforeEach(() => {
+    // No `resetModules` here, and none is needed: the fallback path keeps no
+    // module state. `resolveWebpSupport` skips its cache when there is no worker
+    // and probes directly, and `worker` and `pending` stay untouched. That is
+    // the opposite of the worker path, which caches a worker in a module-level
+    // variable and so needs a fresh import per test.
+    vi.mocked(decodeImage).mockReset().mockResolvedValue(bitmap(4000));
+    vi.mocked(renderVariants).mockReset().mockResolvedValue([]);
+    vi.mocked(releaseImage).mockReset();
+    vi.mocked(supportsWebpEncoding).mockReset().mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("encodes on the main thread when the environment has neither capability", async () => {
+    // The default state, asserted rather than assumed: if a future test
+    // environment gains a real `Worker`, this stops being the fallback and
+    // every test below would quietly pass for the wrong reason.
+    expect(typeof Worker).toBe("undefined");
+    expect(typeof OffscreenCanvas).toBe("undefined");
+
+    const file = photoFile("a.jpg");
+    await processImages([file]);
+
+    expect(decodeImage).toHaveBeenCalledWith(file);
+    expect(renderVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("still falls back when a Worker exists but OffscreenCanvas does not", async () => {
+    // The two capabilities are checked with `&&`, and this is the half that
+    // would be wrong as `||`. A `Worker` is no use on its own: every variant
+    // is drawn on an `OffscreenCanvas`, so an environment with one and not the
+    // other cannot encode anything and must take the main-thread path. Getting
+    // this backwards would construct a worker, post to it, and never resolve —
+    // the form's first paint hangs with no error.
+    vi.stubGlobal("Worker", class {});
+    expect(typeof OffscreenCanvas).toBe("undefined");
+
+    await processImages([photoFile("a.jpg")]);
+
+    expect(renderVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("stamps the probed format on the results, and hands it to the encoder", async () => {
+    // Both halves of one claim. Stamping the result is what the form displays;
+    // passing the same value into `renderVariants` is what actually decides the
+    // bytes. Asserting only the first would pass against a bug that labels every
+    // image `.webp` while writing JPEG — the exact mismatch the extension is
+    // read back off the blob to prevent.
+    vi.mocked(supportsWebpEncoding).mockResolvedValue(false);
+    const [jpeg] = await processImages([photoFile("a.jpg")]);
+    expect(jpeg?.webp).toBe(false);
+    expect(vi.mocked(renderVariants).mock.calls[0]?.[1]).toBe(false);
+
+    vi.mocked(renderVariants).mockClear();
+    vi.mocked(supportsWebpEncoding).mockResolvedValue(true);
+    const [webp] = await processImages([photoFile("b.jpg")]);
+    expect(webp?.webp).toBe(true);
+    expect(vi.mocked(renderVariants).mock.calls[0]?.[1]).toBe(true);
+  });
+
+  it("pairs each result with its own file and dimensions, in order", async () => {
+    // Order is a contract the worker path also has to keep, because it re-maps
+    // the batch against the input by index. Getting it wrong does not throw — a
+    // photo's variants land on the neighbouring photo, and every thumbnail in a
+    // ten-photo artwork is subtly the wrong image.
+    const files = [photoFile("a.jpg"), photoFile("b.jpg")];
+    vi.mocked(decodeImage)
+      .mockResolvedValueOnce(bitmap(4000))
+      .mockResolvedValueOnce(bitmap(100));
+
+    const results = await processImages(files);
+
+    expect(results.map((result) => result.file)).toEqual(files);
+    expect(results.map((result) => result.width)).toEqual([4000, 100]);
+  });
+
+  it("reports progress per file, with the total it was given", async () => {
+    // Once per file rather than once per variant: one file's four variants
+    // encode in well under a second, ten files do not, and a progress bar that
+    // only moves every 400ms is a progress bar nobody can read.
+    const progress: Array<[number, number]> = [];
+
+    await processImages(
+      [photoFile("a.jpg"), photoFile("b.jpg")],
+      (done, total) => progress.push([done, total]),
+    );
+
+    expect(progress).toEqual([
+      [1, 2],
+      [2, 2],
+    ]);
+  });
+
+  it("closes every bitmap it decoded", async () => {
+    // The memory invariant, and the reason `releaseImage` is called at all:
+    // ten unclosed 12-megapixel `ImageBitmap`s is roughly 360 MB. Which bitmaps
+    // were closed is the point — a release of the wrong object leaks just as
+    // surely as no release at all.
+    const decoded = [bitmap(4000), bitmap(100)];
+    vi.mocked(decodeImage)
+      .mockResolvedValueOnce(decoded[0])
+      .mockResolvedValueOnce(decoded[1]);
+
+    await processImages([photoFile("a.jpg"), photoFile("b.jpg")]);
+
+    expect(
+      vi.mocked(releaseImage).mock.calls.map(([source]) => source),
+    ).toEqual(decoded);
+  });
+
+  it("closes the bitmap even when encoding throws", async () => {
+    // The `finally`, which is the whole reason the release is in one. A decode
+    // that throws partway through a batch — one corrupt file, one canvas that
+    // will not allocate — would otherwise strand every bitmap decoded before
+    // it, and the failure is exactly when the browser is already under memory
+    // pressure.
+    const decoded = bitmap(4000);
+    vi.mocked(decodeImage).mockResolvedValueOnce(decoded);
+    vi.mocked(renderVariants).mockRejectedValueOnce(new Error("no canvas"));
+
+    await expect(processImages([photoFile("a.jpg")])).rejects.toThrow(
+      "no canvas",
+    );
+    expect(releaseImage).toHaveBeenCalledWith(decoded);
+  });
+
+  it("probes once for a whole batch", async () => {
+    // Probed before the loop, so ten photos cost one encode rather than ten.
+    // Small — an 8x8 fill — but it is on the critical path of the form's first
+    // paint, and per-file would multiply it by the batch size.
+    await processImages([
+      photoFile("a.jpg"),
+      photoFile("b.jpg"),
+      photoFile("c.jpg"),
+    ]);
+
+    expect(supportsWebpEncoding).toHaveBeenCalledTimes(1);
   });
 });
