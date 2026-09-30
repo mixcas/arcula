@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { entryPrefix, objectName } from "@/services/artworkFiles";
 import { VARIANT_KEYS } from "@/utils/imageVariants";
 import { DOCUMENT_EXTENSIONS } from "@/utils/artworkDocuments";
+import { rulesNamePattern } from "./helpers/rulesSource";
 
 /**
  * The delete sweep, and the prefix it matches on.
@@ -84,5 +85,65 @@ describe("objectName", () => {
     expect(objectName(ARTWORK_ID, ENTRY_ID, "xlarge", "webp")).toBe(
       `${ARTWORK_ID}_${ENTRY_ID}_xlarge.webp`,
     );
+  });
+});
+
+/**
+ * Every name this app can build, against the pattern the rules actually apply.
+ *
+ * The closest thing in the suite to a client↔rules contract test, and the one
+ * that would have caught the bug the other cross-checks exist because of: when
+ * `xlarge` was added to the photo pipeline, the key list in `storage.rules` was
+ * not updated, and **every new photo upload 403'd** — 100% of them, silently
+ * enough that the natural conclusion was "the rules are wrong".
+ *
+ * It was caught by a test, but not by this one: `tests/imageVariants.test.ts`
+ * cross-checks the *key list*, and the rules suite drives a handful of
+ * hand-named fixtures. Neither of those is the claim being made here, which is
+ * that a name produced by `objectName` — the function production calls —
+ * satisfies `isPhotoName` or `isDocumentName` as written. A test of the real
+ * function against the real rules leaves nowhere for the two to drift without
+ * something going red.
+ *
+ * The pattern is read out of `storage.rules` rather than restated, so editing
+ * the rules is what makes this fail, and editing `objectName` is what makes it
+ * fail. Both are the point.
+ */
+describe("the names the client builds, against the rules that accept them", () => {
+  it("accepts every photo name the client can produce", () => {
+    // The cross product, because a name is only right if it is right for every
+    // key and every extension at once — the two are independent parameters and
+    // a mismatch in either is a 403.
+    const pattern = rulesNamePattern("isPhotoName", ARTWORK_ID);
+    for (const key of [...VARIANT_KEYS, "original"] as const) {
+      for (const extension of DOCUMENT_EXTENSIONS) {
+        const name = objectName(ARTWORK_ID, ENTRY_ID, key, extension);
+        // A photo cannot be a PDF, so that combination is not one the client
+        // produces; asserting it would be asserting a name nobody writes.
+        if (extension === "pdf") continue;
+        expect(pattern.test(name), `${name} would be denied`).toBe(true);
+      }
+    }
+  });
+
+  it("accepts every document name the client can produce", () => {
+    const pattern = rulesNamePattern("isDocumentName", ARTWORK_ID);
+    for (const key of [...VARIANT_KEYS, "original"] as const) {
+      for (const extension of DOCUMENT_EXTENSIONS) {
+        const name = objectName(ARTWORK_ID, ENTRY_ID, key, extension);
+        expect(pattern.test(name), `${name} would be denied`).toBe(true);
+      }
+    }
+  });
+
+  it("would deny a name carrying a key the client does not generate", () => {
+    // The negative, so the positive above is not just "the pattern accepts
+    // something". `objectName` takes any string, and a caller that passed a key
+    // outside the table would get a name the rules refuse — the 403 again, this
+    // time from a value nothing constrains.
+    const pattern = rulesNamePattern("isPhotoName", ARTWORK_ID);
+    expect(
+      pattern.test(objectName(ARTWORK_ID, ENTRY_ID, "thumbnail", "webp")),
+    ).toBe(false);
   });
 });

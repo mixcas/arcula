@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_IMAGE_TYPES,
@@ -13,6 +11,11 @@ import {
   type ImageVariantSpec,
   type SquareVariantSpec,
 } from "@/utils/imageVariants";
+import {
+  rulesByteCeiling,
+  rulesKeyList,
+  rulesNamePattern,
+} from "./helpers/rulesSource";
 
 const spec = (key: string): ImageVariantSpec => {
   const found = IMAGE_VARIANTS.find((variant) => variant.key === key);
@@ -46,39 +49,23 @@ describe("IMAGE_VARIANTS", () => {
     expect(new Set(VARIANT_KEYS).size).toBe(IMAGE_VARIANTS.length);
   });
 
-  it("caps at ten photos and matches the rules' 10 MiB ceiling", () => {
+  it("caps the photo at the byte ceiling the rules enforce", () => {
+    // Cross-checked against `acceptablePhotoUpload` rather than a literal. The
+    // form's own cap is only useful if it agrees with the one the server
+    // enforces, and the two live in different files — the same gap that let the
+    // key list drift once already, where the symptom was a 403 on every new
+    // upload rather than anything visible in review.
+    expect(MAX_IMAGE_BYTES).toBe(rulesByteCeiling("acceptablePhotoUpload"));
+  });
+
+  it("caps a photo at ten, which the rules have no opinion about", () => {
+    // A client-only decision, and deliberately not cross-checked: `storage.rules`
+    // counts nothing. Enforced in three places — the hook's rejection, its
+    // `hasRoom`, and the dropzone's `maxFiles` — and the number itself is a
+    // product choice, not a contract with the server.
     expect(MAX_ARTWORK_PHOTOS).toBe(10);
-    expect(MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
   });
 });
-
-/**
- * The key list the storage rules accept, read out of `storage.rules` itself.
- *
- * This is the cross-check that was missing when a `.bin` PDF name went
- * straight through: every rules test hand-wrote its fixture names and every
- * component test stubbed the service, so the two sides could agree with each
- * other and still disagree with what the client produces. Reading the rule off
- * disk means the name the client builds and the name the rules accept are
- * compared by a test rather than by a human remembering to edit both files.
- */
-const rulesKeyList = (fn: "isPhotoName" | "isDocumentName"): string[] => {
-  const source = readFileSync(
-    fileURLToPath(new URL("../storage.rules", import.meta.url)),
-    "utf8",
-  );
-  const start = source.indexOf(`function ${fn}(`);
-  if (start === -1) {
-    throw new Error(`no ${fn} in storage.rules`);
-  }
-  const body = source.slice(start);
-  // The key alternation is the first `_(...)` after the function opens.
-  const alternation = /_\(([^)]+)\)/.exec(body);
-  if (!alternation) {
-    throw new Error(`could not read the key list out of ${fn}`);
-  }
-  return alternation[1].split("|");
-};
 
 describe("storage.rules key list", () => {
   it("accepts every variant the client generates, plus `original`", () => {
@@ -97,16 +84,36 @@ describe("storage.rules key list", () => {
     ]);
   });
 
-  it("lets `xlarge` through where `large` would not have matched it", () => {
-    // The regex is anchored on both ends, so `large` cannot match an `xlarge`
-    // object name — but asserting the alternation is right is only half the
-    // story. This is the shape that actually gets written.
+  it("lets `xlarge` through, and does not let `large` stand in for it", () => {
+    // Read out of the rules rather than written out here. A hand-copied
+    // alternation sitting alongside the real one is the shape of thing that
+    // lets a forgotten edit through: drop `xlarge` from `storage.rules` and from
+    // this regex and the test still passes while every new photo 403s.
     const artworkId = "art1";
-    const name = `${artworkId}_aaaaaaaaaaaaaaaaaaaa_xlarge.webp`;
-    const pattern = new RegExp(
-      `^${artworkId}_[A-Za-z0-9]{20}_(xlarge|square_lg|square_sm|large|medium|original)\\.(webp|jpg|png)$`,
-    );
-    expect(pattern.test(name)).toBe(true);
+    const photoId = "aaaaaaaaaaaaaaaaaaaa";
+    const pattern = rulesNamePattern("isPhotoName", artworkId);
+
+    expect(pattern.test(`${artworkId}_${photoId}_xlarge.webp`)).toBe(true);
+    // The anchor is what makes this safe. `matches` is a partial match, so
+    // without the trailing `$` the substring `large` inside `xlarge` would
+    // satisfy the alternation and an unknown key would be accepted.
+    expect(pattern.test(`${artworkId}_${photoId}_xlarge.webp.bak`)).toBe(false);
+  });
+
+  it("refuses a name whose id or key is not one of ours", () => {
+    // The other direction, and the reason the list matters: a key outside the
+    // alternation is how a client could scatter objects under an artwork's
+    // prefix, which is exactly what the rule exists to prevent.
+    const artworkId = "art1";
+    const photoId = "aaaaaaaaaaaaaaaaaaaa";
+    const pattern = rulesNamePattern("isPhotoName", artworkId);
+
+    // A key the client cannot produce, and one that is only a prefix of a real
+    // key — the case a `contains` check would let through.
+    expect(pattern.test(`${artworkId}_${photoId}_thumbnail.webp`)).toBe(false);
+    // A short id: the pattern asks for exactly 20, so an id of another length
+    // cannot satisfy it however the object arrived.
+    expect(pattern.test(`${artworkId}_short_xlarge.webp`)).toBe(false);
   });
 });
 
