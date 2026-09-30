@@ -9,6 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { basicxSkin } from "@/skins/basicx";
+import { emblaDuration } from "@/skins/basicx/BasicxSection";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
 import type { Artwork, Collection, ImageVariantKey } from "@/types";
@@ -169,6 +170,48 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+/**
+ * Seconds to embla frames.
+ *
+ * The only test in this file that renders nothing, and deliberately: every wrong
+ * answer here is a *plausible* slideshow rather than a broken one, so nothing
+ * about a rendered section can tell a right duration from a wrong one. A test
+ * that clicked the carousel and watched it move would pass identically for every
+ * one of these values, because jsdom has no frames to move in.
+ *
+ * The property under test is the unit, not the number: embla's `ScrollBody`
+ * divides by a frame count, so a value read as milliseconds is off by a factor
+ * of about a thousand and a 0.5s transition becomes an eight-second slide.
+ */
+describe("emblaDuration", () => {
+  it("converts seconds to frames, not to milliseconds", () => {
+    // Half a second at 60fps is 30 frames. Passing `500` — the millisecond
+    // reading — is the bug this function exists to make impossible, and it
+    // would render as a 500-frame (eight second) slide.
+    expect(emblaDuration(0.5)).toBe(30);
+    expect(emblaDuration(1)).toBe(60);
+  });
+
+  it("answers 0 for zero and below, which is embla's instant jump", () => {
+    // Not just `0`: a negative option value would otherwise become a negative
+    // frame count, and embla's own special case is `!scrollDuration` rather than
+    // `scrollDuration === 0`.
+    expect(emblaDuration(0)).toBe(0);
+    expect(emblaDuration(-1)).toBe(0);
+  });
+
+  it("never rounds a live transition down to nothing", () => {
+    // `Math.max(1, …)` is the floor. A positive duration that rounded to 0
+    // would be an instant jump — a transition the visitor explicitly asked for,
+    // silently switched off.
+    expect(emblaDuration(0.01)).toBe(1);
+  });
+
+  it("rounds to whole frames, since a fraction is not a frame count", () => {
+    expect(emblaDuration(0.52)).toBe(31);
+  });
 });
 
 describe("Basicx — the section per artwork", () => {

@@ -412,6 +412,47 @@ describe("PhotoUploader", () => {
 });
 
 /**
+ * Renders the hook alone, for the assertions that are about the hook's decisions
+ * rather than about the grid.
+ *
+ * `mergeUploaded` and `commit` are both what the page calls, and no rendering of
+ * the form ever shows either result — both bugs were invisible until the artwork
+ * was read back. So these are driven through the hook directly.
+ *
+ * The hook is handed back through an effect rather than assigned during render —
+ * React's rules are right that reassigning a variable from outside the component
+ * is a side effect, and a test only needs the value a tick later anyway. The
+ * returned value is read *after* `run`, so it is the post-reorder hook and not a
+ * snapshot of the pre-reorder one.
+ */
+const withHook = async (
+  initialPhotos: ArtworkPhoto[],
+  run: (photos: UseArtworkPhotos) => Promise<void>,
+): Promise<UseArtworkPhotos> => {
+  let latest: UseArtworkPhotos | null = null;
+  const Probe: React.FC = () => {
+    const photos = useArtworkPhotos({ initialPhotos });
+    useEffect(() => {
+      latest = photos;
+    }, [photos]);
+    return null;
+  };
+  render(
+    <MantineProvider>
+      <Probe />
+    </MantineProvider>,
+  );
+  // The mount-time probe is a state update a tick after render; settling it
+  // first keeps `addFiles` from racing the effect above.
+  await waitFor(() => {
+    expect(latest).not.toBeNull();
+    expect(variantFormatIsWebp).toHaveBeenCalled();
+  });
+  await run(latest as UseArtworkPhotos);
+  return latest as UseArtworkPhotos;
+};
+
+/**
  * The order the user set has to survive the save.
  *
  * Driven through the hook rather than the tile grid, because `mergeUploaded` is
@@ -428,42 +469,6 @@ describe("mergeUploaded", () => {
       contentType: "image/jpeg",
     },
   });
-
-  /**
-   * Renders the hook alone; every assertion here is about the merge.
-   *
-   * The hook is handed back through an effect rather than assigned during
-   * render — React's rules are right that reassigning a variable from outside
-   * the component is a side effect, and a test only needs the value a tick
-   * later anyway. The returned value is read *after* `run`, so it is the
-   * post-reorder hook and not a snapshot of the pre-reorder one.
-   */
-  const withHook = async (
-    initialPhotos: ArtworkPhoto[],
-    run: (photos: UseArtworkPhotos) => Promise<void>,
-  ): Promise<UseArtworkPhotos> => {
-    let latest: UseArtworkPhotos | null = null;
-    const Probe: React.FC = () => {
-      const photos = useArtworkPhotos({ initialPhotos });
-      useEffect(() => {
-        latest = photos;
-      }, [photos]);
-      return null;
-    };
-    render(
-      <MantineProvider>
-        <Probe />
-      </MantineProvider>,
-    );
-    // The mount-time probe is a state update a tick after render; settling it
-    // first keeps `addFiles` from racing the effect above.
-    await waitFor(() => {
-      expect(latest).not.toBeNull();
-      expect(variantFormatIsWebp).toHaveBeenCalled();
-    });
-    await run(latest as UseArtworkPhotos);
-    return latest as UseArtworkPhotos;
-  };
 
   it("keeps a newly added photo where the user put it", async () => {
     const photos = await withHook(
@@ -538,6 +543,94 @@ describe("mergeUploaded", () => {
       "b.jpg",
       "c.jpg",
     ]);
+  });
+});
+
+/**
+ * Whether the photos changed, and what to store when they did.
+ *
+ * `commit` is the `else` branch of the Edit page's save: with nothing pending it
+ * is the only thing that can report a change to the stored list, and a `null`
+ * from it leaves `photos` out of the `updateDoc` entirely. So the two decisions
+ * are one — a `dirty` that misses a real change does not merely fail to save, it
+ * fails *silently*, behind a success toast.
+ *
+ * Documents' equivalents are pinned in `documentsUploader.test.tsx`. Photos have
+ * the stricter comparison, and this is the block that says so.
+ */
+describe("commit", () => {
+  it("leaves the field out of a save when nothing changed", async () => {
+    // The reason the method exists: a save that only touched the title must not
+    // rewrite every storage URL and reorder the document for nothing.
+    const photos = await withHook(
+      [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
+      () => {},
+    );
+
+    expect(photos.dirty).toBe(false);
+    expect(photos.commit()).toBeNull();
+  });
+
+  it("is not dirty when the photos are only looked at", async () => {
+    // `dirty` reads state, so a render on its own must not count as a change.
+    const photos = await withHook([photo("a", 0, "a.jpg")], () => {});
+
+    expect(photos.dirty).toBe(false);
+  });
+
+  it("commits the reordered list when a photo is dragged", async () => {
+    // The case this whole comparison exists for. Same two photos, same `order`
+    // numbers, different sequence — which is exactly what the documents'
+    // *set* comparison is blind to. Reordering the photo list is the one thing
+    // this form exists to let someone do, so a `dirty` that read the order as a
+    // set would discard the drag on save and report success.
+    const photos = await withHook(
+      [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
+      (hook) => {
+        act(() => {
+          hook.reorder(1, 0);
+        });
+      },
+    );
+
+    expect(photos.dirty).toBe(true);
+    const committed = photos.commit();
+    expect(committed?.map((entry) => entry.id)).toEqual(["b", "a"]);
+    // And renumbered from the new positions, or the stored `order` would go on
+    // claiming `a` is first while it sits second.
+    expect(committed?.map((entry) => entry.order)).toEqual([0, 1]);
+  });
+
+  it("commits the stored list when a photo is removed", async () => {
+    // The other way the stored list can change. Length differs, so even a set
+    // comparison would catch this one — it is the reorder above that it misses.
+    const photos = await withHook(
+      [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
+      (hook) => {
+        act(() => {
+          hook.remove(hook.entries[0].key);
+        });
+      },
+    );
+
+    expect(photos.commit()?.map((entry) => entry.id)).toEqual(["b"]);
+  });
+
+  it("is dirty when a photo has been added but not yet uploaded", async () => {
+    // `commit` is not called on this path — the page writes
+    // `mergeUploaded(uploaded)` instead — but `dirty` is what gates the branch
+    // that reaches it, so a newly added photo has to make it true or the upload
+    // would never be attempted.
+    let added = 0;
+    const photos = await withHook([photo("a", 0, "a.jpg")], async (hook) => {
+      await act(async () => {
+        const result = await hook.addFiles([jpegFile("b.jpg")]);
+        added = result.added.length;
+      });
+    });
+
+    expect(added).toBe(1);
+    expect(photos.dirty).toBe(true);
   });
 });
 

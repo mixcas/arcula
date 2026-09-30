@@ -74,8 +74,13 @@ const chevronCursor = (direction: "left" | "right"): string => {
  * `0` is special-cased by embla (`isInstant = !scrollDuration`) and jumps
  * straight to the target, which is what both `transitionSeconds: 0` and
  * `prefers-reduced-motion` want.
+ *
+ * Exported for its test rather than reached through a rendered section: the
+ * conversion is a pure function whose wrong answers are all *plausible* — a
+ * slideshow that is merely slow rather than broken — so nothing about the
+ * rendered output distinguishes a right one from a wrong one.
  */
-const emblaDuration = (seconds: number): number =>
+export const emblaDuration = (seconds: number): number =>
   seconds <= 0 ? 0 : Math.max(1, Math.round(seconds * 60));
 
 /**
