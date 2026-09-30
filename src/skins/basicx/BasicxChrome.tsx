@@ -33,8 +33,8 @@
  * The nav is left to its two-column row for now; the space for a second line
  * is reserved and deliberately unrendered. An empty box is indistinguishable
  * from no box, and the reserved slot is better recorded here than as markup.
- * `collection.description` is the obvious thing to put in it when it is wanted;
- * the field is written at creation and currently displayed nowhere.
+ * (`collection.description` is *not* the thing for it — see the footer
+ * below, which is where the description actually lives.)
  */
 
 import React from "react";
@@ -66,16 +66,37 @@ interface BasicxChromeProps {
    * there is only ever one artwork there.
    */
   artwork: FooterArtwork | null;
+  /**
+   * The collection description, already trimmed. Blank means the footer's
+   * right slot renders the spacer and nothing else.
+   */
+  description: string;
+  /**
+   * Whether the description may show. `BasicxSkin` decides: only on `home`,
+   * only while the visitor is on the first artwork at an early-enough photo,
+   * and one-way (once dismissed it stays dismissed).
+   */
+  descriptionVisible: boolean;
+  /**
+   * How long the fade-out takes in milliseconds. `0` under
+   * `prefers-reduced-motion`, matching the carousel's instant transition.
+   */
+  descriptionFadeMs: number;
 }
 
 const LINK_COLOR = "rgba(0, 0, 0, 0.85)";
 const DIM_COLOR = "rgba(0, 0, 0, 0.4)";
+/** How far the description may stretch into the viewport from the right. */
+const DESCRIPTION_MAX_WIDTH_REM = "22rem";
 
 const BasicxChrome: React.FC<BasicxChromeProps> = ({
   collectionTitle,
   collectionPath,
   view,
   artwork,
+  description,
+  descriptionVisible,
+  descriptionFadeMs,
 }) => (
   <>
     {/*
@@ -160,10 +181,11 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
     </Box>
 
     {/*
-      Footer: the artwork in view, as two stacked lines — the title bold on top
-      and the artist beneath it, dimmer because it is the quieter of the two.
-      The title links to the artwork's own public view, which is what makes the
-      homepage a way into its works rather than only a way past them.
+      Footer: the artwork in view as two stacked lines — the title bold on top
+      and the artist beneath it, dimmer because it is the quieter of the two —
+      against the collection description, pinned to the bottom-right of the
+      same bar. The title links to the artwork's own public view, which is what
+      makes the homepage a way into its works rather than only a way past them.
 
       Padding is 1rem at the sides, 1.7rem above, 1rem below.
     */}
@@ -178,41 +200,79 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
       pb="md"
       style={{ zIndex: 2, pointerEvents: "none" }}
     >
-      <Stack gap={0}>
-        {/* A non-breaking space on each line holds its height until the first
-            section reports itself, so the bar does not jump as it fills in. */}
-        {/*
-          Linked on `home` only. On the artwork view this path is the page the
-          visitor is already on, so a link there is a control that navigates
-          nowhere — and the `Text` below is the same line, styled identically,
-          so the two branches differ in behaviour and not in appearance.
+      <Group justify="space-between" align="flex-end" gap="xl">
+        <Stack gap={0}>
+          {/* A non-breaking space on each line holds its height until the first
+              section reports itself, so the bar does not jump as it fills in. */}
+          {/*
+            Linked on `home` only. On the artwork view this path is the page the
+            visitor is already on, so a link there is a control that navigates
+            nowhere — and the `Text` below is the same line, styled identically,
+            so the two branches differ in behaviour and not in appearance.
 
-          The `pointerEvents: "auto"` is not optional and neither is its absence
-          from the nav: the footer is `none`, that inherits, and without this the
-          click lands on the carousel. See the note at the top of this file.
-        */}
-        {artwork?.path && view === "home" ? (
-          <Anchor
-            component={Link}
-            to={artwork.path}
-            underline="never"
-            size="bodycopy"
-            fw={550}
-            lh={1.2}
-            c={LINK_COLOR}
-            style={{ pointerEvents: "auto" }}
-          >
-            {artwork.title}
-          </Anchor>
-        ) : (
-          <Text size="bodycopy" fw={550} lh={1.2} c={LINK_COLOR}>
-            {artwork?.title ?? "\u00A0"}
+            The `pointerEvents: "auto"` is not optional and neither is its
+            absence from the nav: the footer is `none`, that inherits, and
+            without this the click lands on the carousel. See the note at the
+            top of this file.
+          */}
+          {artwork?.path && view === "home" ? (
+            <Anchor
+              component={Link}
+              to={artwork.path}
+              underline="never"
+              size="bodycopy"
+              fw={550}
+              lh={1.2}
+              c={LINK_COLOR}
+              style={{ pointerEvents: "auto" }}
+            >
+              {artwork.title}
+            </Anchor>
+          ) : (
+            <Text size="bodycopy" fw={550} lh={1.2} c={LINK_COLOR}>
+              {artwork?.title ?? "\u00A0"}
+            </Text>
+          )}
+          <Text size="bodycopy" fw={450} lh={1.2} c={DIM_COLOR}>
+            {artwork?.artistName ?? "\u00A0"}
           </Text>
+        </Stack>
+
+        {/*
+          The description, when the collection has one. Fades out in place:
+          `visibility` transitions as a discrete step that stays `visible`
+          until the end of the duration, so the text is readable while it fades
+          and gone (not selectable, not announced) after it. The copy survives
+          in the DOM at opacity 0 so hiding is not a remount — and it never
+          comes back, because `BasicxSkin` feeds its visibility from monotonic
+          state (the farthest artwork reached, the highest photo index). 
+          `aria-hidden` is applied immediately rather than when the fade ends.
+        */}
+        {description.length === 0 ? null : (
+          <Box
+            style={{
+              opacity: descriptionVisible ? 1 : 0,
+              visibility: descriptionVisible ? "visible" : "hidden",
+              transition: `opacity ${descriptionFadeMs}ms, visibility ${descriptionFadeMs}ms`,
+              maxWidth: DESCRIPTION_MAX_WIDTH_REM,
+              textAlign: "right",
+              overflowWrap: "anywhere",
+            }}
+            aria-hidden={!descriptionVisible}
+            px="sm"
+          >
+            <Text
+              size="bodycopy"
+              fw={450}
+              lh={1.2}
+              c={DIM_COLOR}
+              style={{ whiteSpace: "pre-line" }}
+            >
+              {description}
+            </Text>
+          </Box>
         )}
-        <Text size="bodycopy" fw={450} lh={1.2} c={DIM_COLOR}>
-          {artwork?.artistName ?? "\u00A0"}
-        </Text>
-      </Stack>
+      </Group>
     </Box>
   </>
 );

@@ -12,7 +12,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Collection } from "../types";
+import { Collection, CollectionUpdate } from "../types";
 
 const COLLECTIONS_COLLECTION = "collections";
 
@@ -82,7 +82,7 @@ export const collectionService = {
   // Update a collection
   async updateCollection(
     collectionId: string,
-    updateData: Partial<Collection>,
+    updateData: CollectionUpdate,
   ): Promise<void> {
     try {
       const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);

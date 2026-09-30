@@ -39,6 +39,16 @@ export interface Collection {
   updatedAt?: Timestamp;
 }
 
+// Payload for collectionService.updateCollection.
+//
+// `updateDoc` merges, so a key that is simply absent leaves the stored field
+// alone — which would make it impossible to clear a value once it is set. Any
+// field may therefore also carry a `deleteField()` sentinel to remove it. Same
+// mapped-type shape and rationale as `ArtworkUpdate`.
+export type CollectionUpdate = {
+  [K in keyof Omit<Collection, "id">]?: Collection[K] | FieldValue;
+};
+
 // Artwork type
 //
 // Only `title` and `artistName` are required; every other descriptive field is

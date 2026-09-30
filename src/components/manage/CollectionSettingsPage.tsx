@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { deleteField } from "firebase/firestore";
 import {
   Box,
   Container,
   Text,
   TextInput,
+  Textarea,
   Switch,
   SegmentedControl,
   PasswordInput,
@@ -28,7 +30,7 @@ import {
   resolveSkinOptions,
 } from "@/skins/registry";
 import type { SkinOptionValue } from "@/skins/types";
-import type { Collection } from "@/types";
+import type { CollectionUpdate } from "@/types";
 
 /** Shallow equality over the option bag. Order does not matter, values do. */
 const optionsChanged = (
@@ -53,6 +55,13 @@ const CollectionSettingsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [collectionName, setCollectionName] = useState("");
+  // The description as typed, and the one that was loaded. Kept apart for the
+  // same reason `loadedName` is (below): the save compares against the loaded
+  // value, and folding them into one field would make "changed" always true.
+  const [description, setDescription] = useState("");
+  const [loadedDescription, setLoadedDescription] = useState<string | null>(
+    null,
+  );
   // The public/private default for a brand-new collection is public
   // (collectionService.createCollection); until the fetch resolves nothing is
   // rendered anyway (loading gate below), so this initial value only matters as
@@ -106,6 +115,8 @@ const CollectionSettingsPage: React.FC = () => {
         } else {
           setCollectionName(collectionData.name ?? "");
           setLoadedName(collectionData.name ?? "");
+          setDescription(collectionData.description ?? "");
+          setLoadedDescription(collectionData.description ?? "");
           setIsPublic(Boolean(collectionData.isPublic));
 
           // Resolved through the registry rather than stored raw, so the form
@@ -163,11 +174,22 @@ const CollectionSettingsPage: React.FC = () => {
 
     try {
       const name = collectionName.trim();
-      // `skin`/`skinOptions` are written only when they actually differ.
-      // `updateCollection` is a merge, so writing an identical bag is a wasted
-      // write, and `updatedAt` is server-stamped — a no-op save would still move
-      // it and read as a real change to anything watching the document.
-      const update: Partial<Collection> = { name, isPublic };
+      // `skin`/`skinOptions`/`description` are written only when they actually
+      // differ. `updateCollection` is a merge, so writing an identical bag is a
+      // wasted write, and `updatedAt` is server-stamped — a no-op save would
+      // still move it and read as a real change to anything watching the
+      // document.
+      //
+      // The description is cleared with `deleteField()` rather than an empty
+      // string, so a blank description reads as an absent field (the same
+      // "cannot clear a value once set" merge trap that motivates
+      // `CollectionUpdate`).
+      const update: CollectionUpdate = { name, isPublic };
+      const descriptionText = description.trim();
+      if (descriptionText !== (loadedDescription?.trim() ?? "")) {
+        update.description =
+          descriptionText === "" ? deleteField() : descriptionText;
+      }
       if (skin !== loadedSkin) {
         update.skin = skin;
       }
@@ -216,6 +238,18 @@ const CollectionSettingsPage: React.FC = () => {
             value={collectionName}
             onChange={(e) => setCollectionName(e.target.value)}
             required
+            mb="md"
+          />
+
+          <Textarea
+            label="Description"
+            description="Shown on the public view's first artwork."
+            placeholder="Enter collection description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.currentTarget.value)}
+            autosize
+            minRows={3}
+            maxRows={8}
             mb="md"
           />
 

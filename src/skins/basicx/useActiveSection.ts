@@ -16,6 +16,16 @@
  * listener that measures every section on every frame is exactly the work the
  * observer does off the main thread, and it would need the same `root` anyway.
  *
+ * ## `farthestIndex` is `activeId`'s one-way sibling
+ *
+ * The footer names the artwork in view, so `activeId` must follow the scroll
+ * back up as well as down. One-way presentations — the collection description
+ * is gone for the visit once the visitor passes the first artwork — instead
+ * derive from `farthestIndex`, which only ever grows: the observer sets it
+ * when a section becomes active, comparing document position *there* rather
+ * than in render, so the monotonic rule is expressed as data rather than as a
+ * latch the skin would have to keep.
+ *
  * ## The root is the stage, not the viewport
  *
  * `.stage` is its own scroller (`overflow-y: auto`) so that no global CSS is
@@ -49,6 +59,16 @@ export interface ActiveSection {
   /** The section crossing the centre of the stage. `null` until one does. */
   activeId: string | null;
   /**
+   * The index in `ids` of the farthest section the visitor has reached.
+   *
+   * Monotonic on purpose, and the deliberate contrast with `activeId`, which
+   * follows the scroll back up — the skin's footer must name the artwork in
+   * view again after a scroll up. One-way presentations (the collection
+   * description never re-appearing once dismissed) are derived from this
+   * instead: a monotonic input makes the one-way latch a plain value.
+   */
+  farthestIndex: number;
+  /**
    * Sections whose content should be mounted.
    *
    * Grows and never shrinks. Removing a section when it scrolls away would
@@ -67,6 +87,14 @@ export const useActiveSection = (
   const [nearIds, setNearIds] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+  // The farthest section ever made active, and why it is a second state rather
+  // than `activeId`: the footer names whatever is currently in view, so `activeId`
+  // must follow the scroll in both directions, while the description's "once
+  // dismissed, gone for the visit" needs the *farthest* position, which only
+  // ever grows. The observer callback is the one place either may be set — it
+  // runs outside render, so the monotonic update below is how the one-way rule
+  // is expressed without a latch.
+  const [farthestId, setFarthestId] = useState<string | null>(null);
 
   // Both directions of the element <-> id mapping. The reverse one exists so a
   // detach is O(1) instead of a scan over every registered section.
@@ -95,6 +123,15 @@ export const useActiveSection = (
     }
   }, []);
 
+  // The centre observer compares document positions of sections, so it needs
+  // `ids` when it fires. `ids` is a fresh array each render, and a ref updated
+  // here — in an effect, the sanctioned place to touch refs — is how the
+  // callback sees the latest order without being recreated on every render.
+  const idsRef = useRef<readonly string[]>([]);
+  useEffect(() => {
+    idsRef.current = ids;
+  }, [ids]);
+
   useEffect(() => {
     const stage = root.current;
     if (!stage || typeof IntersectionObserver === "undefined") {
@@ -116,6 +153,15 @@ export const useActiveSection = (
         const id = last && idOf.current.get(last.target as HTMLElement);
         if (id !== undefined) {
           setActiveId(id);
+          // The farthest section only ever moves forward. Comparing document
+          // positions here — rather than below, in render — is what keeps the
+          // monotonic rule out of the rendered output, where the react-hooks
+          // rules would rightly object to a state write.
+          setFarthestId((previous) => {
+            const previousIndex =
+              previous === null ? -1 : idsRef.current.indexOf(previous);
+            return idsRef.current.indexOf(id) > previousIndex ? id : previous;
+          });
         }
       },
       { root: stage, rootMargin: "-50% 0px -50% 0px", threshold: 0 },
@@ -198,9 +244,17 @@ export const useActiveSection = (
       ? new Set<string>(ids)
       : nearIds;
 
+  // Same fallback as `activeId` below: without IntersectionObserver nothing
+  // ever reports a section as reached, so the honest answer for a degraded
+  // browser is that the visitor never passed the first artwork. `Math.max`
+  // guards the (impossible) stale-id case: an id that left `ids` reads as -1.
+  const farthestIndex =
+    farthestId === null ? 0 : Math.max(0, ids.indexOf(farthestId));
+
   return {
     register,
     activeId: activeId ?? ids[0] ?? null,
+    farthestIndex,
     mountedIds,
   };
 };

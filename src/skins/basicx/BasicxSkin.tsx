@@ -27,7 +27,7 @@
  * ref, not left on the default viewport root.
  */
 
-import React, { useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Box } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
@@ -35,6 +35,7 @@ import BasicxChrome, { type FooterArtwork } from "./BasicxChrome";
 import BasicxSection from "./BasicxSection";
 import { basicxOptions } from "./options";
 import { useActiveSection } from "./useActiveSection";
+import { descriptionDismissed } from "./description";
 import type { SkinProps } from "@/skins/types";
 
 /**
@@ -46,6 +47,13 @@ import type { SkinProps } from "@/skins/types";
  * controls and then swap them for tap zones.
  */
 const DESKTOP_QUERY = "(min-width: 36em)";
+
+/**
+ * How long the description's fade-out takes. A named constant because it is
+ * the chrome's single animation and the number is the spec; `0` under
+ * `prefers-reduced-motion`, which is the same treatment the carousel gets.
+ */
+const DESCRIPTION_FADE_MS = 400;
 
 const BasicxSkin: React.FC<SkinProps> = ({
   collection,
@@ -60,14 +68,36 @@ const BasicxSkin: React.FC<SkinProps> = ({
   const desktop = useMediaQuery(DESKTOP_QUERY, true);
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
+  // The description is a visitor-facing presentation choice, not a skin
+  // option: `BasicxSkin` decides from what is actually in view, which an owner
+  // preference cannot express. The photo index each section reports lands
+  // here, keyed by artwork id — and as the *max* ever reported, because that
+  // is what makes "once dismissed, gone for the visit" a derived value; the
+  // section reports from embla's select event, so the max is written in an
+  // event handler where the react-hooks rules sanction state updates.
+  const [photoIndexes, setPhotoIndexes] = useState<Record<string, number>>({});
+  const onPhotoIndexChange = useCallback((id: string, index: number) => {
+    setPhotoIndexes((current) => {
+      const highest = Math.max(current[id] ?? 0, index);
+      return highest === current[id] ? current : { ...current, [id]: highest };
+    });
+  }, []);
+
   const ids = artworks.map((artwork) => artwork.id);
-  const { register, activeId, mountedIds } = useActiveSection(stage, ids);
+  const { register, activeId, farthestIndex, mountedIds } = useActiveSection(
+    stage,
+    ids,
+  );
 
   // The footer names whatever is in view, so it has to follow the scroll on the
   // homepage. The fallback to the first artwork is what makes the footer
   // correct immediately — and is the whole of the artwork view's behaviour,
   // where there is only ever one.
-  const active = artworks.find((artwork) => artwork.id === activeId) ?? null;
+  const activeIndex = Math.max(
+    0,
+    artworks.findIndex((artwork) => artwork.id === activeId),
+  );
+  const active = artworks[activeIndex] ?? null;
 
   // Resolved here rather than in the chrome so the chrome never learns how a
   // path is built. `artworkPath` is the shell's, so a skin cannot invent a URL
@@ -80,6 +110,24 @@ const BasicxSkin: React.FC<SkinProps> = ({
       }
     : null;
 
+  // The description is an introduction, so it accompanies exactly the moment
+  // the visitor starts at: the first photo of the first artwork. Both inputs
+  // below are monotonic — `farthestIndex` grows with the scroll, `photoIndexes`
+  // keeps the max reached in the artwork in view — so the "once hidden, never
+  // shown again" rule is a plain derived value rather than a latch. A latch
+  // would have to be written from within a render, which the react-hooks rules
+  // correctly refuse. The artwork view never shows it at all: it is the
+  // introduction to the collection, and a visitor on one artwork has already
+  // stepped past the introduction, so the view gate sits here.
+  const descriptionText = collection.description?.trim() ?? "";
+  const descriptionVisible =
+    view === "home" &&
+    descriptionText.length > 0 &&
+    !descriptionDismissed({
+      artworkIndex: farthestIndex,
+      photoIndex: photoIndexes[active?.id ?? ""] ?? 0,
+    });
+
   return (
     <Box pos="relative" mih="100dvh">
       <BasicxChrome
@@ -87,6 +135,9 @@ const BasicxSkin: React.FC<SkinProps> = ({
         collectionPath={collectionPath}
         view={view}
         artwork={footerArtwork}
+        description={descriptionText}
+        descriptionVisible={descriptionVisible}
+        descriptionFadeMs={reduceMotion ? 0 : DESCRIPTION_FADE_MS}
       />
 
       {/*
@@ -121,6 +172,7 @@ const BasicxSkin: React.FC<SkinProps> = ({
             desktop={desktop}
             transitionSeconds={transitionSeconds}
             reduceMotion={reduceMotion}
+            onPhotoIndexChange={onPhotoIndexChange}
           />
         ))}
       </Box>

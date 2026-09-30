@@ -34,7 +34,7 @@
  *   core `Transition`, losing everything in the paragraph above for one effect.
  */
 
-import React, { useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Box, Image, UnstyledButton } from "@mantine/core";
 import { Carousel } from "@mantine/carousel";
 import type { EmblaCarouselType } from "embla-carousel";
@@ -126,6 +126,16 @@ interface BasicxSectionProps {
   desktop: boolean;
   transitionSeconds: number;
   reduceMotion: boolean;
+  /**
+   * Reports the index of the photo in view within this section's carousel, so
+   * the skin can dismiss content that accompanies only the first photo. A
+   * section with one photo or not yet mounted reports nothing and reads as 0.
+   *
+   * The artwork id is part of the signature because the skin keys its photo
+   * record by it — which also makes the callback itself stable, so the
+   * subscription below can capture it without a "latest value" ref.
+   */
+  onPhotoIndexChange?: (artworkId: string, index: number) => void;
 }
 
 const BasicxSection: React.FC<BasicxSectionProps> = ({
@@ -135,10 +145,46 @@ const BasicxSection: React.FC<BasicxSectionProps> = ({
   desktop,
   transitionSeconds,
   reduceMotion,
+  onPhotoIndexChange,
 }) => {
   const embla = useRef<EmblaCarouselType | null>(null);
   const photos = sortPhotos(artwork.photos);
   const navigable = photos.length > 1;
+
+  // Only report a change, so the parent's record does not get written on
+  // every `select` with a value it already has.
+  const lastReported = useRef(0);
+
+  // The embla instance does not exist when this section's effects first run:
+  // `useEmblaCarousel` creates it inside its *own* effect and re-renders the
+  // carousel, and only on that later pass does `Carousel` call `getEmblaApi`.
+  // So the `select` subscription is attached there, not from an effect that
+  // would see a null ref and never re-run. `Carousel` re-invokes the callback
+  // whenever its own select bookkeeping re-runs, so subscribing is idempotent:
+  // the previous listener is torn down before a fresh one is added. The
+  // unmount-only effect below releases whatever is current; `api.off` is a
+  // plain store filter, safe even against a destroyed api.
+  const unsubscribe = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => unsubscribe.current?.(), []);
+
+  const attachEmbla = useCallback(
+    (api: EmblaCarouselType) => {
+      embla.current = api;
+      unsubscribe.current?.();
+      const sync = () => {
+        const index = api.selectedScrollSnap();
+        if (index !== lastReported.current) {
+          lastReported.current = index;
+          onPhotoIndexChange?.(artwork.id, index);
+        }
+      };
+      sync();
+      api.on("select", sync);
+      unsubscribe.current = () => api.off("select", sync);
+    },
+    [artwork.id, onPhotoIndexChange],
+  );
 
   // Memoized: Mantine re-initialises embla when the options object's identity
   // changes, and a fresh literal every render would reset the visitor to the
@@ -171,9 +217,7 @@ const BasicxSection: React.FC<BasicxSectionProps> = ({
           // round controls take over and the zones are not rendered at all.
           withControls={!desktop}
           withKeyboardEvents
-          getEmblaApi={(api) => {
-            embla.current = api;
-          }}
+          getEmblaApi={attachEmbla}
           emblaOptions={emblaOptions}
         >
           {photos.map((photo) => (
