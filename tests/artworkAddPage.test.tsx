@@ -29,7 +29,7 @@ import { documentService } from "@/services/documentService";
  * that had in fact written the document — and a user told their work was never
  * saved creates it a second time.
  *
- * The receiving end of the redirect is `tests/artworkFormSave.test.tsx`, which
+ * The receiving end of the redirect is `tests/artworkWarnParam.test.tsx`, which
  * owns the `warn` param: that the message arrives, and that it is stripped
  * afterwards. Splitting it this way keeps each file on one half of the handoff.
  */

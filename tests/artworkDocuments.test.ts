@@ -85,9 +85,13 @@ describe("the document variant subset", () => {
     ]);
   });
 
-  it("keeps the geometry from the photo table rather than restating it", () => {
-    // A subset, not a second table. If this ever stops matching, the tile and
-    // the modal are being rendered at sizes nothing else in the app uses.
+  it("sizes a document's tile at `square_sm` and its preview at `large`", () => {
+    // Written out rather than derived, deliberately. `documentImageSpecs()`
+    // filters `IMAGE_VARIANTS` rather than building a second table, so the
+    // sharing needs no test — what needs pinning is the geometry a document
+    // ends up with, since `square_lg` and `medium` are pinned by the photo
+    // grid's own tests and nothing else would notice these two moving. The
+    // reasoning about *why* it is a subset lives in `imageVariants.ts`.
     const byKey = new Map(documentImageSpecs().map((spec) => [spec.key, spec]));
     expect(byKey.get("square_sm")).toMatchObject({
       fit: "cover",
@@ -277,10 +281,17 @@ describe("documentExtension", () => {
 });
 
 describe("DOCUMENT_EXTENSIONS", () => {
-  it("mirrors the four extensions isDocumentName permits", () => {
+  it("pins the allowlist to those four, so it cannot be widened unnoticed", () => {
     // Written out rather than derived, and deliberately not built from
     // ACCEPTED_DOCUMENT_TYPES: that map also lists `.jpeg`, which the rules do
     // not accept as a stored extension.
+    //
+    // The title used to say this "mirrors the extensions `isDocumentName`
+    // permits", which it never checked — it reads no rules at all, and the test
+    // below is the one that does. What this *is* for is the other direction:
+    // the two together assert client == rules, but only this one notices the
+    // rules being widened. That is the XSS control `AGENTS.md` describes, and
+    // adding `html` to fix a client error would make the test below pass.
     expect([...DOCUMENT_EXTENSIONS]).toEqual(["webp", "jpg", "png", "pdf"]);
   });
 

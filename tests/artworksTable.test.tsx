@@ -196,10 +196,6 @@ describe("ArtworksTable", () => {
   it("defaults to 25 per page", () => {
     renderTable({ artworks: [artwork({ id: "a", title: "Art 1" })] });
 
-    // The current size is the selector's own label, so this is both the default
-    // assertion and the "25 is offered" one. The two are coupled through
-    // `RECORDS_PER_PAGE_OPTIONS[0]`, so a reordering would silently change the
-    // page size every collection opens at.
     // The size selector renders its own value as a button, so this asserts the
     // default *and* that 25 is offered. The two are coupled through
     // `RECORDS_PER_PAGE_OPTIONS[0]`, so a reordering would silently change the

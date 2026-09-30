@@ -374,7 +374,7 @@ back — so state is wrong. But it is _read_ once: `useState(() => WARNINGS[warn
 rather than deriving from `searchParams` each render. Deriving it looks equivalent
 and is not: the effect below strips the param on mount, so a derived value blanks
 the message the instant it appears, and it flashes and vanishes unread. Both
-halves are mutation-tested in `tests/artworkFormSave.test.tsx`.
+halves are mutation-tested in `tests/artworkWarnParam.test.tsx`.
 
 **The param is stripped once shown, with `replace`.** `warn` says an upload
 failed and the fix is on the very page it points at, so leaving it in place would

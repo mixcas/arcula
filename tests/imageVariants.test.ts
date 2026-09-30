@@ -204,7 +204,10 @@ describe("variantSize — bounded (inside, no crop, no upscale)", () => {
     });
   });
 
-  it("never produces a zero dimension", () => {
+  it("keeps a 1px dimension at 1px rather than rounding it to zero", () => {
+    // The general claim would be "never produces a zero dimension", but one
+    // case carries it: a rounding implementation that divides by the longer
+    // side lands on 0 here, and 0 is an invalid `width` for every consumer.
     expect(variantSize(spec("large"), { width: 4000, height: 1 })).toEqual({
       width: 1200,
       height: 1,

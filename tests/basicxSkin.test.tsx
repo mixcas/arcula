@@ -471,11 +471,14 @@ describe("Basicx — the scoped theme", () => {
   // because nothing in the theme object distinguishes "set to Darker Grotesque"
   // from "omitted and inherited".
 
-  it("declares the two semantic type sizes rather than overriding md/sm", () => {
+  it("declares the two semantic type sizes", () => {
     const sizes = basicxSkin.theme?.fontSizes as
       Record<string, string> | undefined;
-    // Re-pointing `md`/`sm` would make `<Text size="md">` mean two different
-    // things depending on which side of `.skin-scope` it sat.
+    // That they are *added* rather than substituted is not checkable here, and
+    // the substitution is the likelier mistake: `createTheme` deep-merges, so
+    // re-pointing `md`/`sm` would replace Mantine's values silently and the
+    // resolved theme would look identical to a correct one. The reason is
+    // recorded at `basicx/theme.ts`, next to the keys.
     expect(sizes?.bodycopy).toBeDefined();
     expect(sizes?.caption).toBeDefined();
   });
