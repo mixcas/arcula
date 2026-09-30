@@ -120,11 +120,16 @@ describe("Basicx's own vocabulary", () => {
     ]);
   });
 
-  it("no longer offers `showPoweredBy`, which the nav's slot replaced", () => {
+  it("does not offer an option for the nav's attribution slot", () => {
     // What belongs in that slot is decided by *who is looking* — the owner gets
     // a manage link, everyone else gets the attribution — so an option for it
-    // would be a control that does nothing. The option is removed rather than
+    // would be a control that does nothing. The option is absent rather than
     // left inert, so it cannot be mistaken for one that works.
+    //
+    // The title used to be "no longer offers `showPoweredBy`", which dates
+    // itself and will read as a historical note within a year. A collection
+    // that stored `showPoweredBy: true` is unaffected either way — it is
+    // reported as a dropped key by `resolveSkinOptions`, which is tested above.
     expect(BASICX_OPTION_SPECS.map((spec) => spec.key)).not.toContain(
       "showPoweredBy",
     );

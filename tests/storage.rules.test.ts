@@ -40,6 +40,7 @@ import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   deleteObject,
   getBytes,
+  listAll,
   ref as storageRef,
   uploadBytes,
   type FirebaseStorage,
@@ -49,7 +50,12 @@ import {
 // the same functions production calls — a second hand-written copy here would
 // reproduce the exact gap they are meant to close.
 import { documentService } from "@/services/documentService";
-import { objectName } from "@/services/artworkFiles";
+import {
+  artworkFilesPrefix,
+  deleteEntries,
+  entryPrefix,
+  objectName,
+} from "@/services/artworkFiles";
 import { documentExtension } from "@/utils/artworkDocuments";
 
 const PROJECT_ID = "demo-custodia";
@@ -128,6 +134,22 @@ const putTyped = async (
   });
 
 const MB = 1024 * 1024;
+
+/**
+ * Write an object with the rules off.
+ *
+ * The only way an object with a name the rules refuse can come to exist, which
+ * is the point of the stale-object delete case below: those objects are real in
+ * production. They are what a variant key that has since been dropped, or a `.bin`
+ * from before the PDF fix, leaves behind.
+ */
+const putAsAdmin = async (path: string, data = PNG): Promise<void> => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await uploadBytes(storageRef(context.storage(), path), data, {
+      contentType: "image/png",
+    });
+  });
+};
 
 const seedArtwork = async (
   artworkId: string,
@@ -451,6 +473,147 @@ describe("storage rules — per-photo isolation", () => {
         photoPath(ARTWORK_ID, photoName(OTHER_PHOTO_ID, "original")),
       ),
     ).resolves.toBeDefined();
+  });
+});
+
+/**
+ * Deleting a photo's objects, which is a write that looks nothing like one.
+ *
+ * Documents have had both directions of this since they were built. Photos had
+ * neither, which left the photos block's `request.resource == null` admissions
+ * entirely unexercised.
+ *
+ * There are two of them and they do different jobs, which is worth separating
+ * because they are not equally load-bearing and guessing wrong about that is
+ * how a test ends up asserting the wrong thing:
+ *
+ *   - `acceptablePhotoUpload()` short-circuits because a delete carries no size
+ *     and no content type to read. Without this, *no* photo can be deleted.
+ *   - the name check is skipped because a delete carries no *new* name. This one
+ *     only matters for objects whose existing name the rules would now refuse.
+ *
+ * The second is the subtler one and the more valuable to pin, because those
+ * objects are real in production: a variant key since dropped, or a `.bin` from
+ * before the PDF fix, leaves objects nothing can delete through the app. The
+ * first positive test below therefore does *not* fail if the name admission goes
+ * — a well-formed name still matches — which is why the fourth test exists.
+ *
+ * The cost of any of this failing is invisible from the app, which is why it is
+ * worth a test at all. A photo dropped in the Edit form vanishes from the form
+ * and from Firestore, and its objects stay in Storage: unreferenced, unlisted
+ * anywhere, billing indefinitely. Nothing reports them. `deleteEntries`
+ * documents the same failure from the client side; this is the rule-side half.
+ *
+ * Named with `objectName` rather than the local `photoName` helper, which
+ * hardcodes `ARTWORK_ID` — the same reason the sweep below does.
+ */
+describe("storage rules — photo deletes", () => {
+  // Distinct per test: the emulator is not cleared between cases, so a shared
+  // folder carries one test's objects into the next one's assertions.
+  const DELETE_ARTWORK = "artwork0000000008";
+  const FOREIGN_ARTWORK = "artwork0000000009";
+  const DELETED_ARTWORK = "artwork0000000010";
+  const STALE_ARTWORK = "artwork0000000011";
+
+  it("lets the owner delete a photo", async () => {
+    await seedArtwork(DELETE_ARTWORK, {});
+    const storage = storageFor(OWNER);
+
+    const path = photoPath(
+      DELETE_ARTWORK,
+      objectName(DELETE_ARTWORK, PHOTO_ID, "original", "webp"),
+    );
+    await put(storage, path);
+
+    await expect(
+      deleteObject(storageRef(storage, path)),
+    ).resolves.toBeUndefined();
+    // Gone, rather than merely accepted — a delete that resolved without
+    // removing anything would still strand the object.
+    await expect(getBytes(storageRef(storage, path))).rejects.toThrow();
+  });
+
+  it("rejects a delete from a different account", async () => {
+    // The counterpart. A photo is as much the owner's to remove as to add, and
+    // this is what stops one account's sweep from reaching another's objects
+    // even when the name matches perfectly.
+    await seedArtwork(FOREIGN_ARTWORK, {});
+    const ownerStorage = storageFor(OWNER);
+    const otherStorage = storageFor(OTHER);
+
+    const path = photoPath(
+      FOREIGN_ARTWORK,
+      objectName(FOREIGN_ARTWORK, PHOTO_ID, "original", "webp"),
+    );
+    await put(ownerStorage, path);
+
+    await expect(
+      deleteObject(storageRef(otherStorage, path)),
+    ).rejects.toThrow();
+    await expect(
+      getBytes(storageRef(ownerStorage, path)),
+    ).resolves.toBeDefined();
+  });
+
+  it("lets the owner delete a photo of a soft-deleted artwork", async () => {
+    // The asymmetry, pinned. Visitor *reads* are gated on `deletedAt == null`,
+    // but owner writes are not: a soft-deleted artwork's objects are still the
+    // owner's to clean up, and that is the case the objects become unreachable
+    // from the app entirely.
+    //
+    // Worth pinning because the fix looks reasonable: adding `deletedAt` to
+    // `ownedByCaller` "to hide deleted works" would silently take away the
+    // owner's only route to reclaiming those bytes, and nothing else would
+    // fail — the app already hides the artwork.
+    await seedArtwork(DELETED_ARTWORK, {
+      isPublic: true,
+      deletedAt: new Date(),
+    });
+    const storage = storageFor(OWNER);
+
+    const path = photoPath(
+      DELETED_ARTWORK,
+      objectName(DELETED_ARTWORK, PHOTO_ID, "original", "webp"),
+    );
+    await put(storage, path);
+
+    await expect(
+      deleteObject(storageRef(storage, path)),
+    ).resolves.toBeUndefined();
+    await expect(getBytes(storageRef(storage, path))).rejects.toThrow();
+  });
+
+  it("lets the owner delete an object whose name the rules would now refuse", async () => {
+    // The name check's `request.resource == null` admission, and the only test
+    // that reaches it — the three above delete well-formed names, which still
+    // match, so none of them fails if that admission is removed. Verified by
+    // mutation: dropping it leaves them all green.
+    //
+    // The case is real rather than hypothetical, and this repo has produced it
+    // twice. A variant key is dropped from `IMAGE_VARIANTS` and the objects
+    // written under it stay in the bucket; a `.bin` from before the PDF fix stays
+    // too. Neither can be uploaded again, so the name check refuses them — and if
+    // that refusal also applied to *deletes*, the owner has no route to reclaim
+    // the bytes at all. There is no admin tooling in this app; the Edit form's
+    // sweep is the only deletion path that exists.
+    await seedArtwork(STALE_ARTWORK, {});
+    const storage = storageFor(OWNER);
+
+    // `thumbnail` was never a key this app generates — which is the whole point,
+    // so the object has to be written with the rules off.
+    const path = photoPath(
+      STALE_ARTWORK,
+      `${STALE_ARTWORK}_${PHOTO_ID}_thumbnail.webp`,
+    );
+    await putAsAdmin(path);
+
+    // And the name really is refused, so this is not a delete of something the
+    // check would have let through anyway.
+    await expect(put(storage, path)).rejects.toThrow(/storage\/unauthorized/);
+
+    await expect(
+      deleteObject(storageRef(storage, path)),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -891,5 +1054,110 @@ describe("storage rules — other documents", () => {
     await expect(
       getBytes(storageRef(ownerStorage, path)),
     ).resolves.toBeDefined();
+  });
+});
+
+/**
+ * The sweep that removes a deleted photo's objects.
+ *
+ * Everything else in this file asks whether the *rules* admit a request. This
+ * asks whether the client's own deletion logic, run against real Storage, takes
+ * out what it should and nothing else — and there was no test for it at all,
+ * because the suites drove `deleteObject` with a hand-written path instead.
+ *
+ * The property is narrow and its failure is expensive: objects nothing points at
+ * are invisible in the app, unreferenced in Firestore, and never cleaned up, so
+ * they bill Storage and egress indefinitely while nothing anywhere reports them.
+ *
+ * Names come from the production `objectName` and `entryPrefix` rather than the
+ * local helpers above, for the same reason the rest of this file imports them:
+ * a second hand-written copy of the naming would let the sweep and the names
+ * agree with each other and still disagree with what an upload actually writes.
+ */
+describe("the Storage delete sweep", () => {
+  // An artwork per test rather than one shared folder: the emulator is not
+  // cleared between cases, so a shared folder carries the previous case's
+  // objects into the next one's `remaining()` and makes an unrelated failure
+  // look like a deletion bug.
+  const SWEEP_ARTWORK = "artwork0000000005";
+  const NO_MATCH_ARTWORK = "artwork0000000006";
+  const FOREIGN_ARTWORK = "artwork0000000007";
+
+  const photosFolder = (artworkId: string) =>
+    artworkFilesPrefix(OWNER, COLLECTION_ID, artworkId, "photos");
+
+  const remaining = async (
+    storage: FirebaseStorage,
+    artworkId: string,
+  ): Promise<string[]> => {
+    const listing = await listAll(storageRef(storage, photosFolder(artworkId)));
+    return listing.items.map((item) => item.name).sort();
+  };
+
+  it("removes every encoding of the dropped photo, and leaves its siblings", async () => {
+    // The same photo stored twice, which is exactly what happens when a
+    // browser with a WebP encoder replaces one without: the extension is not
+    // knowable at delete time, so the sweep has to list and filter. Reconstruct
+    // the names instead and the `.jpg` survives.
+    await seedArtwork(SWEEP_ARTWORK, { isPublic: true });
+    const ownerStorage = storageFor(OWNER);
+    const dropped = [
+      objectName(SWEEP_ARTWORK, PHOTO_ID, "original", "webp"),
+      objectName(SWEEP_ARTWORK, PHOTO_ID, "original", "jpg"),
+      objectName(SWEEP_ARTWORK, PHOTO_ID, "large", "webp"),
+    ];
+    const kept = objectName(SWEEP_ARTWORK, OTHER_PHOTO_ID, "original", "webp");
+    for (const name of [...dropped, kept]) {
+      await put(ownerStorage, photoPath(SWEEP_ARTWORK, name));
+    }
+
+    await deleteEntries(ownerStorage, photosFolder(SWEEP_ARTWORK), [
+      entryPrefix(SWEEP_ARTWORK, PHOTO_ID),
+    ]);
+
+    expect(await remaining(ownerStorage, SWEEP_ARTWORK)).toEqual([kept]);
+  });
+
+  it("asks Storage for nothing when there is nothing to remove", async () => {
+    // Removing a photo that was never uploaded must not fail the save that also
+    // writes the metadata. `deleteEntries` short-circuits on an empty match list
+    // rather than issuing a list request it would not use.
+    await seedArtwork(NO_MATCH_ARTWORK, { isPublic: true });
+    const ownerStorage = storageFor(OWNER);
+    await put(
+      ownerStorage,
+      photoPath(
+        NO_MATCH_ARTWORK,
+        objectName(NO_MATCH_ARTWORK, PHOTO_ID, "original", "webp"),
+      ),
+    );
+
+    await expect(
+      deleteEntries(ownerStorage, photosFolder(NO_MATCH_ARTWORK), []),
+    ).resolves.toBeUndefined();
+
+    // Untouched, which is the point: no match, no deletion.
+    expect(await remaining(ownerStorage, NO_MATCH_ARTWORK)).toEqual([
+      objectName(NO_MATCH_ARTWORK, PHOTO_ID, "original", "webp"),
+    ]);
+  });
+
+  it("cannot delete a photo it does not own", async () => {
+    // The rules half, and the reason the sweep is not just a convenience: it
+    // runs as the signed-in owner, so another account's objects are denied at
+    // the folder even though the name matches.
+    await seedArtwork(FOREIGN_ARTWORK, { isPublic: true });
+    const ownerStorage = storageFor(OWNER);
+    const otherStorage = storageFor(OTHER);
+    const name = objectName(FOREIGN_ARTWORK, PHOTO_ID, "original", "webp");
+    await put(ownerStorage, photoPath(FOREIGN_ARTWORK, name));
+
+    await expect(
+      deleteEntries(otherStorage, photosFolder(FOREIGN_ARTWORK), [
+        entryPrefix(FOREIGN_ARTWORK, PHOTO_ID),
+      ]),
+    ).rejects.toThrow();
+
+    expect(await remaining(ownerStorage, FOREIGN_ARTWORK)).toEqual([name]);
   });
 });

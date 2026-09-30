@@ -69,6 +69,92 @@ All Firebase services are imported from `src/services/firebase.ts`:
 - Build output in `dist/` directory (auto-cleaned)
 - No additional test setup required - uses Vite + React testing library
 
+## What to test
+
+The non-emulator suite is 313 tests in about 2.2 seconds, so volume is
+not the problem. **Altitude** is: every test is something a reader has to
+keep true as the libraries underneath it move, and something to reason
+about when it goes red. The question to ask before writing one is
+therefore not "is this worth covering?" but:
+
+> **Would this fail if Mantine changed, or only if we changed?**
+
+A test that answers _Mantine_ is asserting the library's behaviour. It
+costs a reader and buys nothing — Mantine tests itself, and when ours
+goes red we have learned nothing that was not visible in the diff.
+
+Three tiers, and the first is where nearly everything belongs:
+
+1. **Pure logic over our own data.** Test directly, no DOM: `variantSize`,
+   `coverCrop`, `parseAcquisitionDate`, `sortPhotos`, `reindexPhotos`,
+   `publicCollectionState`, `resolveSkinOptions`, `entryPrefix`. Ours end
+   to end, and where a real regression lives.
+2. **Our value going into the library — only when the failure is invisible
+   in review or in a screenshot.** `tests/skinHost.test.tsx` reads the
+   emitted style tags to prove `cssVariablesSelector` is not `:root`,
+   because a skin's type scale leaking onto `/manage` appears in no
+   screenshot anyone takes. The Basicx chrome tests read computed
+   `pointer-events`, because jsdom does no hit testing and the bug was a
+   link that looked live and went nowhere. The `?warn` strip is the same:
+   leaving the param in place looks harmless and silently re-raises an
+   alarm on every refresh.
+3. **Everything else — don't.** Copy that a `Text` renders, props handed
+   to Mantine, a mock's call count with no behavioural meaning, a constant
+   asserted against its own value.
+
+**Mutation testing is the acceptance bar for anything new.** Change the
+line the test claims to cover; if it stays green, the test was not
+covering that. A test that fails its own mutation earns its place. One
+that needs three separate mutations to kill is usually two tests.
+
+**What this has removed**, so the bar is legible rather than theoretical —
+each of these could only fail by editing the thing it read:
+
+- A constant against its own value. `MAX_ARTWORK_PHOTOS` was asserted to
+  be `10`. The caps are a product choice and `storage.rules` counts
+  nothing, so there was nothing to cross-check them against. Compare
+  `PROBE_SIZE > 1`, which looks identical and **stayed**: that is a
+  correctness floor rather than an arbitrary value, and getting it wrong
+  is a _silent_ Safari downgrade.
+- A set against itself. Looping `Object.keys(ACCEPTED_IMAGE_TYPES)`
+  through `isAcceptedImageType`, which is `type in ACCEPTED_IMAGE_TYPES`.
+- A duplicate, checked at the stronger one first. The nav's absent login
+  link was asserted in two files; the unknown-skin fallback in two, where
+  `skinRegistry.test.ts` tests it at the function.
+- Copy. Rendering an empty component and checking a string we wrote
+  appeared.
+- A title claiming more than its assertion. Six were renamed in one pass,
+  and three of the claims turned out to be **untestable at this
+  altitude**: `documentImageSpecs()` is a `filter()` over
+  `IMAGE_VARIANTS`, so there is no restatement to detect; `createTheme`
+  deep-merges, so an overridden `md` is indistinguishable from a default
+  unless you compare against Mantine's own values. In those cases the
+  title shrank and the reasoning stayed in the comment — or, where it
+  belonged next to the keys, in the source.
+
+**What has not moved**, because the rule cuts one way and it is easy to
+overshoot it in a tidy-up:
+
+- **Both rules suites — all 88 tests.** `storage.rules` and
+  `firestore.rules` are ours, and the failures they guard are the ones
+  with teeth: a variant key missing from `isPhotoName` 403s every new
+  photo upload, and a `read, write` block that dereferences
+  `request.resource.size` denies reads too, because that field is `null`
+  on both a read and a delete. Tier 1 in the strictest sense — the thing
+  under test is this repository.
+- The pure-logic half, essentially in full.
+- Every tier-2 DOM test.
+- Correct-altitude cases that happen to be near neighbours of deleted
+  ones — `publicCollectionPage`'s empty collection, whose null
+  `navigation` assertion is what proves the empty state renders outside
+  the skin.
+
+Test **mechanics** — `afterEach(cleanup)`, the `matches: query === ""`
+stub, `ModalsProvider`, `--no-file-parallelism` — are in **Gotchas**
+below and are not restated here. `vitest.config.ts` sets
+`dangerouslyIgnoreUnhandledErrors: false`: an unhandled rejection inside
+a test should fail the run, not be filtered out of it.
+
 ## Architecture Notes
 
 - Management routes (`/manage/*`) are wrapped with consistent layout
@@ -374,7 +460,7 @@ back — so state is wrong. But it is _read_ once: `useState(() => WARNINGS[warn
 rather than deriving from `searchParams` each render. Deriving it looks equivalent
 and is not: the effect below strips the param on mount, so a derived value blanks
 the message the instant it appears, and it flashes and vanishes unread. Both
-halves are mutation-tested in `tests/artworkFormSave.test.tsx`.
+halves are mutation-tested in `tests/artworkWarnParam.test.tsx`.
 
 **The param is stripped once shown, with `replace`.** `warn` says an upload
 failed and the fix is on the very page it points at, so leaving it in place would
@@ -1178,6 +1264,8 @@ file that silently does not appear.
   It starts Firestore, Auth **and Storage**, then runs **all** tests,
   including the pure-logic and component ones (`npx vitest run tests/<file>`
   runs a single file with no emulators, which is the fast loop for UI work).
+- Before writing a test, read **What to test** above. A green suite is not
+  the goal; a test that fails only when we change something is.
 - `bun run build` also proves the Web Worker bundles: the image worker must
   appear in `dist/assets/` as its own chunk. A silently-dropped worker would
   leave the app running on the main-thread fallback with no other signal.

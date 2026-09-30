@@ -120,20 +120,14 @@ describe("SkinHost — dispatch", () => {
     );
   });
 
-  it("falls back to the default skin for an unknown id", () => {
-    // A typo in a stored `skin` must not blank the page: the shell already
-    // holds a document it fetched successfully, so there is always something to
-    // render.
-    renderHost({ collection: { ...collection, skin: "no-such-skin" } });
-    expect(screen.getByRole("region")).toBeInTheDocument();
-  });
-
-  it("resolves stored options before handing them to the skin", () => {
+  it("survives a stored option of the wrong type", () => {
     // `transitionSeconds: "half a second"` is not a number, so the skin must
-    // see its default rather than the stored value. The number itself is not
-    // observable from the outside, so this asserts the surrounding chrome
-    // rendered at all — what it pins is that a hostile value does not throw
-    // before the skin is reached.
+    // see its default rather than the stored value. What reaches the skin is
+    // not observable from here, and asserting it would mean asserting
+    // `resolveSkinOptions`, which `skinOptions.test.ts` does properly. What this
+    // covers is the seam the shell owns: a hostile value must not throw before
+    // the skin is reached, and the documents it fetched must survive it. The
+    // region is the artwork section, so the name below is the artwork's title.
     expect(() =>
       renderHost({
         collection: {
@@ -143,7 +137,10 @@ describe("SkinHost — dispatch", () => {
         },
       }),
     ).not.toThrow();
-    expect(screen.getByRole("region")).toBeInTheDocument();
+    expect(screen.getByRole("region")).toHaveAttribute(
+      "aria-label",
+      artwork.title,
+    );
   });
 
   it("gives the artwork view one section, from the same component", () => {

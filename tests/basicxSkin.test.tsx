@@ -2,13 +2,14 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import * as rtl from "@testing-library/react";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { basicxSkin } from "@/skins/basicx";
+import { emblaDuration } from "@/skins/basicx/BasicxSection";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
 import type { Artwork, Collection, ImageVariantKey } from "@/types";
@@ -171,6 +172,48 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * Seconds to embla frames.
+ *
+ * The only test in this file that renders nothing, and deliberately: every wrong
+ * answer here is a *plausible* slideshow rather than a broken one, so nothing
+ * about a rendered section can tell a right duration from a wrong one. A test
+ * that clicked the carousel and watched it move would pass identically for every
+ * one of these values, because jsdom has no frames to move in.
+ *
+ * The property under test is the unit, not the number: embla's `ScrollBody`
+ * divides by a frame count, so a value read as milliseconds is off by a factor
+ * of about a thousand and a 0.5s transition becomes an eight-second slide.
+ */
+describe("emblaDuration", () => {
+  it("converts seconds to frames, not to milliseconds", () => {
+    // Half a second at 60fps is 30 frames. Passing `500` — the millisecond
+    // reading — is the bug this function exists to make impossible, and it
+    // would render as a 500-frame (eight second) slide.
+    expect(emblaDuration(0.5)).toBe(30);
+    expect(emblaDuration(1)).toBe(60);
+  });
+
+  it("answers 0 for zero and below, which is embla's instant jump", () => {
+    // Not just `0`: a negative option value would otherwise become a negative
+    // frame count, and embla's own special case is `!scrollDuration` rather than
+    // `scrollDuration === 0`.
+    expect(emblaDuration(0)).toBe(0);
+    expect(emblaDuration(-1)).toBe(0);
+  });
+
+  it("never rounds a live transition down to nothing", () => {
+    // `Math.max(1, …)` is the floor. A positive duration that rounded to 0
+    // would be an instant jump — a transition the visitor explicitly asked for,
+    // silently switched off.
+    expect(emblaDuration(0.01)).toBe(1);
+  });
+
+  it("rounds to whole frames, since a fraction is not a frame count", () => {
+    expect(emblaDuration(0.52)).toBe(31);
+  });
+});
+
 describe("Basicx — the section per artwork", () => {
   it("renders one fullscreen section per artwork", () => {
     render({
@@ -317,14 +360,6 @@ describe("Basicx — the fixed chrome", () => {
     expect(credit).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("offers no login link in the nav", () => {
-    // Asserted because it was there and was removed: the public page is
-    // reachable by anyone, and a link that only the owner can follow should not
-    // be advertised to everyone.
-    render();
-    expect(screen.queryByRole("link", { name: /manage|login/i })).toBeNull();
-  });
-
   it("holds the footer's first line with a non-breaking space when nothing is named", () => {
     // The label is the first thing to change as the first section reports
     // itself, so a placeholder that collapsed to zero height would make the bar
@@ -428,22 +463,22 @@ describe("Basicx — photographs", () => {
 });
 
 describe("Basicx — the scoped theme", () => {
-  it("uses one font family for body and headings", async () => {
-    // `headings.fontFamily` is set explicitly rather than inherited: a nested
-    // theme deep-merges, so without it a `Title` would pull in BBH Bartle —
-    // which ships a single 400 weight and would fake-bold the 550 above.
-    render();
-    const title = await screen.findByRole("link", { name: "Flores Solares" });
-    await waitFor(() => {
-      expect(within(title).getByText("Flores Solares")).toBeInTheDocument();
-    });
-  });
+  // The test that asserted `headings.fontFamily` was set was here, and it did
+  // not assert it: it rendered, found the footer's title link, and checked that
+  // the link contained its own text. The reason the value is set explicitly —
+  // that a deep-merging nested theme would otherwise pull in BBH Bartle, which
+  // ships one weight and would fake-bold — makes it worth saying out loud,
+  // because nothing in the theme object distinguishes "set to Darker Grotesque"
+  // from "omitted and inherited".
 
-  it("declares the two semantic type sizes rather than overriding md/sm", () => {
+  it("declares the two semantic type sizes", () => {
     const sizes = basicxSkin.theme?.fontSizes as
       Record<string, string> | undefined;
-    // Re-pointing `md`/`sm` would make `<Text size="md">` mean two different
-    // things depending on which side of `.skin-scope` it sat.
+    // That they are *added* rather than substituted is not checkable here, and
+    // the substitution is the likelier mistake: `createTheme` deep-merges, so
+    // re-pointing `md`/`sm` would replace Mantine's values silently and the
+    // resolved theme would look identical to a correct one. The reason is
+    // recorded at `basicx/theme.ts`, next to the keys.
     expect(sizes?.bodycopy).toBeDefined();
     expect(sizes?.caption).toBeDefined();
   });

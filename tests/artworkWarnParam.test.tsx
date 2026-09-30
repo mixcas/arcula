@@ -33,9 +33,13 @@ import type { Artwork, Collection } from "@/types";
  * since been fixed. A stale alarm is worse than none: it teaches the reader to
  * ignore the one message that matters.
  *
- * Only the Edit page is imported. That is deliberate: it is the half with the
- * behaviour worth stating, and driving the Add page's three-write sequence
- * would be a test of the upload pipeline as much as of this param.
+ * Only the Edit page is imported, and that is deliberate: this file is about
+ * what the Edit page does with the param — shows it, then forgets it. The half
+ * that *produces* it is `tests/artworkAddPage.test.tsx`, which drives the
+ * three-write sequence and decides which stage failed. Split this way, each
+ * file states one half of the handoff and neither has to reason about the
+ * other's stage. The upload pipeline both files mock is covered by
+ * `photoUploader` and `documentsUploader`.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

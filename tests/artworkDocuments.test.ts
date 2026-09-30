@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_DOCUMENT_TYPES,
   DOCUMENT_EXTENSIONS,
-  MAX_ARTWORK_DOCUMENTS,
   MAX_DOCUMENT_BYTES,
   documentExtension,
   documentImageSpecs,
@@ -25,7 +24,12 @@ import {
   sortDocuments,
 } from "@/utils/artworkDocuments";
 import { extensionFor } from "@/utils/imageProcessing";
-import { MAX_ARTWORK_PHOTOS, MAX_IMAGE_BYTES } from "@/utils/imageVariants";
+import { MAX_IMAGE_BYTES } from "@/utils/imageVariants";
+import {
+  rulesByteCeiling,
+  rulesExtensionList,
+  rulesNamePattern,
+} from "./helpers/rulesSource";
 import type {
   ArtworkDocument,
   ArtworkDocumentFile,
@@ -81,9 +85,13 @@ describe("the document variant subset", () => {
     ]);
   });
 
-  it("keeps the geometry from the photo table rather than restating it", () => {
-    // A subset, not a second table. If this ever stops matching, the tile and
-    // the modal are being rendered at sizes nothing else in the app uses.
+  it("sizes a document's tile at `square_sm` and its preview at `large`", () => {
+    // Written out rather than derived, deliberately. `documentImageSpecs()`
+    // filters `IMAGE_VARIANTS` rather than building a second table, so the
+    // sharing needs no test — what needs pinning is the geometry a document
+    // ends up with, since `square_lg` and `medium` are pinned by the photo
+    // grid's own tests and nothing else would notice these two moving. The
+    // reasoning about *why* it is a subset lives in `imageVariants.ts`.
     const byKey = new Map(documentImageSpecs().map((spec) => [spec.key, spec]));
     expect(byKey.get("square_sm")).toMatchObject({
       fit: "cover",
@@ -129,22 +137,29 @@ describe("the accepted types", () => {
 });
 
 describe("the size and count caps", () => {
-  it("allows a larger document than a photo, and says why in numbers", () => {
+  it("allows a larger document than a photo, because the rules do", () => {
+    // Both ceilings are read out of `storage.rules` rather than written here.
     // A scanned catalogue raisonné is a normal attachment and is routinely
-    // larger than a photograph. The rule reads 25 MB, so this is a ceiling the
-    // client may hit exactly rather than one the server rejects a byte under.
-    expect(MAX_DOCUMENT_BYTES).toBe(25 * 1024 * 1024);
-    expect(MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
+    // larger than a photograph, so the document ceiling is deliberately
+    // higher — and "deliberately" only means something if it is pinned to the
+    // number the server actually enforces. A literal on both sides would agree
+    // with itself while the two drifted apart, and the symptom would be a
+    // rejected upload nobody can act on.
+    expect(MAX_DOCUMENT_BYTES).toBe(
+      rulesByteCeiling("acceptableDocumentUpload"),
+    );
+    expect(MAX_IMAGE_BYTES).toBe(rulesByteCeiling("acceptablePhotoUpload"));
+    // The relationship is the point, so it is asserted rather than left to two
+    // literals happening to differ.
     expect(MAX_DOCUMENT_BYTES).toBeGreaterThan(MAX_IMAGE_BYTES);
   });
 
-  it("caps documents and photos separately", () => {
-    // Separate caps, so a work can hold ten of each. A shared pool would make
-    // the second list's limit depend on the first, which is not a limit anyone
-    // can reason about.
-    expect(MAX_ARTWORK_DOCUMENTS).toBe(10);
-    expect(MAX_ARTWORK_PHOTOS).toBe(10);
-  });
+  // The ten-per-list caps used to be asserted here against the literal 10, in
+  // a test that also duplicated the one in `imageVariants.test.ts`. Neither
+  // could fail without editing the constant it asserted, and the caps are a
+  // product choice: `storage.rules` counts nothing, so there is nothing to
+  // cross-check them against. The separate-caps decision they were documenting
+  // is carried by the two constants themselves.
 });
 
 describe("fileExtension", () => {
@@ -266,21 +281,61 @@ describe("documentExtension", () => {
 });
 
 describe("DOCUMENT_EXTENSIONS", () => {
-  it("mirrors the four extensions isDocumentName permits", () => {
+  it("pins the allowlist to those four, so it cannot be widened unnoticed", () => {
     // Written out rather than derived, and deliberately not built from
     // ACCEPTED_DOCUMENT_TYPES: that map also lists `.jpeg`, which the rules do
     // not accept as a stored extension.
+    //
+    // The title used to say this "mirrors the extensions `isDocumentName`
+    // permits", which it never checked — it reads no rules at all, and the test
+    // below is the one that does. What this *is* for is the other direction:
+    // the two together assert client == rules, but only this one notices the
+    // rules being widened. That is the XSS control `AGENTS.md` describes, and
+    // adding `html` to fix a client error would make the test below pass.
     expect([...DOCUMENT_EXTENSIONS]).toEqual(["webp", "jpg", "png", "pdf"]);
   });
 
-  it("permits nothing the storage rules would reject", () => {
-    // The seam that was untested. Every extension the app can *produce* has to be
-    // one `isDocumentName` will *accept*, because the two live in different
-    // files and nothing else compares them.
+  it("permits exactly what the storage rules permit", () => {
+    // The seam that was untested, and the one that was untested *wrongly*: this
+    // used to assert every `DOCUMENT_EXTENSIONS` member against
+    // `isDocumentExtension`, which is `DOCUMENT_EXTENSIONS.includes` — the set
+    // against itself, true by construction whatever the rules say. The claim in
+    // the name is about `storage.rules`, so that is what it now reads.
+    expect([...DOCUMENT_EXTENSIONS]).toEqual(
+      rulesExtensionList("isDocumentName"),
+    );
+  });
+
+  it("names an object the rules will accept, for every extension it produces", () => {
+    // And the same claim one step further out: not just "our set equals the
+    // rules' set" but "a name built the way the client builds one passes the
+    // pattern the rules actually apply". The set comparison above would survive
+    // the two lists agreeing on a name the pattern rejects — `isDocumentName`
+    // checks the whole shape, and the set is only the extensions half of it.
+    const artworkId = "art1";
+    const documentId = "aaaaaaaaaaaaaaaaaaaa";
+    const pattern = rulesNamePattern("isDocumentName", artworkId);
+
     for (const extension of DOCUMENT_EXTENSIONS) {
-      expect(isDocumentExtension(extension)).toBe(true);
+      const name = `${artworkId}_${documentId}_original.${extension}`;
+      expect(pattern.test(name), `${name} is not an accepted name`).toBe(true);
     }
+  });
+
+  it("refuses an extension the rules would reject, whatever the name", () => {
+    // The negative direction, and the XSS control: `contentType` is
+    // client-supplied and forgeable, so the name is the only thing the rule can
+    // bind the declared type to. Allowing `svg` or `html` here would make an
+    // uploaded SVG navigated to directly execute in the storage origin.
+    const artworkId = "art1";
+    const documentId = "aaaaaaaaaaaaaaaaaaaa";
+    const pattern = rulesNamePattern("isDocumentName", artworkId);
+
     for (const extension of ["bin", "jpeg", "gif", "svg", "html", "exe"]) {
+      const name = `${artworkId}_${documentId}_original.${extension}`;
+      expect(pattern.test(name), `${name} was accepted`).toBe(false);
+      // The client's own predicate has to agree, or a rejected name would be
+      // one the form still offers.
       expect(isDocumentExtension(extension)).toBe(false);
     }
   });
@@ -291,8 +346,16 @@ describe("DOCUMENT_EXTENSIONS", () => {
     // the type; a new type added to the accept map without a matching entry in
     // EXTENSION_BY_TYPE would silently start producing `.bin` names, exactly as
     // the PDF path did.
+    const pattern = rulesNamePattern("isDocumentName", "art1");
     for (const type of Object.keys(ACCEPTED_DOCUMENT_TYPES)) {
       const extension = type === "application/pdf" ? "pdf" : extensionFor(type);
+      // The rules' pattern, not only the client's predicate: the question is
+      // whether such a name would be *accepted*, and the two are different
+      // files.
+      expect(
+        pattern.test(`art1_aaaaaaaaaaaaaaaaaaaa_original.${extension}`),
+        `${type} would be stored as _original.${extension}, which is not accepted`,
+      ).toBe(true);
       expect(isDocumentExtension(extension)).toBe(true);
     }
   });
