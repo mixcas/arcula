@@ -1,6 +1,6 @@
 # Arcula
 
-Collection management for people who actually own the work.
+Art management for real people.
 
 Arcula is a web app for cataloguing a private art collection: your collections, the
 artworks in them, and the details that make each one worth recording. It is free and
