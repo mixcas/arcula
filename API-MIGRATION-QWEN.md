@@ -1008,7 +1008,10 @@ ledger.
   2027-02-17). SeaweedFS keeps the shape the plan needs: one pure-Go
   process that implements the S3 API and stores objects locally
   (`weed server -dir=… -s3`), from a maintained upstream (Apache-2.0,
-  current bottles), serving 9000 for S3. `mailpit` (Homebrew, MIT,
+  current bottles), serving 9000 for S3. Its volume server's default HTTP
+  port is 8080 — the Firestore emulator's default (`test:rules`), so
+  `stack-up.sh` passes `-volume.port 8090`; the S3 API on 9000 is the only
+  surface the app uses. `mailpit` (Homebrew, MIT,
   current) fills its slot at 8025/1025. `scripts/stack-up.sh` /
   `stack-down.sh` cover the mixed start/stop, and `dev` calls stack-up
   first. `S3_FORCE_PATH_STYLE=true` is load-bearing for it: the S3

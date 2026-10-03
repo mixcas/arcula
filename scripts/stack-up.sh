@@ -72,8 +72,11 @@ ensure_s3() {
   }
   echo "s3 (SeaweedFS): starting (native binary)..."
   mkdir -p "$ROOT/.stack/seaweedfs" "$ROOT/.stack/logs"
+  # -volume.port: the default 8080 is the Firestore emulator's default port
+  # (test:rules, bun run emulators) — only the S3 API on 9000 is used here.
   nohup "$WEED_BIN" server -dir="$ROOT/.stack/seaweedfs" -s3 \
     -s3.ip.bind 127.0.0.1 -s3.port 9000 \
+    -volume.port 8090 \
     >"$ROOT/.stack/logs/seaweedfs.log" 2>&1 &
   echo $! >"$ROOT/.stack/seaweedfs.pid"
   wait_ready 'curl -s --noproxy "*" -o /dev/null --max-time 2 -w "%{http_code}" http://127.0.0.1:9000/ | grep -q 200' 30 "s3 (SeaweedFS)"
