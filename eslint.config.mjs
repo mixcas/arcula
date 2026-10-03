@@ -91,6 +91,9 @@ export default tseslint.config(
       "apps/web/vitest.config.ts",
       "packages/shared/tests/**/*.ts",
       "packages/shared/vitest.config.ts",
+      "packages/db/tests/**/*.ts",
+      "packages/db/vitest.config.ts",
+      "packages/db/drizzle.config.ts",
       "apps/api/src/**/*.ts",
     ],
     languageOptions: {

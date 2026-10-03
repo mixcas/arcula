@@ -11,7 +11,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": []
+    "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "tests", "vitest.config.ts", "drizzle.config.ts"]
 }

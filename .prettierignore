@@ -33,6 +33,11 @@ skills-lock.json
 firestore.rules
 storage.rules
 
+# Drizzle generated migration metadata (drizzle-kit's journal + snapshots).
+# Regenerated on every `db:generate`; keep byte-stable so Prettier never
+# drifts them from what drizzle-kit wrote.
+packages/db/migrations/meta/
+
 # Firebase CLI + functions build artifacts.
 .firebase/
 functions/lib
