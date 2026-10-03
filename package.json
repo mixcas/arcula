@@ -8,14 +8,16 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cd apps/web && bun run dev",
+    "dev": "bun run --parallel dev:api dev:web",
+    "dev:api": "cd apps/api && bun run dev",
+    "dev:web": "cd apps/web && bun run dev",
     "build": "cd apps/web && bun run build",
     "preview": "cd apps/web && bun run preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "bunx tsc --noEmit -p packages/shared && bunx tsc --noEmit -p apps/web && bunx eslint . && bunx prettier --check .",
+    "check": "bunx tsc --noEmit -p packages/shared && bunx tsc --noEmit -p apps/api && bunx tsc --noEmit -p apps/web && bunx eslint . && bunx prettier --check .",
     "test": "bun run --parallel test:shared test:web",
     "test:shared": "cd packages/shared && bun run test",
     "test:web": "cd apps/web && bun run test",

@@ -91,6 +91,7 @@ export default tseslint.config(
       "apps/web/vitest.config.ts",
       "packages/shared/tests/**/*.ts",
       "packages/shared/vitest.config.ts",
+      "apps/api/src/**/*.ts",
     ],
     languageOptions: {
       globals: { ...globals.node },
