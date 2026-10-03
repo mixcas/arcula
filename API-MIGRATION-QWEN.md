@@ -92,21 +92,21 @@ called `users` while Better Auth models `user`.
 
 ## 1. Key design decisions
 
-| Decision                              | Choice                                                                                                                                                                              | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| API style                             | Plain JSON routes under `/api/v1`, resource-oriented, no RPC                                                                                                                        | Same resource model as the current service layer (`collectionService` / `artworkService`); trivial to consume from any client. `/api/v1` versioned; `/api/auth/*` and `/api/health` unversioned — auth is a fixed vocabulary (Better Auth defines its own endpoint paths) and does not need a version bar                                                                                                                      |
-| API response shapes                   | **Identical JSON to the Firestore documents** (`Artwork`, `ArtworkPhoto.variants[]`, `ArtworkDocument`, …)                                                                          | Client serializers, `photoUrl`/`photoSrcSet`, `sortPhotos`, the skins, and most component tests keep working with near-zero diff. The only shape change: `url` becomes a same-origin **proxy path**, not a Storage URL                                                                                                                                                                                                         |
-| Auth                                  | Better Auth `emailAndPassword`, mounted at `/api/auth/*`, cookie session; **`bearer` plugin wired in Phase 2**                                                                      | `@better-auth/react` client keeps the `useAuth()` contract; sign-up/reset are native endpoints — the `auth/requires-recent-login` re-authentication dance from `project-plan.md` §2 disappears. Verified gotcha (#6583): a bare `Authorization: Bearer` header does **not** resolve via `get_session` unless the `bearer` plugin is configured — wire it now (cheap) so the future mobile client authenticates without cookies |
-| User table                            | **Typed columns on `user` + `settings` jsonb** (see §0.3)                                                                                                                           | "We will start adding data to Users soon" — with generated migrations, a typed column is a one-line edit. The bag form gives up type safety, constraints, and queryability                                                                                                                                                                                                                                                     |
-| IDs                                   | `text` (nanoid) everywhere, including Better Auth's tables                                                                                                                          | Matches the adapter's generated-schema convention (verified); ids are opaque strings in this codebase anyway; lowest-risk choice for the drizzle adapter                                                                                                                                                                                                                                                                       |
-| Thumbnails                            | **Server-side, Sharp.** Original uploaded once (presigned PUT); variants generated per photo in a `process` step                                                                    | The WebP-probe and the entire silent-downgrade class of bug _disappears_ — Sharp always encodes WebP. `variantSize`/`coverCrop` move verbatim; the never-upscale `fit: "inside"` rule is preserved; **EXIF orientation applied explicitly (`.rotate()`) before resize** — the current `imageRender.ts` does this, so it is preserved, not re-derived                                                                           |
-| Image reads                           | **API proxy** (`GET /api/v1/media?key=…`), authz checked per request, stream from S3                                                                                                | Stable URLs that never expire (presigned GETs would break the `photoUrl` ladder on refresh); works identically for a mobile client; documents stay never-public because the proxy 403s non-owners                                                                                                                                                                                                                              |
-| Extension story                       | Originals stored in their own format (keeps PNG alpha); variants `.webp`; PDFs as-is                                                                                                | Supersedes the client's probe / `extensionFor` machinery                                                                                                                                                                                                                                                                                                                                                                       |
-| CSV import                            | Client still parses + reviews in-browser (papaparse); **Confirm POSTs rows** to a batch endpoint; the server validates with the same shared Zod schema and inserts in a transaction | Preserves the entire review UX; the chunk-of-400 `writeBatch` semantics are replaced by one server-side transaction                                                                                                                                                                                                                                                                                                            |
-| Authz                                 | Rules semantics re-implemented in the API service layer (`userId` owner checks, `isPublic`, `deletedAt == null`)                                                                    | The documented semantics of `firestore.rules` / `storage.rules` carry over 1:1 — they are _our_ logic, which the test doctrine says to keep testing                                                                                                                                                                                                                                                                            |
-| Collection cap (`project-plan.md` §1) | **Enforced in the API:** `count < COLLECTION_LIMITS[tier]` on create; the map `COLLECTION_LIMITS: Record<tier, number>` lives in `packages/shared` (beta: `free → 1`)               | Postgres can count; the whole "Firestore rules can't count documents" problem vanishes. The map keyed by tier is what `project-plan.md` §1 always wanted ("a `COLLECTION_LIMITS` map keyed by tier") — now literally implementable                                                                                                                                                                                             |
-| Migrations machinery                  | **Deleted.** Drizzle migrations + the empty-DB assumption make `MigrationsPage`, `src/migrations/*`, and `maintenanceAccess` obsolete                                               | The doctrine they existed for (backfilling legacy documents) no longer applies                                                                                                                                                                                                                                                                                                                                                 |
-| Email                                 | Provider interface: `MailpitEmail` (local) / `ResendEmail` (prod), wired into Better Auth's `sendResetPassword` / `sendVerificationEmail` config hooks                              | Nothing local bills; prod uses Resend exactly as requested                                                                                                                                                                                                                                                                                                                                                                     |
+| Decision                              | Choice                                                                                                                                                                              | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API style                             | Plain JSON routes under `/api/v1`, resource-oriented, no RPC                                                                                                                        | Same resource model as the current service layer (`collectionService` / `artworkService`); trivial to consume from any client. `/api/v1` versioned; `/api/auth/*` and `/api/health` unversioned — auth is a fixed vocabulary (Better Auth defines its own endpoint paths) and does not need a version bar                                                                                                                                             |
+| API response shapes                   | **Identical JSON to the Firestore documents** (`Artwork`, `ArtworkPhoto.variants[]`, `ArtworkDocument`, …)                                                                          | Client serializers, `photoUrl`/`photoSrcSet`, `sortPhotos`, the skins, and most component tests keep working with near-zero diff. The only shape change: `url` becomes a same-origin **proxy path**, not a Storage URL                                                                                                                                                                                                                                |
+| Auth                                  | Better Auth `emailAndPassword`, mounted at `/api/auth/*`, cookie session; **`bearer` plugin wired in Phase 2**                                                                      | the Better Auth react client (`better-auth/react`) keeps the `useAuth()` contract; sign-up/reset are native endpoints — the `auth/requires-recent-login` re-authentication dance from `project-plan.md` §2 disappears. Verified gotcha (#6583): a bare `Authorization: Bearer` header does **not** resolve via `get_session` unless the `bearer` plugin is configured — wire it now (cheap) so the future mobile client authenticates without cookies |
+| User table                            | **Typed columns on `user` + `settings` jsonb** (see §0.3)                                                                                                                           | "We will start adding data to Users soon" — with generated migrations, a typed column is a one-line edit. The bag form gives up type safety, constraints, and queryability                                                                                                                                                                                                                                                                            |
+| IDs                                   | `text` (nanoid) everywhere, including Better Auth's tables                                                                                                                          | Matches the adapter's generated-schema convention (verified); ids are opaque strings in this codebase anyway; lowest-risk choice for the drizzle adapter                                                                                                                                                                                                                                                                                              |
+| Thumbnails                            | **Server-side, Sharp.** Original uploaded once (presigned PUT); variants generated per photo in a `process` step                                                                    | The WebP-probe and the entire silent-downgrade class of bug _disappears_ — Sharp always encodes WebP. `variantSize`/`coverCrop` move verbatim; the never-upscale `fit: "inside"` rule is preserved; **EXIF orientation applied explicitly (`.rotate()`) before resize** — the current `imageRender.ts` does this, so it is preserved, not re-derived                                                                                                  |
+| Image reads                           | **API proxy** (`GET /api/v1/media?key=…`), authz checked per request, stream from S3                                                                                                | Stable URLs that never expire (presigned GETs would break the `photoUrl` ladder on refresh); works identically for a mobile client; documents stay never-public because the proxy 403s non-owners                                                                                                                                                                                                                                                     |
+| Extension story                       | Originals stored in their own format (keeps PNG alpha); variants `.webp`; PDFs as-is                                                                                                | Supersedes the client's probe / `extensionFor` machinery                                                                                                                                                                                                                                                                                                                                                                                              |
+| CSV import                            | Client still parses + reviews in-browser (papaparse); **Confirm POSTs rows** to a batch endpoint; the server validates with the same shared Zod schema and inserts in a transaction | Preserves the entire review UX; the chunk-of-400 `writeBatch` semantics are replaced by one server-side transaction                                                                                                                                                                                                                                                                                                                                   |
+| Authz                                 | Rules semantics re-implemented in the API service layer (`userId` owner checks, `isPublic`, `deletedAt == null`)                                                                    | The documented semantics of `firestore.rules` / `storage.rules` carry over 1:1 — they are _our_ logic, which the test doctrine says to keep testing                                                                                                                                                                                                                                                                                                   |
+| Collection cap (`project-plan.md` §1) | **Enforced in the API:** `count < COLLECTION_LIMITS[tier]` on create; the map `COLLECTION_LIMITS: Record<tier, number>` lives in `packages/shared` (beta: `free → 1`)               | Postgres can count; the whole "Firestore rules can't count documents" problem vanishes. The map keyed by tier is what `project-plan.md` §1 always wanted ("a `COLLECTION_LIMITS` map keyed by tier") — now literally implementable                                                                                                                                                                                                                    |
+| Migrations machinery                  | **Deleted.** Drizzle migrations + the empty-DB assumption make `MigrationsPage`, `src/migrations/*`, and `maintenanceAccess` obsolete                                               | The doctrine they existed for (backfilling legacy documents) no longer applies                                                                                                                                                                                                                                                                                                                                                                        |
+| Email                                 | Provider interface: `MailpitEmail` (local) / `ResendEmail` (prod), wired into Better Auth's `sendResetPassword` / `sendVerificationEmail` config hooks                              | Nothing local bills; prod uses Resend exactly as requested                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Notes on deletions
 
@@ -356,8 +356,10 @@ standalone package (§15).
   session responses). **Undeclared custom columns are the known gotcha** —
   sign-up then fails opaquely — so the declaration and the schema columns are
   asserted in the Phase 1 tests, not assumed.
-- **Mount.** `toWebHandler` (the framework-agnostic handler) is mounted on the
-  Hono app at **`/api/auth/*`** — `signUp`, `signIn`, `signOut`,
+- **Mount.** The framework-agnostic fetch handler — `auth.handler` in
+  1.7.7; the `toWebHandler` name from earlier docs does not exist in its
+  exports — is mounted on the Hono app at **`/api/auth/*`** — `signUp`,
+  `signIn`, `signOut`,
   `changePassword`, `resetPassword`, `requestVerification`, `verifyEmail`,
   `getSession` all under that prefix.
 - **Session cookie.** httpOnly, `sameSite: lax`; **`secure: true` in prod**
@@ -386,7 +388,10 @@ standalone package (§15).
   - `POST /api/auth/change-password` — native.
   - **Email change stays out of scope** (needs verify-before-update +
     confirmation email — a different decision).
-- **Client.** `@better-auth/react` keeps the `useAuth()` contract in the web
+- **Client.** The Better Auth react client — the `better-auth/react`
+  subpath of the main package in 1.7.7; there is no standalone
+  `@better-auth/react` (the web app pins `better-auth@1.7.7`, the API's
+  version) — keeps the `useAuth()` contract in the web
   client; session rides the cookie (web) or the bearer header (mobile).
 
 ## 6. Storage + media pipeline
@@ -538,6 +543,12 @@ are a fixed, small set — `validation` (Zod issues, with the failed fields),
 (400/401/403/404/409/409/500). Clients (web today, mobile tomorrow) switch
 on `code`, never on `message`; `message` is prose for humans.
 
+**The `/api/auth/*` carve-out.** The auth mount keeps Better Auth's native
+response shape — `{ message, code }` on errors, and a 200 with a `null`
+body when there is no session — because that is what the react client
+consumes; re-wrapping it would break the client. The envelope above
+applies to `/api/v1/*` only (decision, §15).
+
 **What is deliberately not on the surface:** no hard-delete of collections
 or artworks (soft delete is the model; the dead `deleteCollection` /
 `deleteArtwork` are not revived), no email change (§5), no endpoints the
@@ -606,7 +617,7 @@ photo-order helpers.
 - `src/services/firebase.ts` (and its importers), `authService.ts`,
   `collectionService.ts`, `artworkService.ts`, `imageService.ts` — replaced
   by the API client (§8 "rewritten").
-- `src/context/AuthContext.tsx` — replaced by `@better-auth/react`.
+- `src/context/AuthContext.tsx` — replaced by the Better Auth react client.
 - `src/migrations/*`, `MigrationsPage.tsx`, `src/utils/maintenanceAccess.ts`
   — the migrations machinery is dead in a Postgres world (§1).
 - `src/utils/imageProcessing.ts`, `imageWorker.ts`, `imageRender.ts` —
@@ -625,7 +636,7 @@ photo-order helpers.
   `softDeleteArtworks`, …) — components keep calling the service layer, and
   the service layer becomes `fetch` + the shared Zod parse. That keeps the
   "follow the surrounding code" doctrine true on the cutover day.
-- **`AuthContext` → `@better-auth/react`.** `useAuth()` keeps its name and
+- **`AuthContext` → the Better Auth react client.** `useAuth()` keeps its name and
   return shape; underneath it is the react client, session by cookie (web) /
   bearer (mobile).
 - **`usePublicCollection`.** Same state union — `invalid | loading | error |
@@ -882,7 +893,7 @@ Better Auth drizzle adapter pointed at the schema, all four core tables
 Better Auth `emailAndPassword` + `bearer`; session cookie config;
 Mailpit/Resend provider interface; verification built-but-gated (§5);
 `GET`/`PATCH /api/v1/me` with the writable set; `changePassword`.
-Client: `@better-auth/react` wired behind `useAuth()`.
+Client: the Better Auth react client wired behind `useAuth()`.
 **Done when:** the API test cases pass — sign up, sign in, sign out, reset
 (verified by reading the Mailpit-captured mail), `PATCH /me` writable-set
 rejections, bearer resolution.
@@ -1044,6 +1055,44 @@ defaultValue }`), not Zod schemas — §5's "Zod-typed" wording did not hold.
   dependency** of `apps/api` — `@better-auth/drizzle-adapter` pinned to the
   matching `1.7.7`, per the official docs — not an import of better-auth's
   `./adapters/drizzle` re-export of it (same code either way).
+
+- **2026-10-03 — Phase 2 (auth) executed; §5/§7 wording vs 1.7.7 and the
+  live-stack findings.** (a) **Auth errors stay native (§7 amended).**
+  Ruling: the §7 envelope applies to `/api/v1/*` only; `/api/auth/*` keeps
+  Better Auth's shape (`{ message, code }`; a 200 with a `null` body when
+  no session — status alone is not the signal) because that is what the
+  react client consumes. (b) **Mount surface:** `auth.handler` (a fetch
+  handler) is the 1.7.7 framework-agnostic surface; `toWebHandler` does
+  not exist in its exports — §5 patched. (c) **Cookie Secure switch:**
+  `advanced.useSecureCookies` (httpOnly + SameSite=Lax are the library
+  defaults, asserted in the S2 cookie-flags test). (d) **API-test
+  transport (§11):** "real HTTP" is read as in-process `app.request()`
+  against the real stack — real routes, real DB, real SMTP; the elided hop
+  is the outermost TCP one, and no second server process is spawned.
+  (e) **Origin/CSRF (verified live):** a state-changing request carrying
+  the session cookie validates Origin — untrusted → 403
+  `INVALID_ORIGIN`, missing → 403 `MISSING_OR_NULL_ORIGIN`; the session
+  survives the refusal. Under `NODE_ENV=test` the library skips origin
+  checks entirely (`isTest()`), so the suite asserts the config does not
+  opt out of them instead of re-testing the library. (f) **Reset/verify
+  URLs:** the reset token rides the path (`/reset-password/<token>`), not
+  a query param; `send-verification-email` wants `{ email }` in the body.
+  Both hook URLs arrive on the API origin and are rewritten to
+  `CLIENT_ORIGIN` (new §9 line — the web app renders those routes in
+  Phase 4). The sign-up auto-send of the verification mail is gated on
+  `sendOnSignUp ?? requireEmailVerification` — both off here is G6, and
+  the test asserts the gate (no mail at sign-up; the on-demand endpoint
+  works and flips `emailVerified`). (g) **The react client is not
+  `@better-auth/react`:** in 1.7.7 it is the `better-auth/react` subpath
+  of the main package (nanostores-based: `createAuthClient`,
+  `client.useSession()` as a client method, no provider component), so
+  `apps/web` pins `better-auth@1.7.7` alongside `apps/api`. The previously
+  accepted `@tanstack/react-query` dependency (ruling #5) is unnecessary
+  for this client and was not added. (h) **Mailpit's REST is
+  PascalCase** (`ID`, `To`, `Subject`, `Snippet`; the full `Text` only on
+  the single-message endpoint) — the test helpers are written to it.
+  (i) The `.env` value `EMAIL_PROVIDER=smtp` was normalized to `mailpit`,
+  the §9 table's value (nodemailer over Mailpit's SMTP, per the ruling).
 
 ---
 
