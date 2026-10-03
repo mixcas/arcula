@@ -173,6 +173,13 @@ arcula/
   run in prod** unless `ALLOW_DB_RESET=true`.
 - **`infra/cdk`** is standalone TypeScript; the CDK constructs never import
   application code (secrets are looked up by name, not value).
+- **Naming [Phase 0, 3 Oct 2026].** The new packages are born `@arcula/*`
+  — `@arcula/web`, `@arcula/shared`, `@arcula/db`, `@arcula/api` — and the
+  root package is named `arcula`. The web app's own package name moves with
+  them (`custodia` → `@arcula/web`), pulled forward from Phase 7 at the
+  owner's ruling: a private identifier with no runtime effect (RENAME.md).
+  The Firebase project id and the `demo-custodia` emulator project are
+  untouched.
 
 ## 3. Known failure modes — guardrails
 
@@ -557,7 +564,26 @@ is which layer a test sits against (§11).
 - `src/utils/imageVariants.ts` → **`apps/api`** (`variantSize`, `coverCrop`,
   the geometry) — verbatim, `.rotate()` included (G4). Its consumer, the
   worker/encoding machinery, is deleted.
-- `src/schemas/artwork.ts`, `src/schemas/artworkImport.ts` → **`packages/shared`**.
+- `src/schemas/artworkImport.ts` → **`packages/shared`** (firebase-free).
+  `src/schemas/artwork.ts` stays in `apps/web` until Phase 4: it calls
+  `deleteField()` from `firebase/firestore` at runtime — the `updateDoc`
+  sentinel machinery is service-layer code that dies with the cutover, and
+  the shared contract must not carry a runtime Firebase import.
+- `src/types/index.ts` → **`packages/shared/src/types.ts`**, with two
+  temporary carve-outs, both reversed in Phase 4 when the wire shape
+  lands: `CollectionUpdate`/`ArtworkUpdate` (the `FieldValue`-sentinel
+  mapped types) stay in `apps/web/src/types/updates.ts` next to the service
+  layer that owns the Firestore merge semantics, and the `Timestamp`
+  annotation keeps its type-only import of `firebase/firestore` — shared
+  declares `firebase` as a devDependency (type-only usage, erased at build
+  time, no runtime or server footprint). Until Phase 4 it is the only
+  Firebase import outside `apps/web`, and it is one line to remove.
+- The caps and accepted-type maps (`MAX_ARTWORK_PHOTOS`,
+  `MAX_IMAGE_BYTES`, `ACCEPTED_IMAGE_TYPES`, `MAX_ARTWORK_DOCUMENTS`,
+  `MAX_DOCUMENT_BYTES`, `ACCEPTED_DOCUMENT_TYPES`) →
+  **`packages/shared`** `caps.ts`, carved out of `imageVariants.ts` /
+  `artworkDocuments.ts` in Phase 0; the geometry table and the pure resize
+  maths stay in web and move to `apps/api` verbatim in Phase 3.
 
 ### Moved to `packages/shared` (the client contract)
 
@@ -581,8 +607,9 @@ photo-order helpers.
   of bug are gone.
 - `functions/`, the rules files (`.rules`, `indexes.json`), `.firebaserc` —
   nothing left to deploy to Firebase from this repo.
-- firebase / firebaseui dependencies; the dead `VITE_API_URL` /
-  `VITE_USE_NEW_API` vars (§0.2 #3).
+- the `firebase` dependency (`firebaseui` was never one — checked) —
+  deleted with the service layer in this phase; the dead
+  `VITE_API_URL`/`VITE_USE_NEW_API` vars go in Phase 0 (§0.2 #3).
 
 ### Rewritten
 
@@ -817,10 +844,12 @@ and so that the Firebase→API cutover happens in one discrete step (G1).
 
 Workspaces (`apps/*`, `packages/*`) in `package.json`; `git mv`
 `src/`→`apps/web/src`, `tests/`→`apps/web/tests`; create `packages/db`,
-`packages/shared`, `infra/cdk`; move verbatim-eligible code
-(types, schemas, `slug`, the order helpers) into `shared`; delete the dead
-`VITE_API_URL`/`VITE_USE_NEW_API` vars and the firebase/firebaseui
-dependencies.
+`packages/shared`, `infra/cdk`; move the verbatim-eligible contract code
+(types, the import schema, `slug`, the caps, the order helpers) into
+`shared`; delete the dead `VITE_API_URL`/`VITE_USE_NEW_API` vars. The
+`firebase` dependency is **not** deleted here: the web client still runs on
+Firebase until the Phase 4 cutover, and this phase's exit criterion requires
+that — the dep joins the §8 deletion bucket instead.
 **Done when:** `bun run check` and `bun run build` are green across
 workspaces, and `bun run dev` runs the web client (still on Firebase — the
 api is an empty shell) as it does today.
