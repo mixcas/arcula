@@ -21,7 +21,9 @@ import { fileURLToPath } from "node:url";
 
 /** The rules source, read once per worker. */
 const source = readFileSync(
-  fileURLToPath(new URL("../../storage.rules", import.meta.url)),
+  // The rules files stay at the repo root until the Phase 4 cutover deletes
+  // them, so from apps/web/tests/helpers that is four levels up.
+  fileURLToPath(new URL("../../../../storage.rules", import.meta.url)),
   "utf8",
 );
 

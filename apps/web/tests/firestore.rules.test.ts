@@ -67,8 +67,10 @@ const PROJECT_ID = "demo-custodia";
 const OWNER = "owner-1";
 const OTHER = "other-1";
 
+// The rules file stays at the repo root until the Phase 4 cutover; from
+// apps/web/tests that is three levels up.
 const RULES = readFileSync(
-  new URL("../firestore.rules", import.meta.url),
+  new URL("../../../firestore.rules", import.meta.url),
   "utf8",
 );
 

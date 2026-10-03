@@ -17,9 +17,10 @@ import { globalIgnores } from "eslint/config";
 export default tseslint.config(
   // Files ESLint should never lint
   globalIgnores([
-    "dist/**",
-    "public/**",
-    "node_modules/**",
+    // Unanchored: build output and node_modules now live under apps/* too.
+    "**/dist/**",
+    "**/node_modules/**",
+    "apps/web/public/**",
     "functions/lib/**",
     "eslint.config.mjs",
   ]),
@@ -84,7 +85,11 @@ export default tseslint.config(
   // browser globals for Node's.
   {
     name: "ts/node",
-    files: ["functions/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+    files: [
+      "functions/**/*.ts",
+      "apps/web/tests/**/*.ts",
+      "apps/web/vitest.config.ts",
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },

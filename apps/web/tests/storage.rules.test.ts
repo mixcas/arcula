@@ -59,7 +59,9 @@ import {
 import { documentExtension } from "@/utils/artworkDocuments";
 
 const PROJECT_ID = "demo-custodia";
-const RULES = readFileSync("storage.rules", "utf8");
+// The rules file stays at the repo root until the Phase 4 cutover; the path
+// is cwd-relative (vitest's root is apps/web), not import.meta.url-relative.
+const RULES = readFileSync("../../storage.rules", "utf8");
 
 const OWNER = "owner-1";
 const OTHER = "other-1";
@@ -185,7 +187,10 @@ beforeAll(() => {
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    firestore: { rules: readFileSync("firestore.rules", "utf8") },
+    firestore: {
+      // Repo root, cwd-relative (vitest's root is apps/web).
+      rules: readFileSync("../../firestore.rules", "utf8"),
+    },
     storage: { rules: RULES },
   });
 });
