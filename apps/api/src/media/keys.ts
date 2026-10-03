@@ -1,0 +1,201 @@
+// The §6 object-key shapes: builders and the parser that turns a key
+// back into its segments.
+//
+// Two prefixes, both self-describing — every segment is an id or a
+// variant key, and no user-supplied filename ever reaches a path:
+//
+//   final:    artworks/{userId}/{collectionId}/{artworkId}/photos/{entryId}_{key}.{ext}
+//             artworks/{userId}/{collectionId}/{artworkId}/documents/{entryId}_{key}.{ext}
+//   staging:  staging/{userId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+//
+// `staging/` leads the staged key on purpose: lifecycle rules match
+// literal prefixes, so one `staging/` rule covers every staged object in
+// every collection, while no such rule can exist over the nested final
+// form. The parser is what makes the proxy's per-request authz and the
+// sweep work from the key alone — nothing else is asked of a key.
+
+/** `original` plus the five photo variant keys. `media/variants.ts`
+ *  (the verbatim port of the client's IMAGE_VARIANTS) carries the same
+ *  five — its test cross-checks the two so they cannot drift. */
+const OBJECT_KEYS = [
+  "original",
+  "xlarge",
+  "square_lg",
+  "square_sm",
+  "large",
+  "medium",
+] as const;
+
+export type MediaPopulation = "photos" | "documents";
+
+export const finalPhotoKey = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+  key: string,
+  ext: string,
+): string =>
+  `artworks/${userId}/${collectionId}/${artworkId}/photos/${entryId}_${key}.${ext}`;
+
+export const finalDocumentKey = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+  key: string,
+  ext: string,
+): string =>
+  `artworks/${userId}/${collectionId}/${artworkId}/documents/${entryId}_${key}.${ext}`;
+
+export const stagingOriginalKey = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+  ext: string,
+): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}.${ext}`;
+
+export const stagingVariantKey = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+  key: string,
+  ext: string,
+): string =>
+  `staging/${userId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
+
+/** The unmodified source: no key suffix, so a staged entry is at most
+ *  one original plus its generated variants. */
+export type ParsedStagingKey = {
+  kind: "staging";
+  userId: string;
+  collectionId: string;
+  artworkId: string;
+  entryId: string;
+  /** `null` for the original, the variant key otherwise. */
+  key: string | null;
+  ext: string;
+};
+
+export type ParsedFinalKey = {
+  kind: "final";
+  population: MediaPopulation;
+  userId: string;
+  collectionId: string;
+  artworkId: string;
+  entryId: string;
+  key: string;
+  ext: string;
+};
+
+export type ParsedMediaKey = ParsedStagingKey | ParsedFinalKey;
+
+/**
+ * Split a `{entryId}_{key}` base into its two halves.
+ *
+ * Entry ids are client-minted and may contain underscores, so the join
+ * cannot be split on the first or the last one — `square_lg` itself
+ * contains one. What is safe is the other side: the object key comes
+ * from a known finite set, and no key is a suffixed neighbour of
+ * another (`_large` is not a suffix of `_square_lg`, …), so stripping
+ * each known suffix recovers the entry id unambiguously. A base that
+ * matches no suffix is an original: entry id, no key.
+ */
+function splitEntryAndKey(base: string): {
+  entryId: string;
+  key: string | null;
+} {
+  for (const key of OBJECT_KEYS) {
+    const suffix = `_${key}`;
+    if (base.endsWith(suffix)) {
+      const entryId = base.slice(0, -suffix.length);
+      if (entryId.length > 0) return { entryId, key };
+    }
+  }
+  return { entryId: base, key: null };
+}
+
+function splitExt(name: string): { base: string; ext: string } | null {
+  const dot = name.lastIndexOf(".");
+  // No dot at all, or one at either end, is not a `{base}.{ext}` name.
+  if (dot <= 0 || dot === name.length - 1) return null;
+  return { base: name.slice(0, dot), ext: name.slice(dot + 1) };
+}
+
+/**
+ * Parse an object key back into its segments. Returns `null` when the
+ * key is not one the app could have built — the proxy turns that into
+ * its 404 rather than guessing which row the key might name.
+ */
+export const parseMediaKey = (key: string): ParsedMediaKey | null => {
+  const segments = key.split("/");
+  // No empty path segments (no leading/trailing/doubled slashes), no dots
+  // in a path segment — an ext belongs to the filename only, which is
+  // validated by splitExt below.
+  if (segments.slice(0, -1).some((s) => s === "" || s.includes("."))) {
+    return null;
+  }
+
+  if (segments[0] === "artworks" && segments.length === 6) {
+    if (segments[4] !== "photos" && segments[4] !== "documents") return null;
+    const name = splitExt(segments[5]);
+    if (!name) return null;
+    const { entryId, key: objectKey } = splitEntryAndKey(name.base);
+    // A final object always names a key: a `{entryId}.{ext}` under
+    // `photos/` or `documents/` is not a shape this app writes.
+    if (objectKey === null) return null;
+    return {
+      kind: "final",
+      population: segments[4],
+      userId: segments[1],
+      collectionId: segments[2],
+      artworkId: segments[3],
+      entryId,
+      key: objectKey,
+      ext: name.ext,
+    };
+  }
+
+  if (segments[0] === "staging" && segments.length === 5) {
+    const name = splitExt(segments[4]);
+    if (!name) return null;
+    const { entryId, key: objectKey } = splitEntryAndKey(name.base);
+    if (entryId.length === 0) return null;
+    return {
+      kind: "staging",
+      userId: segments[1],
+      collectionId: segments[2],
+      artworkId: segments[3],
+      entryId,
+      key: objectKey,
+      ext: name.ext,
+    };
+  }
+
+  return null;
+};
+
+/**
+ * The stored extension for a content type.
+ *
+ * The extension never comes from the request: originals keep their
+ * source format (PNG stays PNG — alpha), variants are `.webp`, document
+ * PDFs are `.pdf`. The content type is what the client declared and
+ * what the allowlist admitted, and this map is the only place that
+ * declaration becomes a name — so an unaccepted type answers `null`,
+ * and `null` is what a caller rejects with, never a guessed `.bin`
+ * (the failure that cost the old client a 403 on 100% of its PDFs).
+ */
+const EXT_BY_CONTENT_TYPE: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "application/pdf": ".pdf",
+};
+
+export const extensionFor = (contentType: string | undefined): string | null =>
+  contentType !== undefined && contentType !== ""
+    ? (EXT_BY_CONTENT_TYPE[contentType] ?? null)
+    : null;

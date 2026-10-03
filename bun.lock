@@ -23,6 +23,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@arcula/db": "workspace:*",
+        "@arcula/shared": "workspace:*",
         "@aws-sdk/client-s3": "3.1146.0",
         "@better-auth/drizzle-adapter": "1.7.7",
         "better-auth": "1.7.7",

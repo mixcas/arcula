@@ -10,7 +10,7 @@
     "db:reset": "set -a && . ../../.env && set +a && bun scripts/db-reset.ts",
     "db:seed": "set -a && . ../../.env && set +a && bun scripts/db-seed.ts",
     "db:studio": "set -a && . ../../.env && set +a && cd ../packages/db && bunx drizzle-kit studio",
-    "test": "set -a && . ../../.env && set +a && sh ../../scripts/stack-up.sh postgres mailpit && vitest run"
+    "test": "set -a && . ../../.env && set +a && sh ../../scripts/stack-up.sh postgres s3 mailpit && vitest run"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@arcula/db": "workspace:*",
+    "@arcula/shared": "workspace:*",
     "@aws-sdk/client-s3": "3.1146.0",
     "@better-auth/drizzle-adapter": "1.7.7",
     "better-auth": "1.7.7",

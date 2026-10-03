@@ -22,6 +22,11 @@ skills-lock.json
 # upstream, so keep it out of Prettier.
 .agents/
 
+# Agent-harness artifacts (the llmstxt installer's CLAUDE.md and .llms/ state):
+# generated content, not repo source, regenerated whenever the installer runs.
+CLAUDE.md
+.llms/
+
 # Env / secrets. Not a Prettier extension today, but keep them out of any
 # formatter (e.g. OpenCode) as a guard against a future workflow touching them.
 .env
