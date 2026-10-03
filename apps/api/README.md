@@ -2,12 +2,27 @@
 
 The Arcula backend, on Bun (plan §3).
 
-In Phase 0 this package is a **shell**: `src/main.ts` is a `serve` with one
-health endpoint (`GET /api/health` → `{"status":"ok"}`, anything else 501).
-It exists so `bun run dev` runs the final two-process topology from the first
-phase — and so the port, the boot, and the error shape are proven while the
-repo is still small. Every later phase replaces the handler; the `serve` call
-is what stays.
+Phase 1 state:
+
+- `src/main.ts` — the Phase 0 shell: a `serve` with one health endpoint
+  (`GET /api/health` → `{"status":"ok"}`, anything else 501). The `serve`
+  call is what stays; the handler is replaced as later phases mount the
+  auth routes (Phase 2) and the domain API (Phase 3).
+- `src/db.ts` — the single driver: postgres.js + drizzle over
+  `@arcula/db`'s schema. Lazy connection; `DATABASE_URL` from the root
+  `.env`.
+- `src/auth.ts` — the Better Auth instance: `emailAndPassword` + `bearer`
+  plugins, the drizzle adapter pointed at the schema, the four custom user
+  columns declared in `user.additionalFields`, and
+  `requireEmailVerification: false` as an **explicit** value (G6).
+- `scripts/db-{migrate,reset,seed}.ts` + the `db:*` scripts (run from the
+  root: `bun run db:reset`). `db:reset` is the Phase 1 exit criterion:
+  drop all tables → re-apply migrations → clear both object prefixes
+  (`staging/`, `artworks/`) in the S3 stand-in → seed the owner account
+  through this package's own auth instance → sign back in through the
+  adapter. It refuses to run in prod unless `ALLOW_DB_RESET=true`.
+- `tests/adapter.test.ts` — asserts the `additionalFields` declaration and
+  the schema's user table agree (the opaque sign-up gotcha, §5).
 
 Two deliberate tsconfig choices:
 

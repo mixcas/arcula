@@ -1,7 +1,7 @@
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"userId" text NOT NULL,
-	"provider" text NOT NULL,
+	"providerId" text NOT NULL,
 	"accountId" text NOT NULL,
 	"accessToken" text,
 	"refreshToken" text,
@@ -10,11 +10,8 @@ CREATE TABLE "account" (
 	"refreshTokenExpiresAt" timestamp with time zone,
 	"scope" text,
 	"password" text,
-	"salt" text,
-	"verificationMethod" text,
-	"clientId" text,
-	"method" text NOT NULL,
-	"type" text NOT NULL
+	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "artwork_documents" (

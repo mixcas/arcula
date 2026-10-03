@@ -225,7 +225,7 @@ defaulted fields).
 ### Core tables (adapter-generated; keep the generated shape, don't hand-roll)
 
 - **`session`** — `id`, `userId` (→ `user`), `expiresAt`, `createdAt`, `updatedAt`.
-- **`account`** — `id`, `userId`, `provider`, the credential/token fields, `clientId`, `method`, `type`.
+- **`account`** — `id`, `userId`, `providerId`, `accountId`, the credential/token fields, `createdAt`, `updatedAt`: the 1.7.7 core model, exactly — no `method`/`type` columns (§15). The adapter schema-checks this table at construction, so a deviation is a hard `SchemaMismatchError`, not a silent one.
 - **`verification`** — `id`, `identifier`, `value`, `expiresAt`, `createdAt`, `updatedAt`. **Defined in the schema even though verification is gated off in beta** — that is what makes the later enablement a config flip, not a schema change (G6).
 
 ### `collections`
@@ -1021,6 +1021,22 @@ ledger.
   stay in `.env` as prod inputs (owner's ruling, Phase 0) — named for
   §10's prod config, not §9's local table; `.env` is gitignored, so no
   value in it is a committed artifact.
+
+- **2026-10-03 — better-auth 1.7.7 API vs the §4/§5 wording (verified
+  against the installed package, all four).** (a) `user.additionalFields`
+  takes **type-discriminator attributes** (`{ type: "string", required,
+defaultValue }`), not Zod schemas — §5's "Zod-typed" wording did not hold.
+  (b) The `includeFields` option no longer exists; `returned` (default
+  `true`) already puts all four custom fields in session responses, so the
+  §5 goal is met by default. (c) Email+password is a **core feature**
+  configured through the `emailAndPassword` section (`enabled: true`,
+  `requireEmailVerification: false` — G6's explicit flip), not a plugin.
+  (d) The `account` core model is `providerId`/`accountId` with no
+  `method`/`type`/`clientId`/`salt` — §4's line is amended in place. Also
+  recorded from the same verification: a failed `.api` call **throws** an
+  `APIError` (`{ status, body: { message, code } }`) and a success resolves
+  the endpoint body; sign-up requires `name` in the body; duplicate email
+  is `USER_ALREADY_EXISTS*`.
 
 ---
 

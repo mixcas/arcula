@@ -95,6 +95,9 @@ export default tseslint.config(
       "packages/db/vitest.config.ts",
       "packages/db/drizzle.config.ts",
       "apps/api/src/**/*.ts",
+      "apps/api/scripts/**/*.ts",
+      "apps/api/tests/**/*.ts",
+      "apps/api/vitest.config.ts",
     ],
     languageOptions: {
       globals: { ...globals.node },

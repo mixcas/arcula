@@ -100,11 +100,12 @@ describe("the nine-table schema (§4)", () => {
     expect(s.token.isUnique).toBe(true);
     expect(s.expiresAt.dataType).toBe("date");
     const a = cols(account);
-    expect(a.provider.notNull).toBe(true);
-    expect(a.method.notNull).toBe(true);
-    expect(a.type.notNull).toBe(true);
+    // The 1.7.7 core model: providerId/accountId, no method/type columns.
+    expect(a.providerId.notNull).toBe(true);
+    expect(a.accountId.notNull).toBe(true);
     expect(a.password).toBeDefined();
-    expect(a.clientId).toBeDefined();
+    expect(a.method).toBeUndefined();
+    expect(a.type).toBeUndefined();
     const v = cols(verification);
     expect(v.identifier.notNull).toBe(true);
     expect(v.value.notNull).toBe(true);

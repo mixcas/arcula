@@ -5,9 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/main.ts",
-    "start": "bun src/main.ts"
+    "start": "bun src/main.ts",
+    "db:migrate": "set -a && . ../../.env && set +a && bun scripts/db-migrate.ts",
+    "db:reset": "set -a && . ../../.env && set +a && bun scripts/db-reset.ts",
+    "db:seed": "set -a && . ../../.env && set +a && bun scripts/db-seed.ts",
+    "db:studio": "set -a && . ../../.env && set +a && cd ../packages/db && bunx drizzle-kit studio",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.2"
+    "@types/bun": "^1.4.2",
+    "vitest": "5.0.2"
+  },
+  "dependencies": {
+    "@arcula/db": "workspace:*",
+    "@aws-sdk/client-s3": "3.1146.0",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3",
+    "postgres": "3.4.9"
   }
 }

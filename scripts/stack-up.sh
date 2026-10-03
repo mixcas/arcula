@@ -2,8 +2,8 @@
 # Bring up the local dev stack (§9), idempotently: services that are
 # already up are left alone.
 #
-#   sh scripts/stack-up.sh                 # everything: postgres minio mailpit
-#   sh scripts/stack-up.sh -p postgres     # just the named service
+#   sh scripts/stack-up.sh                  # everything: postgres s3 mailpit
+#   sh scripts/stack-up.sh postgres s3      # just the named services
 #
 # Postgres runs as a docker (colima) container — the only stack service the
 # docker registry reachable from this machine actually hosts. The S3
@@ -14,12 +14,19 @@
 
 set -eu
 
-case "${1:-all}" in
-  all)                    WANT="postgres s3 mailpit" ;;
-  postgres | s3 | mailpit) WANT="$1" ;;
-  *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "${1:-}" >&2
-     exit 2 ;;
-esac
+if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
+  WANT="postgres s3 mailpit"
+else
+  WANT=""
+  for s in "$@"; do
+    case "$s" in
+      postgres | s3 | mailpit) WANT="$WANT $s" ;;
+      *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "$s" >&2
+         exit 2 ;;
+    esac
+  done
+  WANT=${WANT# }
+fi
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT

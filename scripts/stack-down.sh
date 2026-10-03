@@ -1,19 +1,26 @@
 #!/bin/sh
 # Tear down the local dev stack (inverse of stack-up.sh).
-#   sh scripts/stack-down.sh                 # everything
-#   sh scripts/stack-down.sh -p postgres      # just the named service
+#   sh scripts/stack-down.sh                  # everything
+#   sh scripts/stack-down.sh postgres s3      # just the named services
 #
 # Volumes (postgres data, MinIO state) are kept: db:reset wipes tables and
 # objects, never the volumes.
 
 set -eu
 
-case "${1:-all}" in
-  all)                    WANT="postgres s3 mailpit" ;;
-  postgres | s3 | mailpit) WANT="$1" ;;
-  *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "${1:-}" >&2
-     exit 2 ;;
-esac
+if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
+  WANT="postgres s3 mailpit"
+else
+  WANT=""
+  for s in "$@"; do
+    case "$s" in
+      postgres | s3 | mailpit) WANT="$WANT $s" ;;
+      *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "$s" >&2
+         exit 2 ;;
+    esac
+  done
+  WANT=${WANT# }
+fi
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT

@@ -66,12 +66,15 @@ export const session = pgTable("session", {
   updatedAt: timestamptz("updatedAt"),
 });
 
+// The 1.7.7 core model, exactly: providerId/accountId, no method/type.
+// The adapter validates this at construction time (schema check), so a
+// hand-rolled extra NOT NULL column is a hard error, not a silent one.
 export const account = pgTable("account", {
   id: text("id").primaryKey(),
   userId: text("userId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  provider: text("provider").notNull(),
+  providerId: text("providerId").notNull(),
   accountId: text("accountId").notNull(),
   accessToken: text("accessToken"),
   refreshToken: text("refreshToken"),
@@ -84,11 +87,8 @@ export const account = pgTable("account", {
   }),
   scope: text("scope"),
   password: text("password"),
-  salt: text("salt"),
-  verificationMethod: text("verificationMethod"),
-  clientId: text("clientId"),
-  method: text("method").notNull(),
-  type: text("type").notNull(),
+  createdAt: timestamptz("createdAt"),
+  updatedAt: timestamptz("updatedAt"),
 });
 
 // Defined even though verification is gated off in beta (§5): that is what
