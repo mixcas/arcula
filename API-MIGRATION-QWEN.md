@@ -564,11 +564,15 @@ is which layer a test sits against (§11).
 - `src/utils/imageVariants.ts` → **`apps/api`** (`variantSize`, `coverCrop`,
   the geometry) — verbatim, `.rotate()` included (G4). Its consumer, the
   worker/encoding machinery, is deleted.
-- `src/schemas/artworkImport.ts` → **`packages/shared`** (firebase-free).
-  `src/schemas/artwork.ts` stays in `apps/web` until Phase 4: it calls
-  `deleteField()` from `firebase/firestore` at runtime — the `updateDoc`
-  sentinel machinery is service-layer code that dies with the cutover, and
-  the shared contract must not carry a runtime Firebase import.
+- `src/schemas/artwork.ts` is **split at the `deleteField` seam** in
+  Phase 0: the pure core (validation, coercion, `ArtworkFormValues`,
+  `toArtworkPayload`, `toNewArtwork`, `fromArtwork`) moves to
+  **`packages/shared`**, and `src/schemas/artworkImport.ts` follows
+  (it builds on `toNewArtwork`). Only `toArtworkUpdate` + `EDITABLE_FIELDS`
+  stay in `apps/web/src/schemas/artwork.ts`: they call `deleteField()` from
+  `firebase/firestore` at runtime — the `updateDoc` sentinel machinery is
+  service-layer code that dies with the cutover, and the shared contract
+  must not carry a runtime Firebase import.
 - `src/types/index.ts` → **`packages/shared/src/types.ts`**, with two
   temporary carve-outs, both reversed in Phase 4 when the wire shape
   lands: `CollectionUpdate`/`ArtworkUpdate` (the `FieldValue`-sentinel
