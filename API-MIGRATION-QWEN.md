@@ -1039,7 +1039,10 @@ defaultValue }`), not Zod schemas — §5's "Zod-typed" wording did not hold.
   recorded from the same verification: a failed `.api` call **throws** an
   `APIError` (`{ status, body: { message, code } }`) and a success resolves
   the endpoint body; sign-up requires `name` in the body; duplicate email
-  is `USER_ALREADY_EXISTS*`.
+  is `USER_ALREADY_EXISTS*`. (e) The Drizzle adapter is a **direct
+  dependency** of `apps/api` — `@better-auth/drizzle-adapter` pinned to the
+  matching `1.7.7`, per the official docs — not an import of better-auth's
+  `./adapters/drizzle` re-export of it (same code either way).
 
 ---
 

@@ -12,7 +12,7 @@
 // option is gone — `returned` (default true) already puts all four custom
 // fields in session responses.
 
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { schema } from "@arcula/db";
