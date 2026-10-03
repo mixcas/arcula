@@ -18,6 +18,7 @@ import { bearer } from "better-auth/plugins";
 import { schema } from "@arcula/db";
 import { db } from "./db";
 import { corsOrigins } from "./env";
+import { clientUrl, emailProvider } from "./email/provider";
 
 // The four custom user columns, declared (the opaque-sign-up gotcha, §5):
 // an undeclared custom column fails sign-up with no useful error. The
@@ -45,6 +46,41 @@ export const auth = betterAuth({
     // G6: explicit, never the silently-baked-in default. Beta signs in
     // without a verified email; enabling verification later is this one flip.
     requireEmailVerification: false,
+    // Reset is fully live in beta (§5). Better Auth hands the hook a URL on
+    // the API origin; the mail has to point at the web app, so it is
+    // rewritten to CLIENT_ORIGIN before it is sent.
+    sendResetPassword: async ({ user, url }) => {
+      await emailProvider.send({
+        to: user.email,
+        subject: "Reset your Arcula password",
+        text: [
+          "Hi,",
+          "",
+          `Reset your Arcula password: ${clientUrl(url)}`,
+          "",
+          "If you did not ask for this, ignore this email — your password will not change.",
+        ].join("\n"),
+      });
+    },
+  },
+  emailVerification: {
+    // G6, the second half: the hook is wired but the auto-send stays off
+    // (requireEmailVerification is false and sendOnSignUp is unset), so the
+    // on-demand POST /api/auth/send-verification-email is what fires it.
+    // Enabling verification later is the config flip, not a hook change.
+    sendVerificationEmail: async ({ user, url }) => {
+      await emailProvider.send({
+        to: user.email,
+        subject: "Verify your Arcula email",
+        text: [
+          "Hi,",
+          "",
+          `Verify your Arcula email: ${clientUrl(url)}`,
+          "",
+          "If you did not create this account, ignore this email.",
+        ].join("\n"),
+      });
+    },
   },
   advanced: {
     // §10.3: the session cookie is Secure in prod; local dev is plain

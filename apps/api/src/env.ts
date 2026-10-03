@@ -13,3 +13,11 @@ export const corsOrigins: string[] = (
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+// The web app's origin — where the links in the reset/verification mails
+// have to land (§9). Locally the Vite dev server; in prod the same host
+// the static hosting serves from. A trailing slash is dropped: links are
+// built as `${clientOrigin}${pathname}`.
+export const clientOrigin = (process.env.CLIENT_ORIGIN ?? "")
+  .trim()
+  .replace(/\/$/, "");

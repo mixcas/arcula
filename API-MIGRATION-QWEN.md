@@ -676,14 +676,15 @@ One command, full product:
 
 ### Environment (`.env`, one file)
 
-| Variable                                                        | Read by    | Local value                                                               |
-| --------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                  | api, seed  | `postgres://arcula:arcula@localhost:5432/arcula`                          |
-| `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | api        | MinIO at 9000; bucket `arcula`                                            |
-| `AUTH_SECRET`                                                   | api        | random; committed in `.env` for dev only                                  |
-| `EMAIL_PROVIDER` / `SMTP_HOST` / `SMTP_PORT`                    | api        | `mailpit` / `localhost` / `1025`                                          |
-| `SEED_EMAIL` / `SEED_PASSWORD` / `SEED_NAME`                    | seed       | the owner account                                                         |
-| `ALLOW_DB_RESET`                                                | `db:reset` | defaults false; the script **refuses to run in prod** unless it is `true` |
+| Variable                                                        | Read by    | Local value                                                                                                      |
+| --------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                  | api, seed  | `postgres://arcula:arcula@localhost:5432/arcula`                                                                 |
+| `S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_BUCKET` | api        | SeaweedFS at 9000; bucket `arcula` (the §15 MinIO→SeaweedFS ruling)                                              |
+| `AUTH_SECRET`                                                   | api        | random; committed in `.env` for dev only                                                                         |
+| `EMAIL_PROVIDER` / `SMTP_HOST` / `SMTP_PORT`                    | api        | `mailpit` / `localhost` / `1025`                                                                                 |
+| `CLIENT_ORIGIN`                                                 | api        | `http://localhost:3000` — the web origin the reset/verification mail links point at (§5; prod is the §10.3 host) |
+| `SEED_EMAIL` / `SEED_PASSWORD` / `SEED_NAME`                    | seed       | the owner account                                                                                                |
+| `ALLOW_DB_RESET`                                                | `db:reset` | defaults false; the script **refuses to run in prod** unless it is `true`                                        |
 
 The dead `VITE_API_URL` / `VITE_USE_NEW_API` vars are **deleted**, not
 defaulted (§0.2 #3).
