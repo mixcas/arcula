@@ -13,3 +13,4 @@ export * from "./artworkPhotos";
 export * from "./slug";
 export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
+export * from "./schemas/collection";

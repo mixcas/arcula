@@ -37,7 +37,6 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono, type Context } from "hono";
-import { ZodError, type ZodType } from "zod";
 import {
   loadArtworkById,
   loadArtworkInCollection,
@@ -47,6 +46,7 @@ import {
 } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
+import { parseBody, safeTx, type Tx } from "../http";
 import {
   finalDocumentPrefix,
   finalPhotoPrefix,
@@ -61,37 +61,6 @@ import { resolveSession, requireSession } from "../session";
 // satisfy Hono's optional param type. An empty segment 404s at the row
 // lookup.
 const param = (c: Context, key: string): string => c.req.param(key) ?? "";
-
-// The transaction handle the save helpers write through.
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-// ---------------------------------------------------------------------------
-// Payloads
-// ---------------------------------------------------------------------------
-
-/** The §7 validation envelope: the code, plus the failed fields. */
-async function parseBody<T>(c: Context, schema: ZodType<T>): Promise<T> {
-  let raw: unknown;
-  try {
-    raw = await c.req.json();
-  } catch {
-    throw new ApiError("validation", "The request body is not valid JSON");
-  }
-  try {
-    return schema.parse(raw);
-  } catch (err) {
-    if (err instanceof ZodError) {
-      const fields: Record<string, string> = {};
-      for (const issue of err.issues) {
-        fields[issue.path.join(".")] = issue.message;
-      }
-      throw new ApiError("validation", "The request body is invalid", {
-        fields,
-      });
-    }
-    throw err;
-  }
-}
 
 const tooMany = (field: string, cap: number): ApiError =>
   new ApiError("validation", `An artwork may have at most ${cap} ${field}`, {
@@ -140,29 +109,6 @@ async function assertEntriesFree(
       `The entry id "${taken[0].id}" is already in use`,
       { fields: { [field]: "An entry id is already in use" } },
     );
-  }
-}
-
-// A save's "impossible" failure: two saves raced for the same
-// (artworkId, order) slot. Postgres reports it as a unique violation;
-// the client can only retry, and the upserts make the retry safe.
-const isUniqueViolation = (err: unknown): boolean =>
-  typeof err === "object" &&
-  err !== null &&
-  "code" in err &&
-  (err as { code?: unknown }).code === "23505";
-
-async function safeTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  try {
-    return await db.transaction(fn);
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      throw new ApiError(
-        "internal",
-        "The save collided with a concurrent change. Try again.",
-      );
-    }
-    throw err;
   }
 }
 
