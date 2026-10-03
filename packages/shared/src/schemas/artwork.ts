@@ -232,3 +232,99 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
 // `apps/web/src/schemas/artwork.ts`, next to the service layer that owns the
 // Firestore merge semantics. It dies with that layer in Phase 4 of the
 // migration plan.
+
+// ---------------------------------------------------------------------------
+// API save payloads (Phase 3 S4, plan §6.3 / §7)
+//
+// The form schemas above validate the inputs; these two validate the JSON a
+// save request carries — the fields, plus the staged entries the API
+// promotes into rows in the same transaction.
+// ---------------------------------------------------------------------------
+
+/**
+ * A client-minted id: the same character set the old client's nanoid gave
+ * its Firestore-style ids, and what an object-key segment must be — letters,
+ * digits, dash, underscore; nothing that could carry a dot or a path
+ * separator. Entry ids and artwork ids are both minted under this rule, and
+ * the stage routes apply it to the ids they accept (one regex, shared).
+ */
+export const MINTED_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** One staged entry in a save payload. `name` is metadata only — never in a path. */
+export const stagedEntrySchema = z.object({
+  entryId: z.string().regex(MINTED_ID_RE, "Invalid entry id"),
+  name: z.string().trim().min(1, "Name is required"),
+});
+
+export type StagedEntry = z.infer<typeof stagedEntrySchema>;
+
+/**
+ * POST …/artworks. The form's fields plus the client-minted artwork id and
+ * the staged entries to promote in the same transaction (§6.3).
+ *
+ * The payload carries no `order`: the array position IS the order — the
+ * server assigns it from position, which is the client's existing
+ * `reindexPhotos` contract ("array position is the truth") restated at the
+ * boundary. A save cannot therefore express a duplicate or a gap; the
+ * UNIQUE (artworkId, order) constraint is what turns a _concurrent_ race
+ * into a hard error instead.
+ */
+export const artworkCreateSchema = artworkSchema.extend({
+  artworkId: z.string().regex(MINTED_ID_RE, "Invalid artwork id"),
+  photos: z.array(stagedEntrySchema).default([]),
+  documents: z.array(stagedEntrySchema).default([]),
+});
+
+export type ArtworkCreatePayload = z.infer<typeof artworkCreateSchema>;
+
+/**
+ * The text fields a PATCH may set or clear — the same twelve the form owns.
+ * `title` and `artistName` are required and can never be cleared.
+ */
+export const UPDATABLE_TEXT_FIELDS = [
+  "serie",
+  "dateOfCreation",
+  "media",
+  "dimensions",
+  "editions",
+  "acquisitionDate",
+  "acquisitionPrice",
+  "placeOfOrigin",
+  "provenance",
+  "notes",
+  "condition",
+  "currentValue",
+] as const;
+
+// In a JSON payload a field is either a value, `null` (clear), or absent
+// (leave alone) — JSON has no `deleteField()` sentinel, and `null` is what
+// replaces it. A string must be non-blank: clearing is the job of `null`.
+const updatableText = z.string().trim().min(1).nullable().optional();
+
+/**
+ * PATCH …/artworks/{aid}. `photos`/`documents`, when present, are the FULL
+ * new sequence (array position is the order) / set — stored ids and staged
+ * ids interleaved; when absent, the sequence is left untouched (the form's
+ * `commit()` returning null for "unchanged" is what produces the omission).
+ */
+export const artworkUpdateSchema = z.object({
+  title: z.string().trim().min(1, "Title is required"),
+  artistName: z.string().trim().min(1, "Artist name is required"),
+  serie: updatableText,
+  dateOfCreation: updatableText,
+  media: updatableText,
+  dimensions: updatableText,
+  editions: updatableText,
+  acquisitionDate: z.iso.date().nullable().optional(),
+  acquisitionPrice: updatableText,
+  placeOfOrigin: updatableText,
+  provenance: updatableText,
+  notes: updatableText,
+  condition: updatableText,
+  currentValue: updatableText,
+  isPublic: z.boolean().optional(),
+  photos: z.array(stagedEntrySchema).optional(),
+  documents: z.array(stagedEntrySchema).optional(),
+});
+
+export type ArtworkUpdatePayload = z.infer<typeof artworkUpdateSchema>;

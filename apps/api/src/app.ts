@@ -12,6 +12,7 @@ import { auth } from "./auth";
 import { errorResponse } from "./errors";
 import { corsOrigins } from "./env";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
+import { artworkRoutes } from "./routes/artworks";
 import { meRoutes } from "./routes/me";
 
 export const app = new Hono();
@@ -44,3 +45,4 @@ app.route(
 // modules here, mounted at /api/v1 with their own paths.
 app.route("/api/v1", meRoutes);
 app.route("/api/v1", artworkMediaRoutes);
+app.route("/api/v1", artworkRoutes);

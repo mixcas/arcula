@@ -16,6 +16,7 @@ import {
   ACCEPTED_IMAGE_TYPES,
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
+  MINTED_ID_RE,
 } from "@arcula/shared";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -45,8 +46,8 @@ import { deleteObject, listObjects, putObject, readObject } from "../storage";
 
 // Ids are client-minted (nanoid / Firestore-style) and become key
 // segments: letters, digits, dash, underscore — nothing that could
-// carry a path separator or a dot.
-const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+// carry a path separator or a dot. The shared MINTED_ID_RE is the
+// single owner of that character set (also the save payloads').
 
 // The route patterns guarantee these segments; `?? ""` only exists to
 // satisfy Hono's optional param type. An empty segment either 404s at
@@ -116,8 +117,11 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
   const pop = POPULATIONS[population];
   const r = new Hono();
 
-  r.use("*", requireSession);
-
+  // requireSession is attached per route, NOT via `use("*")`: this sub-app
+  // is mounted at /api/v1, and a sub-app `use("*")` is re-registered on the
+  // parent as /api/v1/* — which would 401 every anonymous /api/v1 request
+  // (the public reads) the moment this app is mounted.
+  //
   // A coarse guard ahead of parseBody: the exact per-file cap is checked
   // on the parsed file below (the multipart overhead is the slack here).
   const limit = bodyLimit({
@@ -133,20 +137,20 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
   // ------------------------------------------------------------------
   // Stage
   // ------------------------------------------------------------------
-  r.post(`/${pop.population}/stage`, limit, async (c) => {
+  r.post(`/${pop.population}/stage`, requireSession, limit, async (c) => {
     const collection = await requireOwnedCollection(
       c,
       param(c, "collectionId"),
     );
     const artworkId = param(c, "artworkId");
-    if (!ID_RE.test(artworkId)) {
+    if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
     }
 
     const body = await c.req.parseBody();
     const entryId = body.entryId;
     const file = body.file;
-    if (typeof entryId !== "string" || !ID_RE.test(entryId)) {
+    if (typeof entryId !== "string" || !MINTED_ID_RE.test(entryId)) {
       throw invalid("A valid entryId field is required", {
         entryId: "required",
       });
@@ -216,13 +220,13 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
   // ------------------------------------------------------------------
   // Process
   // ------------------------------------------------------------------
-  r.post(`/${pop.population}/process`, async (c) => {
+  r.post(`/${pop.population}/process`, requireSession, async (c) => {
     const collection = await requireOwnedCollection(
       c,
       param(c, "collectionId"),
     );
     const artworkId = param(c, "artworkId");
-    if (!ID_RE.test(artworkId)) {
+    if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
     }
 
@@ -233,7 +237,7 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
       throw invalid("Invalid JSON body");
     }
     const entryId = (raw as { entryId?: unknown })?.entryId;
-    if (typeof entryId !== "string" || !ID_RE.test(entryId)) {
+    if (typeof entryId !== "string" || !MINTED_ID_RE.test(entryId)) {
       throw invalid("A valid entryId is required", { entryId: "required" });
     }
 
@@ -289,17 +293,17 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
   // ------------------------------------------------------------------
   // Discard
   // ------------------------------------------------------------------
-  r.delete(`/${pop.population}/:entryId`, async (c) => {
+  r.delete(`/${pop.population}/:entryId`, requireSession, async (c) => {
     const collection = await requireOwnedCollection(
       c,
       param(c, "collectionId"),
     );
     const artworkId = param(c, "artworkId");
-    if (!ID_RE.test(artworkId)) {
+    if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
     }
     const entryId = param(c, "entryId");
-    if (!ID_RE.test(entryId)) {
+    if (!MINTED_ID_RE.test(entryId)) {
       throw invalid("The entry id is not valid");
     }
 

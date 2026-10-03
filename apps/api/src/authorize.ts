@@ -54,6 +54,16 @@ export const loadArtworkInCollection = async (
       )
   )[0] ?? null;
 
+/** The artwork by global id, any collection. The create route's
+ *  collision check: an id is a primary key, and reusing one would
+ *  promote the new save's staged entries under the existing row's id. */
+export const loadArtworkById = async (
+  artworkId: string,
+): Promise<ArtworkRow | null> =>
+  (
+    await db.select().from(artworksTable).where(eq(artworksTable.id, artworkId))
+  )[0] ?? null;
+
 /** The write-side check: the collection exists and the session user owns it. */
 export async function requireOwnedCollection(
   c: Context,

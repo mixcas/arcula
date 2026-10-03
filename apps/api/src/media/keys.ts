@@ -69,6 +69,29 @@ export const stagingVariantKey = (
   `staging/${userId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
 
 /**
+ * The final prefixes that address one entry's objects. Deleting a removed
+ * entry lists this prefix and filters through `parseMediaKey` — the
+ * character-wise prefix alone is not safe against a sibling entry id:
+ * `photos/abc_` also matches entry `abc_d`'s objects, and only the parser
+ * recovers the true entry id.
+ */
+export const finalPhotoPrefix = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+): string =>
+  `artworks/${userId}/${collectionId}/${artworkId}/photos/${entryId}_`;
+
+export const finalDocumentPrefix = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+): string =>
+  `artworks/${userId}/${collectionId}/${artworkId}/documents/${entryId}_`;
+
+/**
  * The prefixes that address one staged entry without its siblings.
  *
  * The original is `{entryId}.{ext}` and its variants are
