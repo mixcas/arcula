@@ -140,12 +140,12 @@ describe("parseMediaKey rejects", () => {
 });
 
 describe("extensionFor", () => {
-  it("maps every accepted type to its stored extension", () => {
+  it("maps every accepted type to its stored extension (no leading dot)", () => {
     const expected: Record<string, string> = {
-      "image/jpeg": ".jpg",
-      "image/png": ".png",
-      "image/webp": ".webp",
-      "application/pdf": ".pdf",
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "application/pdf": "pdf",
     };
     for (const map of [ACCEPTED_IMAGE_TYPES, ACCEPTED_DOCUMENT_TYPES]) {
       for (const type of Object.keys(map)) {
@@ -154,7 +154,7 @@ describe("extensionFor", () => {
     }
   });
 
-  it("returns null — never `.bin` — for any unaccepted type, whatever the name", () => {
+  it("returns null — never `bin` — for any unaccepted type, whatever the name", () => {
     // The property, not the case: the stored extension is a function of
     // the content type alone, the filename is not even read. If a
     // rewrite starts consulting the name (the old client's
@@ -180,9 +180,7 @@ describe("extensionFor", () => {
     ];
     for (const name of names) {
       for (const type of types) {
-        expect(extensionFor(type), `${name} × ${String(type)}`).not.toBe(
-          ".bin",
-        );
+        expect(extensionFor(type), `${name} × ${String(type)}`).not.toBe("bin");
         expect(extensionFor(type), `${name} × ${String(type)}`).toBeNull();
       }
     }

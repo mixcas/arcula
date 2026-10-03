@@ -67,20 +67,28 @@ export const putObject = (
 export const streamObject = (key: string) =>
   s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
 
-/** Read an object back as bytes. Rejects on a missing object — see `isObjectMissing`. */
-export async function objectBytes(key: string): Promise<Uint8Array> {
+/** The bytes and the recorded content type, in one request. */
+export async function readObject(
+  key: string,
+): Promise<{ bytes: Uint8Array; contentType: string | null }> {
   const res = await streamObject(key);
   const body: unknown = res.Body;
+  let bytes: Uint8Array;
   if (body instanceof ReadableStream) {
-    return new Uint8Array(await new Response(body).arrayBuffer());
-  }
-  if (body instanceof Readable) {
+    bytes = new Uint8Array(await new Response(body).arrayBuffer());
+  } else if (body instanceof Readable) {
     const chunks: Buffer[] = [];
     for await (const chunk of body) chunks.push(chunk as Buffer);
-    return new Uint8Array(Buffer.concat(chunks));
+    bytes = new Uint8Array(Buffer.concat(chunks));
+  } else {
+    throw new Error("unconsumable S3 response body");
   }
-  throw new Error("unconsumable S3 response body");
+  return { bytes, contentType: res.ContentType ?? null };
 }
+
+/** Read an object back as bytes. Rejects on a missing object — see `isObjectMissing`. */
+export const objectBytes = async (key: string): Promise<Uint8Array> =>
+  (await readObject(key)).bytes;
 
 export const headObject = (key: string) =>
   s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));

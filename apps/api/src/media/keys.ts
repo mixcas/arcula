@@ -16,8 +16,10 @@
 
 /** `original` plus the five photo variant keys. `media/variants.ts`
  *  (the verbatim port of the client's IMAGE_VARIANTS) carries the same
- *  five — its test cross-checks the two so they cannot drift. */
-const OBJECT_KEYS = [
+ *  five — `tests/pipeline.test.ts` cross-checks the two so they cannot
+ *  drift. Exported for that cross-check and for callers that need the
+ *  full key space. */
+export const OBJECT_KEYS = [
   "original",
   "xlarge",
   "square_lg",
@@ -65,6 +67,30 @@ export const stagingVariantKey = (
   ext: string,
 ): string =>
   `staging/${userId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
+
+/**
+ * The prefixes that address one staged entry without its siblings.
+ *
+ * The original is `{entryId}.{ext}` and its variants are
+ * `{entryId}_{key}.{ext}`, so a `.` after the id and a `_` after it are the
+ * two exact separators. A plain `staging/{u}/{c}/{a}/{entryId}` prefix is
+ * NOT safe to delete by: entry `abc` would also sweep entry `abc_d`'s
+ * objects. These two prefixes are what discard and the original lookup
+ * list against.
+ */
+export const stagedOriginalPrefix = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}.`;
+
+export const stagedVariantPrefix = (
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}_`;
 
 /** The unmodified source: no key suffix, so a staged entry is at most
  *  one original plus its generated variants. */
@@ -188,14 +214,26 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
  * and `null` is what a caller rejects with, never a guessed `.bin`
  * (the failure that cost the old client a 403 on 100% of its PDFs).
  */
-const EXT_BY_CONTENT_TYPE: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "application/pdf": ".pdf",
+// Extensions are returned WITHOUT a leading dot; the key builders add the
+// `.` themselves. Keeping the dot out of this map keeps a single owner of
+// "where the dot goes" and makes the "never bin" property assertable.
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
 };
 
 export const extensionFor = (contentType: string | undefined): string | null =>
   contentType !== undefined && contentType !== ""
-    ? (EXT_BY_CONTENT_TYPE[contentType] ?? null)
+    ? (EXT_BY_TYPE[contentType] ?? null)
     : null;
+
+/**
+ * The proxy path that serves an object. GET responses fill their `url`
+ * fields with these (§7), and the stage/process responses return them so
+ * the form can render previews straight from the staged objects without
+ * encoding anything itself.
+ */
+export const mediaUrl = (key: string): string =>
+  `/api/v1/media?key=${encodeURIComponent(key)}`;
