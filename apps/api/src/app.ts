@@ -9,9 +9,19 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "./auth";
+import { errorResponse } from "./errors";
 import { corsOrigins } from "./env";
+import { meRoutes } from "./routes/me";
 
 export const app = new Hono();
+
+// One envelope for everything we throw (§7). Better Auth's responses
+// never reach here — its handler already produced a Response, and Hono
+// only forwards thrown errors.
+app.onError((err, c) => {
+  const { body, status } = errorResponse(err);
+  return c.json(body, status);
+});
 
 // Locally the web client is a different origin (Vite on 3000, the api on
 // 8000); the same-origin prod deployment needs no CORS. `credentials`
@@ -28,3 +38,7 @@ app.route(
   "/api/auth",
   new Hono().all("*", (c) => auth.handler(c.req.raw)),
 );
+
+// /api/v1/* — the resource API (§7). Later phases add their route
+// modules here, mounted at /api/v1 with their own paths.
+app.route("/api/v1", meRoutes);

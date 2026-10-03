@@ -48,7 +48,9 @@ export const user = pgTable("user", {
   firstName: text("firstName"),
   lastName: text("lastName"),
   tier: text("tier").notNull().default("free"),
-  settings: jsonb("settings"),
+  // $type is compile-time only (no SQL, no migration); without it drizzle
+  // infers the jsonb as `{}`.
+  settings: jsonb("settings").$type<Record<string, unknown> | null>(),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
 });
