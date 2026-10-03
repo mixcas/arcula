@@ -55,6 +55,7 @@
         "@mantine/modals": "^9.6.3",
         "@mantine/notifications": "^9.6.3",
         "@tabler/icons-react": "^3.48.0",
+        "better-auth": "1.7.7",
         "dayjs": "^1.11.23",
         "embla-carousel": "^8.6.0",
         "embla-carousel-react": "^8.6.0",
