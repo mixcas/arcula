@@ -15,6 +15,9 @@ build
 .env.local
 .env.*.local
 
+# local stack state (scripts/stack-up.sh): MinIO data dir, pids, logs
+.stack/
+
 # misc
 .DS_Store
 *.log

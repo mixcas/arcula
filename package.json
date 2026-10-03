@@ -8,7 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --parallel dev:api dev:web",
+    "stack:up": "sh scripts/stack-up.sh",
+    "stack:down": "sh scripts/stack-down.sh",
+    "dev": "sh scripts/stack-up.sh && bun run --parallel dev:api dev:web",
     "dev:api": "cd apps/api && bun run dev",
     "dev:web": "cd apps/web && bun run dev",
     "build": "cd apps/web && bun run build",

@@ -126,9 +126,10 @@ duration of the migration.
 ```
 arcula/
 ├── package.json            # bun workspaces: ["apps/*", "packages/*"]
-│                           #   root scripts: dev, build, check, test, db:*, deploy
+│                           #   root scripts: dev, stack:*, check, test, db:*, deploy
 ├── bun.lock
-├── docker-compose.yml      # local: postgres, minio, mailpit (§9)
+├── docker-compose.yml      # local: postgres only (S3 stand-in + mailpit run natively — §15)
+├── scripts/                # stack-up.sh / stack-down.sh (the mixed local stack, §15)
 ├── apps/
 │   ├── web/               # React 19 + Vite + TS + Mantine — current src/
 │   │   ├── src/          #   moved here (not copied)
@@ -137,8 +138,8 @@ arcula/
 │   └── api/             # Hono + Better Auth + Drizzle, on Bun
 │       ├── src/         #   main.ts, app.ts, db/, auth/, routes/,
 │       │                #   services/, media/, email/
-│       ├── seed.ts      #   wipe + seed: the owner account (§4, §9)
-│       └── package.json #   db:reset, db:studio, db:migrate scripts
+│       ├── scripts/     #   db-migrate / db-reset (wipe+seed) / db-seed (§4)
+│       └── package.json #   db:reset, db:seed, db:migrate, db:studio scripts
 ├── packages/
 │   ├── db/             # Drizzle schema (all tables, §4) + generated
 │   │                   #   migrations; imported by api, seed, and tests
@@ -169,8 +170,8 @@ arcula/
   with a documented move trigger: if a second client ever needs them (mobile
   generating variants client-side), they move to `packages/shared`.
 - **`seed` runs in the `api` package.** The same-instance reason above.
-  `db:reset` (wipe) and `db:studio` are local-only scripts that **refuse to
-  run in prod** unless `ALLOW_DB_RESET=true`.
+  `db:reset` (wipe) and `db:seed` are local-only scripts; `db:reset`
+  **refuses to run in prod** unless `ALLOW_DB_RESET=true`.
 - **`infra/cdk`** is standalone TypeScript; the CDK constructs never import
   application code (secrets are looked up by name, not value).
 - **Naming [Phase 0, 3 Oct 2026].** The new packages are born `@arcula/*`
@@ -342,7 +343,9 @@ through the **same Better Auth instance** the app signs in with, so the stored
 hash is compatible with real sign-in. `firstName`/`lastName` stay null until
 the profile page is used.
 
-`db:studio` opens drizzle-studio against the local compose DB.
+`db:studio` opens Drizzle Studio against the local DB. In this registry the
+Studio ships as the `drizzle-kit studio` subcommand (beta) rather than as a
+standalone package (§15).
 
 ## 5. Auth
 
@@ -663,13 +666,13 @@ private | notFound | ready` — same pure decision functions, same doctrine
 come up (or are already up), then `bun run --parallel dev:api dev:web`.
 One command, full product:
 
-| Service               | Port(s)                    | Role                                                                    |
-| --------------------- | -------------------------- | ----------------------------------------------------------------------- |
-| Postgres 16 (compose) | 5432                       | `arcula` DB                                                             |
-| MinIO (compose)       | 9000 S3 API / 9001 console | the S3 stand-in; bucket `arcula`; lifecycle rules applied if configured |
-| Mailpit (compose)     | 1025 SMTP / 8025 UI        | the reset/verification mail sink — the inbox you actually read in dev   |
-| API (Bun.serve)       | 8000                       | Hono app: `/api/auth/*`, `/api/v1/*`                                    |
-| Web (Vite)            | 3000 (unchanged)           | the client; `/api` proxied to 8000                                      |
+| Service               | Port(s)                     | Role                                                                    |
+| --------------------- | --------------------------- | ----------------------------------------------------------------------- |
+| Postgres 16 (compose) | 5432                        | `arcula` DB                                                             |
+| SeaweedFS (native)    | 9000 S3 API / 9001 admin UI | the S3 stand-in; bucket `arcula`; lifecycle rules applied if configured |
+| Mailpit (native)      | 1025 SMTP / 8025 UI         | the reset/verification mail sink — the inbox you actually read in dev   |
+| API (Bun.serve)       | 8000                        | Hono app: `/api/auth/*`, `/api/v1/*`                                    |
+| Web (Vite)            | 3000 (unchanged)            | the client; `/api` proxied to 8000                                      |
 
 ### Environment (`.env`, one file)
 
@@ -687,9 +690,13 @@ defaulted (§0.2 #3).
 
 ### Scripts (root `package.json`)
 
-- `dev` — parallel `dev:api` + `dev:web` (+ compose, if not already up).
-- `db:migrate` / `db:reset` / `db:studio` / `db:seed` — in `apps/api`
-  (§4); `db:reset` = wipe DB + both object prefixes + seed, one script.
+- `dev` — `sh scripts/stack-up.sh` (start any service that is not already
+  up), then parallel `dev:api` + `dev:web`. The mixed stack — postgres
+  containerized, minio/mailpit native (§15) — is what the stack scripts cover.
+- `db:migrate` / `db:reset` / `db:seed` / `db:studio` — in `apps/api`
+  (§4); `db:reset` = wipe DB + both object prefixes + seed, one script;
+  `db:studio` opens Drizzle Studio (the `drizzle-kit studio` subcommand —
+  §15).
 - `check` — tsc + eslint + prettier across workspaces.
 - `test` — all suites, workspace-wide (§11).
 - `deploy` — the gate suites, then `cdk deploy` (§10).
@@ -861,8 +868,8 @@ api is an empty shell) as it does today.
 ### Phase 1 — Database
 
 `packages/db`: the nine-table Drizzle schema (§4) + generated migrations;
-`db:migrate`/`db:reset`/`db:studio` scripts; the seed script (wipe+seed,
-§4). Better Auth drizzle adapter pointed at the schema, all four core tables
+`db:migrate`/`db:reset`/`db:seed`/`db:studio` scripts (wipe+seed, §4).
+Better Auth drizzle adapter pointed at the schema, all four core tables
 
 - the four custom columns declared in `additionalFields` **and asserted in
   a test** (the opaque-sign-up gotcha, §5).
@@ -969,6 +976,51 @@ necessary); the queue revisit if Phase 3's decision point ever trips.
 | `requireEmailVerification: true` from day one                        | **Rejected for beta** — it would block the owner's own onboarding (no verified email exists yet). Built-but-gated (§5) keeps the beta usable and the later enablement a config flip                                                                                 |
 | Email change in scope                                                | **Out of scope** (§5): needs verify-before-update + confirmation email — a different decision, a different phase                                                                                                                                                    |
 | Data migration / Firebase-UID mapping                                | **Not a requirement** (§0.1): the current project is test data; an empty DB is the assumption the whole design is tuned to                                                                                                                                          |
+
+---
+
+## 15. Amendments (post-Phase 0)
+
+The living-document rule (§13 risk 6) applies to amendments as it does to
+anything else: when reality diverges from an earlier section, patch that
+section in place **and** record the divergence here, dated. This is the
+ledger.
+
+- **2026-10-03 — `db:studio`: dropped, then restored (owner's ruling,
+  corrected finding).** First dropped on the finding that no Drizzle-Studio
+  npm package exists in this registry (`@drizzle.studio`,
+  `@drizzle/studio`, `drizzle-steam` probed, absent). That finding was
+  incomplete: `drizzle-kit@0.31.11` ships the Studio as a `studio`
+  subcommand (beta), and it works here — it loads `drizzle.config.ts`,
+  connects through the pg driver, and serves the UI at
+  local.drizzle.studio. `db:studio` is wired to it; the §9/§12 lines are
+  restored. Ad-hoc inspection remains `docker-compose exec postgres psql`.
+
+- **2026-10-03 — Mixed local stack: Postgres containerized; S3 stand-in and
+  Mailpit native.** The docker registry reachable from this machine (colima)
+  hosts neither `minio/minio` (pull denied / not found) nor the Mailpit
+  image, `dl.min.io` is 410 Gone, and MinIO no longer ships darwin builds
+  (three releases checked: none) — so §9's "three compose services" cannot
+  stand as written. Postgres keeps its container (`postgres:16` is local).
+  The MinIO slot goes to **SeaweedFS**: `minio` is a dead end here — the
+  Homebrew bottle segfaults on this machine (go-m1cpu cgo SIGSEGV, even on
+  `--version`), and its upstream is archived (formula deprecated, disabled
+  2027-02-17). SeaweedFS keeps the shape the plan needs: one pure-Go
+  process that implements the S3 API and stores objects locally
+  (`weed server -dir=… -s3`), from a maintained upstream (Apache-2.0,
+  current bottles), serving 9000 for S3. `mailpit` (Homebrew, MIT,
+  current) fills its slot at 8025/1025. `scripts/stack-up.sh` /
+  `stack-down.sh` cover the mixed start/stop, and `dev` calls stack-up
+  first. `S3_FORCE_PATH_STYLE=true` is load-bearing for it: the S3
+  endpoint is the service root, not a resolvable host.
+
+- **2026-10-03 — Two `.env` rulings recorded.** `AUTH_BASE_URL`
+  (`http://localhost:8000/api/auth` locally; the prod value is
+  `https://api.arcula.art/api/auth`, §10.3) is a Phase 1 addition, not a
+  §9 line. And the first-attempt `RESEND_API_KEY` / `EMAIL_FROM` values
+  stay in `.env` as prod inputs (owner's ruling, Phase 0) — named for
+  §10's prod config, not §9's local table; `.env` is gitignored, so no
+  value in it is a committed artifact.
 
 ---
 
