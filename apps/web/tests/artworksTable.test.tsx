@@ -17,7 +17,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ArtworksTable from "@/components/manage/collection/ArtworksTable";
 import { artworkService } from "@/services/artworkService";
-import type { Artwork } from "@/types";
+import type { Artwork } from "@arcula/shared";
 
 vi.mock("@/services/artworkService", () => ({
   artworkService: { softDeleteArtworks: vi.fn() },

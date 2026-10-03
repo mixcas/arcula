@@ -89,6 +89,8 @@ export default tseslint.config(
       "functions/**/*.ts",
       "apps/web/tests/**/*.ts",
       "apps/web/vitest.config.ts",
+      "packages/shared/tests/**/*.ts",
+      "packages/shared/vitest.config.ts",
     ],
     languageOptions: {
       globals: { ...globals.node },

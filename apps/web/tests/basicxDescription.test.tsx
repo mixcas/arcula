@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { basicxSkin } from "@/skins/basicx";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
-import type { Artwork, Collection, ImageVariantKey } from "@/types";
+import type { Artwork, Collection, ImageVariantKey } from "@arcula/shared";
 import type { MockEmblaApi } from "./helpers/carouselMock";
 
 // React 19 requires this flag for act() outside a browser environment.

@@ -1,4 +1,10 @@
-import { FieldValue, Timestamp } from "firebase/firestore";
+// Type-only import, deliberately kept from the Firebase era: `Timestamp` is
+// the wire shape the Firestore service layer hands back, and every other
+// type in this file is plain. It is erased at build time, so shared has no
+// runtime Firebase dependency. When the API's wire shape lands (Phase 4 of
+// the migration plan) the annotation is replaced and this import — and the
+// `firebase` devDependency — go with it.
+import type { Timestamp } from "firebase/firestore";
 
 // User type
 export interface User {
@@ -38,16 +44,6 @@ export interface Collection {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
-
-// Payload for collectionService.updateCollection.
-//
-// `updateDoc` merges, so a key that is simply absent leaves the stored field
-// alone — which would make it impossible to clear a value once it is set. Any
-// field may therefore also carry a `deleteField()` sentinel to remove it. Same
-// mapped-type shape and rationale as `ArtworkUpdate`.
-export type CollectionUpdate = {
-  [K in keyof Omit<Collection, "id">]?: Collection[K] | FieldValue;
-};
 
 // Artwork type
 //
@@ -103,18 +99,6 @@ export interface Artwork {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
-
-// Payload for artworkService.updateArtwork.
-//
-// `updateDoc` merges, so a key that is simply absent leaves the stored field
-// alone — which would make it impossible to clear a value once it is set. Any
-// field may therefore also carry a `deleteField()` sentinel to remove it.
-// Written as a mapped type rather than `Record<string, unknown>` so the usual
-// type checking survives: a wrong value type or an unknown key is still an
-// error, it just widens to accept the sentinel.
-export type ArtworkUpdate = {
-  [K in keyof Omit<Artwork, "id">]?: Artwork[K] | FieldValue;
-};
 
 // Fields shared by both kinds of "other document".
 interface ArtworkDocumentBase {

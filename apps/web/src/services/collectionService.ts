@@ -12,7 +12,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Collection, CollectionUpdate } from "../types";
+import type { Collection } from "@arcula/shared";
+import type { CollectionUpdate } from "../types/updates";
 
 const COLLECTIONS_COLLECTION = "collections";
 

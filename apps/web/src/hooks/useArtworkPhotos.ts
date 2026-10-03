@@ -23,10 +23,11 @@ import {
   variantFormatIsWebp,
   type ProcessedImage,
 } from "@/utils/imageProcessing";
-import { MAX_ARTWORK_PHOTOS, isAcceptedImageType } from "@/utils/imageVariants";
+import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import { isAcceptedImageType } from "@/utils/imageVariants";
 import { JPEG_TYPE } from "@/utils/imageRender";
-import { reindexPhotos, sortPhotos } from "@/utils/artworkPhotos";
-import type { ArtworkPhoto, ImageVariant } from "@/types";
+import { reindexPhotos, sortPhotos } from "@arcula/shared";
+import type { ArtworkPhoto, ImageVariant } from "@arcula/shared";
 
 /**
  * One entry in the form's photo list.

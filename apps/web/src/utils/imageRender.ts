@@ -16,7 +16,7 @@ import {
   variantSize,
   type ImageVariantSpec,
 } from "./imageVariants";
-import type { ImageVariantKey } from "@/types";
+import type { ImageVariantKey } from "@arcula/shared";
 
 /**
  * Encoder settings.

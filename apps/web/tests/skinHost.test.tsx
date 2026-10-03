@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import SkinHost from "@/components/collection/SkinHost";
 import { DEFAULT_SKIN, SKINS } from "@/skins/registry";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

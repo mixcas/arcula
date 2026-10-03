@@ -26,8 +26,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { processImages, type ProcessedImage } from "@/utils/imageProcessing";
 import { JPEG_TYPE } from "@/utils/imageRender";
+import { MAX_ARTWORK_DOCUMENTS } from "@arcula/shared";
 import {
-  MAX_ARTWORK_DOCUMENTS,
   documentExtension,
   documentImageSpecs,
   documentsChanged,
@@ -40,7 +40,7 @@ import type {
   ArtworkDocument,
   ArtworkDocumentImage,
   ImageVariant,
-} from "@/types";
+} from "@arcula/shared";
 
 /**
  * One entry in the form's document list.

@@ -24,7 +24,7 @@ import type {
   ArtworkPhoto,
   ImageVariant,
   ImageVariantKey,
-} from "@/types";
+} from "./types";
 
 /**
  * The photos in sequence, with `order` renumbered to match array position.

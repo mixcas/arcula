@@ -21,7 +21,7 @@ import {
   type UseArtworkPhotos,
 } from "@/hooks/useArtworkPhotos";
 import { processImages, variantFormatIsWebp } from "@/utils/imageProcessing";
-import type { ArtworkPhoto } from "@/types";
+import type { ArtworkPhoto } from "@arcula/shared";
 
 /**
  * The default stub: one WebP `square_lg` per file, as a working browser gives.

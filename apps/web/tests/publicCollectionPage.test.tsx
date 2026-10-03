@@ -9,7 +9,7 @@ import { FirebaseError } from "firebase/app";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicCollectionPage from "@/components/collection/PublicCollectionPage";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

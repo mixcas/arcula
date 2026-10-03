@@ -2,10 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { collectionSlug } from "@/utils/slug";
+import { collectionSlug } from "@arcula/shared";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
-import type { Collection } from "@/types";
+import type { Collection } from "@arcula/shared";
 
 const ManagePage: React.FC = () => {
   const { currentUser } = useAuth();

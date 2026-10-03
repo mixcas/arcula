@@ -10,7 +10,7 @@ import {
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { collectionSlug } from "@/utils/slug";
+import { collectionSlug } from "@arcula/shared";
 import { collectionService } from "@/services/collectionService";
 import { signOut, getAuth } from "firebase/auth";
 

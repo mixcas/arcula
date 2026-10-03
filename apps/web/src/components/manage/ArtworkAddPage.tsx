@@ -32,8 +32,8 @@ import {
   toNewArtwork,
   type ArtworkFormValues,
   type ArtworkPayload,
-} from "@/schemas/artwork";
-import { artworkSlug, parseId } from "@/utils/slug";
+} from "@arcula/shared";
+import { artworkSlug, parseId } from "@arcula/shared";
 
 /**
  * Where the Add page sends the user: the Edit page for the artwork it just

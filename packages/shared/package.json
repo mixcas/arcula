@@ -1,0 +1,19 @@
+{
+  "name": "@arcula/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "firebase": "^12.19.0",
+    "vitest": "5.0.2"
+  }
+}

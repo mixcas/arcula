@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { artworkSchema, toNewArtwork, type ArtworkFormValues } from "./artwork";
-import type { Artwork } from "@/types";
+import type { Artwork } from "../types";
 
 /**
  * Pure logic for the CSV artwork-import flow (`/manage/collection/:id/import/csv`).

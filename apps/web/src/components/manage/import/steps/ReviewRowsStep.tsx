@@ -7,7 +7,7 @@ import {
   isRowImportable,
   type ImportFieldKey,
   type ReviewRow,
-} from "@/schemas/artworkImport";
+} from "@arcula/shared";
 
 // 25 first, so it is also the default: the state below is initialised from
 // index 0, which keeps the default and the offered options from drifting.

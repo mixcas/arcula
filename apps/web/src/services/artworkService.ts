@@ -12,7 +12,8 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Artwork, ArtworkUpdate } from "../types";
+import type { Artwork } from "@arcula/shared";
+import type { ArtworkUpdate } from "../types/updates";
 
 const ARTWORKS_COLLECTION = "artworks";
 

@@ -35,7 +35,7 @@
 
 import type { ComponentType } from "react";
 import type { MantineThemeOverride } from "@mantine/core";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 /** Which public view the shell is rendering. */
 export type SkinView = "home" | "artwork";

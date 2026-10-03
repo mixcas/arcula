@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { MAX_IMAGE_BYTES } from "@arcula/shared";
 import {
   IMAGE_VARIANTS,
-  MAX_IMAGE_BYTES,
   VARIANT_KEYS,
   coverCrop,
   isAcceptedImageType,

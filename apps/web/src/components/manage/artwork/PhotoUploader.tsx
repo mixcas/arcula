@@ -31,12 +31,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import PhotoPreviewModal from "./PhotoPreviewModal";
 import type { PhotoEntry, UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
-import { photoUrl } from "@/utils/artworkPhotos";
-import {
-  ACCEPTED_IMAGE_TYPES,
-  MAX_ARTWORK_PHOTOS,
-} from "@/utils/imageVariants";
-import type { ArtworkPhoto } from "@/types";
+import { photoUrl } from "@arcula/shared";
+import { ACCEPTED_IMAGE_TYPES, MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import type { ArtworkPhoto } from "@arcula/shared";
 
 interface PhotoUploaderProps {
   photos: UseArtworkPhotos;

@@ -8,10 +8,9 @@
 // filename is read for, and when a save is allowed to skip the field.
 
 import { describe, expect, it } from "vitest";
+import { ACCEPTED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "@arcula/shared";
 import {
-  ACCEPTED_DOCUMENT_TYPES,
   DOCUMENT_EXTENSIONS,
-  MAX_DOCUMENT_BYTES,
   documentExtension,
   documentImageSpecs,
   documentImageUrl,
@@ -24,7 +23,7 @@ import {
   sortDocuments,
 } from "@/utils/artworkDocuments";
 import { extensionFor } from "@/utils/imageProcessing";
-import { MAX_IMAGE_BYTES } from "@/utils/imageVariants";
+import { MAX_IMAGE_BYTES } from "@arcula/shared";
 import {
   rulesByteCeiling,
   rulesExtensionList,
@@ -34,7 +33,7 @@ import type {
   ArtworkDocument,
   ArtworkDocumentFile,
   ArtworkDocumentImage,
-} from "@/types";
+} from "@arcula/shared";
 
 const imageDocument: ArtworkDocumentImage = {
   id: "a",

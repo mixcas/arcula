@@ -7,7 +7,7 @@ import {
   toImportArtwork,
   type ImportResult,
   type ReviewRow,
-} from "@/schemas/artworkImport";
+} from "@arcula/shared";
 
 interface ImportRunStepProps {
   rows: ReviewRow[];

@@ -32,7 +32,7 @@ import type {
   ArtworkDocumentFile,
   ArtworkDocumentImage,
   ImageVariant,
-} from "@/types";
+} from "@arcula/shared";
 
 /** Where an artwork's documents live. */
 const documentsPrefix = (

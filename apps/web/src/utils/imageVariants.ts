@@ -10,26 +10,11 @@
  * into the object filename, so adding a key means updating that rule too.
  */
 
-import type { ImageVariantKey } from "@/types";
+import { ACCEPTED_IMAGE_TYPES, type ImageVariantKey } from "@arcula/shared";
 
-/** Hard cap on images per artwork. Enforced in the form, not by the rules. */
-export const MAX_ARTWORK_PHOTOS = 10;
-
-/**
- * Per-file size cap.
- *
- * Must stay in step with the same constant in `storage.rules`. The rule reads
- * `size <= 10 * 1024 * 1024`, so this is a ceiling the client may hit exactly
- * rather than one the server will reject a byte under.
- */
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-
-/** Image types the form accepts. Mirrored in the Dropzone `accept` map. */
-export const ACCEPTED_IMAGE_TYPES: Record<string, string[]> = {
-  "image/jpeg": [".jpg", ".jpeg"],
-  "image/png": [".png"],
-  "image/webp": [".webp"],
-};
+// The caps (`MAX_ARTWORK_PHOTOS`, `MAX_IMAGE_BYTES`) and the accepted-type map
+// live in `@arcula/shared/src/caps.ts`, shared by every side that enforces
+// them; the forms import them from there.
 
 /** A square variant: scale to cover the box, then crop the overflow off. */
 export interface SquareVariantSpec {

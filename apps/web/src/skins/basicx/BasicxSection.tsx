@@ -39,8 +39,8 @@ import { Box, Image, UnstyledButton } from "@mantine/core";
 import { Carousel } from "@mantine/carousel";
 import type { EmblaCarouselType } from "embla-carousel";
 
-import { photoSrcSet, photoUrl, sortPhotos } from "@/utils/artworkPhotos";
-import type { Artwork, ArtworkPhoto } from "@/types";
+import { photoSrcSet, photoUrl, sortPhotos } from "@arcula/shared";
+import type { Artwork, ArtworkPhoto } from "@arcula/shared";
 
 /**
  * The chevron shown over each click zone.

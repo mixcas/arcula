@@ -9,7 +9,7 @@ import { FirebaseError } from "firebase/app";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicArtworkPage from "@/components/collection/PublicArtworkPage";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 // React 19 requires this flag for act() outside a browser environment.
 (

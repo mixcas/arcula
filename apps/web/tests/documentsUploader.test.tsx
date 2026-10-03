@@ -21,8 +21,8 @@ import {
   type UseArtworkDocuments,
 } from "@/hooks/useArtworkDocuments";
 import { processImages } from "@/utils/imageProcessing";
-import { MAX_DOCUMENT_BYTES } from "@/utils/artworkDocuments";
-import type { ArtworkDocument } from "@/types";
+import { MAX_DOCUMENT_BYTES } from "@arcula/shared";
+import type { ArtworkDocument } from "@arcula/shared";
 
 /**
  * The default stub: one `square_sm` per file, which is the subset a document

@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ImportRunStep from "@/components/manage/import/steps/ImportRunStep";
 import { artworkService } from "@/services/artworkService";
-import type { ReviewRow } from "@/schemas/artworkImport";
+import type { ReviewRow } from "@arcula/shared";
 
 // The step's only side-effecting dependency; controlled per-test below.
 vi.mock("@/services/artworkService", () => ({

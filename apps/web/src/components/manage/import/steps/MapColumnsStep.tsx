@@ -5,7 +5,7 @@ import {
   guessColumnMapping,
   type ColumnMapping,
   type ImportFieldKey,
-} from "@/schemas/artworkImport";
+} from "@arcula/shared";
 
 interface MapColumnsStepProps {
   headers: string[];

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from "react";
 import { Modal, Group, Text, ActionIcon, Box } from "@mantine/core";
-import { photoUrl } from "@/utils/artworkPhotos";
-import type { ArtworkPhoto } from "@/types";
+import { photoUrl } from "@arcula/shared";
+import type { ArtworkPhoto } from "@arcula/shared";
 
 interface PhotoPreviewModalProps {
   /**

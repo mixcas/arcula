@@ -22,7 +22,7 @@ import {
 } from "firebase/storage";
 import { collection, doc } from "firebase/firestore";
 import { db } from "./firebase";
-import type { ImageVariantKey } from "@/types";
+import type { ImageVariantKey } from "@arcula/shared";
 
 /**
  * How many files upload at once.

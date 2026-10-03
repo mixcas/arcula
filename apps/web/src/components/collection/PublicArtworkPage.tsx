@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicArtwork } from "./usePublicCollection";
-import { artworkSlug, collectionSlug, parseId } from "@/utils/slug";
+import { artworkSlug, collectionSlug, parseId } from "@arcula/shared";
 
 /**
  * The public view of a single artwork.

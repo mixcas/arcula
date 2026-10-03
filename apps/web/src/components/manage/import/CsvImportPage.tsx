@@ -3,7 +3,7 @@ import { Alert, Button, Group, Loader, Stepper, Text } from "@mantine/core";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
-import { collectionSlug, parseId } from "@/utils/slug";
+import { collectionSlug, parseId } from "@arcula/shared";
 import { parseCsvText, type ParsedCsv } from "@/utils/csv";
 import {
   attachIssues,
@@ -12,7 +12,7 @@ import {
   isMappingComplete,
   type ColumnMapping,
   type ImportRow,
-} from "@/schemas/artworkImport";
+} from "@arcula/shared";
 import ImportFileStep, { MAX_CSV_BYTES } from "./steps/ImportFileStep";
 import MapColumnsStep from "./steps/MapColumnsStep";
 import ReviewRowsStep from "./steps/ReviewRowsStep";

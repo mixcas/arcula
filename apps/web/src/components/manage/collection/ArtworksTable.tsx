@@ -9,8 +9,8 @@ import {
   type DataTableSortStatus,
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
-import { artworkSlug } from "@/utils/slug";
-import type { Artwork } from "@/types";
+import { artworkSlug } from "@arcula/shared";
+import type { Artwork } from "@arcula/shared";
 
 // 25 first, so it is also the default: the state below is initialised from
 // index 0, which keeps the default and the offered options from drifting.

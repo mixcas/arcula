@@ -5,7 +5,7 @@ import { Container, Text } from "@mantine/core";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicCollection } from "./usePublicCollection";
-import { artworkSlug, collectionSlug, parseId } from "@/utils/slug";
+import { artworkSlug, collectionSlug, parseId } from "@arcula/shared";
 
 /**
  * The public view of a whole collection.

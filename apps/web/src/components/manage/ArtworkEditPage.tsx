@@ -29,11 +29,11 @@ import {
   artworkSchema,
   fromArtwork,
   toArtworkPayload,
-  toArtworkUpdate,
   type ArtworkFormValues,
   type ArtworkPayload,
-} from "@/schemas/artwork";
-import { artworkSlug, parseId } from "@/utils/slug";
+} from "@arcula/shared";
+import { toArtworkUpdate } from "@/schemas/artwork";
+import { artworkSlug, parseId } from "@arcula/shared";
 
 /**
  * The `warn` values the Add page can send, and what each one means.

@@ -15,7 +15,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArtworkEditPage from "@/components/manage/ArtworkEditPage";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 /**
  * The Add → Edit handoff for a partial failure.

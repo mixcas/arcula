@@ -22,8 +22,8 @@ import {
   type UploadOne,
 } from "./artworkFiles";
 import { extensionFor, type ProcessedImage } from "@/utils/imageProcessing";
-import { reindexPhotos } from "@/utils/artworkPhotos";
-import type { ArtworkPhoto, ImageVariant } from "@/types";
+import { reindexPhotos } from "@arcula/shared";
+import type { ArtworkPhoto, ImageVariant } from "@arcula/shared";
 
 /** Where an artwork's photos live. */
 const photosPrefix = (

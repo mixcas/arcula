@@ -6,7 +6,7 @@ import {
   publicCollectionState,
   publicFailure,
 } from "@/components/collection/usePublicCollection";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 const COLLECTION_ID = "collection-1";
 

@@ -31,7 +31,7 @@ import { useEffect, useState } from "react";
 import { artworkService } from "@/services/artworkService";
 import { collectionService } from "@/services/collectionService";
 import { isPermissionDenied } from "@/utils/firestoreErrors";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 /** The only status a page ever renders. */
 export type PublicStatus =

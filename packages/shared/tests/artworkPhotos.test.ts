@@ -7,8 +7,8 @@ import {
   primaryPhoto,
   reindexPhotos,
   sortPhotos,
-} from "@/utils/artworkPhotos";
-import type { ArtworkPhoto, ImageVariantKey } from "@/types";
+} from "../src/artworkPhotos";
+import type { ArtworkPhoto, ImageVariantKey } from "../src/types";
 
 const variant = (key: ImageVariantKey, url: string) => ({
   key,

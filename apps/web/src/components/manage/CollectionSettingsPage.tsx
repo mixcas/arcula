@@ -22,7 +22,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "../../services/collectionService";
 import { isMaintenanceAdmin } from "@/utils/maintenanceAccess";
-import { collectionSlug, parseId } from "../../utils/slug";
+import { collectionSlug, parseId } from "@arcula/shared";
 import {
   DEFAULT_SKIN_ID,
   SKINS,
@@ -30,7 +30,7 @@ import {
   resolveSkinOptions,
 } from "@/skins/registry";
 import type { SkinOptionValue } from "@/skins/types";
-import type { CollectionUpdate } from "@/types";
+import type { CollectionUpdate } from "@/types/updates";
 
 /** Shallow equality over the option bag. Order does not matter, values do. */
 const optionsChanged = (

@@ -22,6 +22,7 @@
       "name": "@arcula/web",
       "version": "0.1.0",
       "dependencies": {
+        "@arcula/shared": "workspace:*",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
@@ -63,6 +64,17 @@
         "vitest": "5.0.2",
       },
     },
+    "packages/shared": {
+      "name": "@arcula/shared",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "^4.6.5",
+      },
+      "devDependencies": {
+        "firebase": "^12.19.0",
+        "vitest": "5.0.2",
+      },
+    },
   },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],
@@ -70,6 +82,8 @@
     "@apidevtools/json-schema-ref-parser": ["@apidevtools/json-schema-ref-parser@9.1.2", "", { "dependencies": { "@jsdevtools/ono": "^7.1.3", "@types/json-schema": "^7.0.6", "call-me-maybe": "^1.0.1", "js-yaml": "^4.1.0" } }, "sha512-r1w81DpR+KyRWd3f+rk6TNqMgedmAxZP5v5KWlXQWlgMUUtyEJch0DKEci1SorPMiSeM8XPl7MZ3miJ60JIpQg=="],
 
     "@apphosting/common": ["@apphosting/common@0.0.8", "", {}, "sha512-RJu5gXs2HYV7+anxpVPpp04oXeuHbV3qn402AdXVlnuYM/uWo7aceqmngpfp6Bi376UzRqGjfpdwFHxuwsEGXQ=="],
+
+    "@arcula/shared": ["@arcula/shared@workspace:packages/shared"],
 
     "@arcula/web": ["@arcula/web@workspace:apps/web"],
 

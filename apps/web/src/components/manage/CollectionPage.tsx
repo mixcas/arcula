@@ -4,9 +4,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
-import { collectionSlug, parseId } from "@/utils/slug";
+import { collectionSlug, parseId } from "@arcula/shared";
 import ArtworksTable from "./collection/ArtworksTable";
-import type { Artwork, Collection } from "@/types";
+import type { Artwork, Collection } from "@arcula/shared";
 
 const CollectionPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();

@@ -30,11 +30,13 @@ import {
   ACCEPTED_DOCUMENT_TYPES,
   MAX_ARTWORK_DOCUMENTS,
   MAX_DOCUMENT_BYTES,
+} from "@arcula/shared";
+import {
   documentImageUrl,
   fileExtension,
   isDocumentImage,
 } from "@/utils/artworkDocuments";
-import type { ArtworkDocument, ArtworkDocumentImage } from "@/types";
+import type { ArtworkDocument, ArtworkDocumentImage } from "@arcula/shared";
 
 interface DocumentsUploaderProps {
   documents: UseArtworkDocuments;
