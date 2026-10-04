@@ -14,7 +14,7 @@ import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import PublicArtworkPage from "./components/collection/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "./auth/AuthProvider";
 
 const App: React.FC = () => {
   return (

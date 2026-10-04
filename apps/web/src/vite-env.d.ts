@@ -4,9 +4,10 @@
 // to Vite's `[key: string]: any` index signature, which makes
 // `@typescript-eslint/no-unsafe-assignment` fire wherever the value is used.
 interface ImportMetaEnv {
-  // Optional: unset locally (the client falls back to the dev API origin);
-  // set to the prod host in the §10.3 build.
-  readonly VITE_API_BASE_URL?: string;
+  // The test transport's API target (tests/helpers/stackFetch.ts); unset
+  // falls back to http://localhost:8000. Never read by app code — the app
+  // is same-origin and calls relative /api paths.
+  readonly VITE_API_TARGET?: string;
   readonly VITE_FIREBASE_API_KEY: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN: string;
   readonly VITE_FIREBASE_PROJECT_ID: string;

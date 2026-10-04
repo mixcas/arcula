@@ -1216,6 +1216,73 @@ defaultValue }`), not Zod schemas — §5's "Zod-typed" wording did not hold.
   `apps/api/src/media/variants.ts` verbatim in S2, cross-checked by
   `tests/pipeline.test.ts`), and §13 risk 3 (MinIO → SeaweedFS wording).
 
+- **2026-10-04 — Phase 4 S1: the auth cutover, the same-origin base, and the
+  test transport.** (a) **The client has no baseURL (form verified).**
+  Omitting `baseURL` makes `getBaseURL` (better-auth `dist/utils/url.mjs`,
+  1.7.7) fall back to `window.location.origin` + `basePath` in the browser:
+  the dev page (Vite :3000) fetches `http://localhost:3000/api/auth/…` and
+  Vite's new `server.proxy["/api"]` (`VITE_API_TARGET ??
+http://localhost:8000`, `changeOrigin`) forwards it; prod is same-origin
+  per §10.2, so no env var is baked into the bundle. `VITE_API_BASE_URL`
+  (the Phase 2 absolute base) is retired from `vite-env.d.ts`;
+  `VITE_API_TARGET` is declared there but read by the test transport only —
+  no app code reads an env var. Caveat: without a `window` (node test
+  environment) the base resolves to the relative `"/api/auth"`, which
+  better-fetch rejects (it requires an absolute URL) — so any test that
+  touches the react client runs jsdom, whose default page URL
+  `http://localhost:3000` is exactly the dev origin the transport emulates.
+  (b) **The react client does not reject on auth failure (corrects the
+  Phase 2 AuthProvider assumption).** better-fetch rejects only with
+  `throw: true`, which the client never sets: a failed sign-in RESOLVES to
+  `{ data: null, error }` where `error` is the response body spread with
+  status — a flat `{ message, code, status, statusText }`. This is not the
+  `BetterFetchError` class shape (`{ status, error: { message, code } }`,
+  `.message` = the status text) that the Phase 2 entry (d) recorded for the
+  server-side `.api` client; the two are different and only the flat one
+  reaches the browser. `AuthProvider.login` now rethrows it (lifted onto a
+  real `Error` carrying `status`/`code`, per lint's `only-throw-error`), and
+  `LoginPage` maps the flat shape: 401 `INVALID_EMAIL_OR_PASSWORD` and 400
+  `INVALID_EMAIL` (both verified on the wire). The cutover itself:
+  `App.tsx` → `./auth/AuthProvider`, `hooks/useAuth.ts` re-exports
+  `auth/useAuth`, `context/AuthContext.tsx` deleted, `NewCollectionPage`
+  signs out through the provider.
+  (c) **Test transport = Vite proxy emulation (G8 mechanism).**
+  `tests/helpers/stackFetch.ts` wraps the global fetch: relative URLs
+  resolve against the app origin, app-origin requests are re-hosted onto
+  the API target, a single cookie jar is carried (cookie deletion via
+  `Max-Age=0`/expired/empty included — how sign-out clears the session),
+  and state-changing requests carry `Origin: http://localhost:3000`. The
+  jar, the installed-flag and the underlying native fetch live on
+  `globalThis` under `Symbol.for` keys, because a vitest worker is reused
+  across test files, each with a fresh module registry — module-scope state
+  would orphan the installed wrapper's jar. `tests/setup.ts` installs it
+  (setupFiles run before the module graph, which matters: the react client
+  captures the global fetch at module load) and clears the session in
+  afterAll, so every file starts anonymous. `tests/sessionTransport.test.ts`
+  pins the seam: sign-up → sign-in → get-session round-trip →
+  `/api/v1/me` on the same cookie → sign-out (cookie deletion honoured) →
+  anonymous 401 → the failed sign-in's 401 + code.
+  (d) **The origin check is Sec-Fetch-driven, not cookie-driven (measured;
+  refines the Phase 2 (e) wording).** Two middlewares:
+  `originCheckMiddleware` validates Origin only on state-changing requests
+  that carry a `cookie` header (GETs skipped); `formCsrfMiddleware` is
+  mounted on sign-in/sign-up only and FORCES origin validation when ANY
+  `Sec-Fetch-*` header is present — cookie or not. Node's undici always
+  sends `sec-fetch-mode: cors`, so a cookie-less sign-up from Node 403s
+  `MISSING_OR_NULL_ORIGIN` without an Origin header, while curl (no
+  Sec-Fetch headers) passes the identical request. Consequences: the
+  transport's blanket Origin on every state-changing request is mandatory
+  rather than defensive, and real browsers are unaffected (same-origin
+  requests carry `sec-fetch-site: same-origin` plus a trusted `Origin`).
+  (e) **The `test:web` gate.** Root `test:web` now runs `stack-up.sh` and
+  the new `ensure-api.sh` first (nohups `bun src/main.ts` when
+  `:8000/api/health` is down and polls it; the API's env is the repo-root
+  `.env` sourced explicitly — bun does not walk up parent directories for
+  `.env`, so `dev:api` only works inside the root `dev` chain).
+  `stack-down.sh` accepts `api` as an opt-in service, never in the default
+  set: a dev API started by `bun run dev` must survive a plain
+  `stack-down`.
+
 ---
 
 ## Closing

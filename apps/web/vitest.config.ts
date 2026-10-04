@@ -18,6 +18,13 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.{ts,tsx}"],
 
+    // Installs the stack transport (tests/helpers/stackFetch.ts) before any
+    // test file's module graph evaluates — the Better Auth react client
+    // captures the global fetch at module load, so the wrapper must be in
+    // place first — and clears the session cookie between files, so every
+    // file starts anonymous like a fresh tab.
+    setupFiles: ["tests/setup.ts"],
+
     /**
      * Stated rather than left to the default, because the default is the only
      * thing standing between a broken component and a green run.

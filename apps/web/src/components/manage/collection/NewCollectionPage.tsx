@@ -12,10 +12,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionSlug } from "@arcula/shared";
 import { collectionService } from "@/services/collectionService";
-import { signOut, getAuth } from "firebase/auth";
 
 const NewCollectionPage: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -61,8 +60,7 @@ const NewCollectionPage: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      const auth = getAuth();
-      await signOut(auth);
+      await logout();
       void navigate("/login");
     } catch (error) {
       console.error("Logout error:", error);

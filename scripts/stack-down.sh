@@ -14,8 +14,10 @@ else
   WANT=""
   for s in "$@"; do
     case "$s" in
-      postgres | s3 | mailpit) WANT="$WANT $s" ;;
-      *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "$s" >&2
+      # `api` is opt-in, never part of the default: a dev API started by
+      # `bun run dev` must survive a plain stack-down.
+      postgres | s3 | mailpit | api) WANT="$WANT $s" ;;
+      *) printf 'unknown service: %s (postgres | s3 | mailpit | api | all)\n' "$s" >&2
          exit 2 ;;
     esac
   done
@@ -45,6 +47,13 @@ for s in $WANT; do
         echo "mailpit: stopped"
       else
         echo "mailpit: not running"
+      fi ;;
+    api)
+      if [ -f "$ROOT/.stack/api.pid" ] && kill "$(cat "$ROOT/.stack/api.pid")" 2>/dev/null; then
+        echo "api: stopped"
+        rm -f "$ROOT/.stack/api.pid"
+      else
+        echo "api: not running"
       fi ;;
   esac
 done

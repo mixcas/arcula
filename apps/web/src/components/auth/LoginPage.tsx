@@ -39,18 +39,23 @@ const LoginPage: React.FC = () => {
       void navigate(from, { replace: true });
     } catch (err: unknown) {
       console.error("Login error:", err);
-      // Firebase auth errors carry a machine-readable code on the thrown
-      // value; anything else (or a missing code) falls through to the
-      // generic message.
+      // AuthProvider rethrows the sign-in's error object: the response
+      // body plus status — { message, code, status, statusText }. Two
+      // codes reach this form — 401 INVALID_EMAIL_OR_PASSWORD (better
+      // auth's enumeration-safe merge of unknown-email and wrong-password)
+      // and 400 INVALID_EMAIL (malformed address, rejected before the DB
+      // is touched). Anything else falls through to the generic message.
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? (err as { status?: unknown }).status
+          : undefined;
       const code =
         err && typeof err === "object" && "code" in err
           ? (err as { code?: unknown }).code
           : undefined;
-      if (code === "auth/user-not-found") {
-        setError("No account found with this email address.");
-      } else if (code === "auth/wrong-password") {
-        setError("Incorrect password.");
-      } else if (code === "auth/invalid-email") {
+      if (status === 401 && code === "INVALID_EMAIL_OR_PASSWORD") {
+        setError("Invalid email or password.");
+      } else if (status === 400 && code === "INVALID_EMAIL") {
         setError("Invalid email address format.");
       } else {
         setError("Login failed. Please try again.");

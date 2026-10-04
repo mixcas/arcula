@@ -24,7 +24,7 @@
     "test:shared": "cd packages/shared && bun run test",
     "test:db": "cd packages/db && bun run test",
     "test:api": "cd apps/api && bun run test",
-    "test:web": "cd apps/web && bun run test",
+    "test:web": "sh scripts/stack-up.sh && sh scripts/ensure-api.sh && cd apps/web && bun run test",
     "test:rules": "firebase emulators:exec --only firestore,auth,storage --project demo-custodia \"cd apps/web && bun run test:rules:inner && cd ../../packages/shared && bun run test\"",
     "db:migrate": "cd apps/api && bun run db:migrate",
     "db:reset": "cd apps/api && bun run db:reset",
