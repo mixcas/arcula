@@ -13,6 +13,8 @@
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
+  artworkDocuments as artworkDocumentsTable,
+  artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
   collections as collectionsTable,
 } from "@arcula/db";
@@ -40,6 +42,8 @@ import {
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { parseBody, safeTx } from "../http";
+import { parseMediaKey } from "../media/keys";
+import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
 import { serializeCollection } from "../serialize";
 
@@ -297,5 +301,63 @@ collectionRoutes.post(
         ),
       );
     return c.json({ restored: true });
+  },
+);
+
+// POST …/maintenance/sweep — delete this collection's staged objects
+// whose entryId has no row (§6 sweep; the lifecycle rule's local twin).
+// An entry that DOES have a row keeps its staged objects even under a
+// soft-deleted work: the row is what a restore would point at, and the
+// staged object may be the entry's newest version.
+collectionRoutes.post(
+  "/collections/:collectionId/maintenance/sweep",
+  requireSession,
+  async (c) => {
+    const collection = await requireOwnedCollection(
+      c,
+      param(c, "collectionId"),
+    );
+
+    // Every staged object under this collection. The prefix addresses
+    // this collection's own staging space; the parser still does the
+    // entry-id recovery, never the character-wise prefix (sibling
+    // entry ids share prefixes).
+    const keys = await listObjects(
+      `staging/${collection.userId}/${collection.id}/`,
+    );
+    const byEntry = new Map<string, string[]>();
+    for (const key of keys) {
+      const parsed = parseMediaKey(key);
+      if (!parsed || parsed.kind !== "staging") continue;
+      const list = byEntry.get(parsed.entryId);
+      if (list) list.push(key);
+      else byEntry.set(parsed.entryId, [key]);
+    }
+
+    let swept = 0;
+    if (byEntry.size > 0) {
+      const entryIds = [...byEntry.keys()];
+      const photoRows = await db
+        .select({ id: artworkPhotosTable.id })
+        .from(artworkPhotosTable)
+        .where(inArray(artworkPhotosTable.id, entryIds));
+      const documentRows = await db
+        .select({ id: artworkDocumentsTable.id })
+        .from(artworkDocumentsTable)
+        .where(inArray(artworkDocumentsTable.id, entryIds));
+      const withRow = new Set([
+        ...photoRows.map((r) => r.id),
+        ...documentRows.map((r) => r.id),
+      ]);
+      for (const [entryId, entryKeys] of byEntry) {
+        if (withRow.has(entryId)) continue;
+        for (const key of entryKeys) {
+          await deleteObject(key);
+          swept++;
+        }
+      }
+    }
+
+    return c.json({ swept });
   },
 );
