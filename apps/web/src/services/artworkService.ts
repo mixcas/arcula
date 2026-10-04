@@ -111,9 +111,19 @@ export const artworkService = {
     collectionId: string,
     rows: unknown[],
   ): Promise<ArtworkImportOutcome> {
-    return apiRequest<ArtworkImportOutcome>(base(collectionId), {
-      method: "POST",
-      body: { rows },
-    });
+    // The import route, NOT `base(collectionId)`: that one is the
+    // single-artwork create route, which validates the body as one artwork
+    // and 400s a `{rows}` envelope with "artworkId/title/artistName:
+    // expected string, received undefined" — a validation error that says
+    // nothing about the wrong URL. The API suite pins the route and the
+    // component suites stub this method, so tests/artworkService.test.ts is
+    // the only thing that checks this seam.
+    return apiRequest<ArtworkImportOutcome>(
+      `/api/v1/collections/${collectionId}/import/csv`,
+      {
+        method: "POST",
+        body: { rows },
+      },
+    );
   },
 };
