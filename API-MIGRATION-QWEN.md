@@ -1344,6 +1344,27 @@ http://localhost:8000`, `changeOrigin`) forwards it; prod is same-origin
   `limit-reached` envelope message on collection create and nothing more of
   the cap mechanics.
 
+- **2026-10-04 — Phase 4 S6: Firebase is out of the tree.** The last
+  Firebase import was a module-scope `getAuth()` in
+  `src/services/firebase.ts`, pulled into every page load by the statically
+  imported `MigrationsPage` route (the Firestore-era maintenance tool); with
+  the `VITE_FIREBASE_*` vars already gone from `.env`, that initialisation
+  threw `auth/invalid-api-key` at boot. Removed in one pass: the
+  `firebase`/`@firebase/rules-unit-testing` dependencies,
+  `services/firebase.ts` and `services/authService` (zero remaining
+  consumers), the migrations mechanism (`src/migrations/`,
+  `MigrationsPage`, `utils/maintenanceAccess` + its test, the Settings-page
+  card, the `/manage/migrations` route), `firestore.rules.test.ts`, the
+  `firestore.rules`/`firestore.indexes.json`/`storage.rules` files,
+  `firebase.json`, `.firebaserc` and `.env.test` (emulator test env), and the
+  `test:rules`/`emulators`/`deploy:rules`/`deploy:hosting`/`deploy` scripts
+  with the `firebase-tools` dependency. AGENTS.md carries the 4-line
+  historical banner (owner's ruling) and now reads as the record of the
+  system the codebase used to be. Note the deploy story: the firebase
+  hosting/rules deploys are gone with the tooling, and the new stack has no
+  deploy path yet — deliberately out of Phase 4's scope, which stops at the
+  local stack.
+
 ---
 
 ## Closing

@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:rules:inner": "vitest run --no-file-parallelism"
+    "test": "vitest run"
   },
   "dependencies": {
     "@arcula/shared": "workspace:*",
@@ -28,7 +27,6 @@
     "dayjs": "^1.11.23",
     "embla-carousel": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
-    "firebase": "^12.19.0",
     "lodash": "^4.18.1",
     "mantine-datatable": "^9.4.0",
     "papaparse": "^5.7.0",
@@ -38,7 +36,6 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "5.0.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

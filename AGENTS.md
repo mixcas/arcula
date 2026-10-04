@@ -1,5 +1,11 @@
 # Custodia Agent Guide
 
+> **Historical note (post-Phase 4, 2026-10-04):** This document records the
+> Firebase-era architecture (Auth, Firestore, Storage, rules, migrations).
+> The product now runs on the Hono/Postgres/S3 API stack — see
+> `API-MIGRATION-QWEN.md`; what follows is kept as the record of the system
+> this codebase used to be.
+
 This is a React + TypeScript + Vite project using Firebase for authentication and Firestore for data storage.
 
 ## Key Commands

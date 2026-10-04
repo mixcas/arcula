@@ -8,7 +8,6 @@ import ArtworkAddPage from "./components/manage/ArtworkAddPage";
 import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
-import MigrationsPage from "./components/manage/MigrationsPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
@@ -97,17 +96,6 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/manage/migrations"
-          element={
-            <ProtectedRoute>
-              <ManageLayout>
-                <MigrationsPage />
-              </ManageLayout>
-            </ProtectedRoute>
-          }
-        />
-
         {/* Public collection view. Both routes render the collection's skin;
             see src/skins/registry.ts. */}
         <Route

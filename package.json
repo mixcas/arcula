@@ -25,15 +25,10 @@
     "test:db": "cd packages/db && bun run test",
     "test:api": "cd apps/api && bun run test",
     "test:web": "sh scripts/stack-up.sh && sh scripts/ensure-api.sh && cd apps/web && bun run test",
-    "test:rules": "firebase emulators:exec --only firestore,auth,storage --project demo-custodia \"cd apps/web && bun run test:rules:inner && cd ../../packages/shared && bun run test\"",
     "db:migrate": "cd apps/api && bun run db:migrate",
     "db:reset": "cd apps/api && bun run db:reset",
     "db:seed": "cd apps/api && bun run db:seed",
-    "db:studio": "cd apps/api && bun run db:studio",
-    "emulators": "firebase emulators:start",
-    "deploy:rules": "bun run test:rules && firebase deploy --only firestore,storage",
-    "deploy:hosting": "bun run build && firebase deploy --only hosting",
-    "deploy": "bun run deploy:rules && bun run deploy:hosting"
+    "db:studio": "cd apps/api && bun run db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,7 +37,6 @@
     "eslint-plugin-format": "^2.0.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
-    "firebase-tools": "15.31.0",
     "globals": "^17.12.0",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",

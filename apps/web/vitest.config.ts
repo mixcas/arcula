@@ -4,11 +4,8 @@ import path from "path";
 export default defineConfig({
   // One .env at the repo root (API-MIGRATION-QWEN.md §9): the api reads it
   // too, and Vite would otherwise look only at its own root. Mirrored from
-  // vite.config.ts — without it the tests cannot see the VITE_* vars that
-  // `src/services/firebase.ts` initializes from, and the three suites that
-  // import it die at module load with `auth/invalid-api-key`. Test mode
-  // additionally loads the root `.env.test` (the emulator values), which
-  // overrides `.env` for tests only.
+  // vite.config.ts so the test-mode modules see the same VITE_* vars the dev
+  // server does.
   envDir: path.resolve(import.meta.dirname, "..", ".."),
 
   test: {
