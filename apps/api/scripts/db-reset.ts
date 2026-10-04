@@ -93,10 +93,26 @@ for (const prefix of ["staging/", "artworks/"]) {
     if (!list.IsTruncated) break;
     token = list.NextContinuationToken;
   }
-  if (keys.length > 0) {
-    await s3.send(
-      new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }),
+  // S3 caps DeleteObjects at 1000 keys per request, and the listing above is
+  // unbounded — test runs leave staged objects behind, so a busy dev bucket
+  // easily crosses the cap and the 400 "up to 1000 keys" aborts the reset.
+  // Chunk, and check the per-key errors: a partial failure answers inside a
+  // 200, so a wipe that "succeeds" with survivors is the same as none at all.
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const res = await s3.send(
+      new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: batch } }),
     );
+    const errors = res.Errors;
+    if (errors && errors.length > 0) {
+      throw new Error(
+        `s3: ${errors.length} key(s) survived the wipe of ${prefix}: ` +
+          errors
+            .map((e) => `${e.Key} (${e.Code})`)
+            .slice(0, 5)
+            .join(", "),
+      );
+    }
   }
   console.log(
     `s3: cleared ${prefix}(${keys.length} object${keys.length === 1 ? "" : "s"})`,
