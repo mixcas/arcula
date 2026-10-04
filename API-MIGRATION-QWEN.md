@@ -337,7 +337,7 @@ client serializers and `photoUrl`/`photoSrcSet` keep working unchanged:
 
 `db:reset` (local only — refuses in prod unless `ALLOW_DB_RESET=true`):
 drop all tables → re-apply migrations → **clear both object prefixes**
-(`…/staging/…` and final) in MinIO → seed. Seeding is minimal:
+(`…/staging/…` and final) in SeaweedFS → seed. Seeding is minimal:
 `signUp.email({ email: SEED_EMAIL, password: SEED_PASSWORD, name: SEED_NAME })`
 through the **same Better Auth instance** the app signs in with, so the stored
 hash is compatible with real sign-in. `firstName`/`lastName` stay null until
@@ -435,8 +435,8 @@ staging:  staging/{userId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
 - **7-day lifecycle on the `staging/` prefix** (CDK `LifecycleRule` in prod)
   is the safety net for abandoned uploads: a staged object with no save
   self-destructs. Locally the lifecycle is not relied on — `db:reset`
-  clears both prefixes, which is stronger. (MinIO lifecycle support is
-  verified in Phase 4, where the compose file is written.)
+  clears both prefixes, which is stronger. (If it is ever needed locally,
+  SeaweedFS lifecycle support is to be verified then, not assumed.)
 - **Extension** never comes from the request: originals keep their source
   format (PNG stays PNG — alpha), variants are `.webp`, document PDFs are
   `.pdf`. `contentType` is recorded per object and the extension is a pure
@@ -448,10 +448,12 @@ staging:  staging/{userId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
 **The flow (four steps).**
 
 1. **Stage.** Client mints `entryId` (nanoid — the same convention the
-   current client uses), obtains a presigned PUT for the staged key, PUTs the
-   original. Server validates type + size on the follow-up call, not on the
-   PUT: photos `image/*` ≤ 10 MiB; documents `image/*` | `application/pdf`
-   ≤ 25 MiB.
+   current client uses) and `POST`s the original as multipart
+   (`{ entryId, file }`) to `…/stage` [v4, S7: was a presigned PUT in v3].
+   The body rides the session cookie (or Bearer), so the server validates
+   type + size **as the upload arrives**: photos `image/*` ≤ 10 MiB;
+   documents `image/*` | `application/pdf` ≤ 25 MiB. No presign, no second
+   round trip — the session the form is already using is the credential.
 2. **Process.** `POST …/process { entryId }`: server reads the staged
    original, decodes with Sharp, **applies EXIF orientation (`.rotate()`)
    before any resize** (G4 — the current `imageRender.ts` does this and it
@@ -623,6 +625,10 @@ photo-order helpers.
 - `src/utils/imageProcessing.ts`, `imageWorker.ts`, `imageRender.ts` —
   generation is server-side; the probe and its whole silent-downgrade class
   of bug are gone.
+- `src/utils/imageVariants.ts` — the variant table and its geometry moved
+  to the API verbatim in Phase 3 S2 (`apps/api/src/media/variants.ts`,
+  cross-checked by `tests/pipeline.test.ts`); the client copy is dead
+  weight once nothing encodes in the browser.
 - `functions/`, the rules files (`.rules`, `indexes.json`), `.firebaserc` —
   nothing left to deploy to Firebase from this repo.
 - the `firebase` dependency (`firebaseui` was never one — checked) —
@@ -704,7 +710,7 @@ defaulted (§0.2 #3).
 
 - `dev` — `sh scripts/stack-up.sh` (start any service that is not already
   up), then parallel `dev:api` + `dev:web`. The mixed stack — postgres
-  containerized, minio/mailpit native (§15) — is what the stack scripts cover.
+  containerized, SeaweedFS/Mailpit native (§15) — is what the stack scripts cover.
 - `db:migrate` / `db:reset` / `db:seed` / `db:studio` — in `apps/api`
   (§4); `db:reset` = wipe DB + both object prefixes + seed, one script;
   `db:studio` opens Drizzle Studio (the `drizzle-kit studio` subcommand —
@@ -844,9 +850,9 @@ the test environment**.
 
 ### Environment and mechanics
 
-- Integration tests run against **the real local stack** (compose: pg,
-  MinIO, Mailpit; API at :8000) — real HTTP, real DB, real S3 semantics,
-  real mail. **No MSW, no stubbed data layer** (G8); where a stub is
+- Integration tests run against **the real local stack** (postgres in
+  compose; SeaweedFS + Mailpit native; API at :8000) — real HTTP, real DB,
+  real S3 semantics, real mail. **No MSW, no stubbed data layer** (G8); where a stub is
   unavoidable it stubs the **contract** (the shared Zod schemas), never an
   imagined API.
 - Mailpit makes email assertions possible without any mocking: the reset
@@ -902,7 +908,9 @@ rejections, bearer resolution.
 
 Sharp pipeline: stage / process / save / sweep (§6) with `.rotate()` (G4)
 and the verbatim geometry; the `media` proxy with the §6 authz table;
-MinIO in `docker-compose.yml` (lifecycle support verified here, not assumed).
+the mixed local stack of §9 (postgres in compose, SeaweedFS + Mailpit
+native — the §15 ruling that replaced the v3 "MinIO in docker-compose"
+line).
 **Done when:** the api test cases pass — variant geometry incl. orientation,
 the `order 0` first-upload case (G7), sweep semantics, proxy authz
 branches — **and the decision point is evaluated**: p95 per-photo ≤ ~3 s
@@ -966,7 +974,7 @@ necessary); the queue revisit if Phase 3's decision point ever trips.
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **Sharp under Bun / in the container.** Prebuilt NAPI binaries are most proven on glibc — which is exactly why the container base is `oven/bun` (debian), not an alpine that does not exist (§0.2 #2).                      | The WASM fallback `@img/sharp-wasm32` is the documented escape hatch; verified in Phase 3 (native) and Phase 6 (container), not assumed                                                                                 |
 | 2   | **The Better Auth drizzle adapter** is the least battle-tested joint in the stack; its generated pg schema and the `additionalFields` contract have real gotchas (undeclared columns → opaque sign-up failure; `text` ids). | Phase 1 asserts the contract **before** anything is built on it (sign-up through the adapter is the exit criterion); the custom field set is kept minimal — four columns, no more                                       |
-| 3   | **MinIO ≠ S3.** Lifecycle rules, `CopyObject` semantics, and auth can diverge between MinIO and S3; a behavior that works in one can fail in the other.                                                                     | Local self-heal deliberately does **not** depend on MinIO lifecycle (`db:reset` clears prefixes, §6); Phase 4/6 verify the constructs that will ship in prod, and any divergence is a stop-and-replan, not a workaround |
+| 3   | **SeaweedFS ≠ S3.** Lifecycle rules, `CopyObject` semantics, and auth can diverge between SeaweedFS and S3; a behavior that works in one can fail in the other.                                                             | Local self-heal deliberately does **not** depend on local lifecycle (`db:reset` clears prefixes, §6); Phase 4/6 verify the constructs that will ship in prod, and any divergence is a stop-and-replan, not a workaround |
 | 4   | **The Phase 0 move.** Mechanical but large — a 313-test suite and a full `src/` relocated across workspaces; import paths, asset paths, and config are where subtle breaks live.                                            | `check` + `build` green required at each step, committed step by step (G1: never let two data layers coexist)                                                                                                           |
 | 5   | **Apex ALIAS at Porkbun.** Verified supported (CNAME-flattening is a documented Porkbun record type); "verified" is not "will work in our exact console state".                                                             | The CloudFront fallback (§10.3) is one day of work, not a re-architecture — and it is the scale path anyway                                                                                                             |
 | 6   | **Document drift.** The first attempt had plan documents and drifted from them anyway; an unrevised `AGENTS.md` describes a world that no longer exists.                                                                    | This document is a **living document**: update it the moment reality diverges (Phase 7 rewrites `AGENTS.md` on the cutover day)                                                                                         |
@@ -1093,6 +1101,120 @@ defaultValue }`), not Zod schemas — §5's "Zod-typed" wording did not hold.
   the single-message endpoint) — the test helpers are written to it.
   (i) The `.env` value `EMAIL_PROVIDER=smtp` was normalized to `mailpit`,
   the §9 table's value (nodemailer over Mailpit's SMTP, per the ruling).
+
+- **2026-10-03 — Phase 3 S3: stage transport is a multipart POST, not a
+  presigned PUT (§6 step 1 amended in place).** A presign would have added
+  a second endpoint and a temporary-credential surface for an upload that
+  is already authenticated by the session. The stage route takes
+  `{ entryId, file }` as multipart on the session cookie or Bearer, and
+  validates type (shared allowlists) and size (shared caps) **as the body
+  arrives**: `bodyLimit` is the coarse guard, the exact check is on the
+  parsed `file.size`. The check order is allowlist → size → decode, so the
+  cheapest failure comes first. The stage/process responses are supersets
+  of §7's minimal shapes (stage reports the original's
+  `width`/`height`/`size`/`contentType`; process reports a `url` per
+  variant): §7's minimal shape is a floor, not the contract. A PDF
+  document's process is a no-op (`variants: []`).
+
+- **2026-10-03 — Phase 3 S4: `order` is array position; the §7 save row
+  read as create-then-PATCH.** The §7 "save" line (POST creates with
+  `photos`/`documents`; PATCH replaces the sequence) is read as the media
+  routes requiring **collection ownership only, not an existing artwork
+  row**: the Add flow mints `artworkId` client-side, and the save creates
+  the row and promotes the staged entries in one transaction. Each
+  payload entry's `order` is its array position (the reindex), and the
+  write runs four passes under `UNIQUE (artworkId, order)`: delete the
+  removed rows (they vacate slots), park the kept rows that must move at a
+  sentinel order (walking **current** order, not payload order, so two
+  concurrent saves take row locks in the same order and cannot deadlock),
+  insert the new entries, then bring the parked rows home. Two saves that
+  race for the SAME slot collide on the constraint → `23505` → a
+  retryable `internal`. Entry ids are table-wide PKs and a silent stale
+  upsert was a real trap, so the saves also run `assertEntriesFree`: POST
+  rejects any entry id already in the table; PATCH rejects promoted ids
+  not stored for this artwork — both 400 `validation`.
+
+- **2026-10-03 — Phase 3 S4: Hono sub-app `use("*")` leak (per-route
+  middleware).** `Hono.route()` re-registers every sub-app route
+  _including `use` routes_ with the base path (verified in
+  `hono-base.js`), so a sub-app `use("*", requireSession)` mounted at
+  `/api/v1` becomes `/api/v1/*` and 401'd every anonymous public read.
+  Auth is attached per route inside mounted sub-apps; the routes carry a
+  comment recording why there is no wildcard middleware.
+
+- **2026-10-03 — Phase 3 S5: the collection surface, as built.**
+  (a) `POST /collections` runs the cap check **first** (§7): the
+  owner's count against the shared `COLLECTION_LIMITS[tier]`, 409
+  `limit-reached` when reached; validation runs before the cap, so a
+  malformed body at the cap is a 400, not a 409. (b) The CSV import
+  validates each row **individually** against the shared `artworkSchema`:
+  a failing row lands in the 200 response's `rejected` (index + failed
+  fields) and the accepted rows are written in one transaction with
+  server-minted ids — the envelope is deliberately loose because a
+  batch-wide 400 would have discarded the healthy rows. (c) Bulk delete
+  is one transaction that stamps `deletedAt`/`updatedAt` on **live**
+  works only (`isNull` guard) and counts only what it moved; foreign or
+  already-deleted ids do not count. (d) Restore is `deletedAt → NULL`,
+  idempotent, `{ restored: true }`. (e) The collection PATCH is JSON
+  null-semantics — present sets (or, as `null`, clears), absent leaves —
+  which is what the settings form's write-only-what-changed payloads need.
+
+- **2026-10-03 — Phase 3 S6: the media proxy's 404/403/401 split and
+  caching (§6 authz table).** A visitor gets a 404 on a private or
+  deleted work's photos (uniform — the same disclosure call as the
+  single-artwork read); documents 403 for everyone else **including
+  anonymous callers** (the "renders a 403 rather than a leak" call, which
+  §6 makes explicit); staged objects are 401 with no session and 403 for
+  a non-owning session. Headers come from the stored row for final
+  objects (the document original from the base row, everything else from
+  the variant row) and from the object's own recorded metadata for staged
+  objects. Final responses carry `Cache-Control: public, max-age=3600`
+  (an object at a final key only changes if the owner re-saves the same
+  entry, which the client does not do); staged responses carry
+  `no-store`. The sweep deletes the collection's staged objects whose
+  entryId has no row; an entry that HAS a row keeps its staged objects
+  even under a soft-deleted work — the row is what a restore would point
+  at, and the staged object may be the entry's newest version.
+
+- **2026-10-03 — End of Phase 3: `test:rules` was red in two ways since the
+  Phase 0 restructure, and both are now fixed.** No gate had run it since
+  the move, so the breakage only surfaced at the phase's final gate.
+  (a) **Three suites died at import** (`auth/invalid-api-key`): the web
+  project moved to `apps/web`, but its `vitest.config.ts` never mirrored
+  `vite.config.ts`'s `envDir: <repo root>`, so the `VITE_FIREBASE_*` vars
+  that `src/services/firebase.ts` initializes from were invisible to the
+  tests — and the Phase 0/2 rewrite of the gitignored root `.env` had
+  dropped them from there anyway. Fix: `envDir` mirrored in
+  `vitest.config.ts`, plus a committed root `.env.test` with the
+  **emulator** values (project `demo-custodia`, placeholder key — no real
+  project is ever contacted, the emulators are the target under
+  `emulators:exec`). `.env.test` is test-mode-only and overrides `.env`,
+  so restoring real values to `.env` for dev cannot leak into the suites.
+  (b) **Eleven component suites lost their jest-dom matchers**
+  (`Invalid Chai property: toBeInTheDocument`): jest-dom v7's `/vitest`
+  entry calls `expect.extend()` from inside `node_modules`, and
+  externalized modules import the package-level `vitest`, not the
+  runner's worker `expect` — so the matchers registered nowhere. Fix:
+  `server.deps.inline: ["@testing-library/jest-dom"]` in
+  `vitest.config.ts`; one line, zero test-file changes. Result:
+  `test:rules` is 403/403 (353 web + 50 shared). Standing state: plain
+  `test:web` is green except the two rules files, which need the
+  emulators (the pre-restructure behaviour — they were always
+  `test:rules`-only). **Open, owner-side:** the real `VITE_FIREBASE_*`
+  values are lost with the `.env` rewrite, so the legacy web app cannot
+  boot in dev (Firebase init throws on page load) until either the
+  values are restored to `.env` or Phase 4 deletes the Firebase imports
+  (which it does).
+
+- **2026-10-03 — Phase 3 S7: the decision point measured; plan amended in
+  place.** Measured on this machine against the real stack at ~12MP
+  sources: p95 per-photo process **0.16 s** (limit ~3 s) and the
+  10-photo save **0.19 s** (limit ~15 s). No queue; Phase 4 proceeds.
+  Amended in place: §6 step 1 (presigned PUT → multipart POST), §12's
+  "MinIO in `docker-compose.yml`" line (§9's mixed stack), §8's deletion
+  list (`src/utils/imageVariants.ts` — the table moved to
+  `apps/api/src/media/variants.ts` verbatim in S2, cross-checked by
+  `tests/pipeline.test.ts`), and §13 risk 3 (MinIO → SeaweedFS wording).
 
 ---
 
