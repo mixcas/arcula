@@ -2,6 +2,15 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
+  // One .env at the repo root (API-MIGRATION-QWEN.md §9): the api reads it
+  // too, and Vite would otherwise look only at its own root. Mirrored from
+  // vite.config.ts — without it the tests cannot see the VITE_* vars that
+  // `src/services/firebase.ts` initializes from, and the three suites that
+  // import it die at module load with `auth/invalid-api-key`. Test mode
+  // additionally loads the root `.env.test` (the emulator values), which
+  // overrides `.env` for tests only.
+  envDir: path.resolve(import.meta.dirname, "..", ".."),
+
   test: {
     // Rules tests are Node-side, not DOM. Component tests use a per-file
     // `// @vitest-environment jsdom` docblock instead of a global environment
@@ -27,6 +36,19 @@ export default defineConfig({
      * failure back on.
      */
     dangerouslyIgnoreUnhandledErrors: false,
+
+    /**
+     * jest-dom's `/vitest` entry calls `expect.extend()` from inside
+     * node_modules. Externalized (native-ESM) modules import the
+     * package-level `vitest`, not this runner's worker `expect`, so the
+     * matchers silently register nowhere. Inlining it into the runner
+     * makes that import resolve to the same `expect` the tests use.
+     */
+    server: {
+      deps: {
+        inline: ["@testing-library/jest-dom"],
+      },
+    },
   },
   resolve: {
     alias: {
