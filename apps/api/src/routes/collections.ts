@@ -54,6 +54,18 @@ export const collectionRoutes = new Hono();
 // lookup.
 const param = (c: Context, key: string): string => c.req.param(key) ?? "";
 
+/**
+ * A fresh row id: a UUID with its hyphens removed.
+ *
+ * The hyphen-free shape is load-bearing, not cosmetic. Routes carry the id in
+ * a `{urlizedName}-{id}` segment, and the client recovers it by cutting at the
+ * LAST hyphen (`parseId` in `packages/shared`) — a hyphenated id would put that
+ * cut inside the id itself and the recovered "id" would be its last segment.
+ * The client mints the same shape for the artwork ids it supplies, so both
+ * sides of a route segment obey one rule.
+ */
+const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
+
 // GET /collections — signed in: the owner's own list, name-ordered (the
 // query the service layer used); anonymous: the public list. A signed-in
 // visitor never sees other people's collections through this route.
@@ -98,7 +110,7 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
     );
   }
 
-  const id = crypto.randomUUID();
+  const id = mintId();
   const now = new Date();
   await db.insert(collectionsTable).values({
     id,
@@ -210,7 +222,7 @@ collectionRoutes.post(
       }
       const values = parsed.data;
       const inserted: typeof artworksTable.$inferInsert = {
-        id: crypto.randomUUID(),
+        id: mintId(),
         userId: user.id,
         collectionId: collection.id,
         title: values.title,

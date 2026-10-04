@@ -9,7 +9,7 @@ import {
   type DataTableSortStatus,
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
-import { artworkSlug } from "@arcula/shared";
+import { artworkSlug, parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
 // 25 first, so it is also the default: the state below is initialised from
@@ -53,10 +53,9 @@ interface ArtworksTableProps {
  *   and slices. Sorting happens over the *whole* set and the page slice is cut
  *   from the sorted result — sorting the visible page instead would merely
  *   reorder one page and leave the collection in a nonsense order.
- * - **Deleting is a soft delete.** `deletedAt` is stamped and the record is
- *   kept, which is why the delete is a batch write rather than a `deleteDoc`
- *   and why it is reversible later. A future trash view will need no rules
- *   work: the owner branches of the artwork rules were left untouched.
+ * - **Deleting is a soft delete.** `deletedAt` is stamped server-side and the
+ *   record is kept, which is why the delete is one bulk request rather than a
+ *   row-per-call and why it is reversible later.
  * - **View leaves the app.** It is a `<Link>` to the public artwork page, not a
  *   route under `/manage`, so the collection's own skin decides what it looks
  *   like. The link still works for a private work or a private collection — the
@@ -154,7 +153,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
           closeOnEscape: false,
         });
         void artworkService
-          .softDeleteArtworks(ids)
+          .softDeleteArtworks(parseId(collectionParam), ids)
           .then(async () => {
             setSelectedIds([]);
             modals.close(DELETE_MODAL_ID);
@@ -231,9 +230,9 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
           <Group gap="xs" wrap="nowrap" justify="flex-end">
             {/*
               The public page for a single artwork, in the collection's own
-              skin. The rules already admit a visitor to a public, un-deleted
-              artwork by id (`firestore.rules`, the `allow get` visitor branch),
-              so this link needed no rules work — only a route and a view.
+              skin. The API already serves a public, un-deleted artwork by id,
+              so this link needs no server work at all — only a route and a
+              view.
 
               A plain `href` rather than a router `Link`, because this leaves the
               app: the new tab gets a full document load, so a skin that somehow

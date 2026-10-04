@@ -616,10 +616,15 @@ artworkRoutes.patch(
       .from(artworkPhotosTable)
       .where(eq(artworkPhotosTable.artworkId, artwork.id))
       .orderBy(asc(artworkPhotosTable.order));
+    // Ordered by id — the only order a document sequence can have: a PATCH
+    // that leaves `documents` absent keeps the stored set, and the kept set
+    // must come back in the same order the serializer emits, whatever order
+    // the rows were inserted in.
     const currentDocs = await db
       .select()
       .from(artworkDocumentsTable)
-      .where(eq(artworkDocumentsTable.artworkId, artwork.id));
+      .where(eq(artworkDocumentsTable.artworkId, artwork.id))
+      .orderBy(asc(artworkDocumentsTable.id));
     const storedPhotoIds = new Set(currentPhotos.map((r) => r.id));
     const storedDocIds = new Set(currentDocs.map((r) => r.id));
     const nextPhotos: StagedEntry[] =

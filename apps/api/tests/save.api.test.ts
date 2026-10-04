@@ -92,6 +92,10 @@ const pOne = entry("p-one");
 const pShape = entry("p-shape");
 const dPdf = entry("d-pdf");
 const dImg = entry("d-img");
+// Two ids that sort cleanly against each other, for the document-order test:
+// "aa-…" < "zz-…" lexicographically, whatever the run suffix is.
+const dAa = entry("aa-doc");
+const dZz = entry("zz-doc");
 const pReal = entry("p-real");
 const pGhost = entry("p-ghost");
 const pX = entry("p-x");
@@ -801,6 +805,66 @@ describe("PATCH …/artworks/{aid}", () => {
       [a, 0],
       [b, 1],
     ]);
+  });
+
+  it("answers an omitted document sequence in id order, whatever the rows sit in", async () => {
+    // Pin for the PATCH handler's `currentDocs` read: when the payload omits
+    // `documents`, the handler re-derives the sequence from the stored rows.
+    // Postgres gives no order without an explicit ORDER BY, so the read must
+    // sort — seeded and created in DESCENDING lexicographic order here, so the
+    // physical rows sit backwards against the id order the answer must carry.
+    //
+    // (The response is serialised through `loadJoined`, which sorts too — so
+    // this test would stay green if the handler's read lost its ORDER BY. It
+    // pins the contract the client relies on, not the one read that happens
+    // to satisfy it today.)
+    const aid = uuid();
+    const pdf = new Uint8Array([
+      ...[0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
+      ...Array.from({ length: 64 }, () => 0),
+    ]);
+    // Seed descending: zz-doc before aa-doc.
+    for (const [entryId, name] of [
+      [dZz, "zz.pdf"],
+      [dAa, "aa.pdf"],
+    ] as const) {
+      const staged = await stageDocument(
+        owner.cookies,
+        cid,
+        aid,
+        entryId,
+        new File([pdf], name, { type: "application/pdf" }),
+      );
+      expect(staged.status).toBe(200);
+      const processed = await processEntry(
+        owner.cookies,
+        cid,
+        aid,
+        "documents",
+        JSON.stringify({ entryId }),
+      );
+      expect(processed.status).toBe(200);
+    }
+    // Create listing them the same way: the rows physically sit zz, aa —
+    // the reverse of the id order.
+    const created = await createArtwork({
+      artworkId: aid,
+      title: "Two reports",
+      artistName: "C. Cas",
+      documents: [
+        { entryId: dZz, name: "zz.pdf" },
+        { entryId: dAa, name: "aa.pdf" },
+      ],
+    });
+    expect(created.status).toBe(201);
+
+    const res = await patchArtwork(aid, {
+      title: "Two reports",
+      artistName: "C. Cas",
+    });
+    expect(res.status).toBe(200);
+    const body = await json<WireArtwork>(res);
+    expect(body.documents.map((d) => d.id)).toEqual([dAa, dZz]);
   });
 
   it("a duplicate order from a concurrent save fails loudly and commits nothing", async () => {

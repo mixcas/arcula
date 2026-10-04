@@ -1,110 +1,74 @@
-import {
-  collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "./firebase";
-import type { Collection } from "@arcula/shared";
-import type { CollectionUpdate } from "../types/updates";
+/**
+ * The collection service layer (Phase 4 S2, plan §7).
+ *
+ * One HTTP call per operation, through `apiRequest`; GET bodies are parsed
+ * through `collectionReadSchema` (the wire contract, plan §7) so a server
+ * reshape is a parse error at the boundary, not a render of a half-shaped
+ * document. Writes return the server's answer parsed the same way.
+ */
 
-const COLLECTIONS_COLLECTION = "collections";
+import {
+  collectionReadSchema,
+  type Collection,
+  type CollectionCreatePayload,
+  type CollectionUpdatePayload,
+} from "@arcula/shared";
+import { ApiRequestError, apiRequest } from "./api";
+
+const BASE = "/api/v1/collections";
 
 export const collectionService = {
-  // Create a new collection
-  async createCollection(
-    collectionData: Omit<Collection, "id">,
-  ): Promise<string> {
-    try {
-      // Defaults first so an explicit caller value still wins; timestamps
-      // stamped last so a caller cannot override them. Collections are public
-      // by default — flip Privacy in Settings to make one private.
-      const docRef = await addDoc(collection(db, COLLECTIONS_COLLECTION), {
-        isPublic: true,
-        artworks: [],
-        ...collectionData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      return docRef.id;
-    } catch (error) {
-      console.error("Error creating collection:", error);
-      throw error;
-    }
+  /** The collections the session owns — the /manage dashboard. */
+  async getUserCollections(): Promise<Collection[]> {
+    const rows = await apiRequest<unknown[]>(BASE);
+    return rows.map((row) => collectionReadSchema.parse(row));
   },
 
-  // Get all collections for a user
-  async getUserCollections(userId: string): Promise<Collection[]> {
+  /**
+   * One collection, by id. A missing collection resolves `null`; a private
+   * one the caller does not own rejects (403) — the public views map that
+   * refusal to their `private` state, so it must stay an error.
+   */
+  async getCollection(id: string): Promise<Collection | null> {
     try {
-      const q = query(
-        collection(db, COLLECTIONS_COLLECTION),
-        where("userId", "==", userId),
-        orderBy("name"),
-      );
-
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Collection[];
-    } catch (error) {
-      console.error("Error fetching user collections:", error);
-      throw error;
-    }
-  },
-
-  // Get a specific collection by ID
-  async getCollection(collectionId: string): Promise<Collection | null> {
-    try {
-      const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        return {
-          id: docSnap.id,
-          ...docSnap.data(),
-        } as Collection;
+      const row = await apiRequest<unknown>(`${BASE}/${id}`);
+      return collectionReadSchema.parse(row);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 404) {
+        return null;
       }
-
-      return null;
-    } catch (error) {
-      console.error("Error fetching collection:", error);
-      throw error;
+      throw err;
     }
   },
 
-  // Update a collection
+  /**
+   * Create. The id is minted server-side; the answer is the created
+   * collection, so the redirect needs no second read. Reaching the tier cap
+   * rejects with 409 `limit-reached` — its message is the one the form shows.
+   */
+  async createCollection(
+    payload: Pick<CollectionCreatePayload, "name" | "description">,
+  ): Promise<Collection> {
+    const row = await apiRequest<unknown>(BASE, {
+      method: "POST",
+      body: payload,
+    });
+    return collectionReadSchema.parse(row);
+  },
+
+  /**
+   * The settings save. `null` clears a field; an absent one is left alone —
+   * the settings page builds the payload so that only the changed keys are
+   * present.
+   */
   async updateCollection(
-    collectionId: string,
-    updateData: CollectionUpdate,
-  ): Promise<void> {
-    try {
-      const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
-      await updateDoc(docRef, {
-        ...updateData,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error("Error updating collection:", error);
-      throw error;
-    }
-  },
-
-  // Delete a collection
-  async deleteCollection(collectionId: string): Promise<void> {
-    try {
-      const docRef = doc(db, COLLECTIONS_COLLECTION, collectionId);
-      await deleteDoc(docRef);
-    } catch (error) {
-      console.error("Error deleting collection:", error);
-      throw error;
-    }
+    id: string,
+    payload: CollectionUpdatePayload,
+  ): Promise<Collection> {
+    const row = await apiRequest<unknown>(`${BASE}/${id}`, {
+      method: "PATCH",
+      body: payload,
+    });
+    return collectionReadSchema.parse(row);
   },
 };

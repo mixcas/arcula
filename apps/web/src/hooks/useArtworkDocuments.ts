@@ -10,74 +10,69 @@
  *
  * What is different is everything after that. Photos have a sequence and a
  * primary thumbnail, so they carry `order`, a reorder, a make-primary and the
- * `reindexPhotos` invariant that keeps the two in step. Documents have none of
- * those, and a hook that offered them would be offering operations that silently
- * do nothing. A shared generic `useFileList` with a config object was the other
- * option; the configuration would have been most of the code, and the parts it
- * switched on are the parts a reader needs to see side by side to tell them
- * apart.
+ * server-side reindex that numbers the sequence from array position at save.
+ * Documents have none of those: the save compares the two id SETS, because a
+ * list with no sequence has nothing to reorder, and a hook that offered a
+ * reorder would be offering an operation that silently does nothing. A shared
+ * generic `useFileList` with a config object was the other option; the
+ * configuration would have been most of the code, and the parts it switched
+ * on are the parts a reader needs to see side by side to tell them apart.
  *
- * The object-URL lifecycle *is* shared logic in spirit, and it is duplicated
- * here deliberately: it is twenty lines, it is the part that leaks if it is
- * wrong, and the two lists release different sets of URLs. Both copies carry the
- * same comment about why.
+ * ## What changed when the pipeline moved server-side
+ *
+ * An attachment that lands in the form is PUT to staging **the moment it is
+ * added** — not at save — and the server generates an image's variants on
+ * demand, so there is no object-URL lifecycle, no worker, and no local decode:
+ * a PDF is a stage and nothing else (the client skips the process call for it
+ * on purpose — a process answer for a non-image would be a `[]` the server had
+ * to special-case for no information), and an image that cannot be decoded is
+ * rejected by the stage route rather than by a canvas here. An entry the user
+ * drops is `discard`ed on removal, best-effort, for the same reason the photo
+ * one is.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { processImages, type ProcessedImage } from "@/utils/imageProcessing";
-import { JPEG_TYPE } from "@/utils/imageRender";
-import { MAX_ARTWORK_DOCUMENTS } from "@arcula/shared";
+import { useCallback, useState } from "react";
 import {
-  documentExtension,
-  documentImageSpecs,
+  MAX_ARTWORK_DOCUMENTS,
+  type ArtworkDocument,
+  type StagedEntry,
+} from "@arcula/shared";
+import {
   documentsChanged,
   isAcceptedDocumentType,
   isDocumentImageType,
   sortDocuments,
 } from "@/utils/artworkDocuments";
-import type { PendingDocument } from "@/services/documentService";
-import type {
-  ArtworkDocument,
-  ArtworkDocumentImage,
-  ImageVariant,
-} from "@arcula/shared";
+import { mediaService } from "@/services/mediaService";
+import { ApiRequestError } from "@/services/api";
 
 /**
  * One entry in the form's document list.
  *
- * A discriminated union for the same reason `PhotoEntry` is one: "has this been
- * uploaded yet" decides whether there is a document to save or a file to upload
- * first, and two optionals would mean re-checking the same condition at every
- * call site.
+ * A discriminated union for the same reason `PhotoEntry` is one: "has this
+ * been saved yet" decides whether there is a document to keep in the set or a
+ * staged entry the save will promote, and two optionals would mean re-checking
+ * the same condition at every call site.
  */
 export type DocumentEntry =
   | {
+      /** Stable across reorders, so React keys survive a move. */
       key: string;
       status: "stored";
       document: ArtworkDocument;
     }
   | {
       key: string;
-      status: "pending";
+      status: "staged";
       file: File;
-      /** Object URL for the local original. Revoked on removal or unmount. */
-      previewUrl: string;
       /**
-       * A transient stand-in `ArtworkDocument`, so a document that has not been
-       * uploaded yet renders and opens through exactly the same path as one that
-       * has. Built from blobs for an image, so the tile shows the WebP that will
-       * be stored rather than the `.jpg` picked from disk. `null` until
-       * processing lands — an image shows a spinner in the meantime, and a
-       * non-image never waits, because there is nothing to process.
+       * A stand-in `ArtworkDocument`, ided with the client-minted entry id, so
+       * a document that has not been saved yet renders and opens through
+       * exactly the same path as one that has: its `original` is the staged
+       * object's proxy url, and for an image its `variants` are the server's
+       * own answer for what it generated.
        */
-      preview: ArtworkDocument | null;
-      /**
-       * The generated variants, kept.
-       *
-       * This is the whole reason the hook exists rather than a `File` list: a
-       * save uploads these directly instead of generating them a second time.
-       */
-      processed: ProcessedImage | null;
+      document: ArtworkDocument;
     };
 
 export interface AddDocumentsResult {
@@ -86,6 +81,11 @@ export interface AddDocumentsResult {
   rejected: Array<{ file: File; reason: string }>;
 }
 
+/** The answer for one file through stage (+ process). */
+type StageOutcome =
+  | { entry: DocumentEntry; rejection: null }
+  | { entry: null; rejection: string };
+
 let keyCounter = 0;
 const nextKey = (): string => {
   keyCounter += 1;
@@ -93,110 +93,120 @@ const nextKey = (): string => {
 };
 
 /**
- * Revoke every object URL a pending entry owns, and forget them.
- *
- * Not just the picked file's: a pending image also holds object URLs for the
- * generated variants its tile displays, and each of those pins a blob. Revoking
- * only the file leaves the rest alive for the life of the page — a leak the
- * user triggers by removing a document, in a form meant to be used repeatedly.
- *
- * A plain function over the tracking set rather than a hook: it touches no
- * component state, so there is nothing to memoise and nothing to depend on.
+ * One file through stage, and process when it is an image. Resolves to the
+ * finished entry on success, or to the rejection on any failure — and
+ * discards the staged original when the stage succeeded but the variants did
+ * not, so a failed batch does not leave objects behind that no save will ever
+ * promote.
  */
-const revokeEntryUrls = (entry: DocumentEntry, tracked: Set<string>): void => {
-  if (entry.status === "stored") {
-    return;
-  }
-  for (const url of [
-    entry.previewUrl,
-    ...(entry.preview
-      ? "variants" in entry.preview
-        ? entry.preview.variants.map((variant) => variant.url)
-        : []
-      : []),
-  ]) {
-    URL.revokeObjectURL(url);
-    tracked.delete(url);
-  }
-};
-
-/**
- * Assemble a stand-in `ArtworkDocument` for a file that has not been uploaded.
- *
- * Two shapes, because the union is the point: a non-image needs nothing built
- * for it — the object URL *is* the document — while an image is built from its
- * generated variants so it renders and opens through the same `photoUrl` ladder
- * as one already in Storage. That is also what makes the tile show the WebP that
- * will be stored rather than the `.jpg` that was picked from disk.
- *
- * The variant URLs are registered for revocation with everything else, because
- * an object URL pins its blob in memory.
- */
-const transientPreview = (
+async function stageAndProcess(
+  collectionId: string,
+  artworkId: string,
   file: File,
-  fileUrl: string,
-  image: ProcessedImage | null,
-  register: (url: string) => void,
-): ArtworkDocument => {
-  const contentType = file.type || "application/pdf";
-
-  if (!image) {
+): Promise<StageOutcome> {
+  const entryId = crypto.randomUUID();
+  try {
+    const staged = await mediaService.stageDocument(
+      collectionId,
+      artworkId,
+      entryId,
+      file,
+    );
+    const base = {
+      id: entryId,
+      name: staged.name,
+      size: staged.size,
+      contentType: staged.contentType,
+      original: {
+        url: staged.url,
+        size: staged.size,
+        contentType: staged.contentType,
+      },
+    };
+    if (!isDocumentImageType(file.type)) {
+      // A PDF is staged and nothing more: there is nothing to generate, so no
+      // process call and no variants — the shape the saved document has.
+      return {
+        entry: {
+          key: nextKey(),
+          status: "staged",
+          file,
+          document: { ...base, kind: "file" },
+        },
+        rejection: null,
+      };
+    }
+    try {
+      const { variants } = await mediaService.processDocument(
+        collectionId,
+        artworkId,
+        entryId,
+      );
+      if (staged.width === null || staged.height === null) {
+        // The stage route decodes every image it admits, so a null dimension is
+        // a server bug, not a file condition: discard what is up and say the
+        // upload failed rather than render a document with no geometry.
+        void mediaService
+          .discardDocument(collectionId, artworkId, entryId)
+          .catch(() => {});
+        return { entry: null, rejection: "The image could not be read" };
+      }
+      return {
+        entry: {
+          key: nextKey(),
+          status: "staged",
+          file,
+          document: {
+            ...base,
+            kind: "image",
+            width: staged.width,
+            height: staged.height,
+            variants,
+          },
+        },
+        rejection: null,
+      };
+    } catch (error) {
+      // The original is up and no save will ever name it: discard it now,
+      // idempotently, and let the error report the failure.
+      void mediaService
+        .discardDocument(collectionId, artworkId, entryId)
+        .catch(() => {});
+      throw error;
+    }
+  } catch (error) {
     return {
-      // Deliberately empty: this document is not in Firestore, and an id here
-      // would be a lie the save path could act on.
-      id: "",
-      kind: "file",
-      name: file.name,
-      size: file.size,
-      contentType,
-      original: { url: fileUrl, size: file.size, contentType },
+      entry: null,
+      rejection:
+        error instanceof ApiRequestError
+          ? (error.fields?.file ?? error.message)
+          : "The file could not be uploaded",
     };
   }
-
-  const originalType = image.file.type || JPEG_TYPE;
-  const variants: ImageVariant[] = image.variants.map((variant) => {
-    const url = URL.createObjectURL(variant.blob);
-    register(url);
-    return {
-      key: variant.key,
-      url,
-      width: variant.width,
-      height: variant.height,
-      size: variant.blob.size,
-      contentType: variant.contentType,
-    };
-  });
-
-  return {
-    id: "",
-    kind: "image",
-    name: image.file.name,
-    size: image.file.size,
-    contentType: originalType,
-    width: image.width,
-    height: image.height,
-    original: {
-      url: fileUrl,
-      size: image.file.size,
-      contentType: originalType,
-    },
-    variants,
-  } satisfies ArtworkDocumentImage;
-};
+}
 
 export interface UseArtworkDocumentsOptions {
+  /** Staging happens at add time, under the collection the form belongs to. */
+  collectionId: string;
+  /**
+   * The artwork id the entries stage under. On the Add page this is the
+   * client-minted id the save will create the row with; on the Edit page it
+   * is the loaded work's id.
+   */
+  artworkId: string;
   /** The documents already on the artwork, when editing. */
   initialDocuments?: ArtworkDocument[];
-  onError?: (message: string) => void;
 }
 
 export const useArtworkDocuments = ({
+  collectionId,
+  artworkId,
   initialDocuments = [],
-  onError,
-}: UseArtworkDocumentsOptions = {}) => {
+}: UseArtworkDocumentsOptions) => {
   // The stored documents as loaded, kept apart from the working list so a save
   // can tell "the user removed one" from "nothing about them changed" and leave
-  // the field alone in the second case.
+  // the field out of the patch in the second case. `hydrate` rewrites it
+  // together with the entries, so the two can never describe different artworks.
   const [loaded, setLoaded] = useState<ArtworkDocument[]>(() =>
     sortDocuments(initialDocuments),
   );
@@ -213,22 +223,19 @@ export const useArtworkDocuments = ({
     total: number;
   } | null>(null);
 
-  // Live preview URLs, so unmount can revoke every one of them. Held in a ref
-  // because the cleanup effect must see the current list without re-running on
-  // every edit.
-  const previewUrls = useRef<Set<string>>(new Set());
-
-  useEffect(
-    () => () => {
-      for (const url of previewUrls.current) {
-        URL.revokeObjectURL(url);
-      }
-      previewUrls.current = new Set();
-    },
-    [],
-  );
-
-  /** Add files, rejecting anything over the cap, of the wrong type, or too big. */
+  /**
+   * Add files, staging each one as it is accepted.
+   *
+   * The pre-checks here are the count cap and the type allowlist — the two
+   * things the form knows before spending a round trip. The size cap and the
+   * decode are the stage route's to answer, and its refusal arrives on the
+   * same `rejected` list with a reason the user can act on. The extension a
+   * saved object gets is the server's decision from the content type, so the
+   * form does not pre-judge filenames.
+   *
+   * Three files stage at a time, and the batch is appended only once every
+   * file has settled, in drop order.
+   */
   const addFiles = useCallback(
     async (files: File[]): Promise<AddDocumentsResult> => {
       const rejected: AddDocumentsResult["rejected"] = [];
@@ -246,15 +253,7 @@ export const useArtworkDocuments = ({
           });
           continue;
         }
-        if (
-          !isAcceptedDocumentType(file.type) ||
-          // The type is what the form accepts; the *extension* is what the
-          // object gets named after, and `isDocumentName` in `storage.rules`
-          // rejects anything outside its four. Both have to hold, because a name
-          // the rules will not accept is not a degraded upload but a 403 at save
-          // time, with no way for the user to act on a console error.
-          documentExtension(file.name, file.type) === null
-        ) {
+        if (!isAcceptedDocumentType(file.type)) {
           rejected.push({ file, reason: "Not a supported file type" });
           continue;
         }
@@ -266,244 +265,121 @@ export const useArtworkDocuments = ({
         return { added: [], rejected };
       }
 
-      const added: DocumentEntry[] = accepted.map((file) => {
-        const previewUrl = URL.createObjectURL(file);
-        previewUrls.current.add(previewUrl);
-        return {
-          key: nextKey(),
-          status: "pending" as const,
-          file,
-          previewUrl,
-          preview: null,
-          processed: null,
-        };
+      setProcessing(true);
+      setProgress({ done: 0, total: accepted.length });
+
+      // The pool: at most three files in flight, each through stage (+ process
+      // for the images). `results` keeps drop order — the append below reads it
+      // in order — while `done` counts settlements, so the bar moves on
+      // failures too.
+      // Holes until the pool fills them; only read after `Promise.all` below.
+      // The explicit type argument keeps the constructor's `any[]` overload
+      // from winning, which is what made the slots lint as `any`.
+      const results = new Array<StageOutcome>(accepted.length);
+      let cursor = 0;
+      let done = 0;
+      const worker = async (file: File) => {
+        const result = await stageAndProcess(collectionId, artworkId, file);
+        done += 1;
+        setProgress({ done, total: accepted.length });
+        return result;
+      };
+      const runners = Array.from({ length: Math.min(3, accepted.length) }, () =>
+        (async () => {
+          for (;;) {
+            const index = cursor;
+            cursor += 1;
+            if (index >= accepted.length) {
+              return;
+            }
+            results[index] = await worker(accepted[index]);
+          }
+        })(),
+      );
+      await Promise.all(runners);
+      setProcessing(false);
+      setProgress(null);
+
+      const added: DocumentEntry[] = [];
+      results.forEach((result, index) => {
+        if (result.entry) {
+          added.push(result.entry);
+        } else {
+          rejected.push({
+            file: accepted[index],
+            reason: result.rejection,
+          });
+        }
       });
 
-      setEntries((current) => [...current, ...added]);
-
-      // Only the images go through the pipeline. A PDF is uploaded as it was
-      // picked — there is nothing to resize, and running it through a decoder
-      // would reject a perfectly good file for having no pixels.
-      const images = accepted.filter((file) => isDocumentImageType(file.type));
-      const register = (url: string) => previewUrls.current.add(url);
-
-      // Everything non-image is ready immediately, so the list is usable while a
-      // large image is still encoding rather than blocked behind it.
-      setEntries((current) =>
-        current.map((entry) =>
-          entry.status === "pending" &&
-          !isDocumentImageType(entry.file.type) &&
-          entry.preview === null
-            ? {
-                ...entry,
-                preview: transientPreview(
-                  entry.file,
-                  entry.previewUrl,
-                  null,
-                  register,
-                ),
-              }
-            : entry,
-        ),
-      );
-
-      let processed: ProcessedImage[] = [];
-      if (images.length > 0) {
-        setProcessing(true);
-        setProgress({ done: 0, total: images.length });
-        try {
-          processed = await processImages(
-            images,
-            (done, total) => setProgress({ done, total }),
-            // Two variants, not four: square_lg and medium only ever render on
-            // the public collection grid, and a document is never public.
-            documentImageSpecs(),
-          );
-        } catch (error) {
-          console.error("Error processing document images:", error);
-          onError?.("The images could not be prepared for upload.");
-        } finally {
-          setProcessing(false);
-          setProgress(null);
-        }
+      if (added.length > 0) {
+        setEntries((current) => [...current, ...added]);
       }
+      return { added, rejected };
+    },
+    [collectionId, artworkId, entries.length],
+  );
 
-      // An image that could not be decoded cannot be uploaded, so it leaves the
-      // list rather than sitting there looking fine and failing at save — where
-      // the failure would be reported as a failed save rather than a bad file.
-      const byFile = new Map(processed.map((image) => [image.file, image]));
-      const ready = new Map<string, DocumentEntry>();
-      for (const entry of added) {
-        if (entry.status !== "pending") {
-          continue;
-        }
-        const result = byFile.get(entry.file);
-        if (!isDocumentImageType(entry.file.type)) {
-          ready.set(entry.key, {
-            ...entry,
-            preview:
-              entry.preview ??
-              transientPreview(entry.file, entry.previewUrl, null, register),
-          });
-          continue;
-        }
-        if (result) {
-          ready.set(entry.key, {
-            ...entry,
-            processed: result,
-            preview: transientPreview(
-              entry.file,
-              entry.previewUrl,
-              result,
-              register,
-            ),
-          });
-          continue;
-        }
-        revokeEntryUrls(entry, previewUrls.current);
-        rejected.push({
-          file: entry.file,
-          reason: "This file could not be read as an image",
-        });
-      }
-
-      const addedKeys = new Set(added.map((entry) => entry.key));
+  /**
+   * Remove one document. A stored one just leaves the set — the save's PATCH
+   * omits its id, and the server deletes the row and sweeps the objects in
+   * the same flow. A staged one is discarded now, best-effort: the call is
+   * fire-and-forget because a remove must not block on the network, and the
+   * staging sweep catches anything the discard lost.
+   */
+  const remove = useCallback(
+    (key: string): string | null => {
+      let removedId: string | null = null;
       setEntries((current) =>
-        current.flatMap((entry) => {
-          const resolved = ready.get(entry.key);
-          if (resolved) {
-            return [resolved];
+        current.filter((entry) => {
+          if (entry.key !== key) {
+            return true;
           }
-          // One of ours that failed: drop it. Anything else is untouched, which
-          // includes a document the user removed while the batch was running.
-          return addedKeys.has(entry.key) ? [] : [entry];
+          if (entry.status === "stored") {
+            removedId = entry.document.id;
+          } else {
+            void mediaService
+              .discardDocument(collectionId, artworkId, entry.document.id)
+              .catch(() => {});
+          }
+          return false;
         }),
       );
-
-      return { added: [...ready.values()], rejected };
+      return removedId;
     },
-    [entries.length, onError],
-  );
-
-  /** Remove one document, revoking its object URLs and reporting a stored id. */
-  const remove = useCallback((key: string): string | null => {
-    let removedId: string | null = null;
-    setEntries((current) =>
-      current.filter((entry) => {
-        if (entry.key !== key) {
-          return true;
-        }
-        if (entry.status === "stored") {
-          removedId = entry.document.id;
-        } else {
-          revokeEntryUrls(entry, previewUrls.current);
-        }
-        return false;
-      }),
-    );
-    return removedId;
-  }, []);
-
-  /** The stored documents still referenced by the working list. */
-  const remainingStoredIds = useMemo(
-    () =>
-      entries.flatMap((entry) =>
-        entry.status === "stored" ? [entry.document.id] : [],
-      ),
-    [entries],
-  );
-
-  /** Documents the user removed, so their objects can be swept on save. */
-  const removedStoredIds = useMemo(() => {
-    const remaining = new Set(remainingStoredIds);
-    return loaded.flatMap((document) =>
-      remaining.has(document.id) ? [] : [document.id],
-    );
-  }, [loaded, remainingStoredIds]);
-
-  /**
-   * Everything awaiting upload, in list order, tagged with what it is.
-   *
-   * A plain projection rather than a promise, which is the point: an image's work
-   * was done when the file was added, so a save has nothing left to compute. The
-   * tag is the union `documentService` branches on, so the two stay in step
-   * without either side inspecting a MIME type.
-   */
-  const pendingUploads = useMemo<PendingDocument[]>(
-    () =>
-      entries.flatMap((entry): PendingDocument[] => {
-        if (entry.status !== "pending") {
-          return [];
-        }
-        return entry.processed
-          ? [{ kind: "image", image: entry.processed }]
-          : [{ kind: "file", file: entry.file }];
-      }),
-    [entries],
+    [collectionId, artworkId],
   );
 
   /**
-   * Whether the documents differ from what was loaded.
+   * The save payload for the document set, or `null` when nothing about the
+   * ids changed and the patch must leave the field out entirely: an absent key
+   * leaves the stored set alone, and re-sending it would rewrite every object
+   * for no change.
    *
    * A set comparison, not photos' ordered one: this list has no sequence, so
-   * removing a document is a change and reordering the UI is not. The comparison
-   * itself lives in `documentsChanged` and is unit-tested there — inlined here
-   * it would have been the second place for the same rule to live, and the
-   * second place is the one that drifts.
+   * removing a document is a change and reordering the UI is not. The
+   * comparison itself lives in `documentsChanged` and is unit-tested there —
+   * inlined here it would have been the second place for the same rule to
+   * live, and the second place is the one that drifts.
    */
-  const dirty = useMemo(
-    () =>
-      documentsChanged(
-        loaded,
-        entries.flatMap((entry) =>
-          entry.status === "stored" ? [entry.document] : [],
-        ),
-      ),
-    [entries, loaded],
-  );
-
-  /**
-   * The document list, once the pending ones uploaded.
-   *
-   * Walks the working list rather than concatenating. The obvious version —
-   * `uploaded.push(...stored)` — silently puts every newly added document at
-   * the front, which is invisible for photos and merely wrong here; walking the
-   * list is what keeps the order the user sees the order that is saved.
-   *
-   * `uploaded` is in `pendingUploads` order, which is entry order, so the two
-   * line up position for position.
-   */
-  const mergeUploaded = useCallback(
-    (uploaded: ArtworkDocument[]): ArtworkDocument[] => {
-      let next = 0;
-      return entries.flatMap((entry) => {
-        if (entry.status === "stored") {
-          return [entry.document];
-        }
-        const document = uploaded[next];
-        next += 1;
-        return document ? [document] : [];
-      });
-    },
-    [entries],
-  );
-
-  /**
-   * Commit the list.
-   *
-   * Returns the documents to store, or `null` when nothing about them changed
-   * and the caller should leave the field out of the update entirely — `updateDoc`
-   * merges, so an absent key leaves the stored array alone rather than rewriting
-   * every storage URL on a save that only touched the title.
-   */
-  const commit = useCallback((): ArtworkDocument[] | null => {
-    if (!dirty) {
-      return null;
-    }
-    return entries.flatMap((entry) =>
+  const commit = useCallback((): StagedEntry[] | null => {
+    const stored = entries.flatMap((entry) =>
       entry.status === "stored" ? [entry.document] : [],
     );
-  }, [dirty, entries]);
+    const staged = entries.flatMap((entry) =>
+      entry.status === "staged" ? [entry.document] : [],
+    );
+    // Unchanged-and-nothing-staged is the only "leave the field out" case: a
+    // batch that only added is a change the patch has to carry, and the
+    // set-comparison alone would miss it (the stored half is untouched).
+    if (staged.length === 0 && !documentsChanged(loaded, stored)) {
+      return null;
+    }
+    return [...stored, ...staged].map((document) => ({
+      entryId: document.id,
+      name: document.name,
+    }));
+  }, [entries, loaded]);
 
   /** Re-seed from a freshly loaded artwork, e.g. after a load completes. */
   const hydrate = useCallback((documents: ArtworkDocument[]) => {
@@ -523,11 +399,7 @@ export const useArtworkDocuments = ({
     count: entries.length,
     processing,
     progress,
-    dirty,
-    pendingUploads,
-    removedStoredIds,
     hasRoom: entries.length < MAX_ARTWORK_DOCUMENTS,
-    mergeUploaded,
     addFiles,
     remove,
     commit,

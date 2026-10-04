@@ -24,11 +24,15 @@ vi.mock("@/services/artworkService", () => ({
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const createArtworksMock = vi.mocked(artworkService.createArtworks);
 
-const row = (rowId: string, overrides: Partial<ReviewRow> = {}): ReviewRow => ({
+const row = (
+  rowId: string,
+  title: string,
+  overrides: Partial<ReviewRow> = {},
+): ReviewRow => ({
   rowId,
   acquisitionDateFrom: undefined,
   values: {
-    title: "Nocturne",
+    title,
     artistName: "Whistler",
     serie: "",
     dateOfCreation: "",
@@ -67,21 +71,13 @@ describe("ImportRunStep", () => {
     });
   });
 
-  it("runs once and keeps reporting progress and the result under StrictMode", async () => {
-    let resolveRun!: (outcome: { created: number; failed: number }) => void;
-    // Two rows tick like two committed batches. The onProgress callbacks fire
-    // asynchronously — after real Firestore round trips, which is after
-    // StrictMode's effect cleanup has already run. That timing is exactly what
-    // regressed: a cleanup that cancelled the in-flight run silenced every
-    // update, leaving the step stuck on "Importing 2 artworks…" forever even
-    // though the writes succeeded.
+  it("posts the selected rows once under StrictMode and renders the outcome", async () => {
+    let resolveRun!: (outcome: {
+      inserted: number;
+      rejected: Array<{ row: number; errors: Record<string, string> }>;
+    }) => void;
     createArtworksMock.mockImplementation(
-      (_payloads, onProgress) =>
-        new Promise((resolve) => {
-          resolveRun = resolve;
-          setTimeout(() => onProgress?.(1), 10);
-          setTimeout(() => onProgress?.(2), 30);
-        }),
+      () => new Promise((resolve) => (resolveRun = resolve)),
     );
 
     render(
@@ -89,10 +85,9 @@ describe("ImportRunStep", () => {
         <MantineProvider>
           <MemoryRouter>
             <ImportRunStep
-              rows={[row("row-0"), row("row-1")]}
+              rows={[row("row-0", "Nocturne"), row("row-1", "Dawn")]}
               selectedRowIds={new Set(["row-0", "row-1"])}
               collectionId="collection-1"
-              userId="user-1"
               collectionSlugParam="my-collection-collection-1"
               onReset={vi.fn()}
             />
@@ -104,16 +99,71 @@ describe("ImportRunStep", () => {
     // StrictMode fires the effect setup twice; the ref guard must still allow
     // exactly one write.
     expect(createArtworksMock).toHaveBeenCalledTimes(1);
+    // One request, one answer: the body is the posted rows' values, in the
+    // selection's order.
+    expect(createArtworksMock.mock.calls[0][0]).toBe("collection-1");
+    expect(
+      createArtworksMock.mock.calls[0][1].map(
+        (values: { title: string }) => values.title,
+      ),
+    ).toEqual(["Nocturne", "Dawn"]);
     expect(screen.getByText(/Importing 2 artworks/)).toBeTruthy();
 
-    // The async progress tick reaches the UI (the regression left the bar
-    // stuck at "0 of 2 committed…").
-    expect(await screen.findByText(/1 of 2 committed/)).toBeTruthy();
-
-    // Completion renders once the batch resolves.
     act(() => {
-      resolveRun({ created: 2, failed: 0 });
+      resolveRun({ inserted: 2, rejected: [] });
     });
-    expect(await screen.findByText(/2 artworks imported/)).toBeTruthy();
+    expect(await screen.findByText("2 artworks imported")).toBeTruthy();
+  });
+
+  it("points a refusal at the review row the server named", async () => {
+    createArtworksMock.mockResolvedValue({
+      inserted: 1,
+      rejected: [{ row: 1, errors: { title: "Title is required" } }],
+    });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportRunStep
+            rows={[row("row-0", "Nocturne"), row("row-1", "Dawn")]}
+            selectedRowIds={new Set(["row-0", "row-1"])}
+            collectionId="collection-1"
+            collectionSlugParam="my-collection-collection-1"
+            onReset={vi.fn()}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    // `row` is the index into the POSTED list — the second selected row — so
+    // the message lands on "Dawn", not on "row 2" and not on "Nocturne".
+    expect(await screen.findByText("1 imported, 1 rejected")).toBeTruthy();
+    expect(screen.getByText("Dawn")).toBeTruthy();
+    expect(screen.getByText(/title: Title is required/i)).toBeTruthy();
+  });
+
+  it("says the collection was left unchanged when the request itself fails", async () => {
+    // No rows were written at all, so there is no per-row answer to render —
+    // the outcome is a whole-request refusal.
+    createArtworksMock.mockRejectedValue(new TypeError("fetch failed"));
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportRunStep
+            rows={[row("row-0", "Nocturne")]}
+            selectedRowIds={new Set(["row-0"])}
+            collectionId="collection-1"
+            collectionSlugParam="my-collection-collection-1"
+            onReset={vi.fn()}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    expect(await screen.findByText("Nothing was imported")).toBeTruthy();
+    expect(
+      screen.getByText("Import failed. The collection was left unchanged."),
+    ).toBeTruthy();
   });
 });

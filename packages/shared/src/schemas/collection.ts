@@ -65,6 +65,25 @@ export const artworkImportSchema = z.object({
 export type ArtworkImportPayload = z.infer<typeof artworkImportSchema>;
 
 /**
+ * The 200 response of the import route: how many rows landed, and which
+ * posted rows the server refused and why. `row` is the index into the POSTED
+ * `rows` array — the selected rows, not the lines of the CSV file — so the
+ * client can point the message at the right review row without re-reading the
+ * file.
+ */
+export const artworkImportOutcomeSchema = z.object({
+  inserted: z.number().int().min(0),
+  rejected: z.array(
+    z.object({
+      row: z.number().int().min(0),
+      errors: z.record(z.string(), z.string()),
+    }),
+  ),
+});
+
+export type ArtworkImportOutcome = z.infer<typeof artworkImportOutcomeSchema>;
+
+/**
  * POST /collections/{cid}/artworks/bulk-delete. The ids are the ones the
  * client minted (the table lists them), so the shared minted-id rule is
  * the right one to check against.

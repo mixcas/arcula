@@ -11,13 +11,12 @@ import {
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useForm, schemaResolver } from "@mantine/form";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { artworkService } from "@/services/artworkService";
-import { imageService } from "@/services/imageService";
-import { documentService } from "@/services/documentService";
+import { ApiRequestError } from "@/services/api";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
 import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
 import FormActionsBar, {
@@ -36,28 +35,21 @@ import { toArtworkUpdate } from "@/schemas/artwork";
 import { artworkSlug, parseId } from "@arcula/shared";
 
 /**
- * The `warn` values the Add page can send, and what each one means.
- *
- * Keyed by the raw param and read through a lookup rather than an `if`, so an
- * unrecognised value renders nothing at all. A message that cannot be triggered
- * (a hand-edited `?warn=anything`) must not reach a visitor as an alert about
- * their uploads.
+ * The Edit save is one PATCH. The text fields come from `toArtworkUpdate`,
+ * which decides per field between "set", "clear" (`null`) and "leave alone"
+ * (absent) against the loaded values; the photo and document sequences are
+ * attached only when their `commit()` says they changed — an absent key
+ * leaves the stored sequence alone, which is what keeps a title-only save
+ * from renumbering fifty rows.
  */
-const WARNINGS: Record<string, string> = {
-  photos:
-    "This artwork was created, but its images could not be uploaded. Add them below and save again.",
-  documents:
-    "This artwork was created, but its documents could not be uploaded. Add them below and save again.",
-};
-
 const ArtworkEditPage: React.FC = () => {
   const { collectionId: collectionParam, artworkId: artworkParam } = useParams<{
     collectionId: string;
     artworkId: string;
   }>();
-  // Either segment may be a bare id or a "{slug}-{id}" param. Firestore needs
-  // the artwork id alone; `collectionParam` stays a passthrough because nothing
-  // on this page looks a collection up by id.
+  // Either segment may be a bare id or a "{slug}-{id}" param; the API needs the
+  // bare ids.
+  const collectionId = parseId(collectionParam ?? "");
   const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
 
@@ -68,11 +60,11 @@ const ArtworkEditPage: React.FC = () => {
     validate: schemaResolver(artworkSchema, { sync: true }),
     transformValues: toArtworkPayload,
   });
-  // Destured so the effect depends on the stable callback rather than on the
-  // `form` object, which is rebuilt every render.
+  // Destructured so the effect depends on the stable callback rather than on
+  // the `form` object, which is rebuilt every render.
   const { initialize } = form;
 
-  // Values as loaded from Firestore. Needed at save time to tell a field the
+  // Values as loaded from the API. Needed at save time to tell a field the
   // user cleared apart from one that was never set — see toArtworkUpdate.
   // State rather than a ref: the submit handler is built during render, and
   // react-hooks/refs rejects reading a ref there.
@@ -91,57 +83,10 @@ const ArtworkEditPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // The storage path needs the real collection id and the owner's uid, and
-  // neither is reliable from the route: `collectionParam` may be a slug, and
-  // the route carries no user at all. Both are read off the loaded document,
-  // which is the authoritative source for both.
-  const [owner, setOwner] = useState<{
-    userId: string;
-    collectionId: string;
-  } | null>(null);
-
-  // Carried over from the Add page when a later upload stage failed there. It
-  // is a query param rather than state so the message survives a refresh or a
-  // pasted URL — the user who is told "its images could not be uploaded" needs
-  // that warning to still be there when they come back to fix it.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const warn = searchParams.get("warn");
-  // Captured once, on mount, and never re-read.
-  //
-  // The effect below strips `warn` from the URL, so deriving the message from
-  // the search params on every render would blank it the instant it appeared —
-  // the warning would flash and vanish before it could be read, and a test
-  // polling for it would never see it either. Initialising state from the URL
-  // is what makes "shown once, then removed from the URL" actually work.
-  const [warning] = useState(() => WARNINGS[warn ?? ""]);
-
-  /**
-   * Shown once, then stripped from the URL.
-   *
-   * Removing it matters more than it looks: `warn` says an upload failed, and
-   * the fix for that is on this very page. Leaving the param in place would
-   * re-raise the warning on every refresh and every re-edit, long after the
-   * photos were uploaded — a stale alarm that trains the user to ignore the
-   * message that matters. `replace` so it does not also cost a history entry.
-   */
-  useEffect(() => {
-    if (!warn) {
-      return;
-    }
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete("warn");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [warn, setSearchParams]);
-
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const photos = useArtworkPhotos({ onError: setPhotoError });
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const documents = useArtworkDocuments({ onError: setDocumentError });
+  // The hooks stage under the collection and artwork the route names — no load
+  // has to complete first, because staging needs neither.
+  const photos = useArtworkPhotos({ collectionId, artworkId });
+  const documents = useArtworkDocuments({ collectionId, artworkId });
   // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each
   // render.
@@ -149,13 +94,18 @@ const ArtworkEditPage: React.FC = () => {
   const { hydrate: documentsHydrate } = documents;
 
   useEffect(() => {
-    if (!artworkId) {
+    if (!collectionId || !artworkId) {
+      // The render below shows the invalid-id alert before any of this state,
+      // so the guard has nothing to set — only the fetch to skip.
       return;
     }
 
     const fetchArtwork = async () => {
       try {
-        const artwork = await artworkService.getArtwork(artworkId);
+        const artwork = await artworkService.getArtwork(
+          collectionId,
+          artworkId,
+        );
         if (!artwork) {
           setLoadError("Artwork not found");
           return;
@@ -164,17 +114,12 @@ const ArtworkEditPage: React.FC = () => {
         const values = fromArtwork(artwork);
         setLoadedValues(values);
         setLoadedTitle(values.title);
-        setOwner({
-          userId: artwork.userId,
-          collectionId: artwork.collectionId,
-        });
         // The stored photos, hydrated into the working list. This is what makes
         // an existing image re-orderable and removable rather than only
         // appendable.
         photosHydrate(artwork.photos);
         // The same for documents, so an existing one is removable rather than
-        // only appendable. `sortDocuments` is what makes an artwork written
-        // before the field existed read as an empty list instead of throwing.
+        // only appendable.
         documentsHydrate(artwork.documents);
         // In uncontrolled mode this bumps the form key, which is what remounts
         // the inputs with the loaded values as their new defaults.
@@ -188,7 +133,7 @@ const ArtworkEditPage: React.FC = () => {
     };
 
     void fetchArtwork();
-  }, [artworkId, initialize, photosHydrate, documentsHydrate]);
+  }, [collectionId, artworkId, initialize, photosHydrate, documentsHydrate]);
 
   // Put the canonical "{title}-{id}" in the address bar once the title is
   // known, preserving the collection segment exactly as it arrived — this page
@@ -210,7 +155,7 @@ const ArtworkEditPage: React.FC = () => {
     );
   }, [artworkParam, collectionParam, artworkId, loadedTitle, navigate]);
 
-  if (!artworkId) {
+  if (!artworkId || !collectionId) {
     return <Alert color="red">Invalid artwork id</Alert>;
   }
 
@@ -235,108 +180,37 @@ const ArtworkEditPage: React.FC = () => {
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
           setError(null);
-          setPhotoError(null);
-          setDocumentError(null);
 
           try {
-            // Upload and sweep Storage BEFORE the Firestore write, never
-            // after. The document is the record of what exists, so it must
-            // only be updated once the objects it will point at are actually
-            // there. Deleting first for the same reason: a photo removed from
-            // the document but left in Storage is invisible to the user and
-            // never cleaned up, whereas an object deleted a moment too early
-            // is at worst re-uploadable.
-            if (owner) {
-              if (photos.pendingImages.length > 0) {
-                const uploaded = await imageService.uploadArtworkPhotos({
-                  userId: owner.userId,
-                  collectionId: owner.collectionId,
-                  artworkId,
-                  // Already generated when the files were added, so the save is
-                  // uploads only.
-                  photos: photos.pendingImages,
-                });
-                await artworkService.updateArtwork(artworkId, {
-                  // Walks the working list, so a photo dragged into the middle
-                  // is stored in the middle. Concatenating the two would make
-                  // every newly added photo the primary thumbnail.
-                  photos: photos.mergeUploaded(uploaded),
-                });
-              } else {
-                // `commit` returns null when nothing about the photos changed,
-                // which leaves the field out of the update entirely — so a save
-                // that only touched the title does not rewrite fifty storage
-                // URLs and reorder the document for nothing.
-                const changed = photos.commit();
-                if (changed) {
-                  await artworkService.updateArtwork(artworkId, {
-                    photos: changed,
-                  });
-                }
-              }
-
-              if (photos.removedStoredIds.length > 0) {
-                await imageService.deleteArtworkPhotos(
-                  owner.userId,
-                  owner.collectionId,
-                  artworkId,
-                  photos.removedStoredIds,
-                );
-              }
-
-              // The same two steps, in the same order, for documents. Separate
-              // from the photos above rather than merged into one update: each
-              // field is written only once its own objects are on disk, so a
-              // document failure cannot leave the photo references unrecorded.
-              if (documents.pendingUploads.length > 0) {
-                const uploaded = await documentService.uploadArtworkDocuments({
-                  userId: owner.userId,
-                  collectionId: owner.collectionId,
-                  artworkId,
-                  // Images already generated when they were added; the rest go
-                  // up exactly as they were picked.
-                  documents: documents.pendingUploads,
-                });
-                await artworkService.updateArtwork(artworkId, {
-                  documents: documents.mergeUploaded(uploaded),
-                });
-              } else {
-                // `commit` returns null when nothing changed, leaving the field
-                // out of the update entirely.
-                const changed = documents.commit();
-                if (changed) {
-                  await artworkService.updateArtwork(artworkId, {
-                    documents: changed,
-                  });
-                }
-              }
-
-              if (documents.removedStoredIds.length > 0) {
-                await documentService.deleteArtworkDocuments(
-                  owner.userId,
-                  owner.collectionId,
-                  artworkId,
-                  documents.removedStoredIds,
-                );
-              }
-            }
-
-            await artworkService.updateArtwork(
-              artworkId,
-              toArtworkUpdate(loadedValues, payload),
-            );
-            // No redirect. This form is where a failed upload from the Add page
-            // is fixed, and where a second pass over a long field list is done —
-            // leaving would throw away the scroll position and the `warn`
-            // context on every save. A toast is enough confirmation: the
-            // timestamps and the unchanged inputs are both proof it worked.
+            // One PATCH, one transaction on the server: the fields, and the
+            // full new sequences whenever they differ from what was loaded.
+            const photosCommit = photos.commit();
+            const documentsCommit = documents.commit();
+            await artworkService.updateArtwork(collectionId, artworkId, {
+              ...toArtworkUpdate(loadedValues, payload),
+              ...(photosCommit ? { photos: photosCommit } : {}),
+              ...(documentsCommit ? { documents: documentsCommit } : {}),
+            });
+            // No redirect. This form is where a second pass over a long field
+            // list is done — leaving would throw away the scroll position on
+            // every save. A toast is enough confirmation: the timestamps and
+            // the unchanged inputs are both proof it worked.
             notifications.show({
               title: "Artwork saved",
               message: `"${payload.title}" was updated.`,
             });
           } catch (err) {
             console.error("Error updating artwork:", err);
-            setError("Failed to save artwork. Please try again.");
+            // A cap hit carries the server's own message ("at most N …"),
+            // which is the one to show; everything else stays generic so the
+            // alert does not leak a status line.
+            setError(
+              err instanceof ApiRequestError &&
+                err.status === 409 &&
+                err.code === "limit-reached"
+                ? err.message
+                : "Failed to save artwork. Please try again.",
+            );
           }
         })}
       >
@@ -483,33 +357,9 @@ const ArtworkEditPage: React.FC = () => {
           </Grid.Col>
         </Grid>
 
-        {/*
-          The Add page's partial-failure warning, above the other alerts: it is
-          the oldest problem on the page and the one that explains why the
-          uploader is empty. `yellow`, not `red` — the artwork exists, so
-          nothing has been lost.
-        */}
-        {warning ? (
-          <Alert color="yellow" mb="md" title="Saved without everything">
-            {warning}
-          </Alert>
-        ) : null}
-
         {error ? (
           <Alert color="red" mb="md">
             {error}
-          </Alert>
-        ) : null}
-
-        {photoError ? (
-          <Alert color="red" mb="md">
-            {photoError}
-          </Alert>
-        ) : null}
-
-        {documentError ? (
-          <Alert color="red" mb="md">
-            {documentError}
           </Alert>
         ) : null}
 

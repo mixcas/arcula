@@ -5,10 +5,10 @@ import * as rtl from "@testing-library/react";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { FirebaseError } from "firebase/app";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicArtworkPage from "@/components/collection/PublicArtworkPage";
+import { ApiRequestError } from "@/services/api";
 import type { Artwork, Collection } from "@arcula/shared";
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -47,7 +47,7 @@ vi.mock("@mantine/carousel", async () => {
 
 const getCollection = vi.fn<() => Promise<Collection | null>>();
 const getArtwork = vi.fn<() => Promise<Artwork | null>>();
-const getPublicCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
+const getCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
 
 vi.mock("@/services/collectionService", () => ({
   collectionService: {
@@ -60,7 +60,10 @@ vi.mock("@/services/artworkService", () => ({
   artworkService: {
     getArtwork: (...args: unknown[]) =>
       (getArtwork as unknown as (...a: unknown[]) => unknown)(...args),
-    getPublicCollectionArtworks: vi.fn(),
+    getCollectionArtworks: (...args: unknown[]) =>
+      (getCollectionArtworks as unknown as (...a: unknown[]) => unknown)(
+        ...args,
+      ),
   },
 }));
 
@@ -135,7 +138,7 @@ const renderPage = () =>
 beforeEach(() => {
   getCollection.mockReset();
   getArtwork.mockReset();
-  getPublicCollectionArtworks.mockReset();
+  getCollectionArtworks.mockReset();
 });
 
 afterEach(() => {
@@ -168,7 +171,7 @@ describe("PublicArtworkPage — the reachable states", () => {
 
   it("says the collection is private when the collection read is denied", async () => {
     getCollection.mockRejectedValue(
-      new FirebaseError("permission-denied", "denied"),
+      new ApiRequestError(403, "forbidden", "denied"),
     );
     renderPage();
     // The collection read is the gate, so its answer is the one that shows —
@@ -181,16 +184,14 @@ describe("PublicArtworkPage — the reachable states", () => {
     expect(getArtwork).not.toHaveBeenCalled();
   });
 
-  it("says the artwork is not available when only the artwork is denied", async () => {
+  it("says the artwork is not available when the artwork read returns nothing", async () => {
     getCollection.mockResolvedValue(collection());
-    getArtwork.mockRejectedValue(
-      new FirebaseError("permission-denied", "denied"),
-    );
+    getArtwork.mockResolvedValue(null);
     renderPage();
     // Not "this collection is private": the collection is public, and the
-    // artwork is the thing that cannot be shown. `firestore.rules` refuses a
-    // private or soft-deleted work here, and saying which would be a
-    // disclosure.
+    // artwork is the thing that cannot be shown. The API answers 404 for a
+    // private, soft-deleted and an absent work alike — saying which was
+    // refused would be a disclosure — and the service folds that 404 to null.
     expect(
       await screen.findByText("This artwork is not available."),
     ).toBeVisible();
@@ -198,7 +199,7 @@ describe("PublicArtworkPage — the reachable states", () => {
 
   it("is not found for a public artwork in a different collection", async () => {
     getCollection.mockResolvedValue(collection());
-    // The rules admit a public artwork by id whatever its parent, so nothing
+    // The API serves a public artwork by id whatever its parent, so nothing
     // server-side stops this. The page's own check is the whole guard.
     getArtwork.mockResolvedValue(
       artwork({ collectionId: "some-other-collection" }),
@@ -209,22 +210,14 @@ describe("PublicArtworkPage — the reachable states", () => {
     ).toBeVisible();
   });
 
-  it("is not found when the artwork does not exist", async () => {
-    getCollection.mockResolvedValue(collection());
-    getArtwork.mockResolvedValue(null);
-    renderPage();
-    expect(
-      await screen.findByText("This artwork is not available."),
-    ).toBeVisible();
-  });
-
   it("reports a transport failure as an error, not as a missing artwork", async () => {
     getCollection.mockResolvedValue(collection());
-    getArtwork.mockRejectedValue(new FirebaseError("unavailable", "down"));
+    getArtwork.mockRejectedValue(new ApiRequestError(500, "internal", "down"));
     renderPage();
-    // The distinction from the denial case above is the point: reporting "this
-    // artwork is not available" for a dropped connection is a claim the app
-    // cannot support, and it costs the visitor a retry that would have worked.
+    // The distinction from the case above is the point: reporting "this
+    // artwork is not available" for a failure that is not a 404 is a claim the
+    // app cannot support, and it costs the visitor a retry that would have
+    // worked.
     expect(await screen.findByText(/Failed to load/)).toBeVisible();
   });
 
@@ -250,8 +243,9 @@ describe("PublicArtworkPage — the reachable states", () => {
     getArtwork.mockResolvedValue(artwork());
     renderPage();
     await waitFor(() => expect(getArtwork).toHaveBeenCalled());
-    // Only the single work: that saves a round trip and skips the
-    // (collectionId, isPublic, deletedAt) composite index entirely.
-    expect(getPublicCollectionArtworks).not.toHaveBeenCalled();
+    // Only the single work: that saves a round trip, and nothing on this view
+    // needs a neighbour — the page offers a link back to the collection and
+    // nothing else.
+    expect(getCollectionArtworks).not.toHaveBeenCalled();
   });
 });

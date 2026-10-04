@@ -1,10 +1,12 @@
-// Type-only import, deliberately kept from the Firebase era: `Timestamp` is
-// the wire shape the Firestore service layer hands back, and every other
-// type in this file is plain. It is erased at build time, so shared has no
-// runtime Firebase dependency. When the API's wire shape lands (Phase 4 of
-// the migration plan) the annotation is replaced and this import — and the
-// `firebase` devDependency — go with it.
-import type { Timestamp } from "firebase/firestore";
+// `Timestamp` is the wire shape the API serializer emits —
+// `{ seconds, nanoseconds }`, exactly the shape Firestore used to hand the
+// client — so every type in this file keeps working unchanged across the
+// cutover. Firebase's `Timestamp` carried the same two fields plus methods
+// the client never called; the plain interface is what remains.
+export interface Timestamp {
+  seconds: number;
+  nanoseconds: number;
+}
 
 // User type
 export interface User {
@@ -141,25 +143,24 @@ export type ArtworkDocument = ArtworkDocumentFile | ArtworkDocumentImage;
 
 // The standard image variants generated for every artwork photo.
 //
-// The keys are the contract: they name the generated files in Firebase Storage
-// and they are matched by `storage.rules`, so adding a variant means changing
-// that rule too. The sizes live in `IMAGE_VARIANTS` (src/utils/imageVariants.ts)
-// — this type is only the key space.
+// The keys are the contract: they name the objects the API writes under S3
+// (`apps/api/src/media/keys.ts`) and the geometry each gets
+// (`apps/api/src/media/variants.ts`), so adding a variant is a change to the
+// API's table. This type is only the key space.
 //
-// `xlarge` is the fullscreen-slideshow size. It was added after the first photos
-// were uploaded, so those have only the four below it — which is why every read
-// goes through `photoUrl`/`photoSrcSet` rather than indexing `variants` by key.
+// Reads still go through `photoUrl`/`photoSrcSet` rather than indexing
+// `variants` by key.
 export type ImageVariantKey =
   "xlarge" | "square_lg" | "square_sm" | "large" | "medium";
 
 // One generated derivative of an uploaded image.
 //
-// `contentType` is recorded per variant rather than assumed, because the
-// encoder is a capability check and not every browser agrees: WebP where the
-// canvas can encode it, JPEG everywhere else. See src/utils/imageProcessing.ts.
+// `contentType` is recorded per variant rather than assumed: the server's
+// encoder picks the format (WebP today) and the client only ever displays
+// what it was told.
 export interface ImageVariant {
   key: ImageVariantKey;
-  url: string; // Firebase Storage download URL
+  url: string; // The API media proxy path that serves this object
   width: number; // Actual encoded pixels, not the nominal target
   height: number;
   size: number; // Bytes

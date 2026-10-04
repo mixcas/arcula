@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Group, Progress, Text } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Card,
+  Group,
+  Progress,
+  Stack,
+  Text,
+} from "@mantine/core";
 import { Link } from "react-router-dom";
 import { artworkService } from "@/services/artworkService";
 import {
   isRowImportable,
-  toImportArtwork,
-  type ImportResult,
+  type ArtworkImportOutcome,
   type ReviewRow,
 } from "@arcula/shared";
 
@@ -13,7 +20,6 @@ interface ImportRunStepProps {
   rows: ReviewRow[];
   selectedRowIds: Set<string>;
   collectionId: string;
-  userId: string;
   collectionSlugParam: string;
   onReset: () => void;
 }
@@ -23,21 +29,23 @@ interface ImportRunStepProps {
  *
  * The import runs auto-start when this step mounts (reaches the review step's
  * Confirm) and cannot be repeated from here — the user goes back to start a new
- * file. Progress ticks per committed chunk; each chunk is a `writeBatch` of up
- * to CHUNK_SIZE documents, so a several-hundred-row file is a handful of
- * commits, not one per artwork.
+ * file. It is one request, not a chunked client write: the API validates each
+ * row against the shared schema and writes what passes in one transaction, so
+ * there is no client-side progress to tick and the answer is the
+ * `{ inserted, rejected }` outcome below.
  */
 const ImportRunStep: React.FC<ImportRunStepProps> = ({
   rows,
   selectedRowIds,
   collectionId,
-  userId,
   collectionSlugParam,
   onReset,
 }) => {
-  const [progress, setProgress] = useState(0);
   const [total, setTotal] = useState(0);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<ArtworkImportOutcome | null>(null);
+  // The request itself failing — no session, bad id, dropped connection —
+  // where nothing was written and there is no per-row answer to render.
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   // Set the moment the run starts; survives StrictMode's double effect run so
   // the write cannot be triggered twice. See the effect comment below.
@@ -58,12 +66,11 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
     // side-effecting write of real documents, so starting it twice would
     // duplicate rows. The cleanup must therefore do nothing: the second setup
     // here is blocked by `startedRef`, so cancelling on cleanup would silence
-    // the only run there is — its progress ticks and final result would never
-    // render even though the Firestore writes completed (the app would sit on
-    // "Importing N artworks…" forever). `selected` in the deps keeps the run
-    // correct if the parent ever remounts this step with a different selection
-    // (it does not, since the review gate fixed the selection before reaching
-    // here).
+    // the only run there is — its final result would never render even though
+    // the write completed (the app would sit on "Importing N artworks…"
+    // forever). `selected` in the deps keeps the run correct if the parent
+    // ever remounts this step with a different selection (it does not, since
+    // the review gate fixed the selection before reaching here).
     if (startedRef.current) {
       return;
     }
@@ -73,75 +80,88 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
       const selectedCount = selected.length;
       setTotal(selectedCount);
       if (selectedCount === 0) {
-        setResult({
-          imported: 0,
-          deselected: rows.length,
-          failed: 0,
-        });
+        setResult({ inserted: 0, rejected: [] });
         return;
       }
 
       try {
-        const payloads = selected.map((row) =>
-          toImportArtwork(row.values, collectionId, userId),
+        // The server validates the raw rows; the client has already told the
+        // user which rows are broken, and the ones that arrive are the ones
+        // that were selected in review.
+        setResult(
+          await artworkService.createArtworks(
+            collectionId,
+            selected.map((row) => row.values),
+          ),
         );
-        const outcome = await artworkService.createArtworks(
-          payloads,
-          setProgress,
-        );
-        setResult({
-          imported: outcome.created,
-          deselected: rows.length - selectedCount,
-          failed: outcome.failed,
-        });
       } catch (error) {
         console.error("Import failed:", error);
-        setResult({
-          imported: 0,
-          deselected: rows.length - selectedCount,
-          failed: selectedCount,
-          error: "Import failed. The collection was left unchanged.",
-        });
+        // The request itself failed (bad id, no session, transport) — no rows
+        // were written at all, so there is no per-row answer to render.
+        setRequestError("Import failed. The collection was left unchanged.");
+        setResult({ inserted: 0, rejected: [] });
       }
     };
 
     void run();
-  }, [selected, collectionId, userId, rows.length]);
+  }, [selected, collectionId]);
 
-  // Before the run finishes, show the progress line.
+  // Before the run finishes, show the progress line. One request means one
+  // answer, so the bar is indeterminate rather than ticked by chunks.
   if (!result) {
-    const done = total > 0 ? progress / total : 0;
     return (
       <Card shadow="sm" p="lg">
         <Text fw={600} mb="xs">
           Importing {total} artwork{total === 1 ? "" : "s"}…
         </Text>
-        <Progress value={done * 100} animated={done < 1} mb="sm" />
+        <Progress value={50} animated mb="sm" />
         <Text size="sm" c="dimmed">
-          {done < 1 ? `${progress} of ${total} committed…` : "Finalizing…"}
+          Sending to the server…
         </Text>
       </Card>
     );
   }
 
-  const failed = result.failed > 0;
+  const failed = result.rejected.length > 0;
   const headline =
-    result.imported === 0 && result.failed === 0
+    result.inserted === 0 && result.rejected.length === 0
       ? "Nothing was imported"
       : failed
-        ? `${result.imported} imported, ${result.failed} failed`
-        : `${result.imported} artwork${result.imported === 1 ? "" : "s"} imported`;
+        ? `${result.inserted} imported, ${result.rejected.length} rejected`
+        : `${result.inserted} artwork${result.inserted === 1 ? "" : "s"} imported`;
 
   return (
     <>
-      <Alert color={failed ? "red" : "green"} title={headline} mb="md">
-        {result.deselected > 0 ? (
-          <Text size="sm">
-            {result.deselected} row{result.deselected === 1 ? "" : "s"} were
-            left out — deselected in the review step.
-          </Text>
+      <Alert
+        color={requestError ? "red" : failed ? "yellow" : "green"}
+        title={headline}
+        mb="md"
+      >
+        {result.rejected.length > 0 ? (
+          <Stack gap={2}>
+            {result.rejected.map((entry, index) => {
+              // `row` is the index into the POSTED list — the selected rows,
+              // not the lines of the file — so it points straight at the
+              // review row that did not land.
+              const row = selected[entry.row];
+              return (
+                // Indexed, not keyed on the title: two rows can share one, and a
+                // duplicate key would silently drop a line from the very list
+                // that explains what did not land.
+                <Text key={`${index}-${entry.row}`} size="sm">
+                  <Text component="span" fw={600}>
+                    {row?.values.title ?? `Row ${entry.row + 1}`}
+                  </Text>{" "}
+                  —{" "}
+                  {Object.entries(entry.errors)
+                    .map(([field, message]) => `${field}: ${message}`)
+                    .join(", ")}
+                </Text>
+              );
+            })}
+          </Stack>
         ) : null}
-        {result.error ? <Text size="sm">{result.error}</Text> : null}
+        {requestError ? <Text size="sm">{requestError}</Text> : null}
       </Alert>
 
       <Group justify="center" mt="xl">

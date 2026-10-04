@@ -2,9 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { collectionService } from "@/services/collectionService";
 import { collectionSlug } from "@arcula/shared";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../services/firebase";
 import type { Collection } from "@arcula/shared";
 
 const ManagePage: React.FC = () => {
@@ -22,20 +21,9 @@ const ManagePage: React.FC = () => {
       if (!userId) return;
 
       try {
-        const q = query(
-          collection(db, "collections"),
-          where("userId", "==", userId),
-        );
-        const querySnapshot = await getDocs(q);
-        // `doc.data()` is untyped Firestore data, so the spread is asserted
-        // here — same pattern as collectionService.getUserCollections.
-        const fetchedCollections = querySnapshot.docs.map((doc) => {
-          return {
-            id: doc.id,
-            ...doc.data(),
-          } as Collection;
-        });
-        setCollections(fetchedCollections);
+        // The session decides whose collections these are; the client sends
+        // nothing but the path.
+        setCollections(await collectionService.getUserCollections());
       } catch (err) {
         console.error("Error fetching collections:", err);
         setError("Failed to fetch collections");

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Loader, Stepper, Text } from "@mantine/core";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { collectionSlug, parseId } from "@arcula/shared";
 import { parseCsvText, type ParsedCsv } from "@/utils/csv";
@@ -32,8 +31,6 @@ const CsvImportPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
-  const userId = currentUser?.uid ?? "";
 
   // The collection the import writes into; its name feeds the canonical-URL
   // rewrite below, mirroring CollectionSettingsPage.
@@ -72,7 +69,7 @@ const CsvImportPage: React.FC = () => {
   // --- collection load ------------------------------------------------------
 
   useEffect(() => {
-    if (!collectionId || !userId) {
+    if (!collectionId) {
       return;
     }
     const fetchCollection = async () => {
@@ -89,7 +86,7 @@ const CsvImportPage: React.FC = () => {
       }
     };
     void fetchCollection();
-  }, [collectionId, userId]);
+  }, [collectionId]);
 
   // Keep the canonical "{slug}-{id}" in the address bar once the name is known.
   useEffect(() => {
@@ -305,7 +302,6 @@ const CsvImportPage: React.FC = () => {
             rows={reviewRows}
             selectedRowIds={selectedRowIds}
             collectionId={collectionId}
-            userId={userId}
             collectionSlugParam={collectionSlug(loadedName, collectionId)}
             onReset={resetFlow}
           />

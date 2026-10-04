@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { FirebaseError } from "firebase/app";
 
 import {
   publicArtworkState,
   publicCollectionState,
   publicFailure,
 } from "@/components/collection/usePublicCollection";
+import { ApiRequestError } from "@/services/api";
 import type { Artwork, Collection } from "@arcula/shared";
 
 const COLLECTION_ID = "collection-1";
@@ -30,25 +30,22 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   ...overrides,
 });
 
-const denied = (): FirebaseError =>
-  new FirebaseError(
-    "permission-denied",
-    "Missing or insufficient permissions.",
-  );
+const denied = (): ApiRequestError =>
+  new ApiRequestError(403, "forbidden", "Missing or insufficient permissions.");
 
 describe("publicFailure", () => {
-  it("maps permission-denied to `private`, and nothing else", () => {
-    // A denied read is the rules doing their job, not a malfunction. Reporting
-    // it as an error both reads badly to a visitor and invites a retry that
+  it("maps a 403 to `private`, and nothing else", () => {
+    // A refused read is the API doing its job, not a malfunction. Reporting it
+    // as an error both reads badly to a visitor and invites a retry that
     // cannot succeed.
     expect(publicFailure(denied())).toEqual({ status: "private" });
   });
 
   it("maps every other failure to `error`", () => {
     for (const error of [
-      new FirebaseError("unavailable", "The service is unavailable."),
-      new FirebaseError("unauthenticated", "no auth"),
-      new TypeError("undefined is not a function"),
+      new ApiRequestError(404, "not-found", "The collection does not exist."),
+      new ApiRequestError(500, "internal", "Something went wrong"),
+      new TypeError("fetch failed"),
       "a bare string",
       undefined,
     ]) {
@@ -132,11 +129,11 @@ describe("publicArtworkState", () => {
   });
 
   it("is `notFound` for a public artwork from a *different* collection", () => {
-    // Not redundant with the rules. `firestore.rules` admits a public,
-    // un-deleted artwork by its own id whatever collection it is in — that is
-    // deliberate, so an owner can keep one work public inside a private
-    // collection. Nothing server-side stops a work rendering on another
-    // collection's URL, so this comparison is the whole check.
+    // Not redundant with the API. The API serves a public, un-deleted artwork
+    // by its own id whatever collection it is in — deliberate, so an owner
+    // can keep one work public inside a private collection. Nothing
+    // server-side stops a work rendering on another collection's URL, so this
+    // comparison is the whole check.
     expect(
       publicArtworkState(
         collection(),
@@ -147,7 +144,7 @@ describe("publicArtworkState", () => {
   });
 
   it("does not require the artwork to be public itself", () => {
-    // The rules already refuse a private or soft-deleted work, so by the time a
+    // The API already refuses a private or soft-deleted work, so by the time a
     // document arrives here it passed that gate. Asserted because it looks like
     // a gap: re-checking `isPublic` here would be defence in depth with no
     // reachable failure, and the flag is the owner's per-work switch.

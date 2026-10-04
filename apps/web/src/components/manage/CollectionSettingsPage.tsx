@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { deleteField } from "firebase/firestore";
 import {
   Box,
   Container,
@@ -30,7 +29,7 @@ import {
   resolveSkinOptions,
 } from "@/skins/registry";
 import type { SkinOptionValue } from "@/skins/types";
-import type { CollectionUpdate } from "@/types/updates";
+import type { CollectionUpdatePayload } from "@arcula/shared";
 
 /** Shallow equality over the option bag. Order does not matter, values do. */
 const optionsChanged = (
@@ -174,21 +173,18 @@ const CollectionSettingsPage: React.FC = () => {
 
     try {
       const name = collectionName.trim();
-      // `skin`/`skinOptions`/`description` are written only when they actually
-      // differ. `updateCollection` is a merge, so writing an identical bag is a
-      // wasted write, and `updatedAt` is server-stamped — a no-op save would
-      // still move it and read as a real change to anything watching the
-      // document.
+      // `skin`/`skinOptions`/`description` are sent only when they actually
+      // differ: the patch contract leaves an absent key alone, so a title-only
+      // save never rewrites the skin bag, and a no-op save never moves
+      // `updatedAt`.
       //
-      // The description is cleared with `deleteField()` rather than an empty
-      // string, so a blank description reads as an absent field (the same
-      // "cannot clear a value once set" merge trap that motivates
-      // `CollectionUpdate`).
-      const update: CollectionUpdate = { name, isPublic };
+      // A blank description is sent as `null`, not as an empty string: the
+      // wire has no "clear" value other than `null`, and an absent key would
+      // leave the stored text in place.
+      const update: CollectionUpdatePayload = { name, isPublic };
       const descriptionText = description.trim();
       if (descriptionText !== (loadedDescription?.trim() ?? "")) {
-        update.description =
-          descriptionText === "" ? deleteField() : descriptionText;
+        update.description = descriptionText === "" ? null : descriptionText;
       }
       if (skin !== loadedSkin) {
         update.skin = skin;

@@ -1283,6 +1283,67 @@ http://localhost:8000`, `changeOrigin`) forwards it; prod is same-origin
   set: a dev API started by `bun run dev` must survive a plain
   `stack-down`.
 
+- **2026-10-04 — Phase 4 S2–S5: the client cutover, landed as one commit.**
+  (a) **The commit boundary.** One commit per step does not hold for S2–S5:
+  the service signatures, the staged hooks and the two save flows are one
+  interlocking unit — `createArtwork`'s payload is what `commit()` answers,
+  and the hooks' entry shape is what the pages render — so no intermediate
+  commit compiles. The four steps landed together, with this entry standing
+  in for the per-step records.
+  (b) **The `Timestamp` pull-forward.** Shared's last Firebase reference was
+  type-only: `import type { Timestamp } from "firebase/firestore"`. It is now
+  a local `interface Timestamp { seconds, nanoseconds }` — the wire shape
+  the API serializer already emits, character-for-character Firestore's — so
+  `@arcula/shared` carries no Firebase import at all, and S6 can delete the
+  `firebase` dependency everywhere without a shared-package exception.
+  (c) **`?warn` is killed entirely (owner's ruling), not re-expressed.** The
+  Add page is one write: the only outcome where nothing was written stays on
+  the form with an alert (the 409 `limit-reached` envelope message verbatim,
+  a generic one otherwise), and every success redirects to the created work.
+  There is no partial-upload state left for a `?warn` link to point at, so
+  the param, its capture-once and its strip-once effect are deleted, with
+  their suite (`tests/artworkWarnParam.test.tsx`).
+  (d) **Upload failures surface as the uploader's rejected list, not as a
+  page param.** The hook's per-file refusals (cap, type, the stage route's
+  own answer) and the Dropzone's validator refusals fold into one per-file
+  list rendered above the grid. Testing found a clobber in that wiring:
+  `handleDrop` replaced the list when the staging settled, erasing the half
+  the synchronous `onReject` had just written — the "one-frame flicker"
+  AGENTS.md describes. Both uploaders now append-or-skip, and the mixed-drop
+  tests pin it. (Test mechanics worth knowing: `userEvent.upload` honours
+  the input's `accept` hint and silently drops non-matching files, so the
+  mixed-drop tests deliver both files on a manually dispatched `change`
+  event — jsdom has no `DataTransfer`.)
+  (e) **The storage-rules suite died with its subject, pulled forward from
+  S6.** `tests/storage.rules.test.ts`, `tests/artworkFiles.test.ts` and
+  `tests/helpers/rulesSource.ts` tested the client's Firebase Storage upload
+  path, which no longer exists: objects go through the API's stage route, and
+  this app consults no `storage.rules` any more. §11's "the 88 rules tests
+  are gone" already settled the count; this records which half died in which
+  commit. `firestore.rules.test.ts` stays until S6, with the rest of the
+  Firebase tree.
+  (f) **Ids are minted hyphen-free — the API's UUIDs were a latent break of
+  the route convention (amends G3's "nanoid" assumption toward the code).**
+  G3 says ids are `text`/nanoid everywhere; the built API minted
+  `crypto.randomUUID()` — hyphenated. That is fatal for the
+  `{urlizedName}-{id}` segment: `parseId` (the one place that knows the
+  convention) cuts at the LAST hyphen, so a hyphenated id's cut lands inside
+  the id and recovers its last segment instead of the id. Nothing is
+  deployed, so the fix is at the mint: the API's two mint sites and the
+  client's Add-page mint now produce `uuid().replace(/-/g, "")` (32 hex),
+  and `parseId` and the slug helpers are unchanged. Staged-entry ids stay
+  full UUIDs: they never enter a URL.
+  (g) **The PATCH's `currentDocs` read now carries `ORDER BY id`** (the
+  photos read already did). Defensive: when the payload omits `documents`,
+  the handler re-derives the sequence from the stored rows, and Postgres
+  gives no order without an explicit one. `apps/api/tests/save.api.test.ts`
+  pins the answer — two PDFs seeded and created in descending id order,
+  PATCH without `documents`, the response ascending — and says in the test
+  that the serializer's own sort would keep it green today.
+  (h) **The cap UI stays Phase 5 (owner's ruling).** Phase 4 renders the 409
+  `limit-reached` envelope message on collection create and nothing more of
+  the cap mechanics.
+
 ---
 
 ## Closing

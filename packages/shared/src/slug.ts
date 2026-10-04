@@ -9,10 +9,15 @@
 /**
  * Recover the document id from a route param.
  *
- * A urlized name always contains at least one hyphen, and Firestore's
- * auto-generated ids never do, so everything after the last hyphen is the id.
- * A param with no hyphen is already a bare id and comes back unchanged, which
- * keeps older raw-id links working.
+ * A urlized name always contains at least one hyphen, and ids are minted
+ * hyphen-free on both sides that matter — the API for the rows it owns and the
+ * client for the artwork id the Add page supplies — so everything after the
+ * last hyphen is the id, and the cut can never land inside it. A param with no
+ * hyphen is already a bare id and comes back unchanged.
+ *
+ * This invariant is load-bearing, not stylistic: an id that contained a
+ * hyphen would put the cut inside the id itself, and this would recover the
+ * id's last segment instead of the id.
  *
  * Callers pass a single path segment, so this never sees the surrounding path.
  * The collection and artwork segments of a nested route are therefore parsed

@@ -12,7 +12,7 @@ import {
   Text,
   Tooltip,
 } from "@mantine/core";
-import { Dropzone } from "@mantine/dropzone";
+import { Dropzone, type FileRejection } from "@mantine/dropzone";
 import {
   DndContext,
   KeyboardSensor,
@@ -29,10 +29,15 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { IconPhoto } from "@tabler/icons-react";
 import PhotoPreviewModal from "./PhotoPreviewModal";
 import type { PhotoEntry, UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
-import { photoUrl } from "@arcula/shared";
-import { ACCEPTED_IMAGE_TYPES, MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import {
+  ACCEPTED_IMAGE_TYPES,
+  MAX_ARTWORK_PHOTOS,
+  MAX_IMAGE_BYTES,
+  photoUrl,
+} from "@arcula/shared";
 import type { ArtworkPhoto } from "@arcula/shared";
 
 interface PhotoUploaderProps {
@@ -53,6 +58,43 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   description,
 }) => {
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [rejected, setRejected] = useState<string[]>([]);
+
+  // Never swallowed. The hook's pre-checks are cap and type, and the stage
+  // route adds the size cap and the decode — a file that silently vanished
+  // from the grid is worse than a message, so every refusal lands here.
+  const handleDrop = async (files: File[]) => {
+    const result = await photos.addFiles(files);
+    // Appended, and skipped when empty: the reject handler below fires
+    // synchronously for the files the Dropzone's own validator refused, and
+    // this settles a tick later. Replacing here would erase that half of the
+    // list the moment the staging settled, and the two halves are disjoint —
+    // a file is either validator-refused or hook-processed, never both.
+    if (result.rejected.length === 0) {
+      return;
+    }
+    setRejected((current) => [
+      ...current,
+      ...result.rejected.map((entry) => `${entry.file.name}: ${entry.reason}`),
+    ]);
+  };
+
+  // The other rejection path, and the one that actually fires for an
+  // oversized file or a type the `accept` hint did not stop: Dropzone checks
+  // them itself and never hands those files to `onDrop`, so an unhandled
+  // `onReject` means a too-large image produces a one-frame flicker and no
+  // explanation. This fires synchronously, before any staging has settled, so
+  // it starts the list and the hook's rejections are appended to it.
+  const handleReject = (failures: FileRejection[]) => {
+    setRejected(
+      failures.map(
+        (failure) =>
+          `${failure.file.name}: ${failure.errors
+            .map((error) => error.message)
+            .join(", ")}`,
+      ),
+    );
+  };
 
   // A keyboard sensor as well as the pointer one: reordering images is exactly
   // the kind of list a keyboard user should be able to rearrange, and
@@ -96,18 +138,17 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     <Stack gap="sm">
       <Dropzone
         onDrop={(files) => {
-          void photos.addFiles(files);
+          void handleDrop(files);
         }}
-        // The files have already been chosen by the time this fires, so the
-        // hook re-validates each one. That is the point: Dropzone's accept
-        // list is a file-picker hint and the OS can still hand over anything.
+        // `accept` is enforced twice: the Dropzone's validator refuses a
+        // mismatch on the way in (the `onReject` path below), and the hook
+        // re-checks the same list for any caller that bypasses the component.
+        // Neither spends a round trip on a wrong type.
         accept={ACCEPTED_IMAGE_TYPES}
-        maxSize={10 * 1024 * 1024}
+        maxSize={MAX_IMAGE_BYTES}
         maxFiles={Math.max(1, MAX_ARTWORK_PHOTOS - photos.count)}
         disabled={!photos.hasRoom || photos.processing}
-        // The grid below is the reorder affordance, so dropping onto a tile
-        // here would be a second, conflicting way to order the list.
-        onReject={() => undefined}
+        onReject={handleReject}
       >
         <Group
           justify="center"
@@ -138,20 +179,25 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         />
       ) : null}
 
-      {/*
-        Stated rather than inferred. The JPEG fallback is silent by design —
-        a browser that cannot encode WebP gets a correct, working, and entirely
-        silent downgrade, and the only evidence is that every object in Storage
-        is a `.jpg`. One line here is cheaper than that discovery.
-      */}
-      {photos.variantWebp === false ? (
+      {rejected.length > 0 ? (
         <Alert
           color="yellow"
-          icon="⚠"
-          title="This browser will store JPEG instead of WebP"
+          icon={<IconPhoto size={16} />}
+          title={`${rejected.length} image${rejected.length === 1 ? "" : "s"} could not be added`}
+          withCloseButton
+          onClose={() => setRejected([])}
         >
-          It cannot encode WebP through a canvas, so the generated image sizes
-          are saved as JPEG at the same quality. The originals are unaffected.
+          <Stack gap={2}>
+            {rejected.map((line, index) => (
+              // Indexed, not keyed on the line: two files can share a name and a
+              // reason — a folder of `scan.jpg`s is ordinary — and a duplicate
+              // key silently drops a row from the very alert meant to say what
+              // went missing.
+              <Text key={`${index}-${line}`} size="xs">
+                {line}
+              </Text>
+            ))}
+          </Stack>
         </Alert>
       ) : null}
 
@@ -209,12 +255,12 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 /**
  * The `ArtworkPhoto` an entry should be displayed through.
  *
- * A pending photo has none of its own until the variants are generated, so it
- * falls back to a stand-in built from them. Returning `null` for an unprocessed
- * pending photo is honest — `photoUrl` then yields nothing, and the tile shows
- * its box rather than a broken image.
+ * A staged photo's stand-in carries the server's own urls — the staged
+ * original and the variants it generated — so it renders through exactly the
+ * same `photoUrl` ladder as a stored one, and there is no intermediate
+ * "preparing" shape: an entry only exists once its variants are in hand.
  */
-const previewPhotoFor = (entry: PhotoEntry): ArtworkPhoto | null =>
+const previewPhotoFor = (entry: PhotoEntry): ArtworkPhoto =>
   entry.status === "stored" ? entry.photo : entry.preview;
 
 /** The photo at an index, or `null` when the index is out of range. */
@@ -360,8 +406,8 @@ const SortableTile: React.FC<SortableTileProps> = ({
   );
 };
 
-/** The filename for a stored photo, or its pending original name. */
+/** The filename for a stored photo, or its staged one. */
 const labelFor = (entry: PhotoEntry): string =>
-  entry.status === "stored" ? entry.photo.name : entry.file.name;
+  entry.status === "stored" ? entry.photo.name : entry.preview.name;
 
 export default PhotoUploader;

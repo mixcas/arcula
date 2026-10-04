@@ -20,54 +20,29 @@ import {
   useArtworkPhotos,
   type UseArtworkPhotos,
 } from "@/hooks/useArtworkPhotos";
-import { processImages, variantFormatIsWebp } from "@/utils/imageProcessing";
+import { mediaService } from "@/services/mediaService";
+import { ApiRequestError } from "@/services/api";
+import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
 import type { ArtworkPhoto } from "@arcula/shared";
 
 /**
- * The default stub: one WebP `square_lg` per file, as a working browser gives.
+ * The staging boundary: the form never decodes or resizes a byte, so every
+ * pixel assertion here reads the server's own answer back through the mock
+ * rather than emulating an encoder. The geometry and the encoder are the
+ * API's, and the API suite pins them.
  *
- * A `function` declaration, not a `const`, because `vi.mock`'s factory is
- * hoisted above the imports and runs before module-scope `const`s are
- * initialised. It is also reassigned onto the mock in `beforeEach`, so a test
- * that changes the encoder's answer does not leak into the next one.
+ * `vi.mock`'s factory is hoisted above the imports, so the default
+ * implementations are installed in `beforeEach` instead.
  */
-function defaultProcessImages(files: File[]) {
-  return Promise.resolve(
-    files.map((file) => ({
-      file,
-      webp: true,
-      width: 2000,
-      height: 1500,
-      variants: [
-        {
-          key: "square_lg" as const,
-          blob: new Blob([new Uint8Array([9])], { type: "image/webp" }),
-          width: 800,
-          height: 800,
-          contentType: "image/webp",
-        },
-      ],
-    })),
-  );
-}
-
-// The variant pipeline needs a real canvas and a Web Worker, and jsdom has
-// neither. Everything asserted here is the layer above that — the list, the
-// ordering and the removal — so the processing is stubbed rather than
-// emulated. The geometry and the encoder choice are covered separately in
-// tests/imageVariants.test.ts and tests/imageProcessing.test.ts, both of which
-// are pure and run in node.
-//
-// The stub returns a real variant, because the form now previews the generated
-// WebP rather than the file that was picked. A stub returning none would fall
-// through to the original and quietly test the fallback path instead.
-vi.mock("@/utils/imageProcessing", () => ({
-  processImages: vi.fn(defaultProcessImages),
-  // Asked once on mount. jsdom has no canvas, so the real probe answers "no
-  // WebP" and the JPEG warning would be showing in every other test here.
-  variantFormatIsWebp: vi.fn(() => Promise.resolve(true)),
-  extensionFor: (type: string) =>
-    type === "image/webp" ? "webp" : type === "image/png" ? "png" : "jpg",
+vi.mock("@/services/mediaService", () => ({
+  mediaService: {
+    stagePhoto: vi.fn(),
+    processPhoto: vi.fn(),
+    discardPhoto: vi.fn(),
+    stageDocument: vi.fn(),
+    processDocument: vi.fn(),
+    discardDocument: vi.fn(),
+  },
 }));
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -93,13 +68,19 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-// `useModals` throws without a provider, and the Dropzone is the only thing
-// here that needs it. Rendered anyway so adding a modal later cannot silently
-// break these tests.
+const COLLECTION_ID = "collection-1";
+const ARTWORK_ID = "artwork-1";
+
+// `useModals` throws without a provider. Rendered anyway so adding a modal
+// later cannot silently break these tests.
 const Harness: React.FC<{ initialPhotos?: ArtworkPhoto[] }> = ({
   initialPhotos,
 }) => {
-  const photos = useArtworkPhotos({ initialPhotos });
+  const photos = useArtworkPhotos({
+    collectionId: COLLECTION_ID,
+    artworkId: ARTWORK_ID,
+    initialPhotos,
+  });
   return (
     <MantineProvider>
       <ModalsProvider>
@@ -111,19 +92,9 @@ const Harness: React.FC<{ initialPhotos?: ArtworkPhoto[] }> = ({
   );
 };
 
-/**
- * Renders the harness and lets the mount-time probe settle.
- *
- * The hook asks the browser what it can encode on mount, so there is a state
- * update a tick after any render. A test that asserts synchronously would
- * finish first and leave that update to land afterwards, which React reports
- * as an unwrapped `act`. Awaiting the probe keeps it inside one.
- */
 const renderHarness = async (initialPhotos?: ArtworkPhoto[]) => {
   const result = render(<Harness initialPhotos={initialPhotos} />);
-  await waitFor(() => {
-    expect(variantFormatIsWebp).toHaveBeenCalled();
-  });
+  await screen.findByText(/drag images here/i);
   return result;
 };
 
@@ -168,32 +139,60 @@ const fileInput = (): HTMLInputElement => {
   return input;
 };
 
+/**
+ * Every entry id that passed through the stage mock, in arrival order.
+ *
+ * The ids are minted by the hook with `crypto.randomUUID`, so a test cannot
+ * predict them; capturing them is what makes the discard assertions name the
+ * exact object the server is being asked to drop.
+ */
+let stagedEntryIds: string[];
+
 beforeEach(() => {
-  // Restored rather than left as each test found it: the format tests below
-  // change both answers, and a stub that survived would make every later test
-  // assert on a WebP-less browser.
-  vi.mocked(processImages).mockImplementation(defaultProcessImages);
-  vi.mocked(variantFormatIsWebp).mockResolvedValue(true);
+  stagedEntryIds = [];
 
-  // jsdom implements neither of these, and the hook calls createObjectURL for
-  // every pending preview and revokes it on removal and unmount. The stub
-  // records calls so the revocation assertions below are real rather than
-  // vacuous.
-  const created: string[] = [];
-  const revoked: string[] = [];
-  let counter = 0;
-
-  URL.createObjectURL = vi.fn(() => {
-    counter += 1;
-    const url = `blob:mock/${counter}`;
-    created.push(url);
-    return url;
-  });
-  URL.revokeObjectURL = vi.fn((url: string) => {
-    revoked.push(url);
-  });
-
-  Object.assign(globalThis, { __created: created, __revoked: revoked });
+  vi.mocked(mediaService.stagePhoto).mockImplementation(
+    (_cid, _aid, entryId, file) => {
+      stagedEntryIds.push(entryId);
+      return Promise.resolve({
+        entryId,
+        name: file.name,
+        width: 2000,
+        height: 1500,
+        size: file.size,
+        contentType: file.type,
+        url: `https://media.test/staging/${entryId}/original`,
+      });
+    },
+  );
+  // The two variants the form actually renders: `square_lg` for the tile,
+  // `large` for the preview modal. Named urls, not blobs — there is no
+  // object-URL lifecycle left to test against.
+  vi.mocked(mediaService.processPhoto).mockImplementation(
+    (_cid, _aid, entryId) =>
+      Promise.resolve({
+        entryId,
+        variants: [
+          {
+            key: "square_lg",
+            url: `https://media.test/variants/${entryId}/square_lg.webp`,
+            width: 800,
+            height: 800,
+            size: 100,
+            contentType: "image/webp",
+          },
+          {
+            key: "large",
+            url: `https://media.test/variants/${entryId}/large.webp`,
+            width: 1200,
+            height: 900,
+            size: 200,
+            contentType: "image/webp",
+          },
+        ],
+      }),
+  );
+  vi.mocked(mediaService.discardPhoto).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -201,12 +200,8 @@ afterEach(() => {
   // automatic cleanup never registers. Without this each render stays in the
   // document and the next test's queries match the previous test's tiles.
   cleanup();
+  vi.clearAllMocks();
 });
-
-const createdUrls = (): string[] =>
-  (globalThis as unknown as { __created: string[] }).__created;
-const revokedUrls = (): string[] =>
-  (globalThis as unknown as { __revoked: string[] }).__revoked;
 
 describe("PhotoUploader", () => {
   it("renders the stored photos in order, badging index 0 as the thumbnail", async () => {
@@ -255,7 +250,7 @@ describe("PhotoUploader", () => {
     expect(screen.getAllByText("Thumbnail")).toHaveLength(1);
   });
 
-  it("removes a photo", async () => {
+  it("removes a stored photo without touching staging", async () => {
     const user = userEvent.setup();
     await renderHarness([
       photo("a", 0, "first.jpg"),
@@ -269,21 +264,138 @@ describe("PhotoUploader", () => {
       expect(screen.queryByText("first.jpg")).not.toBeInTheDocument();
     });
     expect(screen.getByText("second.jpg")).toBeInTheDocument();
+    // Nothing was ever PUT for a stored photo, so there is nothing to discard:
+    // the save's PATCH omits the id and the server sweeps the objects.
+    expect(mediaService.discardPhoto).not.toHaveBeenCalled();
   });
 
-  it("opens a full-screen preview when a stored photo is clicked", async () => {
+  it("renders a staged photo from the server's variant urls", async () => {
     const user = userEvent.setup();
-    await renderHarness([photo("a", 0, "first.jpg")]);
+    await renderHarness();
 
-    await user.click(screen.getByAltText("first.jpg"));
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
 
-    // The modal is portalled out of the render tree, so it is queried by role
-    // rather than by being nested under the grid.
-    const dialog = await screen.findByRole("dialog");
+    const tile = await screen.findByRole("img", { name: "scan.jpg" });
+    // The entry id the hook minted is the one the urls are built from: this
+    // assertion reads the server's own answer back, which is the whole point
+    // of staging at add time. A blob url here would be the old pipeline.
+    expect(tile).toHaveAttribute(
+      "src",
+      `https://media.test/variants/${stagedEntryIds[0]}/square_lg.webp`,
+    );
+  });
+
+  it("keeps the rest of a mixed drop and says why the other was refused", async () => {
+    await renderHarness();
+    // Delivered the way the OS delivers it: both files on one change event,
+    // whatever the `accept` hint said. `userEvent.upload` cannot do this —
+    // it honours the `accept` attribute like the picker does, and would
+    // quietly drop the PDF before the event ever fired.
+    const input = fileInput();
+    Object.defineProperty(input, "files", {
+      value: [
+        jpegFile("good.jpg"),
+        new File([new Uint8Array([1])], "notes.pdf", {
+          type: "application/pdf",
+        }),
+      ],
+      configurable: true,
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await waitFor(() => {
+      expect(screen.getByText("good.jpg")).toBeInTheDocument();
+    });
+    // The PDF never reaches the hook: the Dropzone's own validator refuses it
+    // on the way in and routes it through the reject handler, which folds the
+    // library's reason into the same alert. Asserted by prefix, not by the
+    // library's copy: the contract is that the file is named and explained,
+    // and the wording belongs to the Dropzone.
+    expect(screen.getByText("1 image could not be added")).toBeInTheDocument();
+    expect(screen.getByText(/^notes\.pdf: /)).toBeInTheDocument();
+    expect(screen.queryByText(/^notes\.pdf$/)).toBeNull();
+  });
+
+  it("surfaces the stage route's refusal with its own reason", async () => {
+    // The size cap is the route's to answer, and its envelope carries the
+    // prose: `fields.file` is the field-level message the form should show,
+    // and `message` is the fallback when there is none.
+    vi.mocked(mediaService.stagePhoto).mockRejectedValue(
+      new ApiRequestError(400, "tooMany", "The file is too large", {
+        file: "The file is over 10 MB",
+      }),
+    );
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("scan.jpg: The file is over 10 MB"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("img", { name: "scan.jpg" })).toBeNull();
+  });
+
+  it("discards the staged original when the variants fail", async () => {
+    // The original is up and no save will ever name it: without the discard it
+    // lingers until the sweep, and a failed batch would leave objects behind
+    // per photo.
+    vi.mocked(mediaService.processPhoto).mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+
     expect(
-      within(dialog).getByRole("img", { name: "first.jpg" }),
+      await screen.findByText("scan.jpg: The image could not be uploaded"),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText("1 of 1")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mediaService.discardPhoto).toHaveBeenCalledTimes(1);
+    });
+    expect(mediaService.discardPhoto).toHaveBeenCalledWith(
+      COLLECTION_ID,
+      ARTWORK_ID,
+      stagedEntryIds[0],
+    );
+  });
+
+  it("discards a staged photo when it is removed", async () => {
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+    const entryId = stagedEntryIds[0];
+    const remove = await screen.findByRole("button", { name: /remove image/i });
+    await user.click(remove);
+
+    await waitFor(() => {
+      expect(screen.queryByText("scan.jpg")).not.toBeInTheDocument();
+    });
+    // Fire-and-forget, so await the assertion rather than the call.
+    await waitFor(() => {
+      expect(mediaService.discardPhoto).toHaveBeenCalledWith(
+        COLLECTION_ID,
+        ARTWORK_ID,
+        entryId,
+      );
+    });
+  });
+
+  it("previews a staged photo through the same ladder as a stored one", async () => {
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+    await user.click(await screen.findByRole("img", { name: "scan.jpg" }));
+
+    const dialog = await screen.findByRole("dialog");
+    // The `large` variant the modal wants — the server's url for it, the same
+    // ladder a stored photo walks.
+    expect(
+      within(dialog).getByRole("img", { name: "scan.jpg" }).getAttribute("src"),
+    ).toBe(`https://media.test/variants/${stagedEntryIds[0]}/large.webp`);
   });
 
   it("previews the large variant rather than the original", async () => {
@@ -310,108 +422,20 @@ describe("PhotoUploader", () => {
     const image = within(dialog).getByRole("img", { name: "a.jpg" });
     expect(image).toHaveAttribute("src", "https://example.test/a-large.webp");
   });
-
-  it("revokes a pending photo's object URLs when it is removed", async () => {
-    const user = userEvent.setup();
-    await renderHarness();
-
-    const input = fileInput();
-    expect(input).not.toBeNull();
-    await user.upload(input, [
-      jpegFile("new-one.jpg"),
-      jpegFile("new-two.jpg"),
-    ]);
-
-    await waitFor(() => {
-      expect(screen.getByText("new-one.jpg")).toBeInTheDocument();
-    });
-    // Two per photo, not one: the picked file's own URL, and the generated
-    // `square_lg` the tile actually displays. Both pin a blob in memory.
-    expect(createdUrls()).toHaveLength(4);
-
-    const remove = screen.getAllByRole("button", { name: /remove image/i })[0];
-    await user.click(remove);
-
-    // The browser holds the decoded bytes alive until this happens, and a
-    // removed tile that keeps its blob is a leak the user can trigger ten
-    // times over.
-    await waitFor(() => {
-      expect(revokedUrls()).toHaveLength(2);
-    });
-    expect(screen.queryByText("new-one.jpg")).not.toBeInTheDocument();
-  });
-
-  it("rejects a file that is not an image and keeps the rest of the drop", async () => {
-    const user = userEvent.setup();
-    await renderHarness();
-
-    await user.upload(fileInput(), [
-      jpegFile("good.jpg"),
-      new File([new Uint8Array([1])], "notes.pdf", { type: "application/pdf" }),
-    ]);
-
-    await waitFor(() => {
-      expect(screen.getByText("good.jpg")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("notes.pdf")).not.toBeInTheDocument();
-  });
-
-  it("previews the generated variant, not the picked file, before upload", async () => {
-    const user = userEvent.setup();
-    await renderHarness();
-
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-
-    const tile = await screen.findByRole("img", { name: "scan.jpg" });
-    // The picked file's object URL is minted first and the variant's second,
-    // so the number says which one is on screen. Displaying the first would
-    // mean the form shows the `.jpg` from disk and hides the WebP that is
-    // about to be stored — which is exactly what made the format look wrong.
-    expect(tile).toHaveAttribute("src", "blob:mock/2");
-  });
-
-  it("opens a full-screen preview of a photo that has not been uploaded", async () => {
-    const user = userEvent.setup();
-    await renderHarness();
-
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-    await user.click(await screen.findByRole("img", { name: "scan.jpg" }));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByRole("img", { name: "scan.jpg" }),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps the variants it generated instead of generating them again", async () => {
-    const user = userEvent.setup();
-    await renderHarness();
-
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-    await waitFor(() => {
-      expect(screen.getByText("scan.jpg")).toBeInTheDocument();
-    });
-
-    // The save path hands `photos.pendingImages` straight to the service, so a
-    // second call here would be a full second pass of decode-and-resize per
-    // photo for nothing.
-    expect(vi.mocked(processImages)).toHaveBeenCalledTimes(1);
-  });
 });
 
 /**
- * Renders the hook alone, for the assertions that are about the hook's decisions
- * rather than about the grid.
+ * Renders the hook alone, for the assertions that are about the hook's
+ * decisions rather than about the grid.
  *
- * `mergeUploaded` and `commit` are both what the page calls, and no rendering of
- * the form ever shows either result — both bugs were invisible until the artwork
- * was read back. So these are driven through the hook directly.
+ * `commit` is what the page calls and no rendering of the form ever shows its
+ * result — the bug it guards was invisible until the artwork was read back.
  *
- * The hook is handed back through an effect rather than assigned during render —
- * React's rules are right that reassigning a variable from outside the component
- * is a side effect, and a test only needs the value a tick later anyway. The
- * returned value is read *after* `run`, so it is the post-reorder hook and not a
- * snapshot of the pre-reorder one.
+ * The hook is handed back through an effect rather than assigned during render
+ * — React's rules are right that reassigning a variable from outside the
+ * component is a side effect, and a test only needs the value a tick later
+ * anyway. The returned value is read *after* `run`, so it is the post-action
+ * hook and not a snapshot of the pre-action one.
  */
 const withHook = async (
   initialPhotos: ArtworkPhoto[],
@@ -419,7 +443,11 @@ const withHook = async (
 ): Promise<UseArtworkPhotos> => {
   let latest: UseArtworkPhotos | null = null;
   const Probe: React.FC = () => {
-    const photos = useArtworkPhotos({ initialPhotos });
+    const photos = useArtworkPhotos({
+      collectionId: COLLECTION_ID,
+      artworkId: ARTWORK_ID,
+      initialPhotos,
+    });
     useEffect(() => {
       latest = photos;
     }, [photos]);
@@ -430,11 +458,8 @@ const withHook = async (
       <Probe />
     </MantineProvider>,
   );
-  // The mount-time probe is a state update a tick after render; settling it
-  // first keeps `addFiles` from racing the effect above.
   await waitFor(() => {
     expect(latest).not.toBeNull();
-    expect(variantFormatIsWebp).toHaveBeenCalled();
   });
   await run(latest as UseArtworkPhotos);
   return latest as UseArtworkPhotos;
@@ -443,135 +468,30 @@ const withHook = async (
 /**
  * The order the user set has to survive the save.
  *
- * Driven through the hook rather than the tile grid, because `mergeUploaded` is
- * what the page calls and no rendering of the form ever shows its result — the
- * bug it fixes was invisible until the document was read back.
- */
-describe("mergeUploaded", () => {
-  /** What the service hands back: one stored-shaped photo per upload. */
-  const uploadedFor = (name: string): ArtworkPhoto => ({
-    ...photo("uploaded", 0, name),
-    original: {
-      url: `https://example.test/${name}`,
-      size: 1,
-      contentType: "image/jpeg",
-    },
-  });
-
-  it("keeps a newly added photo where the user put it", async () => {
-    const photos = await withHook(
-      [photo("a", 0, "a.jpg"), photo("c", 1, "c.jpg")],
-      async (hook) => {
-        await act(async () => {
-          await hook.addFiles([jpegFile("b.jpg")]);
-        });
-        // Added at the end, then dragged into the middle. The middle is the
-        // case that matters: promoting to the front happens to agree with
-        // "uploads first", so testing only that would pass against the very
-        // bug this is for.
-        act(() => {
-          hook.reorder(2, 1);
-        });
-      },
-    );
-
-    const merged = photos.mergeUploaded([uploadedFor("b.jpg")]);
-
-    expect(merged.map((entry) => entry.name)).toEqual([
-      "a.jpg",
-      "b.jpg",
-      "c.jpg",
-    ]);
-  });
-
-  it("leaves a photo alone when the user did not move it", async () => {
-    const photos = await withHook([photo("a", 0, "a.jpg")], async (hook) => {
-      await act(async () => {
-        await hook.addFiles([jpegFile("b.jpg"), jpegFile("c.jpg")]);
-      });
-    });
-
-    const merged = photos.mergeUploaded([
-      uploadedFor("b.jpg"),
-      uploadedFor("c.jpg"),
-    ]);
-
-    // The one place "uploads first" and "walk the list" agree: everything new
-    // already follows everything stored. Worth pinning, because it is the case
-    // a reader will assume is the general one.
-    expect(merged.map((entry) => entry.name)).toEqual([
-      "a.jpg",
-      "b.jpg",
-      "c.jpg",
-    ]);
-  });
-
-  it("renumbers `order` to match the merged array", async () => {
-    const photos = await withHook(
-      [photo("a", 0, "a.jpg"), photo("c", 1, "c.jpg")],
-      async (hook) => {
-        await act(async () => {
-          await hook.addFiles([jpegFile("b.jpg")]);
-        });
-        act(() => {
-          hook.reorder(2, 1);
-        });
-      },
-    );
-
-    // `order` is rewritten from array position on every write precisely so it
-    // cannot disagree with it. A stored photo that kept its old number here
-    // would claim to be first while sitting second — the silent half of the
-    // invariant, and the half that has no other check.
-    const merged = photos.mergeUploaded([uploadedFor("b.jpg")]);
-
-    expect(merged.map((entry) => entry.order)).toEqual([0, 1, 2]);
-    expect(merged.map((entry) => entry.name)).toEqual([
-      "a.jpg",
-      "b.jpg",
-      "c.jpg",
-    ]);
-  });
-});
-
-/**
- * Whether the photos changed, and what to store when they did.
- *
- * `commit` is the `else` branch of the Edit page's save: with nothing pending it
- * is the only thing that can report a change to the stored list, and a `null`
- * from it leaves `photos` out of the `updateDoc` entirely. So the two decisions
- * are one — a `dirty` that misses a real change does not merely fail to save, it
- * fails *silently*, behind a success toast.
- *
- * Documents' equivalents are pinned in `documentsUploader.test.tsx`. Photos have
- * the stricter comparison, and this is the block that says so.
+ * `commit` answers the sequence of entry ids in array order — the server
+ * numbers them from position at save, which is the reindex the old
+ * `reindexPhotos` did on the client. So the payload carries ids and names
+ * only, and a sequence that disagrees with the working list's order is a
+ * drag discarded behind a success toast.
  */
 describe("commit", () => {
   it("leaves the field out of a save when nothing changed", async () => {
-    // The reason the method exists: a save that only touched the title must not
-    // rewrite every storage URL and reorder the document for nothing.
+    // The reason the method exists: a save that only touched the title must
+    // not rewrite the sequence for nothing.
     const photos = await withHook(
       [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
       () => {},
     );
 
-    expect(photos.dirty).toBe(false);
     expect(photos.commit()).toBeNull();
   });
 
-  it("is not dirty when the photos are only looked at", async () => {
-    // `dirty` reads state, so a render on its own must not count as a change.
-    const photos = await withHook([photo("a", 0, "a.jpg")], () => {});
-
-    expect(photos.dirty).toBe(false);
-  });
-
-  it("commits the reordered list when a photo is dragged", async () => {
-    // The case this whole comparison exists for. Same two photos, same `order`
-    // numbers, different sequence — which is exactly what the documents'
-    // *set* comparison is blind to. Reordering the photo list is the one thing
-    // this form exists to let someone do, so a `dirty` that read the order as a
-    // set would discard the drag on save and report success.
+  it("sends the new sequence when a photo is dragged", async () => {
+    // The case this whole comparison exists for. Same two photos, same ids,
+    // different sequence — which is exactly what the documents' *set*
+    // comparison is blind to. Reordering the photo list is the one thing this
+    // form exists to let someone do, so a commit that read the order as a set
+    // would discard the drag on save and report success.
     const photos = await withHook(
       [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
       (hook) => {
@@ -581,17 +501,12 @@ describe("commit", () => {
       },
     );
 
-    expect(photos.dirty).toBe(true);
     const committed = photos.commit();
-    expect(committed?.map((entry) => entry.id)).toEqual(["b", "a"]);
-    // And renumbered from the new positions, or the stored `order` would go on
-    // claiming `a` is first while it sits second.
-    expect(committed?.map((entry) => entry.order)).toEqual([0, 1]);
+    expect(committed?.map((entry) => entry.entryId)).toEqual(["b", "a"]);
+    expect(committed?.map((entry) => entry.name)).toEqual(["b.jpg", "a.jpg"]);
   });
 
-  it("commits the stored list when a photo is removed", async () => {
-    // The other way the stored list can change. Length differs, so even a set
-    // comparison would catch this one — it is the reorder above that it misses.
+  it("sends the shorter sequence when a photo is removed", async () => {
     const photos = await withHook(
       [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
       (hook) => {
@@ -601,83 +516,131 @@ describe("commit", () => {
       },
     );
 
-    expect(photos.commit()?.map((entry) => entry.id)).toEqual(["b"]);
+    expect(photos.commit()?.map((entry) => entry.entryId)).toEqual(["b"]);
   });
 
-  it("is dirty when a photo has been added but not yet uploaded", async () => {
-    // `commit` is not called on this path — the page writes
-    // `mergeUploaded(uploaded)` instead — but `dirty` is what gates the branch
-    // that reaches it, so a newly added photo has to make it true or the upload
-    // would never be attempted.
-    let added = 0;
+  it("carries staged additions in array position", async () => {
+    // A staged entry takes its slot where the user put it, with the entry id
+    // the hook staged it under — the save's transaction promotes that exact
+    // object.
     const photos = await withHook([photo("a", 0, "a.jpg")], async (hook) => {
       await act(async () => {
-        const result = await hook.addFiles([jpegFile("b.jpg")]);
-        added = result.added.length;
+        await hook.addFiles([jpegFile("b.jpg")]);
       });
     });
 
-    expect(added).toBe(1);
-    expect(photos.dirty).toBe(true);
+    const committed = photos.commit();
+    expect(committed?.map((entry) => entry.entryId)).toEqual([
+      "a",
+      stagedEntryIds[0],
+    ]);
+    expect(committed?.map((entry) => entry.name)).toEqual(["a.jpg", "b.jpg"]);
   });
 });
 
-describe("the format the variants will be stored in", () => {
-  const jpegWarning = () =>
-    screen.queryByText(/will store jpeg instead of webp/i);
-
-  it("warns when the browser cannot encode WebP", async () => {
-    vi.mocked(variantFormatIsWebp).mockResolvedValue(false);
-    await renderHarness();
-
-    expect(
-      await screen.findByText(/will store jpeg instead of webp/i),
-    ).toBeInTheDocument();
-  });
-
-  it("says nothing when WebP is available", async () => {
-    await renderHarness();
-
-    // Wait for the probe to answer, so a warning appearing later would fail
-    // this rather than merely go unnoticed.
-    await waitFor(() => {
-      expect(variantFormatIsWebp).toHaveBeenCalled();
+describe("addFiles", () => {
+  it("refuses a type the allowlist does not admit, without staging", async () => {
+    // The DOM path never reaches this check — the Dropzone's own validator
+    // refuses non-images on the way in — but `addFiles` is the boundary for
+    // any caller that bypasses it, and a file that stages and then fails the
+    // route's own type check costs an object the sweep has to clean.
+    const photos = await withHook([], async (hook) => {
+      await act(async () => {
+        const result = await hook.addFiles([
+          new File([new Uint8Array([1])], "notes.pdf", {
+            type: "application/pdf",
+          }),
+        ]);
+        expect(result.added).toHaveLength(0);
+        expect(result.rejected.map((entry) => entry.reason)).toEqual([
+          "Not a supported image",
+        ]);
+      });
     });
-    expect(jpegWarning()).not.toBeInTheDocument();
+
+    expect(photos.entries).toHaveLength(0);
+    expect(mediaService.stagePhoto).not.toHaveBeenCalled();
   });
 
-  it("believes the encoder over the probe", async () => {
-    // The probe is a guess about a canvas made before any image exists. The
-    // batch that actually produced the bytes is the fact, and it has to be
-    // able to overrule the guess — a probe that says WebP while every variant
-    // comes back JPEG is precisely how this went wrong unnoticed.
-    vi.mocked(variantFormatIsWebp).mockResolvedValue(true);
-    vi.mocked(processImages).mockImplementation((files: File[]) =>
-      Promise.resolve(
-        files.map((file) => ({
-          file,
-          webp: false,
+  it("refuses over the cap without staging anything", async () => {
+    // The cap is enforced before any round trip, so the refusal carries the
+    // form's own reason rather than the route's, and the stage mock never
+    // hears about the drop at all.
+    const seeded = Array.from({ length: MAX_ARTWORK_PHOTOS }, (_, index) =>
+      photo(`p${index}`, index),
+    );
+    const photos = await withHook(seeded, async (hook) => {
+      await act(async () => {
+        const result = await hook.addFiles([
+          jpegFile("one.jpg"),
+          jpegFile("two.jpg"),
+        ]);
+        expect(result.rejected.map((entry) => entry.reason)).toEqual([
+          `Only ${MAX_ARTWORK_PHOTOS} images per artwork`,
+          `Only ${MAX_ARTWORK_PHOTOS} images per artwork`,
+        ]);
+      });
+    });
+
+    expect(photos.entries).toHaveLength(MAX_ARTWORK_PHOTOS);
+    expect(mediaService.stagePhoto).not.toHaveBeenCalled();
+  });
+
+  it("leaves no gap in the numbering when a file fails mid-batch", async () => {
+    // The append numbers each success from `entries.length + added.length`, so
+    // a failure in the middle must not open a hole: the second success still
+    // numbers one after the first. A gap here would persist to the server's
+    // reindex as a skip nobody can see.
+    vi.mocked(mediaService.stagePhoto).mockImplementation(
+      (_cid, _aid, entryId, file) => {
+        if (file.name === "fail.jpg") {
+          return Promise.reject(
+            new ApiRequestError(400, "tooMany", "The file is too large"),
+          );
+        }
+        stagedEntryIds.push(entryId);
+        return Promise.resolve({
+          entryId,
+          name: file.name,
           width: 2000,
           height: 1500,
-          variants: [
-            {
-              key: "square_lg" as const,
-              blob: new Blob([new Uint8Array([9])], { type: "image/jpeg" }),
-              width: 800,
-              height: 800,
-              contentType: "image/jpeg",
-            },
-          ],
-        })),
-      ),
+          size: file.size,
+          contentType: file.type,
+          url: `https://media.test/staging/${entryId}/original`,
+        });
+      },
     );
-    const user = userEvent.setup();
-    await renderHarness();
+    const photos = await withHook(
+      [photo("a", 0, "a.jpg"), photo("b", 1, "b.jpg")],
+      async (hook) => {
+        const result = await act(async () => {
+          return await hook.addFiles([
+            jpegFile("one.jpg"),
+            jpegFile("fail.jpg"),
+            jpegFile("two.jpg"),
+          ]);
+        });
+        // `added` is the whole entry union here, so name each entry through
+        // the arm it actually is — every entry in this batch is staged.
+        expect(
+          result.added.map((entry) =>
+            entry.status === "staged" ? entry.preview.name : entry.photo.name,
+          ),
+        ).toEqual(["one.jpg", "two.jpg"]);
+        expect(result.rejected.map((entry) => entry.reason)).toEqual([
+          "The file is too large",
+        ]);
+      },
+    );
 
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-
+    // `order` on a staged entry is its position in the working list: two
+    // stored photos, then the two successes in drop order, no hole between.
     expect(
-      await screen.findByText(/will store jpeg instead of webp/i),
-    ).toBeInTheDocument();
+      photos.entries
+        .slice(2)
+        .map((entry) =>
+          entry.status === "staged" ? entry.preview.order : null,
+        ),
+    ).toEqual([2, 3]);
   });
 });

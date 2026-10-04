@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { artworkSchema, toNewArtwork, type ArtworkFormValues } from "./artwork";
-import type { Artwork } from "../types";
+import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
 /**
  * Pure logic for the CSV artwork-import flow (`/manage/collection/:id/import/csv`).
@@ -19,9 +18,10 @@ import type { Artwork } from "../types";
  *      the user's latest edits. The only title rule is that a Title exists:
  *      same-title works are legitimate in art, so titles are never compared
  *      against each other or against the collection's existing artworks.
- *   4. `toImportArtwork` — build the Firestore payload via the shared
- *      `toNewArtwork` path so an imported artwork is byte-identical to one
- *      created by hand (ownership, `documents`/`photos`, public default).
+ * The run step's remaining job is to POST the selected rows to the API's
+ * import route and render its `{ inserted, rejected }` answer — the server
+ * validates each row against this same `artworkSchema`, so an imported work
+ * lands byte-identical to one created by hand.
  *
  * `isPublic` is intentionally NOT a mappable column: imported works inherit the
  * app-wide public-by-default posture and can be flipped per-work afterwards.
@@ -518,37 +518,3 @@ export const validateImportRow = (
     message: issue.message,
   }));
 };
-
-// ---------------------------------------------------------------------------
-// Firestore payload
-// ---------------------------------------------------------------------------
-
-/**
- * Shape a (valid) import row into the exact document the single-artwork path
- * would write: shared schema parse for trimming/coercion, then `toNewArtwork`
- * for ownership, `documents`/`photos`, and the public-by-default flag.
- */
-export const toImportArtwork = (
-  values: ImportRowValues,
-  collectionId: string,
-  userId: string,
-): Omit<Artwork, "id"> => {
-  const parsed = artworkSchema.parse({ ...values, isPublic: true });
-  return toNewArtwork(parsed, collectionId, userId);
-};
-
-// ---------------------------------------------------------------------------
-// Import run result
-// ---------------------------------------------------------------------------
-
-/** The outcome of one import run, reported to the final stepper step. */
-export interface ImportResult {
-  /** Artworks successfully written to the collection. */
-  imported: number;
-  /** Rows left out (not selected in the review step). */
-  deselected: number;
-  /** Selected rows that failed to write. */
-  failed: number;
-  /** Human-readable reason, when a run aborted part-way. */
-  error?: string;
-}

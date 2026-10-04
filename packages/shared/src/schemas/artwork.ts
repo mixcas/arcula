@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { Artwork, ArtworkPhoto } from "../types";
-import { reindexPhotos } from "../artworkPhotos";
+import type { Artwork } from "../types";
 
 /**
  * Validation and payload shaping for the artwork form, shared by
@@ -12,14 +11,10 @@ import { reindexPhotos } from "../artworkPhotos";
  * its output *is* the payload — `@mantine/form` feeds `z.output` to the submit
  * handler through `transformValues`, so there is no second conversion step.
  *
- * This file is the pure core of what the web app's schema used to be; the
- * `updateDoc` sentinel half (`toArtworkUpdate`) stayed in
- * `apps/web/src/schemas/artwork.ts`. The split is at the `deleteField` seam:
- * this side has no Firebase import, and the API validates and writes with
- * these same functions (plan §7). The Firestore-flavoured comments below are
- * accurate for the client era they were written in; they are rewritten
- * storage-neutral in Phase 4, when the web sentinel dies with the service
- * layer.
+ * This file is the pure core of the artwork schema; the PATCH-payload seam
+ * (`toArtworkUpdate`) stayed in `apps/web/src/schemas/artwork.ts`, next to the
+ * Edit form that supplies it the loaded values it clears against. The API
+ * validates and writes with these same functions (plan §7).
  */
 
 /** Blank text becomes `undefined` so an untouched field is never written. */
@@ -102,7 +97,7 @@ export interface ArtworkFormValues {
   isPublic: boolean;
 }
 
-/** The trimmed, validated, Firestore-ready subset of an artwork. */
+/** The trimmed, validated, API-ready subset of an artwork. */
 export type ArtworkPayload = Partial<Omit<Artwork, "id">>;
 
 // Compile-time guards, erased at build time. The first catches a schema that
@@ -142,9 +137,9 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
 /**
  * Remove the keys the schema resolved to `undefined`.
  *
- * Firestore rejects an explicit `undefined` property value — `updateDoc` and
- * `addDoc` both throw `invalid-argument` — so "unset" has to mean "the key is
- * not there", not "the key is there and holds undefined".
+ * JSON has no `undefined` — the wire carries a value, `null`, or an absent
+ * key — so "unset" has to mean "the key is not there", not "the key is there
+ * and holds undefined".
  */
 const stripUndefined = (payload: Record<string, unknown>): ArtworkPayload =>
   Object.fromEntries(
@@ -152,60 +147,11 @@ const stripUndefined = (payload: Record<string, unknown>): ArtworkPayload =>
   );
 
 /**
- * Validate form values and shape them into a Firestore payload.
+ * Validate form values and shape them into the API payload.
  * Wired to `useForm` as `transformValues`, so it only runs on a valid submit.
  */
 export const toArtworkPayload = (values: ArtworkFormValues): ArtworkPayload =>
   stripUndefined(artworkSchema.parse(values));
-
-/**
- * Build the payload for a new document, where every required field is set.
- *
- * Blank optional fields parse (via the schema's `blankText` transform) to
- * `undefined`, and Firestore rejects an explicit `undefined` property value on
- * write (`batch.set` throws "Unsupported field value: undefined"). The
- * single-artwork path strips before calling this, but the CSV import path
- * hands over the raw schema output — stripping here once makes every caller
- * safe, and is a no-op when the payload is already clean.
- */
-export const toNewArtwork = (
-  payload: ArtworkPayload,
-  collectionId: string,
-  userId: string,
-  // Photos cannot be part of the payload: a File is neither serialisable nor a
-  // Zod value, and the document is created before Storage has anything to
-  // record. The form therefore creates the artwork with an empty list and
-  // writes the uploaded photos in a second update. `photos` after the spread
-  // stops form data from ever setting the field, which is what kept this a
-  // hardcoded `[]` for as long as there was no storage service.
-  photos: ArtworkPhoto[] = [],
-): Omit<Artwork, "id"> => {
-  const clean = stripUndefined(payload);
-  return {
-    ...clean,
-    // Re-narrow: the payload types these as optional, but the schema guarantees
-    // them. Listing them after the spread also stops form data from ever
-    // overriding the ownership fields below.
-    title: clean.title ?? "",
-    artistName: clean.artistName ?? "",
-    // The bare Firestore document id, never the "{slug}-{id}" route param from
-    // FULLSPEC §10. A slug is cosmetic and changes when the collection is
-    // renamed, so storing one would orphan the artwork on the next rename.
-    collectionId,
-    userId,
-    // Public by default, matching the schema default in every write path.
-    isPublic: clean.isPublic ?? true,
-    // Always written, as [] when the artwork has none. The form uploads after
-    // the document exists (Storage needs an id to put objects under), so the
-    // second write sets the real list — same two-write shape as `photos`, and
-    // for the same reason.
-    documents: [],
-    // `reindexPhotos` rather than the caller's array: `order` is derived from
-    // array position, and this is the one place a new document's sequence is
-    // established.
-    photos: reindexPhotos(photos),
-  };
-};
 
 /** Populate the form from a stored artwork. */
 export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
@@ -228,10 +174,9 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   isPublic: artwork.isPublic ?? true,
 });
 
-// `toArtworkUpdate` — the `updateDoc` sentinel half — lives in
-// `apps/web/src/schemas/artwork.ts`, next to the service layer that owns the
-// Firestore merge semantics. It dies with that layer in Phase 4 of the
-// migration plan.
+// `toArtworkUpdate` — the PATCH-payload seam — lives in
+// `apps/web/src/schemas/artwork.ts`, next to the Edit form that supplies it
+// the loaded values a cleared field is matched against.
 
 // ---------------------------------------------------------------------------
 // API save payloads (Phase 3 S4, plan §6.3 / §7)
@@ -276,6 +221,32 @@ export const artworkCreateSchema = artworkSchema.extend({
 });
 
 export type ArtworkCreatePayload = z.infer<typeof artworkCreateSchema>;
+
+/**
+ * The POST body of the single-artwork Add flow: the form payload, plus the
+ * client-minted artwork id and the staged entries the save promotes in the
+ * same transaction.
+ *
+ * The input is `ArtworkPayload` — the schema's output — because that is what
+ * the form hands to its submit handler (`transformValues: toArtworkPayload`),
+ * and a caller holding raw form values runs them through the schema first:
+ * one parse, in one place. The cast is safe: the schema guarantees
+ * `title`, `artistName` and `isPublic` on a valid submit, and the three
+ * added keys are exactly what `artworkCreateSchema.extend` requires on top
+ * of the payload.
+ */
+export const toArtworkCreatePayload = (
+  payload: ArtworkPayload,
+  artworkId: string,
+  photos: StagedEntry[],
+  documents: StagedEntry[],
+): ArtworkCreatePayload =>
+  ({
+    ...payload,
+    artworkId,
+    photos,
+    documents,
+  }) as ArtworkCreatePayload;
 
 /**
  * The text fields a PATCH may set or clear — the same twelve the form owns.

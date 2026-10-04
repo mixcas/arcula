@@ -8,34 +8,46 @@
  * payload. A `File` cannot survive either half of that: it is not
  * serialisable, it is not a Zod value, and in uncontrolled mode the inputs are
  * remounted on every `initialize`, which would drop any component holding one.
- * So the photos live here, outside the form, and are merged into the payload at
- * submit time by the page.
+ * So the photos live here, outside the form, and the staged ids are merged
+ * into the payload at submit time by the page.
  *
- * The hook also owns three things that are easy to get subtly wrong and are
- * each commented where they appear: the object-URL lifecycle, the distinction
- * between a stored photo (a URL) and a pending one (a `File` yet to be
- * uploaded), and the local `order` that is only committed on save.
+ * ## What changed when the pipeline moved server-side
+ *
+ * A photo that lands in the form is PUT to staging **the moment it is
+ * added** — not at save — so the save has nothing left to generate or
+ * upload: it sends the sequence of entry ids and the server promotes the
+ * staged objects into rows in the same transaction as the fields it writes.
+ * The consequences worth keeping straight:
+ *
+ * - there is no object-URL lifecycle; every url the tile renders is a server
+ *   proxy path, and there is nothing to revoke on removal or unmount;
+ * - there is no format probe and no worker: the server owns the encoder and
+ *   answers with the variants it actually wrote, so a photo that cannot be
+ *   decoded is rejected by the stage route, not by a canvas here;
+ * - an entry the user drops is `discard`ed on removal, best-effort: the
+ *   staging lifecycle and the sweep are what keep a dropped object from
+ *   lingering, and neither of them is this hook's job to verify.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
-  processImages,
-  variantFormatIsWebp,
-  type ProcessedImage,
-} from "@/utils/imageProcessing";
-import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
-import { isAcceptedImageType } from "@/utils/imageVariants";
-import { JPEG_TYPE } from "@/utils/imageRender";
-import { reindexPhotos, sortPhotos } from "@arcula/shared";
-import type { ArtworkPhoto, ImageVariant } from "@arcula/shared";
+  isAcceptedImageType,
+  MAX_ARTWORK_PHOTOS,
+  sortPhotos,
+  type ArtworkPhoto,
+  type ImageVariant,
+  type StagedEntry,
+} from "@arcula/shared";
+import { mediaService } from "@/services/mediaService";
+import { ApiRequestError } from "@/services/api";
 
 /**
  * One entry in the form's photo list.
  *
  * A discriminated union rather than one shape with optional fields: "has this
- * been uploaded yet" decides whether there is a `photo` to save or a `pending`
- * blob to upload first, and making both optional would mean checking the same
- * two conditions at every call site.
+ * been saved yet" decides whether there is a `photo` to keep in the sequence
+ * or a staged entry the save will promote, and making both optional would mean
+ * checking the same two conditions at every call site.
  */
 export type PhotoEntry =
   | {
@@ -46,29 +58,17 @@ export type PhotoEntry =
     }
   | {
       key: string;
-      status: "pending";
+      status: "staged";
       file: File;
-      /** Object URL for the local original. Revoked on removal or unmount. */
-      previewUrl: string;
       /**
-       * A transient stand-in `ArtworkPhoto` assembled from the generated
-       * variants, so a photo that has not been uploaded yet renders and opens
-       * through exactly the same path as one that has.
-       *
-       * Built from blobs rather than the local file so the form shows what
-       * will actually be stored — including that a variant is a WebP and not
-       * the `.jpg` that was picked from disk. `null` until processing lands.
+       * A stand-in `ArtworkPhoto`, ided with the client-minted entry id, so a
+       * photo that has not been saved yet renders and opens through exactly
+       * the same `photoUrl` ladder as one that has: its `original` is the
+       * staged object's proxy url and its `variants` are the server's own
+       * answer for what it generated. `order` is filled in when the entry is
+       * appended, from the position it takes.
        */
-      preview: ArtworkPhoto | null;
-      /**
-       * The generated variants, kept.
-       *
-       * This is the whole reason the hook exists rather than a `File` list: a
-       * save uploads these directly instead of generating them a second time.
-       * Four variants for ten photos is several seconds of CPU, and doing it
-       * twice was pure waste.
-       */
-      processed: ProcessedImage | null;
+      preview: ArtworkPhoto;
     };
 
 export interface AddPhotosResult {
@@ -77,6 +77,15 @@ export interface AddPhotosResult {
   rejected: Array<{ file: File; reason: string }>;
 }
 
+/** The staged arm of the union, named so a helper's return type can say it
+ *  without widening to the whole entry type. */
+type StagedPhotoEntry = Extract<PhotoEntry, { status: "staged" }>;
+
+/** The answer for one file through stage + process. */
+type StageOutcome =
+  | { entry: StagedPhotoEntry; rejection: null }
+  | { entry: null; rejection: string };
+
 let keyCounter = 0;
 const nextKey = (): string => {
   keyCounter += 1;
@@ -84,95 +93,103 @@ const nextKey = (): string => {
 };
 
 /**
- * Revoke every object URL a pending entry owns, and forget them.
- *
- * Not just the picked file's: a pending entry also holds object URLs for the
- * generated variants its tile displays, and each of those pins a decoded blob.
- * Revoking only the file would leave the rest alive for the life of the page,
- * which is a leak the user triggers by removing a photo — up to ten times
- * over, in a form that is meant to be used repeatedly.
- *
- * A plain function over the tracking set rather than a hook: it touches no
- * component state, so there is nothing to memoise and nothing to depend on.
+ * One file through stage + process. Resolves to the finished entry on
+ * success, or to the rejection on any failure — and discards the staged
+ * original when the stage succeeded but the variants did not, so a failed
+ * batch does not leave objects behind that no save will ever promote.
  */
-const revokeEntryUrls = (entry: PhotoEntry, tracked: Set<string>): void => {
-  if (entry.status === "stored") {
-    return;
-  }
-  for (const url of [
-    entry.previewUrl,
-    ...(entry.preview?.variants ?? []).map((variant) => variant.url),
-  ]) {
-    URL.revokeObjectURL(url);
-    tracked.delete(url);
-  }
-};
-
-/**
- * Assemble a stand-in `ArtworkPhoto` from a processed image that has not been
- * uploaded yet.
- *
- * Built from the generated variants rather than from the local file, so a photo
- * still in the form renders and opens through the same `photoUrl` ladder as one
- * already in Storage — and shows the WebP that will be stored rather than the
- * `.jpg` that was picked from disk. Without it the tile is the only thing
- * displaying a local file, which is what made the format look wrong in the
- * form when the variants were in fact fine.
- *
- * The variant URLs are registered for revocation with everything else, because
- * an object URL pins its blob in memory: ten photos' worth left alive for the
- * life of the page is the alternative.
- */
-const transientPreview = (
-  image: ProcessedImage,
-  fileUrl: string,
-  register: (url: string) => void,
-): ArtworkPhoto => {
-  const originalType = image.file.type || JPEG_TYPE;
-  const variants: ImageVariant[] = image.variants.map((variant) => {
-    const url = URL.createObjectURL(variant.blob);
-    register(url);
-    return {
-      key: variant.key,
-      url,
-      width: variant.width,
-      height: variant.height,
-      size: variant.blob.size,
-      contentType: variant.contentType,
+async function stageAndProcess(
+  collectionId: string,
+  artworkId: string,
+  file: File,
+): Promise<StageOutcome> {
+  const entryId = crypto.randomUUID();
+  try {
+    const staged = await mediaService.stagePhoto(
+      collectionId,
+      artworkId,
+      entryId,
+      file,
+    );
+    let variants: ImageVariant[];
+    try {
+      ({ variants } = await mediaService.processPhoto(
+        collectionId,
+        artworkId,
+        entryId,
+      ));
+    } catch (error) {
+      // The original is up and no save will ever name it: discard it now,
+      // idempotently, and let the error report the failure.
+      void mediaService
+        .discardPhoto(collectionId, artworkId, entryId)
+        .catch(() => {});
+      throw error;
+    }
+    if (staged.width === null || staged.height === null) {
+      // The stage route decodes every photo it admits, so a null dimension
+      // is a server bug, not a file condition: discard what is up and say
+      // the upload failed rather than render a photo with no geometry.
+      void mediaService
+        .discardPhoto(collectionId, artworkId, entryId)
+        .catch(() => {});
+      return { entry: null, rejection: "The image could not be read" };
+    }
+    const entry: StagedPhotoEntry = {
+      key: nextKey(),
+      status: "staged",
+      file,
+      preview: {
+        id: entryId,
+        // Filled when the entry is appended; 0 is only ever a placeholder.
+        order: 0,
+        name: staged.name,
+        size: staged.size,
+        contentType: staged.contentType,
+        width: staged.width,
+        height: staged.height,
+        original: {
+          url: staged.url,
+          size: staged.size,
+          contentType: staged.contentType,
+        },
+        variants,
+      },
     };
-  });
-  return {
-    // Deliberately empty: this photo is not in Firestore, and an id here would
-    // be a lie the save path could act on.
-    id: "",
-    order: 0,
-    name: image.file.name,
-    size: image.file.size,
-    contentType: originalType,
-    width: image.width,
-    height: image.height,
-    original: {
-      url: fileUrl,
-      size: image.file.size,
-      contentType: originalType,
-    },
-    variants,
-  };
-};
+    return { entry, rejection: null };
+  } catch (error) {
+    return {
+      entry: null,
+      rejection:
+        error instanceof ApiRequestError
+          ? (error.fields?.file ?? error.message)
+          : "The image could not be uploaded",
+    };
+  }
+}
 
 export interface UseArtworkPhotosOptions {
+  /** Staging happens at add time, under the collection the form belongs to. */
+  collectionId: string;
+  /**
+   * The artwork id the entries stage under. On the Add page this is the
+   * client-minted id the save will create the row with; on the Edit page it
+   * is the loaded work's id.
+   */
+  artworkId: string;
   /** The photos already on the artwork, when editing. */
   initialPhotos?: ArtworkPhoto[];
-  onError?: (message: string) => void;
 }
 
 export const useArtworkPhotos = ({
+  collectionId,
+  artworkId,
   initialPhotos = [],
-  onError,
-}: UseArtworkPhotosOptions = {}) => {
+}: UseArtworkPhotosOptions) => {
   // The stored photos as loaded, kept apart from the working list so a save can
   // tell "the user reordered" from "nothing about the photos changed" and
-  // leave the field alone in the second case.
+  // leave the field out of the patch in the second case. `hydrate` rewrites it
+  // together with the entries, so the two can never describe different artworks.
   const [loaded, setLoaded] = useState<ArtworkPhoto[]>(() =>
     sortPhotos(initialPhotos),
   );
@@ -190,57 +207,18 @@ export const useArtworkPhotos = ({
   } | null>(null);
 
   /**
-   * The format variants are being stored in, or null while still unknown.
+   * Add files, staging each one as it is accepted.
    *
-   * Two sources, and the second overwrites the first. On mount the probe is
-   * asked, so the form can warn before anything has been added. Then every
-   * batch of real encodes reports what it actually wrote, which is the answer
-   * that counts — the probe is a guess about a canvas, and the bytes are the
-   * fact.
+   * The pre-checks here are the count cap and the type allowlist — the two
+   * things the form knows before spending a round trip. The size cap and the
+   * decode are the stage route's to answer, and its refusal arrives on the
+   * same `rejected` list with a reason the user can act on, which is why a
+   * too-large file does not need a client-side size check of its own.
    *
-   * Worth having at all because the JPEG fallback is correct, silent, and
-   * invisible: a browser that cannot encode WebP writes every variant as
-   * `.jpg`, and the only other way to find out is to open the Storage console
-   * afterwards and notice.
+   * Three files stage at a time, and the batch is appended only once every
+   * file has settled, in drop order: a slow second file must not sit behind a
+   * fast one in the sequence the user dropped.
    */
-  const [variantWebp, setVariantWebp] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    void variantFormatIsWebp()
-      .then((webp) => {
-        if (live) {
-          setVariantWebp(webp);
-        }
-      })
-      .catch(() => {
-        // The probe's own fallback already answers this; failing to ask is not
-        // worth an error, and an unknown state renders as "cannot tell yet".
-        if (live) {
-          setVariantWebp(false);
-        }
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  // Live preview URLs, so unmount can revoke every one of them. Held in a ref
-  // because the cleanup effect must see the current list without re-running on
-  // every edit.
-  const previewUrls = useRef<Set<string>>(new Set());
-
-  useEffect(
-    () => () => {
-      for (const url of previewUrls.current) {
-        URL.revokeObjectURL(url);
-      }
-      previewUrls.current = new Set();
-    },
-    [],
-  );
-
-  /** Add files, rejecting anything over the cap or of the wrong type. */
   const addFiles = useCallback(
     async (files: File[]): Promise<AddPhotosResult> => {
       const rejected: AddPhotosResult["rejected"] = [];
@@ -270,120 +248,106 @@ export const useArtworkPhotos = ({
         return { added: [], rejected };
       }
 
-      const added: PhotoEntry[] = accepted.map((file) => {
-        const previewUrl = URL.createObjectURL(file);
-        previewUrls.current.add(previewUrl);
-        return {
-          key: nextKey(),
-          status: "pending" as const,
-          file,
-          previewUrl,
-          preview: null,
-          processed: null,
-        };
-      });
-
-      setEntries((current) => [...current, ...added]);
-
-      // Generate the variants now rather than at submit, so the save does not
-      // freeze for several seconds on a phone with ten large photos. The
-      // results stay on the entry and are uploaded as they are, so this is the
-      // one and only time they are generated — previously the save ran the
-      // whole pipeline again and threw the first pass away.
-      const register = (url: string) => previewUrls.current.add(url);
       setProcessing(true);
       setProgress({ done: 0, total: accepted.length });
-      let processed: ProcessedImage[] = [];
-      try {
-        processed = await processImages(accepted, (done, total) =>
-          setProgress({ done, total }),
-        );
-        // The encoder's own report of what it wrote, which is the fact. The
-        // probe asked earlier; this overrules it if they disagree.
-        if (processed.length > 0) {
-          setVariantWebp(processed[0]?.webp ?? null);
-        }
-      } catch (error) {
-        console.error("Error processing images:", error);
-        onError?.("The images could not be prepared for upload.");
-      } finally {
-        setProcessing(false);
-        setProgress(null);
-      }
 
-      // A file that could not be decoded cannot be uploaded, so it leaves the
-      // grid rather than sitting there looking fine and failing at save — where
-      // the failure would be reported as a failed save rather than a bad file.
-      const byFile = new Map(processed.map((image) => [image.file, image]));
-      const ready = new Map<string, PhotoEntry>();
-      for (const entry of added) {
-        if (entry.status !== "pending") {
-          continue;
-        }
-        const result = byFile.get(entry.file);
-        if (result) {
-          ready.set(entry.key, {
-            key: entry.key,
-            status: "pending" as const,
-            file: entry.file,
-            previewUrl: entry.previewUrl,
-            processed: result,
-            preview: transientPreview(result, entry.previewUrl, register),
-          });
-          continue;
-        }
-        revokeEntryUrls(entry, previewUrls.current);
-        rejected.push({
-          file: entry.file,
-          reason: "This file could not be read as an image",
-        });
-      }
-
-      const addedKeys = new Set(added.map((entry) => entry.key));
-      setEntries((current) =>
-        current.flatMap((entry) => {
-          const resolved = ready.get(entry.key);
-          if (resolved) {
-            return [resolved];
+      // The pool: at most three files in flight, each through stage + process.
+      // `results` keeps drop order — the append below reads it in order —
+      // while `done` counts settlements, so the bar moves on failures too.
+      // Holes until the pool fills them; only read after `Promise.all` below.
+      // The explicit type argument keeps the constructor's `any[]` overload
+      // from winning, which is what made the slots lint as `any`.
+      const results = new Array<StageOutcome>(accepted.length);
+      let cursor = 0;
+      let done = 0;
+      const worker = async (file: File) => {
+        const result = await stageAndProcess(collectionId, artworkId, file);
+        done += 1;
+        setProgress({ done, total: accepted.length });
+        return result;
+      };
+      const runners = Array.from({ length: Math.min(3, accepted.length) }, () =>
+        (async () => {
+          for (;;) {
+            const index = cursor;
+            cursor += 1;
+            if (index >= accepted.length) {
+              return;
+            }
+            results[index] = await worker(accepted[index]);
           }
-          // One of ours that failed: drop it. Anything else is untouched, which
-          // includes a photo the user removed while the batch was running.
-          return addedKeys.has(entry.key) ? [] : [entry];
-        }),
+        })(),
       );
+      await Promise.all(runners);
+      setProcessing(false);
+      setProgress(null);
 
-      return { added: [...ready.values()], rejected };
+      const added: PhotoEntry[] = [];
+      results.forEach((result, index) => {
+        if (result.entry) {
+          // Drop order, offset by whatever was already in the list: a remove
+          // that landed while the batch ran must not collide with a slot, and
+          // a failed file must not leave a gap in the numbering.
+          added.push({
+            ...result.entry,
+            preview: {
+              ...result.entry.preview,
+              order: entries.length + added.length,
+            },
+          });
+        } else {
+          rejected.push({
+            file: accepted[index],
+            reason: result.rejection,
+          });
+        }
+      });
+
+      if (added.length > 0) {
+        setEntries((current) => [...current, ...added]);
+      }
+      return { added, rejected };
     },
-    [entries.length, onError],
+    [collectionId, artworkId, entries.length],
   );
 
-  /** Remove one photo, revoking its object URLs and reporting a stored id. */
-  const remove = useCallback((key: string): string | null => {
-    let removedId: string | null = null;
-    setEntries((current) =>
-      current.filter((entry) => {
-        if (entry.key !== key) {
-          return true;
-        }
-        if (entry.status === "stored") {
-          removedId = entry.photo.id;
-        } else {
-          revokeEntryUrls(entry, previewUrls.current);
-        }
-        return false;
-      }),
-    );
-    return removedId;
-  }, []);
+  /**
+   * Remove one photo. A stored one just leaves the sequence — the save's
+   * PATCH omits its id, and the server deletes the row and sweeps the objects
+   * in the same flow. A staged one is discarded now, best-effort: the call is
+   * fire-and-forget because a remove must not block on the network, and the
+   * staging sweep catches anything the discard lost.
+   */
+  const remove = useCallback(
+    (key: string): string | null => {
+      let removedId: string | null = null;
+      setEntries((current) =>
+        current.filter((entry) => {
+          if (entry.key !== key) {
+            return true;
+          }
+          if (entry.status === "stored") {
+            removedId = entry.photo.id;
+          } else {
+            void mediaService
+              .discardPhoto(collectionId, artworkId, entry.preview.id)
+              .catch(() => {});
+          }
+          return false;
+        }),
+      );
+      return removedId;
+    },
+    [collectionId, artworkId],
+  );
 
   /**
    * Reorder the list.
    *
-   * `order` is not renumbered here. It is renumbered by `reindexPhotos` at save
-   * time, and the entries are already stored in array order, which is the
-   * sequence the app reads. Numbering them on every keystroke-level change
-   * would mean the number in state disagrees with the array it describes
-   * between the reorder and the save.
+   * `order` is not renumbered here. The saved photos carry their stored order
+   * and the staged ones take theirs on append; the save sends only the ids,
+   * in array order, and the server numbers them from position — the
+   * reindex at the boundary the old `reindexPhotos` did on the client.
    */
   const reorder = useCallback((from: number, to: number) => {
     setEntries((current) => {
@@ -420,108 +384,33 @@ export const useArtworkPhotos = ({
     });
   }, []);
 
-  /** The stored photos still referenced by the working list. */
-  const remainingStoredIds = useMemo(
-    () =>
-      entries.flatMap((entry) =>
-        entry.status === "stored" ? [entry.photo.id] : [],
-      ),
-    [entries],
-  );
-
-  /** Photos the user removed, so their objects can be swept on save. */
-  const removedStoredIds = useMemo(
-    () =>
-      loaded.flatMap((photo) =>
-        remainingStoredIds.includes(photo.id) ? [] : [photo.id],
-      ),
-    [loaded, remainingStoredIds],
-  );
-
-  /** Files chosen but not yet uploaded. */
-  const pendingFiles = useMemo(
-    () =>
-      entries.flatMap((entry) =>
-        entry.status === "pending" ? [entry.file] : [],
-      ),
-    [entries],
-  );
-
   /**
-   * The generated variants awaiting upload, in list order.
+   * The save payload for the photo sequence, or `null` when the ids in the
+   * working list are the loaded ones in the loaded order — in which case the
+   * patch must leave the field out entirely, for the reason the patch
+   * contract gives: an absent key leaves the stored sequence alone, and
+   * re-sending it would renumber fifty rows for no change.
    *
-   * A plain projection rather than a promise, which is the point: the work was
-   * done when the file was added, so a save has nothing left to compute. Every
-   * pending entry carries a result — one that failed is removed, not left
-   * waiting — so the order here is the order the photos will be written in.
+   * The comparison is on ids in order, not on the entries: the staged ones
+   * carry no `order` of their own, and their position in the array *is* the
+   * order the server will write.
    */
-  const pendingImages = useMemo(
-    () =>
-      entries.flatMap((entry) =>
-        entry.status === "pending" && entry.processed ? [entry.processed] : [],
-      ),
-    [entries],
-  );
-
-  /** Whether the photos differ from what was loaded. */
-  const dirty = useMemo(() => {
-    const storedIds = entries.flatMap((entry) =>
-      entry.status === "stored" ? [entry.photo.id] : [],
+  const commit = useCallback((): StagedEntry[] | null => {
+    const loadedIds = loaded.map((photo) => photo.id);
+    const ids = entries.map((entry) =>
+      entry.status === "stored" ? entry.photo.id : entry.preview.id,
     );
-    return (
-      pendingFiles.length > 0 ||
-      storedIds.length !== loaded.length ||
-      storedIds.some((id, index) => loaded[index]?.id !== id)
-    );
-  }, [entries, loaded, pendingFiles.length]);
-
-  /**
-   * The photo list in the order the user set, once the pending ones uploaded.
-   *
-   * Walks the working list rather than concatenating. The obvious version —
-   * `uploaded.push(...stored)` — silently puts every newly added photo at the
-   * front, so a photo dragged into third place is saved first and becomes the
-   * primary thumbnail. The order is the one thing this form exists to let the
-   * user change, so it has to survive the save.
-   *
-   * `uploaded` is in `pendingImages` order, which is entry order, so the two
-   * line up position for position.
-   */
-  const mergeUploaded = useCallback(
-    (uploaded: ArtworkPhoto[]): ArtworkPhoto[] => {
-      let next = 0;
-      return reindexPhotos(
-        entries.flatMap((entry) => {
-          if (entry.status === "stored") {
-            return [entry.photo];
-          }
-          const photo = uploaded[next];
-          next += 1;
-          return photo ? [photo] : [];
-        }),
-      );
-    },
-    [entries],
-  );
-
-  /**
-   * Commit the list.
-   *
-   * Returns the photos to store, or `null` when nothing about them changed and
-   * the caller should leave the field out of the update entirely — `updateDoc`
-   * merges, so an absent key leaves the stored array alone rather than
-   * rewriting fifty storage URLs on a save that only touched the title.
-   */
-  const commit = useCallback((): ArtworkPhoto[] | null => {
-    if (!dirty) {
+    const unchanged =
+      ids.length === loadedIds.length &&
+      ids.every((id, index) => id === loadedIds[index]);
+    if (unchanged) {
       return null;
     }
-    return reindexPhotos(
-      entries.flatMap((entry) =>
-        entry.status === "stored" ? [entry.photo] : [],
-      ),
-    );
-  }, [dirty, entries]);
+    return entries.map((entry) => ({
+      entryId: entry.status === "stored" ? entry.photo.id : entry.preview.id,
+      name: entry.status === "stored" ? entry.photo.name : entry.preview.name,
+    }));
+  }, [entries, loaded]);
 
   /** Re-seed from a freshly loaded artwork, e.g. after a load completes. */
   const hydrate = useCallback((photos: ArtworkPhoto[]) => {
@@ -541,13 +430,7 @@ export const useArtworkPhotos = ({
     count: entries.length,
     processing,
     progress,
-    dirty,
-    pendingFiles,
-    pendingImages,
-    removedStoredIds,
     hasRoom: entries.length < MAX_ARTWORK_PHOTOS,
-    variantWebp,
-    mergeUploaded,
     addFiles,
     remove,
     reorder,

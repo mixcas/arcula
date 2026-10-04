@@ -5,10 +5,10 @@ import * as rtl from "@testing-library/react";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { FirebaseError } from "firebase/app";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicCollectionPage from "@/components/collection/PublicCollectionPage";
+import { ApiRequestError } from "@/services/api";
 import type { Artwork, Collection } from "@arcula/shared";
 
 (
@@ -39,7 +39,7 @@ vi.mock("@mantine/carousel", async () => {
 });
 
 const getCollection = vi.fn<() => Promise<Collection | null>>();
-const getPublicCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
+const getCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
 
 vi.mock("@/services/collectionService", () => ({
   collectionService: {
@@ -50,8 +50,8 @@ vi.mock("@/services/collectionService", () => ({
 
 vi.mock("@/services/artworkService", () => ({
   artworkService: {
-    getPublicCollectionArtworks: (...args: unknown[]) =>
-      (getPublicCollectionArtworks as unknown as (...a: unknown[]) => unknown)(
+    getCollectionArtworks: (...args: unknown[]) =>
+      (getCollectionArtworks as unknown as (...a: unknown[]) => unknown)(
         ...args,
       ),
     getArtwork: vi.fn(),
@@ -105,7 +105,7 @@ const renderPage = () =>
 
 beforeEach(() => {
   getCollection.mockReset();
-  getPublicCollectionArtworks.mockReset();
+  getCollectionArtworks.mockReset();
 });
 
 afterEach(() => {
@@ -115,7 +115,7 @@ afterEach(() => {
 describe("PublicCollectionPage — the reachable states", () => {
   it("renders a section per public artwork", async () => {
     getCollection.mockResolvedValue(collection());
-    getPublicCollectionArtworks.mockResolvedValue([
+    getCollectionArtworks.mockResolvedValue([
       artwork("a1", "Bodegón"),
       artwork("a2", "Estudio"),
     ]);
@@ -124,11 +124,10 @@ describe("PublicCollectionPage — the reachable states", () => {
   });
 
   it("orders the artworks by title, as the page has always done", async () => {
-    // Sorted client-side rather than with `orderBy`, and the reason belongs
-    // beside the query: the service already carries two `where()` constraints
-    // and a third would need another composite index deployed first.
+    // Sorted client-side: the list route answers in no particular order, and a
+    // public page should read the same on every visit.
     getCollection.mockResolvedValue(collection());
-    getPublicCollectionArtworks.mockResolvedValue([
+    getCollectionArtworks.mockResolvedValue([
       artwork("a1", "Zeta"),
       artwork("a2", "Alpha"),
     ]);
@@ -143,7 +142,7 @@ describe("PublicCollectionPage — the reachable states", () => {
 
   it("says the collection is private when the read is denied", async () => {
     getCollection.mockRejectedValue(
-      new FirebaseError("permission-denied", "denied"),
+      new ApiRequestError(403, "forbidden", "denied"),
     );
     renderPage();
     expect(
@@ -151,7 +150,7 @@ describe("PublicCollectionPage — the reachable states", () => {
     ).toBeVisible();
     // The sequencing that matters: a private collection's artworks are never
     // requested, so its contents cannot leak through the public page.
-    expect(getPublicCollectionArtworks).not.toHaveBeenCalled();
+    expect(getCollectionArtworks).not.toHaveBeenCalled();
   });
 
   it("says the collection is private for a private collection the caller CAN read", async () => {
@@ -162,7 +161,7 @@ describe("PublicCollectionPage — the reachable states", () => {
     expect(
       await screen.findByText("This collection is private."),
     ).toBeVisible();
-    expect(getPublicCollectionArtworks).not.toHaveBeenCalled();
+    expect(getCollectionArtworks).not.toHaveBeenCalled();
   });
 
   it("says not available for a collection that does not exist", async () => {
@@ -174,14 +173,14 @@ describe("PublicCollectionPage — the reachable states", () => {
   });
 
   it("reports a transport failure as an error", async () => {
-    getCollection.mockRejectedValue(new FirebaseError("unavailable", "down"));
+    getCollection.mockRejectedValue(new TypeError("fetch failed"));
     renderPage();
     expect(await screen.findByText(/Failed to load/)).toBeVisible();
   });
 
   it("says so plainly when there are no public artworks", async () => {
     getCollection.mockResolvedValue(collection());
-    getPublicCollectionArtworks.mockResolvedValue([]);
+    getCollectionArtworks.mockResolvedValue([]);
     renderPage();
     // Deliberately *not* the skin: a skin with an empty stage and a title in the
     // nav reads as a loading failure rather than as an empty collection.
@@ -193,7 +192,7 @@ describe("PublicCollectionPage — the reachable states", () => {
 
   it("offers the attribution link in the skin's nav, and no login link", async () => {
     getCollection.mockResolvedValue(collection());
-    getPublicCollectionArtworks.mockResolvedValue([artwork("a1", "Bodegón")]);
+    getCollectionArtworks.mockResolvedValue([artwork("a1", "Bodegón")]);
     renderPage();
     await waitFor(() => expect(screen.getAllByRole("region")).toHaveLength(1));
     // The nav's right slot holds the attribution link. The owner-only link that
@@ -208,7 +207,7 @@ describe("PublicCollectionPage — the reachable states", () => {
 
   it("links each footer's title to that artwork's public view", async () => {
     getCollection.mockResolvedValue(collection());
-    getPublicCollectionArtworks.mockResolvedValue([
+    getCollectionArtworks.mockResolvedValue([
       artwork("a1", "Bodegón"),
       artwork("a2", "Estudio"),
     ]);

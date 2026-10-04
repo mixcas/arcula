@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionSlug } from "@arcula/shared";
 import { collectionService } from "@/services/collectionService";
+import { ApiRequestError } from "@/services/api";
 
 const NewCollectionPage: React.FC = () => {
   const { currentUser, logout } = useAuth();
@@ -39,20 +40,30 @@ const NewCollectionPage: React.FC = () => {
     setError(null);
 
     try {
-      // Create the collection document. Defaults (isPublic/artworks) and
-      // timestamps are supplied by collectionService.
-      const newId = await collectionService.createCollection({
+      // The answer is the created collection — id, name and all — so the
+      // redirect slugs from the server's record rather than the form's.
+      const created = await collectionService.createCollection({
         name: name.trim(),
         description: description.trim(),
-        userId: currentUser.uid,
       });
 
       // Redirect to the newly created collection page
-      void navigate(`/manage/collection/${collectionSlug(name, newId)}`);
+      void navigate(
+        `/manage/collection/${collectionSlug(created.name, created.id)}`,
+      );
       setSuccess(true);
     } catch (err) {
       console.error("Error creating collection:", err);
-      setError("Failed to create collection. Please try again.");
+      // Hitting the tier cap is the one failure with a message worth showing
+      // as-is ("You can have at most N collections on the free tier"); every
+      // other error stays generic.
+      setError(
+        err instanceof ApiRequestError &&
+          err.status === 409 &&
+          err.code === "limit-reached"
+          ? err.message
+          : "Failed to create collection. Please try again.",
+      );
     } finally {
       setLoading(false);
     }

@@ -5,7 +5,6 @@ import {
   isMappingComplete,
   matchHeader,
   parseAcquisitionDate,
-  toImportArtwork,
   validateImportRow,
   type ColumnMapping,
   type ImportRowValues,
@@ -228,35 +227,5 @@ describe("validateImportRow", () => {
       currentValue: "",
     });
     expect(validateImportRow(blankRow)).toEqual([]);
-  });
-});
-
-describe("toImportArtwork", () => {
-  it("never emits undefined for a blank optional field", () => {
-    const doc = toImportArtwork(row({}), "collection-1", "user-1");
-    // Firestore rejects an explicit `undefined` property value on write (the
-    // exact failure that bubbled out of WriteBatch.set() during a real
-    // import), so the document must be free of them for any value the row can
-    // produce — the `row()` helper blanks every optional field.
-    for (const value of Object.values(doc)) {
-      expect(value).not.toBeUndefined();
-    }
-    expect(doc).not.toHaveProperty("editions");
-    expect(doc).not.toHaveProperty("serie");
-  });
-
-  it("shares the single-artwork write shape (ownership, public, storage)", () => {
-    const doc = toImportArtwork(
-      row({ title: "Nocturne", artistName: "Whistler" }),
-      "collection-1",
-      "user-1",
-    );
-    expect(doc.collectionId).toBe("collection-1");
-    expect(doc.userId).toBe("user-1");
-    expect(doc.isPublic).toBe(true);
-    expect(doc.documents).toEqual([]);
-    expect(doc.photos).toEqual([]);
-    expect(doc.title).toBe("Nocturne");
-    expect(doc.artistName).toBe("Whistler");
   });
 });

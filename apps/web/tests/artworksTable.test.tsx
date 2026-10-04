@@ -30,10 +30,10 @@ vi.mock("@/services/artworkService", () => ({
 
 // The failure test below drives the component's real error path, and
 // `artworkService.softDeleteArtworks` reports a rejected write with
-// `console.error`. Left unstubbed that lands on stderr during `test:rules`,
-// which is the gate in front of `deploy:rules` — so a *passing* run prints a
-// red stack trace and the deploy output trains everyone to ignore the one
-// line that matters. Captured instead of leaked; that test asserts on it.
+// `console.error`. Left unstubbed that lands on stderr during the web suite —
+// so a *passing* run prints a red stack trace and trains everyone to ignore
+// the one line that matters. Captured instead of leaked; that test asserts on
+// it.
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 // mantine-datatable measures its scroll viewport on mount to drive column
@@ -56,7 +56,7 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "collection-1",
+  collectionId: "collection1",
   isPublic: true,
   deletedAt: null,
   ...overrides,
@@ -73,7 +73,7 @@ const renderTable = (props: {
         <MemoryRouter>
           <ArtworksTable
             artworks={props.artworks}
-            collectionParam="my-collection-collection-1"
+            collectionParam="my-collection-collection1"
             onDeleted={props.onDeleted ?? vi.fn()}
           />
         </MemoryRouter>
@@ -232,7 +232,7 @@ describe("ArtworksTable", () => {
     // already carries, and the public route parses the id back out of it.
     const view = screen.getByRole("link", { name: "View" });
     expect(view.getAttribute("href")).toBe(
-      "/collection/my-collection-collection-1/artwork/art-1-a",
+      "/collection/my-collection-collection1/artwork/art-1-a",
     );
     // A new tab, so the owner can check the public page without losing their
     // place in this one. `noopener` is asserted because it is not optional:
@@ -249,7 +249,9 @@ describe("ArtworksTable", () => {
 
     await user.click(scope.getByRole("button", { name: "Delete" }));
 
-    await waitFor(() => expect(softDeleteMock).toHaveBeenCalledWith(["a"]));
+    await waitFor(() =>
+      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a"]),
+    );
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
     // The dialog closes on success and the toast confirms it.
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -300,7 +302,7 @@ describe("ArtworksTable", () => {
     await user.click(scope.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(softDeleteMock).toHaveBeenCalledWith(["a", "b"]),
+      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a", "b"]),
     );
     // The selection is cleared once the write lands, so a second batch delete
     // cannot silently reuse stale ids.

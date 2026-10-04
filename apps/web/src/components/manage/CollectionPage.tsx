@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Text, Button, Group } from "@mantine/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
 import { collectionSlug, parseId } from "@arcula/shared";
@@ -15,8 +14,6 @@ const CollectionPage: React.FC = () => {
   // rewrite below change the URL without re-triggering the fetch.
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
-  const userId = currentUser?.uid;
   const [collection, setCollection] = useState<Collection | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,27 +25,24 @@ const CollectionPage: React.FC = () => {
   // the delete's error handler and reported as a failed delete — which would be
   // a lie, since the write already went through.
   const loadArtworks = useCallback(async () => {
-    if (!collectionId || !userId) return;
+    if (!collectionId) return;
     try {
-      // Scoped to the owner so the rules can authorize it with a plain userId
-      // check; the owner sees every artwork, public or private, and never the
-      // soft-deleted ones (the service filters those out).
-      const fetchedArtworks = await artworkService.getCollectionArtworks(
-        collectionId,
-        userId,
-      );
+      // The session decides whose works these are: the owner sees every
+      // artwork, public or private, and never the soft-deleted ones (the
+      // server filters those out).
+      const fetchedArtworks =
+        await artworkService.getCollectionArtworks(collectionId);
       setArtworks(fetchedArtworks);
       setError(null);
     } catch (err) {
       console.error("Error fetching artworks:", err);
       setError("Failed to fetch artworks");
     }
-  }, [collectionId, userId]);
+  }, [collectionId]);
 
   useEffect(() => {
     const fetchCollectionData = async () => {
       if (!collectionId) return;
-      if (!userId) return;
 
       try {
         // Fetch the collection
@@ -72,7 +66,7 @@ const CollectionPage: React.FC = () => {
     };
 
     void fetchCollectionData();
-  }, [collectionId, userId, loadArtworks]);
+  }, [collectionId, loadArtworks]);
 
   // Once the name is known, put the canonical "{slug}-{id}" in the address bar
   // so a link written with only the id still resolves to a readable URL.

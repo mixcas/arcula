@@ -20,48 +20,28 @@ import {
   useArtworkDocuments,
   type UseArtworkDocuments,
 } from "@/hooks/useArtworkDocuments";
-import { processImages } from "@/utils/imageProcessing";
-import { MAX_DOCUMENT_BYTES } from "@arcula/shared";
+import { mediaService } from "@/services/mediaService";
+import { MAX_ARTWORK_DOCUMENTS, MAX_DOCUMENT_BYTES } from "@arcula/shared";
 import type { ArtworkDocument } from "@arcula/shared";
 
 /**
- * The default stub: one `square_sm` per file, which is the subset a document
- * image actually gets.
+ * The staging boundary: the form never decodes or resizes a byte, so the
+ * variants a row renders are the server's own answer, read back through the
+ * mock. The geometry and the encoder are the API's, and the API suite pins
+ * them.
  *
- * A `function` declaration, not a `const`, because `vi.mock`'s factory is
- * hoisted above the imports and runs before module-scope `const`s are
- * initialised.
+ * `vi.mock`'s factory is hoisted above the imports, so the default
+ * implementations are installed in `beforeEach` instead.
  */
-function defaultProcessImages(files: File[]) {
-  return Promise.resolve(
-    files.map((file) => ({
-      file,
-      webp: true,
-      width: 2000,
-      height: 1500,
-      variants: [
-        {
-          key: "square_sm" as const,
-          blob: new Blob([new Uint8Array([9])], { type: "image/webp" }),
-          width: 400,
-          height: 400,
-          contentType: "image/webp",
-        },
-      ],
-    })),
-  );
-}
-
-// The variant pipeline needs a real canvas and a Web Worker, and jsdom has
-// neither. Everything asserted here is the layer above that — the list, the
-// open behaviour, the removal and the merge — so the processing is stubbed
-// rather than emulated. The geometry and the encoder choice are covered in
-// tests/imageVariants.test.ts and tests/imageProcessing.test.ts, both pure.
-vi.mock("@/utils/imageProcessing", () => ({
-  processImages: vi.fn(defaultProcessImages),
-  variantFormatIsWebp: vi.fn(() => Promise.resolve(true)),
-  extensionFor: (type: string) =>
-    type === "image/webp" ? "webp" : type === "image/png" ? "png" : "jpg",
+vi.mock("@/services/mediaService", () => ({
+  mediaService: {
+    stagePhoto: vi.fn(),
+    processPhoto: vi.fn(),
+    discardPhoto: vi.fn(),
+    stageDocument: vi.fn(),
+    processDocument: vi.fn(),
+    discardDocument: vi.fn(),
+  },
 }));
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -87,10 +67,17 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
+const COLLECTION_ID = "collection-1";
+const ARTWORK_ID = "artwork-1";
+
 const Harness: React.FC<{ initialDocuments?: ArtworkDocument[] }> = ({
   initialDocuments,
 }) => {
-  const documents = useArtworkDocuments({ initialDocuments });
+  const documents = useArtworkDocuments({
+    collectionId: COLLECTION_ID,
+    artworkId: ARTWORK_ID,
+    initialDocuments,
+  });
   return (
     <MantineProvider>
       <ModalsProvider>
@@ -102,8 +89,8 @@ const Harness: React.FC<{ initialDocuments?: ArtworkDocument[] }> = ({
   );
 };
 
-// Not async: the documents hook asks no mount-time probe the way the photo hook
-// does, so there is no state update to settle before a test can assert.
+// Not async: the hook asks nothing of the server on mount, so there is no
+// state update to settle before a test can assert.
 const renderHarness = (initialDocuments?: ArtworkDocument[]) =>
   render(<Harness initialDocuments={initialDocuments} />);
 
@@ -170,28 +157,63 @@ const fileInput = (): HTMLInputElement => {
   return input;
 };
 
+/**
+ * Every entry id that passed through the stage mock, in arrival order.
+ *
+ * The ids are minted by the hook with `crypto.randomUUID`, so a test cannot
+ * predict them; capturing them is what makes the discard assertions name the
+ * exact object the server is being asked to drop.
+ */
+let stagedDocumentIds: string[];
+
 beforeEach(() => {
-  vi.mocked(processImages).mockImplementation(defaultProcessImages);
+  stagedDocumentIds = [];
 
-  // jsdom implements neither of these, and the hook calls createObjectURL for
-  // every pending preview and revokes it on removal and unmount. The stub
-  // records calls so the revocation assertions below are real rather than
-  // vacuous.
-  const created: string[] = [];
-  const revoked: string[] = [];
-  let counter = 0;
-
-  URL.createObjectURL = vi.fn(() => {
-    counter += 1;
-    const url = `blob:mock/${counter}`;
-    created.push(url);
-    return url;
-  });
-  URL.revokeObjectURL = vi.fn((url: string) => {
-    revoked.push(url);
-  });
-
-  Object.assign(globalThis, { __created: created, __revoked: revoked });
+  // A PDF is the one document the stage route answers without dimensions:
+  // nothing to decode, so nulls are the honest shape.
+  vi.mocked(mediaService.stageDocument).mockImplementation(
+    (_cid, _aid, entryId, file) => {
+      stagedDocumentIds.push(entryId);
+      const isImage = file.type !== "application/pdf";
+      return Promise.resolve({
+        entryId,
+        name: file.name,
+        width: isImage ? 2000 : null,
+        height: isImage ? 1500 : null,
+        size: file.size,
+        contentType: file.type,
+        url: `https://media.test/staging-doc/${entryId}/original`,
+      });
+    },
+  );
+  // The two variants a document image actually gets — `square_sm` for the
+  // row thumbnail, `large` for the preview modal. Named urls, not blobs:
+  // there is no object-URL lifecycle left to test against.
+  vi.mocked(mediaService.processDocument).mockImplementation(
+    (_cid, _aid, entryId) =>
+      Promise.resolve({
+        entryId,
+        variants: [
+          {
+            key: "square_sm",
+            url: `https://media.test/variants-doc/${entryId}/square_sm.webp`,
+            width: 400,
+            height: 400,
+            size: 100,
+            contentType: "image/webp",
+          },
+          {
+            key: "large",
+            url: `https://media.test/variants-doc/${entryId}/large.webp`,
+            width: 1200,
+            height: 800,
+            size: 200,
+            contentType: "image/webp",
+          },
+        ],
+      }),
+  );
+  vi.mocked(mediaService.discardDocument).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -199,18 +221,14 @@ afterEach(() => {
   // automatic cleanup never registers. Without this each render stays in the
   // document and the next test's queries match the previous test's rows.
   cleanup();
+  vi.clearAllMocks();
 });
-
-const createdUrls = (): string[] =>
-  (globalThis as unknown as { __created: string[] }).__created;
-const revokedUrls = (): string[] =>
-  (globalThis as unknown as { __revoked: string[] }).__revoked;
 
 describe("DocumentsUploader", () => {
   it("renders a stored image with its thumbnail and filename", () => {
     renderHarness([imageDocument("a", "reverse.jpg")]);
 
-    // `square_sm` is the variant a document image gets, and the tile has to
+    // `square_sm` is the variant a document image gets, and the row has to
     // render it rather than reaching for a key this feature never generates.
     expect(screen.getByAltText("reverse.jpg")).toHaveAttribute(
       "src",
@@ -264,19 +282,26 @@ describe("DocumentsUploader", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("adds a PDF without running it through the image pipeline", async () => {
+  it("adds a PDF without asking the server for variants", async () => {
     const user = userEvent.setup();
     renderHarness();
 
     await user.upload(fileInput(), pdfFile("provenance.pdf"));
 
     expect(await screen.findByText("provenance.pdf")).toBeInTheDocument();
-    // A PDF has no pixels; running it through a decoder would reject a
-    // perfectly good file for having nothing to resize.
-    expect(vi.mocked(processImages)).not.toHaveBeenCalled();
+    // A PDF has no pixels: the client skips the process call on purpose, and
+    // the row's link points at the staged original's proxy url.
+    expect(mediaService.processDocument).not.toHaveBeenCalled();
+    expect(mediaService.stageDocument).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("link", { name: /provenance.pdf/i }),
+    ).toHaveAttribute(
+      "href",
+      `https://media.test/staging-doc/${stagedDocumentIds[0]}/original`,
+    );
   });
 
-  it("adds an image and runs only the images through the pipeline", async () => {
+  it("adds an image and asks the server for its variants", async () => {
     const user = userEvent.setup();
     renderHarness();
 
@@ -287,99 +312,54 @@ describe("DocumentsUploader", () => {
 
     expect(await screen.findByText("scan.jpg")).toBeInTheDocument();
     expect(screen.getByText("receipt.pdf")).toBeInTheDocument();
-    // One call, and only for the image — the file is not a second argument to
-    // the same call.
-    expect(vi.mocked(processImages)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(processImages).mock.calls[0]?.[0]).toHaveLength(1);
-  });
-
-  it("asks for only the two variants a document uses", async () => {
-    const user = userEvent.setup();
-    renderHarness();
-
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-    await screen.findByText("scan.jpg");
-
-    // The spec list is the third argument. `square_lg`, `medium` and `xlarge`
-    // exist for the public collection views, and a document is never public, so
-    // generating them would write objects nothing can ever read.
-    const specs = vi.mocked(processImages).mock.calls[0]?.[2] as Array<{
-      key: string;
-    }>;
-    expect(specs.map((spec) => spec.key)).toEqual(["square_sm", "large"]);
-  });
-
-  it("reports a file it could not read, and keeps the rest of the drop", async () => {
-    vi.mocked(processImages).mockImplementation(() =>
-      Promise.reject(new Error("decode failed")),
+    // One call, and only for the image's entry — the file is not a second
+    // argument to the same call, and the pdf is not in it at all.
+    expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
+    expect(mediaService.processDocument).toHaveBeenCalledWith(
+      COLLECTION_ID,
+      ARTWORK_ID,
+      stagedDocumentIds[0],
     );
-    const user = userEvent.setup();
+    // And the row renders the server's own thumbnail.
+    expect(screen.getByAltText("scan.jpg")).toHaveAttribute(
+      "src",
+      `https://media.test/variants-doc/${stagedDocumentIds[0]}/square_sm.webp`,
+    );
+  });
+
+  it("keeps the rest of a mixed drop and says why the other was refused", async () => {
+    // Delivered the way the OS delivers it: both files on one change event,
+    // whatever the `accept` hint said. `userEvent.upload` cannot do this —
+    // it honours the `accept` attribute like the picker does, and would
+    // quietly drop the spreadsheet before the event ever fired.
     renderHarness();
-
-    await user.upload(fileInput(), [
-      jpegFile("broken.jpg"),
-      pdfFile("fine.pdf"),
-    ]);
-
-    // Never swallowed: a file that silently vanished from the list is worse
-    // than a message, and the accept list here is broad enough that a mixed
-    // drop is an ordinary thing to do.
-    expect(
-      await screen.findByText(/could not be read as an image/i),
-    ).toBeInTheDocument();
-    // The PDF never depended on the pipeline, so it survived.
-    expect(screen.getByText("fine.pdf")).toBeInTheDocument();
-  });
-
-  it("rejects a file whose stored name the rules would deny", async () => {
-    // The second half of the accept check, and the one that would have caught the
-    // PDF 403 in the form rather than at save time: a type can be accepted while
-    // the name the upload would be stored under is refused by `isDocumentName`.
-    // A `text/html` file is the sharp version — the type is rejected first, so it
-    // is spoofed here as a type the form *does* accept, and only the name gives
-    // it away. The rules are the only thing that can catch this, and they answer
-    // with a 403 nobody can act on.
-    let result: AddFilesResult = { added: [], rejected: [] };
-    await withHook([], async (hook) => {
-      await act(async () => {
-        result = await hook.addFiles([
-          new File([new Uint8Array([1])], "payload.html", {
-            type: "application/pdf",
-          }),
-        ]);
-      });
+    const input = fileInput();
+    Object.defineProperty(input, "files", {
+      value: [
+        jpegFile("good.jpg"),
+        new File([new Uint8Array([1])], "sheet.xlsx", {
+          type: "application/vnd.ms-excel",
+        }),
+      ],
+      configurable: true,
     });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
 
-    expect(result.added).toHaveLength(0);
-    expect(result.rejected).toEqual([
-      expect.objectContaining({ reason: "Not a supported file type" }),
-    ]);
-  });
-
-  it("rejects an unsupported type and keeps the rest of the drop", async () => {
-    // Driven through the hook, not the Dropzone. react-dropzone filters by the
-    // `accept` map before `onDrop` fires, so a picker-chosen `.xlsx` never
-    // reaches the hook at all — the check here is the second line, and it is the
-    // one a drag from an OS that ignores `accept` would meet.
-    let result: AddFilesResult = { added: [], rejected: [] };
-    await withHook([], async (hook) => {
-      await act(async () => {
-        result = await hook.addFiles([
-          jpegFile("good.jpg"),
-          new File([new Uint8Array([1])], "sheet.xlsx", {
-            type: "application/vnd.ms-excel",
-          }),
-        ]);
-      });
+    await waitFor(() => {
+      expect(screen.getByText("good.jpg")).toBeInTheDocument();
     });
-
-    expect(result.added).toHaveLength(1);
-    expect(result.rejected).toEqual([
-      expect.objectContaining({ reason: "Not a supported file type" }),
-    ]);
+    // The spreadsheet never reaches the hook: the Dropzone's own validator
+    // refuses it on the way in and routes it through the reject handler, which
+    // starts the alert. The staging that settles a tick later has nothing to
+    // add and must not erase that half of the list. Asserted by prefix, not by
+    // the library's copy: the contract is that the file is named and
+    // explained, and the wording belongs to the Dropzone.
+    expect(screen.getByText("1 file could not be added")).toBeInTheDocument();
+    expect(screen.getByText(/^sheet\.xlsx: /)).toBeInTheDocument();
+    expect(screen.queryByText(/^sheet\.xlsx$/)).toBeNull();
   });
 
-  it("removes a document", async () => {
+  it("removes a stored document without touching staging", async () => {
     const user = userEvent.setup();
     renderHarness([
       fileDocument("a", "first.pdf"),
@@ -392,42 +372,31 @@ describe("DocumentsUploader", () => {
       expect(screen.queryByText("first.pdf")).not.toBeInTheDocument();
     });
     expect(screen.getByText("second.pdf")).toBeInTheDocument();
+    // Nothing was ever PUT for a stored document, so there is nothing to
+    // discard: the save's PATCH omits the id and the server sweeps the
+    // objects.
+    expect(mediaService.discardDocument).not.toHaveBeenCalled();
   });
 
-  it("revokes a pending image's object URLs when it is removed", async () => {
-    const user = userEvent.setup();
-    renderHarness();
-
-    await user.upload(fileInput(), jpegFile("scan.jpg"));
-    await screen.findByText("scan.jpg");
-
-    // Two per image, not one: the picked file's own URL, and the generated
-    // `square_sm` the row displays. Both pin a blob in memory.
-    expect(createdUrls()).toHaveLength(2);
-
-    await user.click(screen.getByRole("button", { name: /remove scan.jpg/i }));
-
-    await waitFor(() => {
-      expect(revokedUrls()).toHaveLength(2);
-    });
-  });
-
-  it("revokes a pending file's object URL when it is removed", async () => {
+  it("discards a staged document when it is removed", async () => {
     const user = userEvent.setup();
     renderHarness();
 
     await user.upload(fileInput(), pdfFile("receipt.pdf"));
-    await screen.findByText("receipt.pdf");
-
-    // One: a file gets no variants, so the picked file's URL is all it owns.
-    expect(createdUrls()).toHaveLength(1);
-
-    await user.click(
-      screen.getByRole("button", { name: /remove receipt.pdf/i }),
-    );
+    const entryId = stagedDocumentIds[0];
+    const remove = await screen.findByRole("button", { name: /remove/i });
+    await user.click(remove);
 
     await waitFor(() => {
-      expect(revokedUrls()).toHaveLength(1);
+      expect(screen.queryByText("receipt.pdf")).not.toBeInTheDocument();
+    });
+    // Fire-and-forget, so await the assertion rather than the call.
+    await waitFor(() => {
+      expect(mediaService.discardDocument).toHaveBeenCalledWith(
+        COLLECTION_ID,
+        ARTWORK_ID,
+        entryId,
+      );
     });
   });
 
@@ -441,8 +410,8 @@ describe("DocumentsUploader", () => {
     renderHarness();
 
     // A real allocation rather than a stubbed `size`: react-dropzone reads
-    // `file.size` off the object, and a File whose size is faked is not one the
-    // rule is being exercised on.
+    // `file.size` off the object, and a File whose size is faked is not one
+    // the rule is being exercised on.
     const huge = new File(
       [new Uint8Array(MAX_DOCUMENT_BYTES + 1024)],
       "catalogue.pdf",
@@ -451,50 +420,11 @@ describe("DocumentsUploader", () => {
     await user.upload(fileInput(), huge);
 
     const line = await screen.findByText(/catalogue\.pdf: /i);
-    // Matched loosely on purpose. The claim is that a *reason* reached the user
-    // rather than a bare filename; Mantine's exact wording is its own to change,
-    // and pinning it here would break this test for a reason that says nothing
-    // about the behaviour being covered.
+    // Matched loosely on purpose. The claim is that a *reason* reached the
+    // user rather than a bare filename; Mantine's exact wording is its own to
+    // change, and pinning it here would break this test for a reason that says
+    // nothing about the behaviour being covered.
     expect(line.textContent).toMatch(/larger than/i);
-  });
-
-  it("caps the list at ten, keeping the first ten of a larger drop", async () => {
-    // Counted as the drop is processed, so a drop of twelve keeps ten and
-    // reports two — not twelve reported and none kept, which is the more
-    // defensible-looking behaviour and the more annoying one.
-    let result: AddFilesResult = { added: [], rejected: [] };
-    await withHook([], async (hook) => {
-      await act(async () => {
-        result = await hook.addFiles(
-          Array.from({ length: 12 }, (_, index) => pdfFile(`doc-${index}.pdf`)),
-        );
-      });
-    });
-
-    expect(result.added).toHaveLength(10);
-    expect(result.rejected).toHaveLength(2);
-    expect(result.rejected[0]?.reason).toMatch(
-      /only 10 documents per artwork/i,
-    );
-  });
-
-  it("stops adding once the list is full", async () => {
-    let result: AddFilesResult = { added: [], rejected: [] };
-    await withHook(
-      Array.from({ length: 10 }, (_, index) =>
-        fileDocument(`d${index}`, `stored-${index}.pdf`),
-      ),
-      async (hook) => {
-        await act(async () => {
-          result = await hook.addFiles([pdfFile("one-too-many.pdf")]);
-        });
-      },
-    );
-
-    expect(result.added).toHaveLength(0);
-    expect(result.rejected[0]?.reason).toMatch(
-      /only 10 documents per artwork/i,
-    );
   });
 });
 
@@ -516,7 +446,11 @@ const withHook = async (
 ): Promise<UseArtworkDocuments> => {
   let latest: UseArtworkDocuments | null = null;
   const Probe: React.FC = () => {
-    const documents = useArtworkDocuments({ initialDocuments });
+    const documents = useArtworkDocuments({
+      collectionId: COLLECTION_ID,
+      artworkId: ARTWORK_ID,
+      initialDocuments,
+    });
     useEffect(() => {
       latest = documents;
     }, [documents]);
@@ -536,8 +470,8 @@ const withHook = async (
 
 type AddFilesResult = Awaited<ReturnType<UseArtworkDocuments["addFiles"]>>;
 
-describe("useArtworkDocuments", () => {
-  it("tags an image for processing and a file for a straight upload", async () => {
+describe("addFiles", () => {
+  it("tags an image for processing and a file for nothing else", async () => {
     let result: AddFilesResult = { added: [], rejected: [] };
     await withHook([], async (hook) => {
       await act(async () => {
@@ -548,32 +482,167 @@ describe("useArtworkDocuments", () => {
       });
     });
 
-    // The tag is the union `documentService` branches on, so the two stay in
-    // step without either side inspecting a MIME type.
-    const kinds = result.added.map((entry) =>
-      entry.status === "pending" && entry.processed !== null ? "image" : "file",
-    );
-    expect(kinds).toEqual(["image", "file"]);
+    // The kind is the one the save's promotion branches on, so the two stay in
+    // step without either side inspecting a MIME type. The image carries the
+    // server's dimensions and variants; the file is complete after staging
+    // alone.
+    expect(result.added.map((entry) => entry.document.kind)).toEqual([
+      "image",
+      "file",
+    ]);
+    const [imageEntry, fileEntry] = result.added;
+    expect(imageEntry.document).toMatchObject({
+      width: 2000,
+      height: 1500,
+    });
+    // A file document has no geometry at all: the fields are absent, not
+    // null. (The stage route answers nulls for it, and the entry shape drops
+    // them on the way in.)
+    expect("width" in fileEntry.document).toBe(false);
+    expect("height" in fileEntry.document).toBe(false);
+    expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
   });
 
-  // The test that accepted a file the browser reported no type for was here. It
-  // was asserting a branch a visitor cannot reach, and its reason was wrong.
-  // `file-selector` backfills a MIME type from the filename's extension before
-  // the Dropzone's `onDrop` fires — measured: a `File` built with `type: ""`
-  // arrives as `application/pdf` — so an empty-type file only reaches the hook
-  // when its name has no dot, and a dotless name is rejected. The empty-type
-  // branch of `isAcceptedDocumentType` is genuinely dead code, which is the one
-  // thing this test could usefully have said and did not.
+  it("refuses a type the allowlist does not admit, without staging", async () => {
+    // Driven through the hook, not the Dropzone: react-dropzone filters by the
+    // `accept` map before `onDrop` fires, so a picker-chosen `.xlsx` never
+    // reaches the hook at all — the check here is the second line, and it is
+    // the one a caller that bypasses the component would meet.
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook([], async (hook) => {
+      await act(async () => {
+        result = await hook.addFiles([
+          jpegFile("good.jpg"),
+          new File([new Uint8Array([1])], "sheet.xlsx", {
+            type: "application/vnd.ms-excel",
+          }),
+        ]);
+      });
+    });
 
+    expect(result.added).toHaveLength(1);
+    expect(result.rejected).toEqual([
+      expect.objectContaining({ reason: "Not a supported file type" }),
+    ]);
+  });
+
+  it("refuses over the cap without staging anything", async () => {
+    // Counted against the cap as the drop is processed, so a drop of twelve
+    // with a limit of ten keeps the first ten rather than rejecting all
+    // twelve, and nothing over the line spends a round trip.
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook([], async (hook) => {
+      await act(async () => {
+        result = await hook.addFiles(
+          Array.from({ length: 12 }, (_, index) => pdfFile(`doc-${index}.pdf`)),
+        );
+      });
+    });
+
+    expect(result.added).toHaveLength(MAX_ARTWORK_DOCUMENTS);
+    expect(result.rejected).toHaveLength(2);
+    expect(result.rejected[0]?.reason).toBe(
+      `Only ${MAX_ARTWORK_DOCUMENTS} documents per artwork`,
+    );
+  });
+
+  it("stops adding once the list is full", async () => {
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook(
+      Array.from({ length: MAX_ARTWORK_DOCUMENTS }, (_, index) =>
+        fileDocument(`d${index}`, `stored-${index}.pdf`),
+      ),
+      async (hook) => {
+        await act(async () => {
+          result = await hook.addFiles([pdfFile("one-too-many.pdf")]);
+        });
+      },
+    );
+
+    expect(result.added).toHaveLength(0);
+    expect(result.rejected[0]?.reason).toBe(
+      `Only ${MAX_ARTWORK_DOCUMENTS} documents per artwork`,
+    );
+    expect(mediaService.stageDocument).not.toHaveBeenCalled();
+  });
+
+  it("leaves no gap when a file fails mid-batch", async () => {
+    // A failure in the middle must not cost the drop the files that came after
+    // it: the batch is appended once everything has settled, in drop order, so
+    // the survivors keep their places.
+    vi.mocked(mediaService.stageDocument).mockImplementation(
+      (_cid, _aid, entryId, file) => {
+        if (file.name === "fail.pdf") {
+          return Promise.reject(new Error("staging failed"));
+        }
+        stagedDocumentIds.push(entryId);
+        return Promise.resolve({
+          entryId,
+          name: file.name,
+          width: null,
+          height: null,
+          size: file.size,
+          contentType: file.type,
+          url: `https://media.test/staging-doc/${entryId}/original`,
+        });
+      },
+    );
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook([], async (hook) => {
+      await act(async () => {
+        result = await hook.addFiles([
+          pdfFile("one.pdf"),
+          pdfFile("fail.pdf"),
+          pdfFile("two.pdf"),
+        ]);
+      });
+    });
+
+    expect(result.added.map((entry) => entry.document.name)).toEqual([
+      "one.pdf",
+      "two.pdf",
+    ]);
+    expect(
+      result.rejected.map((entry) => [entry.file.name, entry.reason]),
+    ).toEqual([["fail.pdf", "The file could not be uploaded"]]);
+  });
+
+  it("discards the staged original when the variants fail", async () => {
+    // The original is up and no save will ever name it: without the discard it
+    // lingers until the sweep, and a failed batch would leave objects behind
+    // per image.
+    vi.mocked(mediaService.processDocument).mockRejectedValue(
+      new Error("boom"),
+    );
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook([], async (hook) => {
+      await act(async () => {
+        result = await hook.addFiles([jpegFile("scan.jpg")]);
+      });
+    });
+
+    expect(result.added).toHaveLength(0);
+    await waitFor(() => {
+      expect(mediaService.discardDocument).toHaveBeenCalledWith(
+        COLLECTION_ID,
+        ARTWORK_ID,
+        stagedDocumentIds[0],
+      );
+    });
+  });
+});
+
+describe("commit", () => {
   it("leaves the field out of a save when nothing changed", async () => {
     const hook = await withHook([fileDocument("a", "a.pdf")], () => {});
 
     // `commit` returning null is what keeps a save that only touched the title
-    // from rewriting every storage URL.
+    // from rewriting every object for no change: an absent key leaves the
+    // stored set alone.
     expect(hook.commit()).toBeNull();
   });
 
-  it("commits the stored list when a document is removed", async () => {
+  it("commits the shorter set when a document is removed", async () => {
     const hook = await withHook(
       [fileDocument("a", "a.pdf"), fileDocument("b", "b.pdf")],
       (inner) => {
@@ -583,114 +652,24 @@ describe("useArtworkDocuments", () => {
       },
     );
 
-    expect(hook.commit()).toEqual([
-      expect.objectContaining({ id: "b", name: "b.pdf" }),
-    ]);
+    expect(hook.commit()).toEqual([{ entryId: "b", name: "b.pdf" }]);
   });
 
-  it("reports a removed stored id for the Storage sweep", async () => {
-    const hook = await withHook(
-      [fileDocument("a", "a.pdf"), fileDocument("b", "b.pdf")],
-      (inner) => {
-        act(() => {
-          inner.remove(inner.entries[0].key);
-        });
-      },
-    );
-
-    // Without this the document's objects would stay in Storage forever:
-    // invisible, unreferenced, and never cleaned up.
-    expect(hook.removedStoredIds).toEqual(["a"]);
-  });
-
-  it("does not report a removal when the user re-adds the same document", async () => {
-    // Not reachable through the UI, but the sweep is destructive: a false
-    // positive here deletes objects the saved document still points at.
-    const hook = await withHook([fileDocument("a", "a.pdf")], () => {});
-
-    expect(hook.removedStoredIds).toEqual([]);
-  });
-
-  it("is not dirty when a document is only viewed", async () => {
-    const hook = await withHook([fileDocument("a", "a.pdf")], () => {});
-    expect(hook.dirty).toBe(false);
-  });
-});
-
-/**
- * The list the user sees has to be the list that is saved.
- *
- * Driven through the hook rather than the row list, because `mergeUploaded` is
- * what the page calls and no rendering of the form ever shows its result — the
- * bug it fixes is invisible until the document is read back.
- */
-describe("mergeUploaded", () => {
-  /** What the service hands back: one stored-shaped document per upload. */
-  const uploadedImage = (name: string): ArtworkDocument =>
-    imageDocument("uploaded", name);
-  const uploadedFile = (name: string): ArtworkDocument =>
-    fileDocument("uploaded", name);
-
-  it("keeps a new document where the list put it", async () => {
-    // The bug this replaces was `uploaded.push(...stored)`, which puts every new
-    // document at the front. For documents there is no thumbnail to get wrong as
-    // there is for photos, so the failure is quieter: a saved list whose order
-    // nobody chose, and a user with ten receipts who cannot find the one they
-    // just added.
-    const hook = await withHook(
-      [fileDocument("a", "a.pdf"), fileDocument("b", "b.pdf")],
-      async (inner) => {
-        await act(async () => {
-          await inner.addFiles([pdfFile("c.pdf")]);
-        });
-      },
-    );
-
-    const merged = hook.mergeUploaded([uploadedFile("c.pdf")]);
-
-    expect(merged.map((entry) => entry.name)).toEqual([
-      "a.pdf",
-      "b.pdf",
-      "c.pdf",
-    ]);
-  });
-
-  it("returns uploaded images and files to their own slots in a mixed list", async () => {
-    // The mixed case, and the one that breaks a merge which assumed uploads
-    // were contiguous: two new documents of different kinds, either of which
-    // would be paired with the wrong upload if the walk did not line them up
-    // position for position.
+  it("carries a staged-only addition even though the stored set is untouched", async () => {
+    // The case that distinguishes this comparison from a plain set check:
+    // removing nothing and adding one is still a change the patch has to carry,
+    // and a set comparison of the stored half alone would answer "unchanged".
     const hook = await withHook([fileDocument("a", "a.pdf")], async (inner) => {
       await act(async () => {
-        await inner.addFiles([jpegFile("b.jpg"), pdfFile("c.pdf")]);
+        await inner.addFiles([pdfFile("b.pdf")]);
       });
     });
 
-    const merged = hook.mergeUploaded([
-      uploadedImage("b.jpg"),
-      uploadedFile("c.pdf"),
+    const committed = hook.commit();
+    expect(committed?.map((entry) => entry.entryId)).toEqual([
+      "a",
+      stagedDocumentIds[0],
     ]);
-
-    expect(merged.map((entry) => entry.name)).toEqual([
-      "a.pdf",
-      "b.jpg",
-      "c.pdf",
-    ]);
-    // And the kinds line up with the names, which is what a misaligned zip
-    // would break: an image entry pointing at a PDF's URL renders as a broken
-    // image with no error anywhere.
-    expect(merged.map((entry) => entry.kind)).toEqual([
-      "file",
-      "image",
-      "file",
-    ]);
-  });
-
-  it("leaves a document alone when the user added nothing", async () => {
-    const hook = await withHook([fileDocument("a", "a.pdf")], () => {});
-
-    const merged = hook.mergeUploaded([]);
-
-    expect(merged.map((entry) => entry.name)).toEqual(["a.pdf"]);
+    expect(committed?.map((entry) => entry.name)).toEqual(["a.pdf", "b.pdf"]);
   });
 });

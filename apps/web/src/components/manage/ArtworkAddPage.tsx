@@ -13,12 +13,10 @@ import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
 import { useParams, useNavigate } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
-import { useAuth } from "@/hooks/useAuth";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { artworkService } from "@/services/artworkService";
-import { imageService } from "@/services/imageService";
-import { documentService } from "@/services/documentService";
+import { ApiRequestError } from "@/services/api";
 import PhotoUploader from "@/components/manage/artwork/PhotoUploader";
 import DocumentsUploader from "@/components/manage/artwork/DocumentsUploader";
 import FormActionsBar, {
@@ -29,56 +27,37 @@ import {
   EMPTY_ARTWORK_FORM,
   artworkSchema,
   toArtworkPayload,
-  toNewArtwork,
+  toArtworkCreatePayload,
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
 import { artworkSlug, parseId } from "@arcula/shared";
 
 /**
- * Where the Add page sends the user: the Edit page for the artwork it just
- * created, carrying `warn` when a later upload stage failed.
- *
- * The param is a query rather than state because the Edit page can be reached
- * cold — a refresh, or the URL pasted into a new tab — and a message about a
- * failed upload has to still be there. `stage` is omitted on the success path so
- * the URL stays clean; the Edit page strips the param once it has shown it, so
- * a later refresh does not re-raise a warning about an upload already fixed.
+ * The Add page is now a single write: the form fields, the client-minted
+ * artwork id, and the staged photo/document entries go up in one POST, and the
+ * API promotes the staged objects into rows in the same transaction as the
+ * fields (§6.3). That removes the three-write sequence this page used to run
+ * and the whole machinery that existed to explain it — `warn` params, stage
+ * tracking, a partial-upload toast — because there is no longer a partial
+ * save: the transaction either lands or it does not.
  */
 const ArtworkAddPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
-  // The route carries "{slug}-{id}"; the artwork must store the bare id, or the
-  // dashboard — which looks collections up by id — would not find it.
+  // The route carries "{slug}-{id}"; the API needs the bare id.
   const collectionId = parseId(param ?? "");
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  /**
-   * Where this page sends the user: the Edit page for the artwork it just
-   * created, carrying `warn` when a later upload stage failed.
-   *
-   * A query param rather than in-memory state because the Edit page can be
-   * reached cold — a refresh, or the URL pasted into a new tab — and a message
-   * about a failed upload has to still be there. `stage` is omitted on the
-   * success path so the URL stays clean, and the Edit page strips the param
-   * once shown, so a later refresh does not re-raise a warning about an upload
-   * that is already fixed.
-   *
-   * `param` is the raw route segment rather than the parsed id, because the
-   * Edit route re-parses it itself and the manage pages have always passed the
-   * slugged form straight through.
-   */
-  const editPath = (
-    title: string,
-    artworkId: string,
-    stage?: "photos" | "documents",
-  ): string => {
-    const base = `/manage/collection/${param ?? ""}/artwork/${artworkSlug(
-      title,
-      artworkId,
-    )}`;
-    return stage ? `${base}?warn=${stage}` : base;
-  };
+  // The artwork id, minted here. The staged entries are PUT under it while the
+  // form is open, and the save creates the row with it — one id, decided once,
+  // so staging and the row can never name different artworks.
+  //
+  // Hyphen-free on purpose: the edit link this save lands on is
+  // `{title}-{id}`, and the route recovers the id by cutting at the LAST
+  // hyphen. A hyphenated id would put that cut inside the id, and the page
+  // would arrive at its own work under the wrong name. The API mints its own
+  // ids the same way, so both halves of the segment obey one rule.
+  const [artworkId] = useState(() => crypto.randomUUID().replace(/-/g, ""));
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
@@ -94,12 +73,11 @@ const ArtworkAddPage: React.FC = () => {
   });
 
   const [error, setError] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [documentError, setDocumentError] = useState<string | null>(null);
   // Photos and documents live outside the form entirely — see useArtworkPhotos
-  // for why a File cannot survive `useForm` in uncontrolled mode.
-  const photos = useArtworkPhotos({ onError: setPhotoError });
-  const documents = useArtworkDocuments({ onError: setDocumentError });
+  // for why a File cannot survive `useForm` in uncontrolled mode. Staging
+  // happens at add time, under the collection the route names.
+  const photos = useArtworkPhotos({ collectionId, artworkId });
+  const documents = useArtworkDocuments({ collectionId, artworkId });
 
   return (
     <>
@@ -115,125 +93,50 @@ const ArtworkAddPage: React.FC = () => {
         // Uncontrolled mode repaints a field by remounting it, which is what
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
-          // Not field validation, so these guards stay out of the schema.
+          // Not field validation, so this guard stays out of the schema.
           if (!collectionId) {
             setError("Invalid collection id");
             return;
           }
 
-          if (!currentUser) {
-            setError("You must be signed in to add an artwork");
-            return;
-          }
-
           setError(null);
 
-          // Which write was in flight when something threw.
-          //
-          // Not inferable from the pending lists: those still hold their files
-          // after a successful upload, so "photos.pendingImages is non-empty"
-          // cannot tell you the photos were the thing that failed. It says only
-          // that some were queued, which is true of the artwork even when every
-          // one of them uploaded fine and the *documents* are what broke.
-          let stage: "create" | "photos" | "documents" = "create";
-          // Hoisted so the catch can build the redirect. `stage !== "create"`
-          // is exactly the guarantee that this is populated: the only way past
-          // the create write is to have completed it.
-          let createdId = "";
-          // The payload as written, which is the only statement of the new
-          // artwork's title that cannot disagree with Firestore. Hoisted with
-          // `createdId` because the catch names the artwork it redirected to.
-          let title = "";
-
           try {
-            // Two writes, not one. The document has to exist before Storage
-            // has an id to put objects under, and the id cannot be known
-            // before the document exists — so the artwork is created with an
-            // empty photo list and the photos are attached immediately after.
-            // A failure between the two leaves a valid artwork with no photos,
-            // which the Edit form can fix; the reverse order would leave
-            // orphaned objects in Storage.
-            const artwork = toNewArtwork(
+            // One write: the fields plus the staged entries, promoted in the
+            // same transaction. `commit()` answers null when the list is
+            // unchanged, which on a new artwork means "nothing staged".
+            const body = toArtworkCreatePayload(
               payload,
-              collectionId,
-              currentUser.uid,
+              artworkId,
+              photos.commit() ?? [],
+              documents.commit() ?? [],
             );
-            title = artwork.title;
-            createdId = await artworkService.createArtwork(artwork);
-
-            if (photos.pendingImages.length > 0) {
-              stage = "photos";
-              const uploaded = await imageService.uploadArtworkPhotos({
-                userId: currentUser.uid,
-                collectionId,
-                artworkId: createdId,
-                // Already generated when the files were added, so the save is
-                // uploads only.
-                photos: photos.pendingImages,
-              });
-              await artworkService.updateArtwork(createdId, {
-                photos: photos.mergeUploaded(uploaded),
-              });
-            }
-
-            // A second update rather than one merged with the photos above, on
-            // purpose. If documents were written in the same call, a document
-            // failure would land after the photos were already recorded and
-            // report the whole save as failed — or, if swallowed to avoid that,
-            // leave the photo references unrecorded and the objects orphaned.
-            // Two independent updates means each field is either right or
-            // untouched, and the message below can say which went wrong.
-            if (documents.pendingUploads.length > 0) {
-              stage = "documents";
-              const uploaded = await documentService.uploadArtworkDocuments({
-                userId: currentUser.uid,
-                collectionId,
-                artworkId: createdId,
-                documents: documents.pendingUploads,
-              });
-              await artworkService.updateArtwork(createdId, {
-                documents: documents.mergeUploaded(uploaded),
-              });
-            }
-
-            // One exit for every outcome. A partial failure lands here too and
-            // carries the reason in `warn`; the Edit page renders it. Holding
-            // the form open instead would mean the message told the user to
-            // "open it to try again" while the artwork is already saved and
-            // the only route to fixing it is the dashboard.
+            const created = await artworkService.createArtwork(
+              collectionId,
+              body,
+            );
             notifications.show({
               title: "Artwork created",
-              message: `"${title}" was added to this collection.`,
+              message: `"${created.title}" was added to this collection.`,
             });
-            void navigate(editPath(title, createdId));
+            void navigate(
+              `/manage/collection/${param ?? ""}/artwork/${artworkSlug(
+                created.title,
+                created.id,
+              )}`,
+            );
           } catch (err) {
             console.error("Error creating artwork:", err);
-            // The artwork exists by the time either upload can fail, so the
-            // outcome has to distinguish "nothing was saved" from "saved, minus
-            // some files" — the second is recoverable from the Edit form, and
-            // saying "failed" would send the user looking for a missing record.
-            //
-            // Keyed on the stage rather than on the pending lists, so a document
-            // failure after the photos landed does not tell the user their
-            // images are missing.
-            if (stage === "create") {
-              // Nothing was written, so the form still holds everything the user
-              // typed. Staying on it is the whole point of this branch.
-              setError("Failed to create artwork. Please try again.");
-              return;
-            }
-            // Past this point the document is written, so this form can no
-            // longer fix it. Redirect *and* say what went wrong: the message has
-            // to survive the navigation, which is what `warn` is for.
-            notifications.show({
-              title: "Artwork created",
-              color: "yellow",
-              message:
-                stage === "photos"
-                  ? "The artwork was created, but its images could not be uploaded."
-                  : "The artwork was created, but its documents could not be uploaded.",
-            });
-            void navigate(editPath(title, createdId, stage));
+            // A cap hit carries the server's own message ("at most N …"),
+            // which is the one to show; everything else stays generic so the
+            // alert does not leak a status line.
+            setError(
+              err instanceof ApiRequestError &&
+                err.status === 409 &&
+                err.code === "limit-reached"
+                ? err.message
+                : "Failed to create artwork. Please try again.",
+            );
           }
         })}
       >
@@ -385,18 +288,6 @@ const ArtworkAddPage: React.FC = () => {
         {error ? (
           <Alert color="red" mb="md">
             {error}
-          </Alert>
-        ) : null}
-
-        {photoError ? (
-          <Alert color="red" mb="md">
-            {photoError}
-          </Alert>
-        ) : null}
-
-        {documentError ? (
-          <Alert color="red" mb="md">
-            {documentError}
           </Alert>
         ) : null}
 

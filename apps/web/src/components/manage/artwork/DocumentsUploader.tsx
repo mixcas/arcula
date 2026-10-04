@@ -31,12 +31,7 @@ import {
   MAX_ARTWORK_DOCUMENTS,
   MAX_DOCUMENT_BYTES,
 } from "@arcula/shared";
-import {
-  documentImageUrl,
-  fileExtension,
-  isDocumentImage,
-} from "@/utils/artworkDocuments";
-import type { ArtworkDocument, ArtworkDocumentImage } from "@arcula/shared";
+import { documentImageUrl, isDocumentImage } from "@/utils/artworkDocuments";
 
 interface DocumentsUploaderProps {
   documents: UseArtworkDocuments;
@@ -68,9 +63,7 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
   const previewEntry = documents.entries.find(
     (entry) => entry.key === previewKey,
   );
-  const previewDocument = previewEntry
-    ? displayDocumentFor(previewEntry)
-    : null;
+  const previewDocument = previewEntry?.document ?? null;
   const previewImage =
     previewDocument && isDocumentImage(previewDocument)
       ? previewDocument
@@ -81,16 +74,28 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
     // Never swallowed. The accept list here is broader than the photos one, so
     // a mixed drop rejecting half its files is an ordinary thing to do, and a
     // file that silently vanished from the list is worse than a message.
-    setRejected(
-      result.rejected.map((entry) => `${entry.file.name}: ${entry.reason}`),
-    );
+    //
+    // Appended, and skipped when empty: the reject handler below fires
+    // synchronously for the files the Dropzone's own validator refused, and
+    // this settles a tick later. Replacing here would erase that half of the
+    // list the moment the staging settled, and the two halves are disjoint —
+    // a file is either validator-refused or hook-processed, never both.
+    if (result.rejected.length === 0) {
+      return;
+    }
+    setRejected((current) => [
+      ...current,
+      ...result.rejected.map((entry) => `${entry.file.name}: ${entry.reason}`),
+    ]);
   };
 
   // The other rejection path, and the one that actually fires for an oversized
   // file: Dropzone checks `maxSize` itself and never calls `onDrop`, so an
   // unhandled `onReject` means a 30 MB PDF produces a one-frame flicker of
   // "That file cannot be added" and no explanation. The 25 MiB cap makes that
-  // routine rather than exotic, so the reason is folded into the same list.
+  // routine rather than exotic. This fires synchronously, before any staging
+  // has settled, so it starts the list and the hook's rejections are appended
+  // to it.
   const handleReject = (failures: FileRejection[]) => {
     setRejected(
       failures.map(
@@ -108,9 +113,10 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
         onDrop={(files) => {
           void handleDrop(files);
         }}
-        // The files have already been chosen by the time this fires, so the hook
-        // re-validates each one. That is the point: Dropzone's accept list is a
-        // file-picker hint and the OS can still hand over anything.
+        // `accept` is enforced twice: the Dropzone's validator refuses a
+        // mismatch on the way in (the `onReject` path below), and the hook
+        // re-checks the same list for any caller that bypasses the component.
+        // Neither spends a round trip on a wrong type.
         accept={ACCEPTED_DOCUMENT_TYPES}
         maxSize={MAX_DOCUMENT_BYTES}
         maxFiles={Math.max(1, MAX_ARTWORK_DOCUMENTS - documents.count)}
@@ -199,45 +205,22 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
   );
 };
 
-/** The stored document, or the transient stand-in for a pending one. */
-const displayDocumentFor = (entry: DocumentEntry): ArtworkDocument =>
-  entry.status === "stored"
-    ? entry.document
-    : (entry.preview ?? emptyDocument(entry));
-
 /**
- * A placeholder for a pending image whose variants have not finished encoding.
+ * The icon for a non-image, chosen by content type.
  *
- * It has to be an `ArtworkDocument` for the caller to branch on `kind`, and it
- * has to be recognisable as "nothing yet" — hence no URL, which is what makes
- * the row render its box rather than a broken image.
- */
-const emptyDocument = (entry: DocumentEntry): ArtworkDocumentImage => ({
-  id: "",
-  kind: "image",
-  name: entry.status === "stored" ? entry.document.name : entry.file.name,
-  size: entry.status === "stored" ? entry.document.size : entry.file.size,
-  contentType: "",
-  width: 0,
-  height: 0,
-  original: { url: "", size: 0, contentType: "" },
-  variants: [],
-});
-
-/**
- * The icon for a non-image, chosen by extension.
- *
- * Extension rather than content type, because the badge is there to tell the
- * user which file they picked. A generic page glyph as the fallback means a
- * type this app did not anticipate still renders sensibly instead of a blank
- * tile — which matters more than it sounds, since the list is exactly where
- * someone would notice a file they did not expect.
+ * Content type rather than filename, because that is what the server knows:
+ * the entry's `contentType` is the value the staged object was named from, so
+ * it cannot disagree with what the row actually points at. A generic page glyph
+ * as the fallback means a type this app did not anticipate still renders
+ * sensibly instead of a blank tile — which matters more than it sounds, since
+ * the list is exactly where someone would notice a file they did not expect.
  *
  * A boolean rather than a component: returning a component from a function
  * called during render is flagged by `react-hooks/static-components`, and the
  * rule is right — the component identity would change on every render.
  */
-const isPdf = (name: string): boolean => fileExtension(name) === "pdf";
+const isPdf = (contentType: string): boolean =>
+  contentType === "application/pdf";
 
 interface DocumentRowProps {
   entry: DocumentEntry;
@@ -250,15 +233,12 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
   onRemove,
   onPreview,
 }) => {
-  const document = displayDocumentFor(entry);
+  const document = entry.document;
   const isImageEntry = isDocumentImage(document);
   const thumbnail = isImageEntry ? documentImageUrl(document) : null;
-  // A file is ready the moment it is added — there is nothing to generate. Only
-  // an image waits, and only until its variants land, so this must not key off
-  // `status === "pending"` or a PDF would say "preparing" forever.
-  const isPreparing = entry.status === "pending" && isImageEntry && !thumbnail;
-  // A pending image has no variants yet, so there is nothing to open; the row
-  // stays a plain, non-interactive label until the pipeline lands.
+  // An entry only exists once the server has answered for it, so both kinds
+  // are complete: an image has its variants (and a thumbnail) and a file has
+  // its original. There is no "preparing" state to draw.
   const canOpen = isImageEntry ? thumbnail !== null : !!document.original.url;
 
   const leading = thumbnail ? (
@@ -279,12 +259,7 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
       color="gray"
       style={{ flexShrink: 0 }}
     >
-      {isPreparing ? (
-        // Distinguishes "an image that is still encoding" from "a file": a
-        // photo glyph, not a page glyph, so the row does not appear to have
-        // changed kind halfway through.
-        <IconPhoto size={22} />
-      ) : isPdf(document.name) ? (
+      {isPdf(document.contentType) ? (
         <IconFileTypePdf size={22} />
       ) : (
         <IconFileText size={22} />
@@ -299,7 +274,6 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
       </Text>
       <Text size="xs" c="dimmed">
         {formatBytes(document.size)}
-        {isPreparing ? " · preparing" : ""}
       </Text>
     </Box>
   );
