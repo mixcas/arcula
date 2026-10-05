@@ -12,3 +12,4 @@ export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
 export * from "./schemas/collection";
 export * from "./schemas/document";
+export * from "./schemas/user";

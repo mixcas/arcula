@@ -8,20 +8,14 @@
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { z } from "zod";
 import { user as userTable } from "@arcula/db";
+import { mePatchSchema } from "@arcula/shared";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { requireSession, type SessionUser } from "../session";
 
 // Anything outside this set on a PATCH body is server-managed.
 const WRITABLE = ["firstName", "lastName", "settings"] as const;
-
-const patchSchema = z.object({
-  firstName: z.string().min(1).max(200).optional(),
-  lastName: z.string().min(1).max(200).optional(),
-  settings: z.record(z.string(), z.unknown()).optional(),
-});
 
 function serializeUser(row: typeof userTable.$inferSelect): SessionUser {
   return {
@@ -83,7 +77,7 @@ meRoutes.patch("/me", async (c) => {
     );
   }
 
-  const parsed = patchSchema.safeParse(raw);
+  const parsed = mePatchSchema.safeParse(raw);
   if (!parsed.success) {
     const fields: Record<string, string> = {};
     for (const issue of parsed.error.issues) {

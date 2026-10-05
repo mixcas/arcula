@@ -4,6 +4,7 @@
 // Driven in-process with app.request() against the real stack, exactly
 // as tests/auth.api.test.ts (see the decision recorded in §15).
 
+import { sessionUserSchema } from "@arcula/shared";
 import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
 import { afterAll, describe, expect, it } from "vitest";
@@ -87,6 +88,40 @@ describe("GET /api/v1/me", () => {
     const err = await json<Envelope>(res);
     expect(err.error.code).toBe("unauthorized");
     expect(typeof err.error.message).toBe("string");
+  }, 15000);
+
+  // The sign-up page's seam: the custom fields ride the sign-up body as
+  // additional fields, the DB default fills the tier, and /me serves all
+  // of it back. Parsed through the client's wire contract on the way out,
+  // so a serializer↔schema drift fails here instead of as a parse error in
+  // the browser.
+  it("lands a sign-up's custom fields on the user row and serves them with the tier default", async () => {
+    const email = `me-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
+    const up = await req("POST", "/api/auth/sign-up/email", {
+      body: {
+        name: "Nina Solar",
+        email,
+        password: "me-pass-12345",
+        firstName: "Nina",
+        lastName: "Solar",
+      },
+    });
+    expect(up.status).toBe(200);
+    const cookies = up.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .filter((c) => !c.includes("Max-Age=0"))
+      .join("; ");
+
+    const res = await req("GET", "/api/v1/me", { cookies });
+    expect(res.status).toBe(200);
+    const me = sessionUserSchema.parse(await json<unknown>(res));
+    expect(me.email).toBe(email);
+    expect(me.name).toBe("Nina Solar");
+    expect(me.firstName).toBe("Nina");
+    expect(me.lastName).toBe("Solar");
+    expect(me.tier).toBe("free");
+    expect(me.emailVerified).toBe(false);
   }, 15000);
 });
 
