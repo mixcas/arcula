@@ -1365,6 +1365,18 @@ http://localhost:8000`, `changeOrigin`) forwards it; prod is same-origin
   deploy path yet — deliberately out of Phase 4's scope, which stops at the
   local stack.
 
+- **2026-10-04 — `dev:api` sources the root `.env` explicitly; the S1 "works
+  inside the root dev chain" claim is withdrawn.** A fresh `bun run dev`
+  crashed `dev:api` at module load with `EMAIL_FROM is required to send
+mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
+  it does not walk up parent directories), and the nested `bun run` chain did
+  not carry the root `.env` down either. It had never actually been
+  verified — every API instance that had worked so far came up through
+  `ensure-api.sh`, which sources `.env` explicitly. The fix is the pattern
+  every other `apps/api` script already uses (`db:*`, `test`): `dev` now
+  runs `set -a && . ../../.env && set +a && bun --watch src/main.ts`. Vite
+  was never affected — `vite.config.ts` loads the root `envDir` itself.
+
 ---
 
 ## Closing

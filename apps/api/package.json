@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/main.ts",
+    "dev": "set -a && . ../../.env && set +a && bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "db:migrate": "set -a && . ../../.env && set +a && bun scripts/db-migrate.ts",
     "db:reset": "set -a && . ../../.env && set +a && bun scripts/db-reset.ts",
