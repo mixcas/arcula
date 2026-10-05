@@ -16,6 +16,7 @@ import { artworkRoutes } from "./routes/artworks";
 import { collectionRoutes } from "./routes/collections";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
+import { spaMiddleware } from "./spa";
 
 export const app = new Hono();
 
@@ -50,3 +51,8 @@ app.route("/api/v1", mediaRoutes);
 app.route("/api/v1", collectionRoutes);
 app.route("/api/v1", artworkMediaRoutes);
 app.route("/api/v1", artworkRoutes);
+
+// The built SPA (plan §10.2), after every API mount: a request the API
+// already answered never reaches here, and the middleware guards /api
+// itself, so this stays correct even if a route above moves.
+app.use("*", spaMiddleware);
