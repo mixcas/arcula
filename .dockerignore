@@ -1,0 +1,12 @@
+# The build context is the repo root; keep the image inputs small and
+# secret-free.
+.git
+dist
+**/node_modules
+apps/web/dist
+.env
+.env.*
+.agents
+.llms
+CLAUDE.md
+*.zip

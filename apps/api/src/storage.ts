@@ -7,9 +7,16 @@
 //
 // The client reads its config at import time, like env.ts. The `test`
 // and `dev` scripts source the root .env first, so every entry point
-// sees the same values; a missing endpoint or credential throws here
-// rather than silently falling through to AWS's default endpoint and
-// the ambient credential chain.
+// sees the same values; a missing endpoint or bucket throws here rather
+// than silently falling through to AWS's default endpoint.
+//
+// Credentials have two sources, in order: the explicit
+// S3_ACCESS_KEY/S3_SECRET_KEY pair (local dev — .env points the client
+// at the SeaweedFS stand-in), and, when absent, the SDK's default
+// credential chain — which on the Lambda is its IAM role, so the
+// production environment carries no long-lived keys. A deployment
+// without either fails on the first object operation with the SDK's
+// no-credentials error, not silently.
 
 import {
   CopyObjectCommand,
@@ -38,10 +45,15 @@ export const s3 = new S3Client({
   endpoint: required("S3_ENDPOINT"),
   region: process.env.S3_REGION ?? "us-east-1",
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
-  credentials: {
-    accessKeyId: required("S3_ACCESS_KEY"),
-    secretAccessKey: required("S3_SECRET_KEY"),
-  },
+  // Static keys when the env carries them (local dev), otherwise the
+  // default chain — the Lambda's IAM role in production.
+  credentials:
+    process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY
+      ? {
+          accessKeyId: process.env.S3_ACCESS_KEY,
+          secretAccessKey: process.env.S3_SECRET_KEY,
+        }
+      : undefined,
 });
 
 /**

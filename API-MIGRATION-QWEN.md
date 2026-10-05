@@ -1438,6 +1438,70 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   re-renders nothing on purpose — so a live read outside the submit path is
   `form.getValues()` (the internal ref the submit path validates).
 
+- **2026-10-05 — Phase 6 S1–S3: local stack pinned, SPA serving in the
+  API, the Lambda package verified, the WASM fallback discarded.**
+  (a) **Compose is pinned to `postgres:16.15`** — the floating `:16` tag
+  let a fresh `up` on another machine pull a different minor; the prod
+  RDS runs the same major (16), the minor stays a local concern.
+  (b) **The API now serves the built SPA** (`apps/api/src/spa.ts`, plan
+  §10.2): one artifact behind one origin. Path logic — /api is never the
+  SPA's (guarded regardless of mount order); a dist file hit serves with
+  a content type and the cache table; a path that would escape the dist
+  root is a 404, never a read; anything else is a client route and gets
+  `index.html` (the in-app 404 is the router's). The cache table is the
+  load-bearing part: `index.html` is never cached (a stale shell 404s on
+  the new deploy's hashed assets), `/assets/*` is immutable, the rest
+  short-lived. Inert with no dist tree, so Vite stays the dev origin.
+  `WEB_DIST` is the one knob (default: the repo layout). Nine cases pin
+  it in `spa.api.test.ts` against a throwaway fixture dist.
+  (c) **The Lambda entry** (`apps/api/src/lambda.ts`): API Gateway
+  payload 2.0 ↔ Request/Response. The detail that fails silently in
+  production: **Set-Cookie must travel via `multiValueHeaders`** — the
+  standard Headers view comma-joins multiple cookies and mangles the
+  session in a way no screenshot shows; the event's `cookies` array is
+  joined back into one request header, and binary answers (the API
+  proxies media bytes) are base64 by a text-type allowlist. `main.ts`
+  (`Bun.serve`) stays the local entry; the app code is runtime-agnostic
+  (the whole API suite already runs it under Node via vitest). Six cases
+  pin the conversions in `lambdaEntry.test.ts`, including the
+  cookie-split shape.
+  (d) **Sharp verdict — risk #1, the glibc/container side: the native
+  prebuilt works; the WASM fallback is discarded.** The deploy package
+  (code bundle + `@img/sharp-linux-arm64`) was smoked inside a glibc
+  arm64 container on a real 4000×3000 JPEG: ~220 ms per photo (orient
+  ~15 ms + five WebP encodes ~205 ms) — far under the ~3 s/photo beta
+  target. The package (13 MB: the libvips prebuilt plus the built SPA)
+  is well inside the 250 MB deploy limit; handler is `index.handler`.
+  The package carries a FRESH web build — the script builds it, because
+  a stale dist would ship an old app under the new API — served by
+  `spa.ts` through `WEB_DIST=/var/task/web/dist`.
+  `scripts/build-lambda.sh` fails the build when the smoke fails, so a
+  prebuilt that stops loading never ships.
+  (g) **S3 credentials are two-source** (`storage.ts`): the explicit
+  `S3_ACCESS_KEY`/`S3_SECRET_KEY` pair when the env carries it (local
+  dev → SeaweedFS), otherwise the SDK's default credential chain — the
+  Lambda's IAM role in production, so the deployed environment carries
+  no long-lived keys. Endpoint/region/bucket stay required: the
+  fail-loud doctrine is what keeps a local misconfiguration from
+  silently aiming at the real AWS endpoint.
+  (e) **Runtime stand-in, recorded:** the AWS public ECR images are not
+  reachable from this machine's docker registry (docker.io is), so the
+  smoke ran on `node:20` (Debian glibc, arm64) — the same Node ABI and
+  glibc the Lambda Node 20 runtime has. The Lambda runtime itself is
+  verified by the real deploy (S5), which also gets HTTPS for free from
+  API Gateway (the §10 "HTTP-only" Phase 6 criterion is met with room
+  to spare; `arcula.art` stays a Phase 7 item).
+  (f) **Smoke design:** the package runs in-container against the local
+  dev Postgres (compose network). S3 is deliberately absent — the AWS
+  SDK storage path is pure JS, proven host-side against SeaweedFS, and
+  SeaweedFS is bound to the host loopback (unreachable from a container);
+  Sharp is driven straight through the pipeline, so the measured number
+  is the process route's work minus the storage round trip. Two gotchas
+  recorded: the app's DB pool keeps `node` alive after the last
+  assertion (the smoke must `process.exit` or the container hangs), and
+  the in-container `npm install` of the sharp prebuilt takes ~10 min on
+  this network — expected, not a hang.
+
 ---
 
 ## Closing
