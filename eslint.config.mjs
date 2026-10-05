@@ -20,6 +20,8 @@ export default tseslint.config(
     // Unanchored: build output and node_modules now live under apps/* too.
     "**/dist/**",
     "**/node_modules/**",
+    // CDK synth output (generated template + the 13 MB asset copy).
+    "**/cdk.out/**",
     "apps/web/public/**",
     "functions/lib/**",
     "eslint.config.mjs",
@@ -98,6 +100,9 @@ export default tseslint.config(
       "apps/api/scripts/**/*.ts",
       "apps/api/tests/**/*.ts",
       "apps/api/vitest.config.ts",
+      // The standalone CDK app (own tsconfig, own tsc at synth; Node
+      // context — process, __dirname, fs).
+      "infra/cdk/src/**/*.ts",
     ],
     languageOptions: {
       globals: { ...globals.node },

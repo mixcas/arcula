@@ -729,27 +729,33 @@ locally. No framework ceremony.
 
 ### 10.1 The stack
 
-One CDK app (`infra/cdk`, TypeScript); context vars `STACK_REGION`,
-`DOMAIN`, `CERT_ARN`. Everything region-scoped lands in **`us-east-1`
-(locked, v3)** — that is the one decision that is expensive to redo: RDS,
-S3, the ACM cert, the ECR image, the ALB, and the VPC all live in the
-region.
+One CDK app (`infra/cdk`, TypeScript, standalone — not a workspace
+member). Values arrive at deploy time as `-c` context, never in the app
+(§15 S4). Everything region-scoped lands in **`us-east-1` (locked, v3)**
+— S3, and in Phase 7 the ACM cert and custom domain; Postgres is the
+exception and lives outside AWS (Supabase, below).
 
-| Construct      | Choice                                                                               | Notes                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VPC            | two subnets (public + private), default config                                       | ALB in public, everything else in private                                                                                                                        |
-| RDS            | Postgres 16, `db.t3.micro`, single-AZ in beta, gp3                                   | beta sizing; Multi-AZ and a bigger class are scale decisions, not beta ones. **No data migration** (§0.1) — the DB starts empty; `db:migrate` creates the schema |
-| S3             | one bucket; `LifecycleRule` prefix `staging/`, expire 7 days; `BlockPublicAccess` on | the v3 key fix (§6) is what makes the prefix rule expressible                                                                                                    |
-| SecretsManager | `DATABASE_URL`, `AUTH_SECRET`, `RESEND_API_KEY`                                      | looked up by name; the CDK app never contains values                                                                                                             |
-| ECS            | Fargate, **single service** `api`                                                    | one task type runs the whole product: API + the built SPA (§10.2). Beta: fixed 2 tasks, no autoscaling — the cap implies a tiny fleet                            |
-| ECR            | one repository                                                                       | image built locally, pushed (§10.4)                                                                                                                              |
-| ALB            | L7, public subnet; 80 (redirect →443) + 443 (cert) → task:8000                       |                                                                                                                                                                  |
-| CloudWatch     | default metrics; the api log stream (awslogs)                                        |                                                                                                                                                                  |
+> **Amended 2026-10-05 (cost ruling, §15 S4).** The beta is mostly
+> idle, so the original shape — VPC, RDS, ECS/Fargate, ECR, ALB,
+> SecretsManager, ~$27–48/mo of 24/7 line items — was replaced by the
+> Lambda shape below (~$0–3/mo, inside the account's $100/180-day
+> credit). The original table survives in git history; the `t4g` EC2 +
+> `oven/bun` container is the documented scale-up path for when the
+> workload goes always-on.
 
-Migrations never run inside CDK: the stack creates an **empty** DB, and
-migrations are **SQL files** (`packages/db` generates them; `db:migrate`
-applies whatever `DATABASE_URL` it is pointed at). Prod = apply the same
-SQL to the prod URL.
+| Construct  | Choice                                                                                                      | Notes                                                                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3         | one bucket; private, encrypted, `enforceSSL`; `LifecycleRule` prefix `staging/`, expire 7 days              | the v3 key fix (§6) is what makes the prefix rule expressible; the Lambda reaches it through its IAM role — no long-lived keys in the deployed env                                            |
+| Lambda     | Node 20, **ARM_64**, 3 GB, 300 s; `index.handler` from the S3 package                                       | one function runs the whole product: API + the built SPA (§10.2). The package (bundle + native Sharp + fresh web build) is built and smoked by `scripts/build-lambda.sh` before it ships      |
+| HTTP API   | one catch-all route `ANY /{$request: *}` (AWS_PROXY, payload 2.0); 29 s integration timeout, set on purpose | **HTTPS by default** (AWS-managed cert on the `execute-api` name) — Phase 6's "no cert yet" is satisfied with room to spare; the 29 s cap is a service hard limit (§15 S4 f)                  |
+| Postgres   | **Supabase free tier, out of band** — `DATABASE_URL` points at its direct connection string                 | no RDS: the beta's DB is small, the Supabase free tier is _ongoing_ (no 180-day cliff) and managed with backups; the 500 MB cap and the ~1-week idle pause are accepted for the beta (§15 S4) |
+| dropped    | VPC, ECS/Fargate, ECR, ALB, SecretsManager                                                                  | every one was a 24/7 line item; the secrets ride `-c` context at deploy, the S3 credential rides the IAM role                                                                                 |
+| CloudWatch | default metrics + the Lambda's log group                                                                    | no custom configuration in beta                                                                                                                                                               |
+
+Migrations never run inside CDK: the DB starts **empty** (a fresh
+Supabase project), and migrations are **SQL files** (`packages/db`
+generates them; `db:migrate` applies whatever `DATABASE_URL` it is
+pointed at). Prod = apply the same SQL to the prod URL.
 
 ### 10.2 The container
 
@@ -944,13 +950,19 @@ existing 409 message is the answer; §15).
 its password, is blocked at the cap with the right message, and the cap
 cases in §11 pass.
 
-### Phase 6 — Local polish + container + CDK stack
+### Phase 6 — Local polish + Lambda package + CDK stack [amended 2026-10-05]
 
-Compose file finalized; Dockerfile (`oven/bun`, §10.2) with the WASM
-fallback verified or dismissed; `infra/cdk` (VPC/RDS/S3+LifecycleRule/
-Secrets/ECR/ECS/ALB/CloudWatch, §10.1).
-**Done when:** the container runs the full api; the CDK stack deploys
-HTTP-only (no `DOMAIN`/`CERT_ARN` yet) and the app works against it.
+Compose file finalized; static SPA serving in the API (§10.2, one
+artifact behind one origin); the Lambda deploy package (code bundle +
+native Sharp + a fresh web build) with the glibc smoke — risk #1
+verified in-container, WASM fallback discarded; the `oven/bun`
+Dockerfile as the EC2 scale-up path; `infra/cdk` in the Lambda shape
+(S3+LifecycleRule, one Lambda, HTTP API — §10.1 amended per the cost
+ruling, §15).
+**Done when:** the package smokes green on glibc (Sharp verdict
+recorded); `cdk synth` is green with no AWS account; the stack deploys
+with no `DOMAIN`/`CERT_ARN` and the app works against it (HTTPS comes
+free with the HTTP API; the custom domain is Phase 7).
 
 ### Phase 7 — Production cutover + docs
 
@@ -1501,6 +1513,58 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   assertion (the smoke must `process.exit` or the container hangs), and
   the in-container `npm install` of the sharp prebuilt takes ~10 min on
   this network — expected, not a hang.
+
+- **2026-10-05 — Phase 6 S4: the Lambda-shaped stack; §10.1's
+  ALB/ECS/ECR/RDS shape is replaced (owner's ruling).**
+  (a) **The ruling and the arithmetic.** The beta is mostly idle, so the
+  24/7 line items are the enemy: the original §10.1 shape is
+  ~$27–48/mo of standing cost (ALB ~$18, 2× Fargate ~$18, RDS ~$14),
+  while the Lambda shape is ~$0–3/mo and fits the account's
+  $100/180-day credit with room to spare. Primary target is therefore
+  one Lambda (API + built SPA) behind an HTTP API, S3 for media, and
+  Postgres **out of band in Supabase** (free tier, created manually).
+  §10.1's table is amended in place at S5 (with the deploy record); the
+  `t4g` EC2 + `oven/bun` container from S3 is the documented scale-up
+  path for when the workload goes always-on.
+  (b) **`infra/cdk`** (standalone TS project, deliberately not a
+  workspace member): the S3 bucket (private, encrypted, `enforceSSL`,
+  `staging/` 7-day lifecycle — the same rule local self-heal counts
+  on), one Lambda (Node 20, **ARM_64 to match the package**, 3 GB for
+  Sharp's 12 MP headroom, 300 s timeout), and an HTTP API with a single
+  catch-all route `ANY /{$request: *}` (AWS_PROXY, payload 2.0 — the
+  S3 entry contract). No VPC (the Lambda reaches Supabase and S3
+  directly), no custom CloudWatch (default log group). Outputs:
+  `ExecuteApiUrl` and `MediaBucket`.
+  (c) **The CDK app contains no values** (the §10.1 doctrine, kept):
+  the secrets arrive at deploy time as `-c` context (`DATABASE_URL`,
+  `AUTH_SECRET`, `RESEND_API_KEY`, `PUBLIC_URL`, `EMAIL_FROM`); absent
+  context falls back to placeholders at synth, so `cdk synth` stays
+  green with no AWS account and no secrets, and the deploy script (S5)
+  enforces the real values before `cdk deploy`.
+  (d) **`PUBLIC_URL` is two-step by construction:** the HTTP API's URL
+  exists only after the first deploy, so the deploy sequence is deploy →
+  read `ExecuteApiUrl` → re-deploy with the real URL. The Lambda is
+  stateless (its DB is Supabase), so the re-deploy costs nothing;
+  Phase 7's custom domain makes the URL stable for good.
+  (e) **Region is `--region`** (us-east-1 locked, §10.3) — the plan's
+  `STACK_REGION` context is satisfied by the standard CDK mechanism;
+  `DOMAIN`/`CERT_ARN` stay Phase 7 items, at which point §10.3's
+  443/redirect discussion is amended for the custom-domain-on-HTTP-API
+  shape (no ALB to hang a listener on).
+  (f) **The HTTP API integration timeout caps at 29 s** (a hard limit of
+  the service). It is set on purpose: the measured worst case (a
+  10-photo save) is single-digit seconds, and a request that outgrows
+  29 s is a signal to move the work off the request path, not to wait
+  longer for it.
+  (g) **The Lambda's S3 access is its IAM role** (`grantReadWrite` on
+  the bucket — the app's put/get/head/delete/list surface), via
+  storage.ts's default-credential-chain branch: no long-lived keys in
+  the deployed environment.
+  (h) **Repo integration:** `infra/cdk` is standalone — its own
+  tsconfig, its own tsc at synth, its own typescript pin — and is not in
+  the root tsc chain; the root eslint lints it type-aware under the
+  Node globals block; `cdk.out` (generated template + the 13 MB asset
+  copy) is ignored by git, Prettier, and eslint.
 
 ---
 

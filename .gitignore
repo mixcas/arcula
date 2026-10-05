@@ -8,6 +8,8 @@ node_modules
 # build (any level — apps/web/dist, future api dists)
 dist
 build
+# CDK synth output (generated template + the asset copy)
+cdk.out
 
 # env
 .env

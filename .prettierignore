@@ -8,6 +8,8 @@ dist
 build
 coverage
 .pnp
+# CDK synth output (generated CloudFormation template + asset copies).
+cdk.out
 
 # Lockfiles are generated and should never be (re)formatted.
 # `bun.lock` is present locally but NOT git-ignored, and Prettier has no parser
