@@ -12,7 +12,10 @@
 
 services:
   postgres:
-    image: postgres:16
+    # Pinned to the minor the stack is actually running (16.15), so a fresh
+    # `docker compose up` on another machine pulls the same server. RDS in
+    # prod runs the same major (Phase 6); the minor is a local concern.
+    image: postgres:16.15
     ports:
       - "5432:5432"
     environment:
