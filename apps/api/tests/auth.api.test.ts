@@ -156,6 +156,55 @@ describe("sign-in", () => {
   }, 15000);
 });
 
+describe("change-password", () => {
+  // The profile page's seam: the page calls this native endpoint, so its
+  // failure vocabulary (native codes, not the §7 envelope) is pinned here.
+  it("rejects a wrong current password with the native INVALID_PASSWORD code", async () => {
+    const email = unique();
+    const up = await req("POST", "/api/auth/sign-up/email", {
+      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+    });
+    const cookies = cookieHeader(up)!;
+
+    const wrong = await req("POST", "/api/auth/change-password", {
+      cookies,
+      body: {
+        currentPassword: "not-the-password",
+        newPassword: "new-pass-12345",
+      },
+    });
+    expect(wrong.status).toBe(400);
+    expect((await json(wrong))?.code).toBe("INVALID_PASSWORD");
+  }, 15000);
+
+  it("changes the password — the old one stops resolving, the new one works", async () => {
+    const email = unique();
+    const up = await req("POST", "/api/auth/sign-up/email", {
+      body: { email, password: "old-pass-12345", name: "S2 Test" },
+    });
+    const cookies = cookieHeader(up)!;
+
+    const changed = await req("POST", "/api/auth/change-password", {
+      cookies,
+      body: {
+        currentPassword: "old-pass-12345",
+        newPassword: "new-pass-12345",
+      },
+    });
+    expect(changed.status).toBe(200);
+
+    const stale = await req("POST", "/api/auth/sign-in/email", {
+      body: { email, password: "old-pass-12345" },
+    });
+    expect(stale.status).toBe(401);
+
+    const fresh = await req("POST", "/api/auth/sign-in/email", {
+      body: { email, password: "new-pass-12345" },
+    });
+    expect(fresh.status).toBe(200);
+  }, 15000);
+});
+
 describe("sign-out", () => {
   it("kills the session and clears the cookie", async () => {
     const email = unique();

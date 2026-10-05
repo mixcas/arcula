@@ -11,6 +11,7 @@ import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
+import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import PublicArtworkPage from "./components/collection/PublicArtworkPage";
@@ -46,6 +47,16 @@ const App: React.FC = () => {
             <ProtectedRoute>
               <ManageLayout>
                 <NewCollectionPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/profile"
+          element={
+            <ProtectedRoute>
+              <ManageLayout>
+                <ProfilePage />
               </ManageLayout>
             </ProtectedRoute>
           }

@@ -77,3 +77,37 @@ export const resetPasswordSchema = z
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
+
+/**
+ * The profile name form. A blank half is _not_ a value: the PATCH contract
+ * leaves absent keys alone, so a blank is sent as absent (leave alone),
+ * never as `""` — which the shared `mePatchSchema` correctly rejects on the
+ * wire. That is why this schema allows blanks where the wire schema does
+ * not.
+ */
+export interface ProfileNameFormValues {
+  firstName: string;
+  lastName: string;
+}
+
+export const profileNameSchema = z.object({
+  firstName: z.string().trim().max(200),
+  lastName: z.string().trim().max(200),
+});
+
+export interface ChangePasswordFormValues {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password"),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm the new password"),
+  })
+  .refine((values) => values.newPassword === values.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
