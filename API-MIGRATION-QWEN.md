@@ -932,13 +932,17 @@ test suite is green.
 
 ### Phase 5 — Beta scope [v3]
 
-`/signup` screen (and the link off `/login`); `ProfilePage` (first name,
-last name, change password — avatar deferred to Phase 8); the
-one-collection cap: API enforcement (409 `limit-reached`, §1) + UI
-reflection (`ManagePage`/`NewCollectionPage` read
-`COLLECTION_LIMITS[me.tier]`).
-**Done when:** a fresh local account can sign up, set its profile, is
-blocked at the cap with the right message, and the cap cases in §11 pass.
+`/signup` screen (and the link off `/login`); the forgot-password path on
+the same page plus the `/reset-password/[token]` form the live reset mail
+points at; `ProfilePage` (first name, last name, change password — avatar
+deferred to Phase 8); the one-collection cap: API enforcement
+(409 `limit-reached`, §1) + UI reflection (`ManagePage` reads
+`COLLECTION_LIMITS[me.tier]` via `collectionLimitForTier`; an at-cap direct
+hit on `/manage/collection/new` is **deferred** — no redirect, the form's
+existing 409 message is the answer; §15).
+**Done when:** a fresh local account can sign up, set its profile, change
+its password, is blocked at the cap with the right message, and the cap
+cases in §11 pass.
 
 ### Phase 6 — Local polish + container + CDK stack
 
@@ -1377,27 +1381,63 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   runs `set -a && . ../../.env && set +a && bun --watch src/main.ts`. Vite
   was never affected — `vite.config.ts` loads the root `envDir` itself.
 
+- **2026-10-05 — Phase 5: beta scope landed (S1–S3).** The sign-up screen,
+  the password-reset path, the profile page, and the cap UI:
+  (a) **Sign-up collects email + password + first/last name** (owner's
+  ruling). Better Auth's sign-up body requires the core `name`, so the
+  payload derives `name` from the trimmed first + last, and the custom
+  fields ride the same body as additional fields (the handler forwards
+  every key it does not own to the user row); `me.api.test.ts` pins the
+  seam end to end (sign up with fields → `GET /me` serves them back plus
+  the `tier` default). The error codes are Better Auth's native ones
+  (422 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`, 400 `INVALID_EMAIL` /
+  `PASSWORD_TOO_SHORT`), not the Firebase codes `project-plan.md` §3
+  listed — that section predates the cutover.
+  (b) **Forgot-password is in Phase 5** (owner's ruling; `project-plan.md`:
+  reset "belongs on the same page" as sign-up): a request mode on
+  `/signup` plus the `/reset-password/[token]` form. The API side was live
+  since Phase 2 (routes + mail hook, pinned by `email.api.test.ts`) — what
+  was missing was the page the mail's token link lands on; the catch-all
+  route used to send the token back to `/`.
+  (c) **The `/me` foundation.** `sessionUserSchema` + `mePatchSchema` in
+  `packages/shared` (the wire contract; `me.ts` now validates against the
+  shared patch schema instead of a local copy), `meService` parses both
+  directions through them, and `AuthProvider` fetches `/me` once the
+  session is known and exposes `me` on the context — a failed read degrades
+  to `null`, and tier UI falls back to the free limit, the same fallback
+  the API makes. `toAuthError` (auth/errors.ts) centralises better-fetch's
+  non-rejecting failure shape (`{ data: null, error }` → a real `Error`
+  carrying `status`/`code`).
+  (d) **The profile page** (`/manage/profile`): name through
+  `PATCH /api/v1/me`, password through Better Auth's native
+  `change-password` — the old `reauthenticateWithCredential` dance the
+  project plan described is the endpoint's own `currentPassword` check on
+  this stack. The name save sends only the changed, non-blank keys (a blank
+  is not a value: absent keys are "leave alone" on the PATCH, and the
+  shared `mePatchSchema` rejects `""` on the wire), and a no-change submit
+  is no write at all. The user menu replaces the empty avatar with an
+  initials avatar plus a label on the fallback chain the data actually
+  has: first + last (the profile) → the session's core `name` (the seeded
+  account has one but no first/last yet) → the email.
+  (e) **The cap UI.** `ManagePage` gains the New-collection button (which
+  the S2–S5 rewrite had lost — it existed in the Firebase-era page) and an
+  "N of 1" counter; the limit reads through `collectionLimitForTier`
+  (unknown/absent tier → free), which the API's create check now uses too —
+  one function on both sides, pinned by
+  `packages/shared/tests/limits.test.ts`. The at-cap control is a real
+  disabled `<button>`, not a disabled `component={Link}`: a disabled anchor
+  is not a thing, and the failure the test exists for is a control that
+  looks capped but still navigates to a form the server refuses.
+  (f) **The at-cap direct hit on `/manage/collection/new` is deferred**
+  (owner's ruling): no redirect, no cap state on the page — the form
+  renders and submitting shows the existing 409 `limit-reached` envelope
+  message. `project-plan.md`'s "redirects to the collection the account
+  already has" stands as the recorded spec for a future pass.
+  Mantine 9.6.3 gotcha, recorded for the next person: in uncontrolled
+  `useForm`, `form.values` is a snapshot of the last render — typing
+  re-renders nothing on purpose — so a live read outside the submit path is
+  `form.getValues()` (the internal ref the submit path validates).
+
 ---
 
 ## Closing
-
-Status: **v3 approved 2 Oct 2026; implementation-ready (Phase 0).**
-
-This file is now the single authoritative record of the plan. v1 survives
-in git history; v2 existed only in conversation — everything worth keeping
-from it is folded in above, with the v3 changes (the typed-columns `user`
-table, §0.3; the Porkbun/`us-east-1` DNS story, §10.3; the `staging/`-
-leading key, §6) marked at the point of change.
-
-Rules of the road for implementation:
-
-- **Phases are gates.** Each exit criterion green before the next phase
-  starts (§12). A phase that cannot reach its exit criterion is a signal to
-  re-plan, not to push through.
-- **Guardrails are load-bearing** (§3). An implementation that trips a
-  guardrail repeated a known failure — fix the plan or the implementation,
-  but record the outcome in this document either way.
-- **The test doctrine is the quality system** (§11). Altitude, mutation
-  testing, "would this fail if Mantine changed, or only if we changed?"
-- **Living document.** Update it the moment reality diverges; do not let it
-  drift silently — that is how the first attempt died.

@@ -19,18 +19,17 @@ import {
   collections as collectionsTable,
 } from "@arcula/db";
 import {
-  COLLECTION_LIMITS,
   UPDATABLE_TEXT_FIELDS,
   artworkBulkDeleteSchema,
   artworkImportSchema,
   collectionCreateSchema,
   collectionUpdateSchema,
+  collectionLimitForTier,
   artworkSchema,
   type ArtworkBulkDeletePayload,
   type ArtworkImportPayload,
   type CollectionCreatePayload,
   type CollectionUpdatePayload,
-  type CollectionTier,
 } from "@arcula/shared";
 import { Hono, type Context } from "hono";
 import {
@@ -95,10 +94,7 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
     collectionCreateSchema,
   );
 
-  const limit =
-    user.tier in COLLECTION_LIMITS
-      ? COLLECTION_LIMITS[user.tier as CollectionTier]
-      : COLLECTION_LIMITS.free;
+  const limit = collectionLimitForTier(user.tier);
   const owned = await db
     .select({ id: collectionsTable.id })
     .from(collectionsTable)
