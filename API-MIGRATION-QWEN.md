@@ -743,14 +743,14 @@ exception and lives outside AWS (Supabase, below).
 > `oven/bun` container is the documented scale-up path for when the
 > workload goes always-on.
 
-| Construct  | Choice                                                                                                      | Notes                                                                                                                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S3         | one bucket; private, encrypted, `enforceSSL`; `LifecycleRule` prefix `staging/`, expire 7 days              | the v3 key fix (§6) is what makes the prefix rule expressible; the Lambda reaches it through its IAM role — no long-lived keys in the deployed env                                            |
-| Lambda     | Node 20, **ARM_64**, 3 GB, 300 s; `index.handler` from the S3 package                                       | one function runs the whole product: API + the built SPA (§10.2). The package (bundle + native Sharp + fresh web build) is built and smoked by `scripts/build-lambda.sh` before it ships      |
-| HTTP API   | one catch-all route `ANY /{$request: *}` (AWS_PROXY, payload 2.0); 29 s integration timeout, set on purpose | **HTTPS by default** (AWS-managed cert on the `execute-api` name) — Phase 6's "no cert yet" is satisfied with room to spare; the 29 s cap is a service hard limit (§15 S4 f)                  |
-| Postgres   | **Supabase free tier, out of band** — `DATABASE_URL` points at its direct connection string                 | no RDS: the beta's DB is small, the Supabase free tier is _ongoing_ (no 180-day cliff) and managed with backups; the 500 MB cap and the ~1-week idle pause are accepted for the beta (§15 S4) |
-| dropped    | VPC, ECS/Fargate, ECR, ALB, SecretsManager                                                                  | every one was a 24/7 line item; the secrets ride `-c` context at deploy, the S3 credential rides the IAM role                                                                                 |
-| CloudWatch | default metrics + the Lambda's log group                                                                    | no custom configuration in beta                                                                                                                                                               |
+| Construct  | Choice                                                                                                                                                                           | Notes                                                                                                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3         | one bucket; private, encrypted, `enforceSSL`; `LifecycleRule` prefix `staging/`, expire 7 days                                                                                   | the v3 key fix (§6) is what makes the prefix rule expressible; the Lambda reaches it through its IAM role — no long-lived keys in the deployed env                                            |
+| Lambda     | Node 24, **ARM_64**, 3008 MB, 300 s; `index.handler` from the S3 package                                                                                                         | one function runs the whole product: API + the built SPA (§10.2). The package (bundle + native Sharp + fresh web build) is built and smoked by `scripts/build-lambda.sh` before it ships      |
+| HTTP API   | one catch-all route `ANY /{proxy+}` (AWS_PROXY, payload 2.0); 29 s integration timeout, set on purpose                                                                           | **HTTPS by default** (AWS-managed cert on the `execute-api` name) — Phase 6's "no cert yet" is satisfied with room to spare; the 29 s cap is a service hard limit (§15 S4 f)                  |
+| Postgres   | **Supabase free tier, out of band** — `DATABASE_URL` points at the **session-mode pooler** (the direct connection is IPv6-only; this machine and the Lambda have no IPv6 egress) | no RDS: the beta's DB is small, the Supabase free tier is _ongoing_ (no 180-day cliff) and managed with backups; the 500 MB cap and the ~1-week idle pause are accepted for the beta (§15 S4) |
+| dropped    | VPC, ECS/Fargate, ECR, ALB, SecretsManager                                                                                                                                       | every one was a 24/7 line item; the secrets ride `-c` context at deploy, the S3 credential rides the IAM role                                                                                 |
+| CloudWatch | default metrics + the Lambda's log group                                                                                                                                         | no custom configuration in beta                                                                                                                                                               |
 
 Migrations never run inside CDK: the DB starts **empty** (a fresh
 Supabase project), and migrations are **SQL files** (`packages/db`
@@ -950,19 +950,17 @@ existing 409 message is the answer; §15).
 its password, is blocked at the cap with the right message, and the cap
 cases in §11 pass.
 
-### Phase 6 — Local polish + Lambda package + CDK stack [amended 2026-10-05]
+### Phase 6 — Local polish + Lambda package + CDK stack + deploy [amended 2026-10-06 — complete]
 
-Compose file finalized; static SPA serving in the API (§10.2, one
-artifact behind one origin); the Lambda deploy package (code bundle +
-native Sharp + a fresh web build) with the glibc smoke — risk #1
-verified in-container, WASM fallback discarded; the `oven/bun`
-Dockerfile as the EC2 scale-up path; `infra/cdk` in the Lambda shape
-(S3+LifecycleRule, one Lambda, HTTP API — §10.1 amended per the cost
-ruling, §15).
-**Done when:** the package smokes green on glibc (Sharp verdict
-recorded); `cdk synth` is green with no AWS account; the stack deploys
-with no `DOMAIN`/`CERT_ARN` and the app works against it (HTTPS comes
-free with the HTTP API; the custom domain is Phase 7).
+Steps: compose pinning; SPA serving; Lambda package + smoke; oven/bun Dockerfile; CDK stack; deploy (two-step PUBLIC_URL); local `db:migrate`/`db:seed` against the pooler URL; `prod-verify.ts` end-to-end pass against the live URL.
+
+**Done when** (all met 2026-10-06):
+
+- package smokes green on glibc (Sharp verdict recorded)
+- `cdk synth` is green with no AWS account
+- the stack deployed with no `DOMAIN`/`CERT_ARN` and the app works against it (HTTPS comes free with the HTTP API; the custom domain is Phase 7)
+- all 16 verification steps pass in `prod-verify.ts`
+- Lambda identity/payload-2.0 cookie handling verified against the live API
 
 ### Phase 7 — Production cutover + docs
 
@@ -1468,7 +1466,7 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   it in `spa.api.test.ts` against a throwaway fixture dist.
   (c) **The Lambda entry** (`apps/api/src/lambda.ts`): API Gateway
   payload 2.0 ↔ Request/Response. The detail that fails silently in
-  production: **Set-Cookie must travel via `multiValueHeaders`** — the
+  production: **Set-Cookie must travel via the response's `cookies` array** — [superseded by the S5 finding, §15] the `multiValueHeaders` contract does not hold under payload 2.0; cookies must be returned in a top-level `cookies` array; see the 2026-10-06 S5 entry.
   standard Headers view comma-joins multiple cookies and mangles the
   session in a way no screenshot shows; the event's `cookies` array is
   joined back into one request header, and binary answers (the API
@@ -1565,6 +1563,69 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   the root tsc chain; the root eslint lints it type-aware under the
   Node globals block; `cdk.out` (generated template + the 13 MB asset
   copy) is ignored by git, Prettier, and eslint.
+
+- **2026-10-06 — Phase 6 S5: deploy + verify.** Deployed the CDK stack
+  (`Arcula`), ran `prod-verify.ts` end to end against the live API, and
+  reconciled the deploy-time findings (all 16 steps green; the 12 MP
+  stage→process number was measured on the actual runtime, ~1.4–1.5 s for
+  five variants). Amended §10.1 in place and records below.
+  (a) **The layout is now functionally complete.** S1–S4 build the shape;
+  S5 makes it live — `Arcula` stack deployed (HTTP API at
+  `https://zs0tanfoid.execute-api.us-east-1.amazonaws.com/`, bucket
+  `arcula-media-<id>`), client served on that same origin. The only thing
+  left before Phase 7 (custom domain) is a fixed hostname.
+  (b) **The cookies gotcha — amends the S3 contract in place.** HTTP API
+  Lambda proxy, **payload format 2.0, has no `multiValueHeaders` field in
+  the response** — that is the 1.0 shape. API Gateway silently ignores
+  unknown response fields, so the 1.0-style response signed the user in and
+  then silently dropped the session cookie on the wire: sign-up returns 200,
+  zero cookies, downstream `401`s — invisible in any screenshot. The 2.0
+  contract is a top-level `cookies` array; each entry becomes one
+  `set-cookie` header (the request side is the mirror: cookies arrive in the
+  event's `cookies` array). Confirmed on the wire: local Node 24 ran the
+  same bundle and `lambda.ts` was returning `cookies`; the direct Lambda
+  invoke in prod returned `multiValueHeaders` — so the gateway was the drop
+  point, not the entry. `lambda.ts`, `lambdaEntry.test.ts`, and
+  `lambda-smoke.mjs` updated to the `cookies` contract.
+  (c) **Local egress restored → keep local migrate/seed against the
+  pooler (decision reversal).** The plan for a one-shot migration Lambda was
+  contingent on the local machine having no IPv6 egress to the Supabase
+  pooler ELBs; that machine-level blocker is gone — local `db:migrate` and
+  `db:seed` now connect fine through the session-mode pooler. The one-shot
+  Lambda was **not** written. Recorded decision: local path is the flow;
+  keep the one-shot Lambda as the documented fallback for when local egress
+  is unavailable (travel, other machine). `deploy-prod.sh` is the local-path
+  flow (deploy1 → migrate → seed → deploy2 → verify), all idempotent.
+  (d) **Verifier 200→201 for save/create.** The save/create routes return
+  `201 Created` by design (honest for POST); the local suite asserts 201, so
+  `prod-verify.ts` was updated to expect 201 rather than 200.
+  (e) **Web-suite flake — jsdom lacks `Element.scrollTo`.** The DOM table
+  resizes with `Element.scrollTo` (JS-scrollable; jsdom has only the
+  `scrollTop`/`scrollLeft` accessors), which had two downstream failures:
+  the CSS-dynamic table needed a pixel height (jsdom reports 0), surfaced by
+  `fillPageToHeight` calling `document.documentElement.scrollTo` in
+  `apps/web/tests/setup.ts`, and a race between the datatable's rAF scroll
+  reset and vitest teardown. The fix in `setup.ts` is a faithful
+  `Element.prototype.scrollTo` stub (both call forms; `smooth` treated as
+  instant — no layout; jsdom's accessors have no range to clamp against, so
+  no clamping logic). Node-env files are unaffected (no `Element` global
+  there). Verifier went green 5/5 straight runs afterward.
+  (f) **Post-S4 runtime fixes (NODEJS_24_X / 3008 MB / `/{proxy+}`).**
+  Logged here because they diverge from the S4 entry: the stack now pins
+  `NODEJS_24_X` (the `nodejs20.x` runtime is deprecated — creation
+  disabled 2027-02-01, update disabled 2027-03-03); `memorySize` is 3008
+  (the Lambda hard cap; "3 GB" in the S4 entry is the unexpressible form);
+  the catch-all route is `/{proxy+}` (`$request: *` is REST-era syntax;
+  `{$proxy}` is REST syntax, rejected by HTTP API; the greedy `/{proxy+}` is
+  the HTTP form).
+  (g) **NODE_ENV / non-Secure cookies in prod — accepted for the beta.**
+  `useSecureCookies: process.env.NODE_ENV === "production"` (auth.ts) does
+  not flip in the Lambda (`NODE_ENV` is unset) — the prod session cookie is
+  therefore not `Secure`. Accepted while we are still reachable only over
+  the HTTPS HTTP API (the regional endpoint has no plain-HTTP path); the fix
+  is one env var (`NODE_ENV=production` in the stack env, or an explicit
+  knob), deferred to Phase 7 with the custom domain. Recorded so nobody
+  surprises themselves on the diag cookie.
 
 ---
 

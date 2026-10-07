@@ -8,11 +8,14 @@
  * Two conversions carry the weight, and both fail silently if done
  * wrong:
  *
- * - **Set-Cookie must travel via `multiValueHeaders`.** The standard
- *   `Headers` view collapses multiple Set-Cookie values into one
- *   comma-joined string, and a session cookie mangled that way breaks
- *   sign-in in a way no screenshot shows. The `cookies` array in the
- *   event is joined back into one `cookie` header for the request.
+ * - **Set-Cookie travels in the response's `cookies` array.** The
+ *   integration is payload format 2.0, whose response shape has NO
+ *   `multiValueHeaders` field (that is 1.0) — API Gateway silently
+ *   ignores an unknown field, so a 1.0-style response signs the user in
+ *   and then loses the session cookie on the wire. The format-2.0
+ *   contract: a top-level `cookies` array, each entry becoming a
+ *   `set-cookie` header. The request side is the mirror image: cookies
+ *   arrive in the event's `cookies` array, joined back into one header.
  * - **Binary answers are base64.** The API proxies media bytes to the
  *   client, so text and binary responses take different shapes; the
  *   split is on the content type, and text-shaped types are an allowlist
@@ -73,20 +76,19 @@ export const handler = async (event: GatewayEvent) => {
   }
 
   const outHeaders: Record<string, string> = {};
-  const multiValueHeaders: Record<string, string[]> = {};
   res.headers.forEach((value, key) => {
-    if (key.toLowerCase() === "set-cookie") return; // split out below
+    if (key.toLowerCase() === "set-cookie") return; // travels via `cookies`
     outHeaders[key] = value;
   });
   const setCookies = res.headers.getSetCookie();
-  if (setCookies.length > 0) {
-    multiValueHeaders["set-cookie"] = setCookies;
-  }
 
   return {
     statusCode: res.status,
     headers: outHeaders,
-    multiValueHeaders,
+    // Payload format 2.0: a top-level cookies array, each entry becoming
+    // a set-cookie header. (multiValueHeaders is a 1.0 field — silently
+    // dropped here, which is how the session cookie vanished on the wire.)
+    ...(setCookies.length > 0 ? { cookies: setCookies } : {}),
     body: responseBody,
     isBase64Encoded,
   };

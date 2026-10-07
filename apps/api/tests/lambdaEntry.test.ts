@@ -56,10 +56,8 @@ const jsonBody = (body: unknown) => ({
   headers: { "content-type": "application/json" },
 });
 
-const sessionCookie = (res: {
-  multiValueHeaders?: Record<string, string[]>;
-}) => {
-  const cookies = res.multiValueHeaders?.["set-cookie"] ?? [];
+const sessionCookie = (res: { cookies?: string[] }) => {
+  const cookies = res.cookies ?? [];
   const session = cookies.find((c) =>
     c.startsWith("better-auth.session_token"),
   );
@@ -94,7 +92,7 @@ describe("the Lambda entry", () => {
     expect(res.headers["content-type"]).toBe("application/octet-stream");
   });
 
-  it("sign-up: the body rides through, and the session cookie comes back via multiValueHeaders", async () => {
+  it("sign-up: the body rides through, and the session cookie comes back in the cookies array (payload 2.0)", async () => {
     const email = `lambda-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
     const res = await handler(
       gw("/api/auth/sign-up/email", {
@@ -110,17 +108,19 @@ describe("the Lambda entry", () => {
     const signUpBody = JSON.parse(res.body) as { user: { email: string } };
     expect(signUpBody.user.email).toBe(email);
 
-    // The whole point of the split: each Set-Cookie is its own entry. A
+    // The whole point of the array: each Set-Cookie is its own entry. A
     // comma-joined string would still "contain" the token, so assert the
-    // shape, not just the presence.
-    const cookies = res.multiValueHeaders?.["set-cookie"] ?? [];
+    // shape, not just the presence. (Payload format 2.0 has no
+    // multiValueHeaders — an unknown field is dropped silently, which is
+    // exactly how the session cookie vanished behind the gateway.)
+    const cookies = res.cookies ?? [];
     expect(cookies.length).toBeGreaterThan(0);
     for (const cookie of cookies) {
       expect(cookie).toContain("better-auth.session_token");
       expect(cookie).not.toContain(", better-auth");
     }
-    // The collapsed view must not also carry the cookies, or the gateway
-    // would send them twice.
+    // The flat headers view must not also carry the cookies, or the
+    // gateway would send them twice.
     expect(res.headers["set-cookie"]).toBeUndefined();
   });
 

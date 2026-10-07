@@ -54,17 +54,18 @@ export class ArculaStack extends cdk.Stack {
     // The product: API + built SPA in one function. The package is built
     // by scripts/build-lambda.sh (code bundle + Sharp's native prebuilt +
     // a fresh web build), smoked in a glibc container before it ships.
-    // ARM_64 to match the package (and the t4g scale-up path); 3 GB is
-    // Sharp's 12 MP headroom, 300 s is a wide safety margin over the
-    // measured ~0.25 s/photo.
+    // ARM_64 to match the package (and the t4g scale-up path).
+    // nodejs24.x: nodejs20.x is deprecated (creation disabled 2027-02-01);
+    // Sharp rides the stable N-API, so the smoke carries over. 3008 MB is
+    // Lambda's hard memory cap — Sharp's 12 MP headroom.
     const fn = new lambda.Function(this, "ApiFunction", {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64,
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../../dist/lambda/arcula-api.zip"),
       ),
       handler: "index.handler",
-      memorySize: 3072,
+      memorySize: 3008,
       timeout: cdk.Duration.seconds(300),
       environment: {
         // Supabase (out of band): the connection string, not a cluster.
@@ -97,15 +98,17 @@ export class ArculaStack extends cdk.Stack {
     media.grantReadWrite(fn);
 
     // One catch-all route: /api/* and the SPA share the function, exactly
-    // as locally — spa.ts is what splits them.
+    // as locally — spa.ts is what splits them. `{proxy+}` is the HTTP
+    // API's greedy catch-all parameter (what HttpApi.addProxy() generates;
+    // `{$proxy}` is REST-API syntax and the `$` fails the path-part
+    // validation). The integration timeout is an HTTP-API hard cap of 29 s
+    // — set it on purpose: the measured worst case (a 10-photo save) is
+    // single digits, and a request that outgrows 29 s is a signal to move
+    // the work off the request path, not to wait longer for it.
     const api = new apigw.HttpApi(this, "Api", { apiName: "arcula" });
     api.addRoutes({
-      path: "/{$request: *}",
+      path: "/{proxy+}",
       methods: [apigw.HttpMethod.ANY],
-      // The integration timeout is an HTTP-API hard cap of 29 s — set it
-      // on purpose: the measured worst case (a 10-photo save) is single
-      // digits, and a request that outgrows 29 s is a signal to move the
-      // work off the request path, not to wait longer for it.
       integration: new integrations.HttpLambdaIntegration("Api", fn, {
         timeout: cdk.Duration.seconds(29),
       }),

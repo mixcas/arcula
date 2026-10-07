@@ -85,7 +85,7 @@ const up = await handler(
   }),
 );
 expectStatus("sign-up", up, 200);
-const cookie = (up.multiValueHeaders?.["set-cookie"] ?? []).find((c) =>
+const cookie = (up.cookies ?? []).find((c) =>
   c.startsWith("better-auth.session_token"),
 );
 if (!cookie) fail("sign-up returned no session cookie");
