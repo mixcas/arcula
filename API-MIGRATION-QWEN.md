@@ -757,12 +757,19 @@ Supabase project), and migrations are **SQL files** (`packages/db`
 generates them; `db:migrate` applies whatever `DATABASE_URL` it is
 pointed at). Prod = apply the same SQL to the prod URL.
 
-### 10.2 The container
+### 10.2 The container — documented scale-up path, not the primary artifact
 
-Dockerfile (`infra/`): `FROM oven/bun` (debian — §0.2 #2: no official
-`bun:alpine` exists, and Sharp's prebuilt NAPI binaries are most proven on
-glibc) → copy the workspace manifests → `bun install` (production deps) →
-copy the apps → `CMD ["bun", "run", "start"]`.
+The current **primary** deploy artifact is the Lambda package built by
+`scripts/build-lambda.sh` (§10.1): the code bundle + native Sharp + a fresh
+web build, shipped as one zip. `infra/Dockerfile` is the **documented
+scale-up path** for when the workload goes always-on — the
+`oven/bun` (debian) image that Phase 3's ECS/Fargate shape used — kept so the
+switch from Lambda is a `fargate`/ECR redeploy, not a rewrite:
+
+`FROM oven/bun` (debian — §0.2 #2: no official `bun:alpine` exists, and
+Sharp's prebuilt NAPI binaries are most proven on glibc) → copy the
+workspace manifests → `bun install` (production deps) → copy the apps →
+`CMD ["bun", "run", "start"]`.
 
 - `bun run start` in the container is the **same `main.ts`** as local
   (`Bun.serve`) — one code path, no container-specific variant.
@@ -800,23 +807,34 @@ STACK_REGION=us-east-1` → the 443 listener and 80→443 redirect come on;
 
 ### 10.4 Deploy flow
 
-First deploy:
+The deployed stack is the Lambda shape (§10.1), so the flow is the
+two-step Lambda deploy (`scripts/deploy-prod.sh`), not an image push:
 
-1. ACM: request the cert (`arcula.art` + `www` alternate name) → collect
-   the validation records.
-2. Porkbun: add the validation CNAMEs, plus the ALIAS/CNAME pair (step 3
-   settles them).
-3. Validate the cert. Build + push the image (`docker build` → ECR).
-4. `cdk deploy -c DOMAIN=arcula.art -c CERT_ARN=… -c STACK_REGION=us-east-1`.
-5. `db:migrate` against the prod `DATABASE_URL` (the schema SQL).
-6. Seed the owner account (`db:seed` — the same script as local; prod is an
+1. Build the Lambda package (`scripts/build-lambda.sh`: bundle + native
+   Sharp + a fresh web build) and smoke it on glibc.
+2. `cdk deploy` with the prod values as `-c` context
+   (`DATABASE_URL`, `AUTH_SECRET`, `RESEND_API_KEY`, …),
+   `PUBLIC_URL` = the placeholder — the HTTP API's URL does not exist yet.
+3. Read `ExecuteApiUrl` (a `cdk deploy` output); the Lambda is stateless
+   (its DB is Supabase) so the re-deploy is free.
+4. `db:migrate` against the prod `DATABASE_URL` (the schema SQL).
+5. Seed the owner account (`db:seed` — same script as local; prod is an
    empty DB, so seeding _is_ the bootstrap).
-7. Verify end-to-end over HTTPS: sign up → sign in → create a collection
-   (cap) → stage/process/save a photo → the public page.
+6. Re-deploy with the real `PUBLIC_URL` (deploy 2 of the two-step; the URL
+   exists only after deploy 1).
+7. Verify end-to-end: `prod-verify.ts` sign up → sign in → create a
+   collection (cap) → stage/process/save a photo → the public page.
 
-Every later deploy: gate suites green → build + push → `cdk deploy`
-(drift) → `db:migrate` if the schema changed → service image update.
-**`db:reset` never runs in prod** (the `ALLOW_DB_RESET` guard, §9).
+Every later deploy: build the package → gate suites green → `cdk deploy`
+(drift) → `db:migrate` if the schema changed → verify. **`db:reset` never
+runs in prod** (the `ALLOW_DB_RESET` guard, §9).
+
+The **custom-domain** cutover (ACM cert request → Porkbun records →
+validate → `cdk deploy -c DOMAIN=arcula.art -c CERT_ARN=…` → cookie
+`secure: true`) is Phase 7 — §10.3 carries the DNS/TLS detail, and §10.3's
+443/redirect discussion is amended for the custom-domain-on-HTTP-API shape
+(no ALB to hang a listener on). Phase 6 ships HTTP-only on the
+`execute-api` name, where HTTPS comes free.
 
 ## 11. Testing
 
@@ -1626,6 +1644,31 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   is one env var (`NODE_ENV=production` in the stack env, or an explicit
   knob), deferred to Phase 7 with the custom domain. Recorded so nobody
   surprises themselves on the diag cookie.
+
+- **2026-10-07 — Phase 6 container/deploy still carried the ALB/ECS/ECR
+  wording (§10.2/§10.4 amended in place; §15 records the divergence).**
+  §10.1's Postgres row was amended at S5, but §10.2 and §10.4 still described
+  the shape Phase 4 S4 replaced with Lambda. Recorded for the same reason as
+  the §15 entries that already live: a reader following §10.2 today would
+  build an ECS task, not the Lambda package that is actually deployed.
+  (a) **§10.2 was the primary-artifact claim.** It read `infra/Dockerfile`
+  (`FROM oven/bun` → `CMD bun run start`) as the container that ships the
+  product. Reality: the deployed artifact is the Lambda package from
+  `scripts/build-lambda.sh` (bundle + native Sharp + a fresh web build, shipped
+  as one zip — the §10.1 row already named it); `infra/Dockerfile` is now only
+  the **documented scale-up path** for an always-on workload, kept so the
+  Lambda→Fargate switch is a redeploy, not a rewrite. §10.2 rewritten to
+  state that up front and point at the zip.
+  (b) **§10.4 described a first deploy that never happened.** It was the
+  ECS flow: `docker build → ECR` push → `cdk deploy -c DOMAIN/CERT_ARN`, plus
+  an ACM cert request and Porkbun ALIAS/CNAME records. That is the pre-S4
+  ALB shape, and it duplicated §10.3's custom-domain cutover. Reality is the
+  two-step Lambda deploy (`scripts/deploy-prod.sh`): build + smoke the zip →
+  `cdk deploy` with `PUBLIC_URL` = placeholder → read `ExecuteApiUrl` →
+  migrate → seed → re-deploy with the real `PUBLIC_URL` → `prod-verify.ts`.
+  No ACM, no ECR, no ALB — HTTPS comes free from the HTTP API. §10.4 rewritten
+  to the Lambda flow, with the domain cutover kept as the Phase 7 reference
+  §10.3 already carries.
 
 ---
 
