@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-03T22:48:55.527Z",
+  "entries": {
+    "drizzle-orm": {
+      "slug": "drizzle-orm",
+      "format": "llms.txt",
+      "sourceUrl": "https://orm.drizzle.team/llms.txt",
+      "etag": "W/\"a3d2502709fb899ad907e60d86e32d75\"",
+      "lastModified": null,
+      "fetchedAt": "2026-10-03T22:48:43.541Z",
+      "checksum": "fcb2c3e108986fe9b8b3a4d656d57097fc0f3d249b9ca914df5f32d559c79d1f",
+      "size": 38923,
+      "name": "Drizzle ORM"
+    },
+    "hono": {
+      "slug": "hono",
+      "format": "llms.txt",
+      "sourceUrl": "https://hono.dev/llms.txt",
+      "etag": "W/\"9cbddbb04d4e3f04a27c100929b5ccf7\"",
+      "lastModified": null,
+      "fetchedAt": "2026-10-03T22:48:47.917Z",
+      "checksum": "333caface78c29dd23d5027699a08aa748b0f17047179673ec9a1e0f8503c20e",
+      "size": 5715,
+      "name": "Hono"
+    },
+    "better-auth": {
+      "slug": "better-auth",
+      "format": "llms.txt",
+      "sourceUrl": "https://www.better-auth.com/llms.txt",
+      "etag": "\"e37fe87abc4d9154ac8a7aca99723730\"",
+      "lastModified": null,
+      "fetchedAt": "2026-10-03T22:48:55.526Z",
+      "checksum": "a3cd3829d5014898927627d374d5cbead8768d8924d7fdded812c932be08b12a",
+      "size": 777,
+      "name": "Better Auth"
+    }
+  }
+}
