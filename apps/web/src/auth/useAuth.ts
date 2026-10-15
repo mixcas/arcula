@@ -1,8 +1,8 @@
 import { useContext } from "react";
 import { AuthContext } from "./AuthProvider";
 
-// The value shape is the old AuthContext's (src/hooks/useAuth.ts
-// re-exports this hook, so the call sites are unchanged).
+// The value shape is AuthContext's (src/hooks/useAuth.ts re-exports this
+// hook, so the call sites are unchanged).
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

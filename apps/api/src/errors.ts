@@ -1,4 +1,4 @@
-// The one error envelope for /api/v1/* (plan §7):
+// The one error envelope for /api/v1/*:
 //
 //   { "error": { "code", "message" } }
 //
@@ -7,7 +7,7 @@
 // `message` is prose for humans.
 //
 // /api/auth/* deliberately does NOT use this envelope: Better Auth's
-// native error shape is what @better-auth/react expects (decision, §15).
+// native error shape is what @better-auth/react expects.
 
 export type ApiErrorCode =
   | "validation"

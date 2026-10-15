@@ -1,6 +1,5 @@
-// The app-wide auth provider (replaced src/context/AuthContext.tsx at the
-// Phase 4 cutover): the same value shape (currentUser with the `uid` alias,
-// login, logout) and the same gate (children render only once the session
+// The app-wide auth provider: the value shape (currentUser with the `uid`
+// alias, login, logout) and the gate (children render only once the session
 // is known).
 //
 // The session needs no manual refetch after login/logout: the client's

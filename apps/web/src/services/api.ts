@@ -1,5 +1,5 @@
 /**
- * The request core of the API service layer (Phase 4 S2, plan §7).
+ * The request core of the API service layer.
  *
  * Same-origin by construction: every path here is relative (`/api/…`), and the
  * dev server proxies `/api` to the API — the page never names the API's

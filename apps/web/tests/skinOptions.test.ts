@@ -34,8 +34,8 @@ describe("resolveSkinOptions — defaults", () => {
 
   it("treats null and an empty object the same as absent", () => {
     // A collection written before the field existed has no `skinOptions` key,
-    // which Firestore reads as `undefined`; `null` is what a caller may hand
-    // over after a merge that removed it.
+    // which reads as `undefined`; `null` is what a caller may hand over after
+    // a merge that removed it.
     expect(resolveSkinOptions(fakeSkin, null).options).toEqual(
       resolveSkinOptions(fakeSkin, undefined).options,
     );
@@ -126,10 +126,11 @@ describe("Basicx's own vocabulary", () => {
     // would be a control that does nothing. The option is absent rather than
     // left inert, so it cannot be mistaken for one that works.
     //
-    // The title used to be "no longer offers `showPoweredBy`", which dates
-    // itself and will read as a historical note within a year. A collection
-    // that stored `showPoweredBy: true` is unaffected either way — it is
-    // reported as a dropped key by `resolveSkinOptions`, which is tested above.
+    // The title is deliberately generic: it names the invariant, not the
+    // story of how the option went away, so it does not read as a historical
+    // note. A collection that stored `showPoweredBy: true` is unaffected
+    // either way — it is reported as a dropped key by `resolveSkinOptions`,
+    // which is tested above.
     expect(BASICX_OPTION_SPECS.map((spec) => spec.key)).not.toContain(
       "showPoweredBy",
     );

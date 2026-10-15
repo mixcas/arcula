@@ -1,6 +1,6 @@
 #!/bin/sh
-# Build the Lambda deploy package and smoke it on a glibc Linux runtime
-# (Phase 6 S3). Usage: sh scripts/build-lambda.sh
+# Build the Lambda deploy package and smoke it on a glibc Linux runtime.
+# Usage: sh scripts/build-lambda.sh
 #
 # Produces dist/lambda/arcula-api.zip — the code bundle, Sharp's native
 # prebuilt, and the built SPA (web/dist, served by spa.ts with
@@ -13,7 +13,7 @@
 # arm64). The AWS public ECR images are not reachable from this machine's
 # docker registry, so the smoke runs on `node:20` (Debian glibc, arm64) —
 # the same Node ABI and glibc the Lambda runtime has. The Lambda runtime
-# itself is verified by the real deploy (S5).
+# itself is verified by the real deploy.
 #
 # Postgres: the local dev database, reached over the compose network
 # (`arcula_default`, service `postgres`) — the same database the API

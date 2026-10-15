@@ -1,9 +1,8 @@
 #!/bin/sh
-# Deploy the beta stack (Phase 6 S5; §10.4's "every later deploy" flow).
-# Usage: sh scripts/deploy-prod.sh
+# Deploy the production stack. Usage: sh scripts/deploy-prod.sh
 #
 # Prereqs: aws configured (us-east-1); infra/cdk/.env populated
-# (DATABASE_URL, RESEND_API_KEY, AUTH_SECRET — see the S5 handoff);
+# (DATABASE_URL, RESEND_API_KEY, AUTH_SECRET);
 # a Lambda package present (sh scripts/build-lambda.sh — checked below,
 # not rebuilt here). The local stack may be up or down: db-seed's own
 # stack-up check is idempotent.
@@ -42,7 +41,7 @@ PROD_RESEND_KEY="$RESEND_API_KEY"
 
 CTX="-c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RESEND_API_KEY=$RESEND_API_KEY"
 [ -n "${EMAIL_FROM:-}" ] && CTX="$CTX -c EMAIL_FROM=$EMAIL_FROM"
-# Phase 7 custom domain (§10.3): only carried when both are set, and
+# Custom domain: only carried when both are set, and
 # CERT_ARN is required when DOMAIN is — the stack hard-fails synth
 # otherwise. They live in infra/cdk/.env; the cert ARN is added there
 # only after the ACM cert has been validated.
@@ -61,7 +60,7 @@ npx cdk deploy --region us-east-1 --require-approval never $CTX
 BUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
   --query "Stacks[0].Outputs[?OutputKey=='MediaBucket'].OutputValue | [0]" --output text)
 if [ -n "${DOMAIN:-}" ]; then
-  # Custom domain (§10.3): the public origin is the domain itself — its
+  # Custom domain: the public origin is the domain itself — its
   # cert is validated before this deploy runs — so the seed's mail links
   # and the deploy-2 PUBLIC_URL both point at it.
   URL="https://${DOMAIN}"

@@ -3,11 +3,11 @@
  *
  * ## Why `order` and the array position both exist
  *
- * Firestore preserves array order, so the array position is already a
- * sequence — which is exactly what makes a denormalized `order` field a
- * liability. The two can drift the moment anything writes one without the
- * other, and the failure is silent: a photo claims to be first while sitting
- * third, and the "primary thumbnail" quietly renders the wrong image.
+ * The array position is already a sequence — which is exactly what makes a
+ * denormalized `order` field a liability. The two can drift the moment anything
+ * writes one without the other, and the failure is silent: a photo claims to be
+ * first while sitting third, and the "primary thumbnail" quietly renders the
+ * wrong image.
  *
  * So the rule is narrower than "store the order": the array position is the
  * truth, and `reindexPhotos` rewrites `order` from it on *every* write. The

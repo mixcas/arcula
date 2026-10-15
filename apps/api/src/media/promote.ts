@@ -1,4 +1,4 @@
-// Promoting one staged entry to its final objects (plan §6.3, step 3).
+// Promoting one staged entry to its final objects.
 //
 // Promoting is two things: the S3 `COPY` of the entry's staged objects
 // onto their final keys, and the metadata the save transaction records
@@ -9,9 +9,9 @@
 //     so a retried save lands on the same state.
 //   - **Not transactional.** An S3 copy does not roll back with Postgres,
 //     so the copies run INSIDE the save transaction and a failed save may
-//     leave final objects with no row — the accepted residual (§6),
-//     cleaned by Phase 8's sweep-orphans. The staged objects themselves
-//     are deleted by the save only AFTER commit; on failure they remain,
+//     leave final objects with no row — the accepted orphan residual,
+//     cleaned by the orphan sweep. The staged objects themselves are
+//     deleted by the save only AFTER commit; on failure they remain,
 //     which is exactly what the sweep and the staging lifecycle exist
 //     for.
 //

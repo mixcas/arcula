@@ -7,7 +7,7 @@
  * anything: the shell has already loaded the data, already mapped
  * `permission-denied` to the private state, and hands the skin a dataset that
  * is safe to render. That boundary is what makes a skin testable with plain
- * objects and no emulator.
+ * objects.
  *
  * A skin is deliberately a **component tree rather than a layout config**. The
  * alternative — one generic engine driven by JSON — would have to express

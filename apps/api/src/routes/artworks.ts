@@ -1,23 +1,21 @@
-// The artwork resource routes (plan §7):
+// The artwork resource routes:
 //
 //   GET    /collections/{cid}/artworks            the collection's live works
 //   POST   /collections/{cid}/artworks            create + promote staged entries
 //   GET    /collections/{cid}/artworks/{aid}      one work
 //   PATCH  /collections/{cid}/artworks/{aid}      edit fields + new sequence
 //
-// A save is one Postgres transaction (§6.3): field write → per-entry
-// S3 copy (staged → final) and row upserts → row deletes for entries
-// dropped from the sequence. An S3 copy cannot roll back with the rows,
-// so a failed save may leave final objects with no row — the accepted
-// residual (§6, Phase 8's sweep-orphans). Staged objects are deleted only
-// AFTER commit; what a failed save leaves behind is exactly what the
-// sweep and the staging lifecycle exist to remove.
+// A save is one Postgres transaction: field write → per-entry S3 copy
+// (staged → final) and row upserts → row deletes for entries dropped
+// from the sequence. An S3 copy cannot roll back with the rows, so a
+// failed save may leave final objects with no row — the accepted orphan
+// residual. Staged objects are deleted only AFTER commit; what a failed
+// save leaves behind is exactly what the sweep and the staging lifecycle
+// exist to remove.
 //
-// Reader access mirrors the storage rules the proxy will replace: the
-// owner always; a visitor on the collection's live PUBLIC works in the
-// list, and a single work by id when the work itself is public — the
-// collection's flag does not hide a direct id read, which is what the
-// old rules allowed and what §7 calls out.
+// Reader access: the owner always; a visitor on the collection's live
+// PUBLIC works in the list, and a single work by id when the work itself
+// is public — the collection's flag does not hide a direct id read.
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -277,7 +275,7 @@ async function writePhotoSequence(
   }
 
   // 3: the new entries, at their final positions. The array position is
-  // the order — the first photo of a fresh artwork lands at order 0 (G7).
+  // the order — the first photo of a fresh artwork lands at order 0.
   for (let i = 0; i < next.length; i++) {
     const entry = next[i];
     if (stored.has(entry.entryId)) {
@@ -437,9 +435,8 @@ artworkRoutes.get(
     const session = await resolveSession(c);
     const isOwner = session !== null && artwork.userId === session.user.id;
     if (!isOwner) {
-      // A private work and a deleted work are both "not here" for a
-      // visitor: the old client mapped a denied read to its notFound
-      // state, and saying which was refused would be a disclosure.
+      // A private work and a deleted work are both a uniform 404 for a
+      // visitor: saying which was refused would be a disclosure.
       if (artwork.deletedAt !== null || !artwork.isPublic) {
         throw new ApiError("not-found", "The artwork does not exist");
       }
@@ -560,7 +557,7 @@ artworkRoutes.post(
         currentValue: payload.currentValue ?? null,
         isPublic: payload.isPublic,
         // Always written, as null: the list filters on it, and a missing
-        // field is not a null (the write-path doctrine, §4).
+        // field is not a null (the write-path doctrine).
         deletedAt: null,
         createdAt: now,
         updatedAt: now,

@@ -1,20 +1,18 @@
-// Resource authorization for /api/v1 (plan §7): load a row, check the
-// caller against it, and hand the route a row it can trust.
+// Resource authorization for /api/v1: load a row, check the caller
+// against it, and hand the route a row it can trust.
 //
-// Two access shapes, mirroring the storage rules the proxy will
-// replace:
+// Two access shapes:
 //
 //   owner   — the session user owns the collection. Every write path
 //             (stage/process/discard/save/sweep) goes through here.
-//   visitor — the resource is public. The read paths in S4 combine
-//             this with their own per-resource rule (a collection's
-//             isPublic hides its page; an artwork's isPublic admits it
-//             by id even inside a private collection).
+//   visitor — the resource is public. The read paths combine this with
+//             their own per-resource rule (a collection's isPublic hides
+//             its page; an artwork's isPublic admits it by id even inside
+//             a private collection).
 //
 // The split between "does not exist" (404) and "you may not see it"
-// matters for visitors: a private collection 403s, never 404s — the
-// web client maps that refusal to its "private" state, exactly as it
-// mapped the storage rules' permission-denied.
+// matters for visitors: a private collection 403s, never 404s — the web
+// client maps that refusal to its "private" state.
 
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
@@ -69,7 +67,7 @@ export const loadArtworkById = async (
  * The read-side check: the collection exists, and the caller is the owner
  * or is looking at something public. A private collection the caller does
  * not own 403s — never 404s, the web client maps that refusal to its
- * "private" state, exactly as it mapped the old rules' permission-denied.
+ * "private" state.
  */
 export async function requireReadableCollection(
   c: Context,

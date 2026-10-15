@@ -1,20 +1,18 @@
-# Local dev stack — Postgres (§9).
+# Local dev stack — Postgres.
 #
-# MinIO and Mailpit do NOT run as containers: the docker registry reachable
-# from this machine does not host those images, and `dl.min.io` is gone —
-# they run natively via Homebrew instead (API-MIGRATION-QWEN.md §15,
-# amendments 2026-10-03). `scripts/stack-up.sh` starts them; this file is
+# Mailpit and the S3 stand-in (SeaweedFS) do NOT run as containers: they run
+# natively via Homebrew, and `scripts/stack-up.sh` starts them. This file is
 # postgres only.
 #
 # Runtime is colima (the docker context on this machine): `colima start`
 # before first use. `docker-compose up -d postgres` is idempotent.
-# Nothing here is production: §10 deploys via CDK, never compose.
+# Nothing here is production: production deploys via CDK, never compose.
 
 services:
   postgres:
     # Pinned to the minor the stack is actually running (16.15), so a fresh
-    # `docker compose up` on another machine pulls the same server. RDS in
-    # prod runs the same major (Phase 6); the minor is a local concern.
+    # `docker compose up` on another machine pulls the same server. Prod runs
+    # the same major; the minor is a local concern.
     image: postgres:16.15
     ports:
       - "5432:5432"

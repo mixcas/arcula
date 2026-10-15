@@ -1,6 +1,6 @@
 // Parsed environment shared by the app and the auth instance.
 //
-// The root .env is the single source (§9); scripts source it before
+// The root .env is the single source; scripts source it before
 // running. Values here are read once at import time.
 
 // The browser origins the API admits cross-origin requests from (the
@@ -15,7 +15,7 @@ export const corsOrigins: string[] = (
   .filter(Boolean);
 
 // The web app's origin — where the links in the reset/verification mails
-// have to land (§9). Locally the Vite dev server; in prod the same host
+// have to land. Locally the Vite dev server; in prod the same host
 // the static hosting serves from. A trailing slash is dropped: links are
 // built as `${clientOrigin}${pathname}`.
 export const clientOrigin = (process.env.CLIENT_ORIGIN ?? "")

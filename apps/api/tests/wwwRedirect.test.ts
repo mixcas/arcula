@@ -1,4 +1,4 @@
-// Canonical-host redirect (Phase 7.1): `www.arcula.art` is an alias of
+// Canonical-host redirect: `www.arcula.art` is an alias of
 // `arcula.art`, so every www request is 308-redirected to the apex before
 // any route runs. Driven in-process with app.request() against the real
 // app — real middleware, no second server.

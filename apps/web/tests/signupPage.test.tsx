@@ -16,7 +16,7 @@ import {
 } from "@/schemas/user";
 
 /**
- * The sign-up page (Phase 5): what it sends, where each outcome lands, and
+ * The sign-up page: what it sends, where each outcome lands, and
  * the reset request that shares the page.
  *
  * The seam is the auth client itself: everything past `authClient` is

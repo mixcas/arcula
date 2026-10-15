@@ -13,7 +13,6 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "firebase": "^12.19.0",
     "vitest": "5.0.2"
   }
 }

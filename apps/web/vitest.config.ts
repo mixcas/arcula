@@ -2,10 +2,9 @@ import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
-  // One .env at the repo root (API-MIGRATION-QWEN.md §9): the api reads it
-  // too, and Vite would otherwise look only at its own root. Mirrored from
-  // vite.config.ts so the test-mode modules see the same VITE_* vars the dev
-  // server does.
+  // One .env at the repo root; the api reads it too, and Vite would otherwise
+  // look only at its own root. Mirrored from vite.config.ts so the test-mode
+  // modules see the same VITE_* vars the dev server does.
   envDir: path.resolve(import.meta.dirname, "..", ".."),
 
   test: {

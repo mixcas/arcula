@@ -65,7 +65,7 @@ describe("the registry", () => {
       expect(typeof skin.Artwork, `${skin.id}.Artwork`).toBe("function");
       expect(skin.label.length, `${skin.id}.label`).toBeGreaterThan(0);
       // Lowercase, hyphenated, no whitespace: the id goes in a Select's value
-      // and into Firestore, and is not something a human reads.
+      // and persists on the collection, and is not something a human reads.
       expect(skin.id, `${skin.id}.id`).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     }
   });

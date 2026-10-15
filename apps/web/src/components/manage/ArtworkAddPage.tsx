@@ -34,13 +34,11 @@ import {
 import { artworkSlug, parseId } from "@arcula/shared";
 
 /**
- * The Add page is now a single write: the form fields, the client-minted
- * artwork id, and the staged photo/document entries go up in one POST, and the
- * API promotes the staged objects into rows in the same transaction as the
- * fields (§6.3). That removes the three-write sequence this page used to run
- * and the whole machinery that existed to explain it — `warn` params, stage
- * tracking, a partial-upload toast — because there is no longer a partial
- * save: the transaction either lands or it does not.
+ * The Add page is a single write: the form fields, the client-minted artwork
+ * id, and the staged photo/document entries go up in one POST, and the API
+ * promotes the staged objects into rows in the same transaction as the
+ * fields. There is no partial save: the transaction either lands or it does
+ * not.
  */
 const ArtworkAddPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();

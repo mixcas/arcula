@@ -1,4 +1,4 @@
-// The §6 object-key shapes: builders and the parser that turns a key
+// The object-key shapes: builders and the parser that turns a key
 // back into its segments.
 //
 // Two prefixes, both self-describing — every segment is an id or a
@@ -15,10 +15,9 @@
 // sweep work from the key alone — nothing else is asked of a key.
 
 /** `original` plus the five photo variant keys. `media/variants.ts`
- *  (the verbatim port of the client's IMAGE_VARIANTS) carries the same
- *  five — `tests/pipeline.test.ts` cross-checks the two so they cannot
- *  drift. Exported for that cross-check and for callers that need the
- *  full key space. */
+ *  (`IMAGE_VARIANTS`) carries the same five — `tests/pipeline.test.ts`
+ *  cross-checks the two so they cannot drift. Exported for that
+ *  cross-check and for callers that need the full key space. */
 export const OBJECT_KEYS = [
   "original",
   "xlarge",
@@ -234,8 +233,7 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
  * PDFs are `.pdf`. The content type is what the client declared and
  * what the allowlist admitted, and this map is the only place that
  * declaration becomes a name — so an unaccepted type answers `null`,
- * and `null` is what a caller rejects with, never a guessed `.bin`
- * (the failure that cost the old client a 403 on 100% of its PDFs).
+ * and `null` is what a caller rejects with, never a guessed `.bin`.
  */
 // Extensions are returned WITHOUT a leading dot; the key builders add the
 // `.` themselves. Keeping the dot out of this map keeps a single owner of
@@ -254,7 +252,7 @@ export const extensionFor = (contentType: string | undefined): string | null =>
 
 /**
  * The proxy path that serves an object. GET responses fill their `url`
- * fields with these (§7), and the stage/process responses return them so
+ * fields with these, and the stage/process responses return them so
  * the form can render previews straight from the staged objects without
  * encoding anything itself.
  */

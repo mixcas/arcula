@@ -1,4 +1,4 @@
-// The collection resource routes (plan §7):
+// The collection resource routes:
 //
 //   GET    /collections                              the owner's list / the public list
 //   POST   /collections                              create (cap check first)
@@ -65,9 +65,9 @@ const param = (c: Context, key: string): string => c.req.param(key) ?? "";
  */
 const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
 
-// GET /collections — signed in: the owner's own list, name-ordered (the
-// query the service layer used); anonymous: the public list. A signed-in
-// visitor never sees other people's collections through this route.
+// GET /collections — signed in: the owner's own list, name-ordered;
+// anonymous: the public list. A signed-in visitor never sees other
+// people's collections through this route.
 collectionRoutes.get("/collections", async (c) => {
   const session = await resolveSession(c);
   const rows =
@@ -85,7 +85,7 @@ collectionRoutes.get("/collections", async (c) => {
   return c.json(rows.map(serializeCollection));
 });
 
-// POST /collections — the cap check comes FIRST (§7): the count is over the
+// POST /collections — the cap check comes FIRST: the count is over the
 // caller's own collections, the limit is read off the caller's tier.
 collectionRoutes.post("/collections", requireSession, async (c) => {
   const user = c.get("user");
@@ -225,7 +225,7 @@ collectionRoutes.post(
         artistName: values.artistName,
         isPublic: values.isPublic,
         // Always written, as null: the list filters on it, and a missing
-        // field is not a null (the write-path doctrine, §4).
+        // field is not a null (the write-path doctrine).
         deletedAt: null,
         createdAt: now,
         updatedAt: now,
@@ -249,8 +249,7 @@ collectionRoutes.post(
 );
 
 // POST …/artworks/bulk-delete — one transaction stamps `deletedAt`/
-// `updatedAt` (the old batch-of-400 writeBatch was this, minus the
-// chunking). Already-deleted or foreign ids are not in the WHERE clause's
+// `updatedAt`. Already-deleted or foreign ids are not in the WHERE clause's
 // result and do not count: the response is how many works this call
 // actually moved.
 collectionRoutes.post(
@@ -313,10 +312,9 @@ collectionRoutes.post(
 );
 
 // POST …/maintenance/sweep — delete this collection's staged objects
-// whose entryId has no row (§6 sweep; the lifecycle rule's local twin).
-// An entry that DOES have a row keeps its staged objects even under a
-// soft-deleted work: the row is what a restore would point at, and the
-// staged object may be the entry's newest version.
+// whose entryId has no row. An entry that DOES have a row keeps its staged
+// objects even under a soft-deleted work: the row is what a restore would
+// point at, and the staged object may be the entry's newest version.
 collectionRoutes.post(
   "/collections/:collectionId/maintenance/sweep",
   requireSession,

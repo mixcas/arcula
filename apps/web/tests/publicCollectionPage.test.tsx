@@ -59,9 +59,9 @@ vi.mock("@/services/artworkService", () => ({
 }));
 
 /**
- * Firestore-style ids, not `"collection-1"`.
+ * Opaque, hyphen-free ids, not `"collection-1"`.
  *
- * `parseId` treats everything after the *last* hyphen as the document id, so a
+ * `parseId` treats everything after the *last* hyphen as the id, so a
  * hyphenated id would be cut to `"1"` and the page would look up a collection
  * that does not exist — a failure that reads as a bug in the page rather than in
  * the test. Real ids are 20 alphanumeric characters.
@@ -198,7 +198,7 @@ describe("PublicCollectionPage — the reachable states", () => {
     // The nav's right slot holds the attribution link. The owner-only link that
     // would replace it is not built — see the TODO in `BasicxChrome` — so this
     // is what an anonymous visitor sees, and the absence of a login link is
-    // asserted because one used to be here.
+    // asserted.
     const credit = screen.getByRole("link", { name: "Powered by Arcula" });
     expect(credit).toHaveAttribute("href", "https://arcula.art");
     expect(credit).toHaveAttribute("target", "_blank");

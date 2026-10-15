@@ -1,12 +1,11 @@
-// API integration: the mail provider and the reset/verification hooks
-// (Phase 2, plan §12) — "Reset — fully live in beta" (§5) and G6's
-// built-but-gated verification.
+// API integration: the mail provider and the reset/verification hooks —
+// "Reset — fully live in beta" and the built-but-gated verification.
 //
 // The sink is the local Mailpit, read through its REST API (:8025) — the
 // same inbox a developer opens in the UI. The app is driven in-process
-// with app.request() (the decision recorded in §15); the SMTP hop to
-// Mailpit is the only wire involved. .env is sourced by the test script,
-// so EMAIL_FROM / CLIENT_ORIGIN here are the dev values.
+// with app.request(); the SMTP hop to Mailpit is the only wire involved.
+// .env is sourced by the test script, so EMAIL_FROM / CLIENT_ORIGIN here
+// are the dev values.
 
 import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
@@ -88,7 +87,7 @@ const unique = () =>
 async function signUp(): Promise<{ email: string; cookies: string }> {
   const email = unique();
   const res = await req("POST", "/api/auth/sign-up/email", {
-    body: { email, password: "s4-pass-12345", name: "S4 Test" },
+    body: { email, password: "test-pass-12345", name: "Test User" },
   });
   expect(res.status).toBe(200);
   const cookies = res.headers
@@ -130,7 +129,7 @@ describe("provider selection (offline)", () => {
   });
 });
 
-describe("password reset — live (plan §5: fully live in beta)", () => {
+describe("password reset — live (fully live in beta)", () => {
   it("mails a link on the CLIENT_ORIGIN that resets the password", async () => {
     await mailpitClear();
     const { email } = await signUp();
@@ -145,7 +144,7 @@ describe("password reset — live (plan §5: fully live in beta)", () => {
     expect(mail.Subject).toContain("Reset your Arcula password");
 
     // The link lands on the web app (CLIENT_ORIGIN), not the API — the
-    // web app is what renders the reset form in Phase 4.
+    // web app is what renders the reset form.
     const text = await mailpitText(mail.ID);
     const url = text.match(/http:\/\/\S+/)?.[0];
     expect(url, "the mail carries a link").toBeDefined();
@@ -164,13 +163,13 @@ describe("password reset — live (plan §5: fully live in beta)", () => {
     });
     expect(newIn.status).toBe(200);
     const oldIn = await req("POST", "/api/auth/sign-in/email", {
-      body: { email, password: "s4-pass-12345" },
+      body: { email, password: "test-pass-12345" },
     });
     expect(oldIn.status).toBe(401);
   }, 30000);
 });
 
-describe("email verification — built but gated (G6)", () => {
+describe("email verification — built but gated", () => {
   it("stays gated: the wired hook sends nothing at sign-up", async () => {
     await mailpitClear();
     await signUp();

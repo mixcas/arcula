@@ -9,7 +9,7 @@ import type { Artwork, Collection } from "@arcula/shared";
 
 const CollectionPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
-  // Routes carry "{slug}-{id}" but Firestore needs the id alone. Parsing down
+  // Routes carry "{slug}-{id}" but the API needs the id alone. Parsing down
   // to the id — rather than using the raw param — is what lets the canonical
   // rewrite below change the URL without re-triggering the fetch.
   const collectionId = parseId(param ?? "");

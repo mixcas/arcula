@@ -1,12 +1,11 @@
-// The save transaction and the read routes (Phase 3 S4, plan §6.3 + §7):
-// create/patch with staged-entry promotion, the serializer's exact
-// Firestore shape, and the owner/visitor reads — driven in-process with
-// app.request() against the real stack (real Postgres rows, real S3
-// objects, real Sharp).
+// The save transaction and the read routes: create/patch with staged-entry
+// promotion, the serializer's exact wire shape, and the owner/visitor
+// reads — driven in-process with app.request() against the real stack
+// (real Postgres rows, real S3 objects, real Sharp).
 //
-// The media suite (S3) is about the staging contract; this one is about
-// what happens AT SAVE: one transaction, order reindexed from position,
-// the exact document shape on the wire.
+// The media suite is about the staging contract; this one is about what
+// happens AT SAVE: one transaction, order reindexed from position, the
+// exact document shape on the wire.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
@@ -199,7 +198,7 @@ async function processEntry(
 }
 
 // ---------------------------------------------------------------------------
-// Wire shapes (the exact Firestore document shapes, plan §7)
+// Wire shapes (the exact wire document shapes)
 // ---------------------------------------------------------------------------
 
 interface WireTimestamp {
@@ -411,7 +410,7 @@ async function insertRow(
 // ---------------------------------------------------------------------------
 
 describe("POST …/artworks", () => {
-  it("creates the work and promotes the staged photo at order 0 (G7)", async () => {
+  it("creates the work and promotes the staged photo at order 0", async () => {
     const aid = uuid();
     await stageAndProcessPhoto(aid, pOne);
     const res = await createArtwork({
@@ -447,7 +446,7 @@ describe("POST …/artworks", () => {
     }
   });
 
-  it("answers with the exact Firestore document shape", async () => {
+  it("answers with the exact wire document shape", async () => {
     const aid = uuid();
     await stageAndProcessPhoto(aid, pShape);
     const res = await createArtwork({

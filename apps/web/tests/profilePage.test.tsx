@@ -14,7 +14,7 @@ import { changePasswordSchema, profileNameSchema } from "@/schemas/user";
 import type { SessionUserRead } from "@arcula/shared";
 
 /**
- * The profile page (Phase 5): which keys the name save sends (absent-leave
+ * The profile page: which keys the name save sends (absent-leave
  * is the PATCH contract, so only changed, non-blank halves ride the wire),
  * and the change-password outcome mapping.
  *

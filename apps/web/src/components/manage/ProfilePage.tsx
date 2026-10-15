@@ -24,15 +24,13 @@ import {
 } from "@/schemas/user";
 
 /**
- * The account profile (Phase 5, plan §12): first/last name through
- * `PATCH /me`, the password through Better Auth's native
- * `change-password` — Auth owns the credential, so the re-authentication
- * dance the old plan described (reauthenticateWithCredential) is the
- * endpoint's own `currentPassword` check. Email change is out of scope
- * (plan §5) and shown as read-only, not omitted — the field is there,
- * it just is not this page's to move.
+ * The account profile: first/last name through `PATCH /me`, the password
+ * through Better Auth's native `change-password` — Auth owns the credential,
+ * so the endpoint's own `currentPassword` check is the re-authentication
+ * step. Email change is out of scope and shown as read-only, not omitted —
+ * the field is there, it just is not this page's to move.
  *
- * The avatar (the user row's `image` column) is Phase 8.
+ * The avatar (the user row's `image` column) is not editable here yet.
  */
 
 /**

@@ -1,7 +1,6 @@
-// toArculaUser is the whole user-shape surface of the Phase 4 cutover:
-// every owner-side query reads `currentUser.uid` (the Firebase alias), so
-// a mapping that stops aliasing id -> uid breaks them silently. Pure and
-// ours end to end — tier 1.
+// toArculaUser is the whole user-shape surface: every owner-side query reads
+// `currentUser.uid` (the alias), so a mapping that stops aliasing id -> uid
+// breaks them silently. Pure and ours end to end — tier 1.
 
 import { toArculaUser } from "@/auth/user";
 import { describe, expect, it } from "vitest";

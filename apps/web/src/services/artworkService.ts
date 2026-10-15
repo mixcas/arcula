@@ -1,10 +1,9 @@
 /**
- * The artwork service layer (Phase 4 S2, plan §7).
+ * The artwork service layer.
  *
- * Reads parse through `artworkReadSchema` (the wire contract, plan §7);
- * writes are one HTTP call each — a save is one server-side transaction
- * (fields + staged-entry promotion), so there is nothing for the client to
- * sequence the way the Firebase era did.
+ * Reads parse through `artworkReadSchema` (the wire contract); writes are one
+ * HTTP call each — a save is one server-side transaction (fields +
+ * staged-entry promotion), so there is nothing for the client to sequence.
  *
  * The 404s on the single-artwork reads are the contract, not a failure:
  * for a visitor, a private work and a deleted work both answer 404 —

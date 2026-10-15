@@ -32,7 +32,7 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // Sign in with email and password using Firebase
+      // Sign in with email and password.
       await login(email, password);
 
       // Redirect to the intended destination after successful login

@@ -1,19 +1,13 @@
-// The server-side variant pipeline (§6 step 2): Sharp decodes once,
-// applies EXIF orientation, and encodes every requested variant to
-// WebP.
+// The server-side variant pipeline: Sharp decodes once, applies EXIF
+// orientation, and encodes every requested variant to WebP.
 //
-// The client's probe machinery is retired with it: Sharp always encodes
-// WebP, so there is no capability probe to get wrong and no silent
-// `.jpg` downgrade class. What carries over is the behaviour, not the
-// canvas: one decode per source (the client drew its N variants from
-// one decoded bitmap), the orientation applied at decode time, and the
-// 0.95 quality the client chose on purpose — "0.95 is a deliberate
-// quality choice rather than a size one", per the constants it
-// replaces in `imageRender.ts`.
+// Sharp always encodes WebP, so there is no capability probe to get
+// wrong and no silent `.jpg` downgrade class. The shape of the work is:
+// one decode per source, the orientation applied at decode time, and
+// the 0.95 quality — a deliberate quality choice rather than a size one.
 //
-// The geometry itself is not here: it is the verbatim table in
-// `./variants.ts`, and this module consumes it exactly as the client's
-// `renderVariant` did.
+// The geometry itself is not here: it is the variant table in
+// `./variants.ts`, and this module consumes it.
 
 import sharp from "sharp";
 import type { ImageVariantKey } from "@arcula/shared";
@@ -26,7 +20,7 @@ import {
 } from "./variants";
 
 /**
- * The encoder quality, on Sharp's 0–100 scale: the client's 0.95.
+ * The encoder quality, on Sharp's 0–100 scale: 0.95.
  * Artwork is unforgiving of ringing and mush around fine brushwork, and
  * WebP at 95 is visually near-lossless while still being far smaller
  * than a PNG.
@@ -74,7 +68,7 @@ export async function orientSource(
   source: Uint8Array,
 ): Promise<OrientedSource> {
   const { data, info } = await sharp(source)
-    // No argument: apply the EXIF orientation tag and strip it (G4),
+    // No argument: apply the EXIF orientation tag and strip it,
     // before any resize or crop.
     .rotate()
     .raw()
@@ -114,12 +108,11 @@ function rawInput(oriented: OrientedSource) {
 /**
  * Encode one variant from the already-decoded source.
  *
- * `cover` realises the crop in source pixels first (the same
- * `coverCrop` arithmetic the client fed to `drawImage`), then resizes
- * the centred window to the box — the box is square by construction, so
- * the aspect is the crop's, not the resize's. `inside` resizes to the
- * exact target the table computed: `fit: "fill"` lands on it pixel for
- * pixel (the target keeps the source aspect by construction), and
+ * `cover` realises the crop in source pixels first (via `coverCrop`),
+ * then resizes the centred window to the box — the box is square by
+ * construction, so the aspect is the crop's, not the resize's. `inside`
+ * resizes to the exact target the table computed: `fit: "fill"` lands on it
+ * pixel for pixel (the target keeps the source aspect by construction), and
  * `withoutEnlargement` is the second lock on the no-upscale rule the
  * table already applies.
  */
@@ -168,8 +161,8 @@ async function renderVariant(
 }
 
 /**
- * Every variant the source gets, in spec order (largest first — the same
- * order the client's `variants` array had, which the serializer keeps).
+ * Every variant the source gets, in spec order (largest first, which the
+ * serializer keeps).
  */
 export async function generateVariants(
   oriented: OrientedSource,

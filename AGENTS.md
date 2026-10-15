@@ -1,13 +1,12 @@
 # Arcula Agent Guide
 
-> The design record lives in **`API-MIGRATION-QWEN.md`** — the living doc that
-> carries every phase, decision and in-place amendment. This file is the
-> working guide: layout, commands, and the test doctrine. `README.md` is the
+> The design record lives in **`project-plan.md`** — the as-built description
+> of the product, its data model and its architecture. This file is the working
+> guide: layout, commands, and the test doctrine. `README.md` is the
 > user-facing overview.
 >
-> The product is **Arcula** (`arcula.art`); several internal identifiers still
-> say `custodia` (the Firebase project id, the package and repo names). That
-> split is deliberate — read `RENAME.md` before renaming any of them.
+> The product is **Arcula** (`arcula.art`), and the packages, the repository
+> and the identifiers all say `arcula` too.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and one
 deploy target:
@@ -81,8 +80,9 @@ consumes. `packages/db/migrations/` is generated, never hand-edited.
 
 **`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
 the custom domain; the apex and `www` are **separate** `DomainName` pairs that
-each get their own regional endpoint (see the doc — pointing `www` at the apex
-target is the `403` the layout is built to avoid).
+each get their own regional endpoint — an HTTP-API custom domain serves only its
+exact host, so pointing `www` at the apex target is the `403` the layout is built
+to avoid.
 
 ## How a request flows
 
@@ -222,5 +222,6 @@ restated here.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and
-  `scripts/deploy-prod.sh` prints each against the matching Porkbun record. See
-  `API-MIGRATION-QWEN.md` §10.3 before touching DNS.
+  `scripts/deploy-prod.sh` prints each against the matching Porkbun record.
+  Those DNS records are console-only (no API access), and the apex and `www`
+  targets are **different** `d-…` values — do not point one at the other.

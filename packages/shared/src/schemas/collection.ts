@@ -2,15 +2,15 @@ import { z } from "zod";
 import { MINTED_ID_RE } from "./artwork";
 
 /**
- * The /api/v1 collection payloads (Phase 3 S5, plan §7). The form side of
+ * The /api/v1 collection payloads. The form side of
  * these stays in the web app; what is shared is the JSON the routes
  * validate — the same reason the artwork save payloads live next to
  * `artworkSchema` rather than in the route file.
  */
 
 /**
- * POST /collections. The id is minted server-side — the old `addDoc()` had
- * no caller-supplied id, and the client only ever sent name/description.
+ * POST /collections. The id is minted server-side; the client sends only
+ * name/description.
  */
 export const collectionCreateSchema = z.object({
   name: z.string().trim().min(1, "Collection name is required"),
@@ -27,8 +27,7 @@ export const collectionCreateSchema = z.object({
 export type CollectionCreatePayload = z.infer<typeof collectionCreateSchema>;
 
 // In a JSON payload a field is either a value, `null` (clear), or absent
-// (leave alone) — JSON has no `deleteField()` sentinel, and `null` is what
-// replaces it (the same contract the artwork PATCH uses). A string must be
+// (leave alone) — the same contract the artwork PATCH uses. A string must be
 // non-blank: clearing is the job of `null`.
 const clearableText = z.string().trim().min(1).nullable().optional();
 

@@ -10,7 +10,7 @@
  * pretending documents are ordered or threading a flag through every helper.
  *
  * What this module does not do anymore: name a document's stored object. The
- * server mints the object key from the content type it decoded (plan §6), so
+ * server mints the object key from the content type it decoded, so
  * the client has no extension to choose and no allowlist to keep in step with
  * the rules — the accepted-type checks below are the form's only gate, and the
  * stage route enforces the same lists at the boundary.

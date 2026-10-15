@@ -23,7 +23,7 @@ import { artworkSlug, collectionSlug, parseId } from "@arcula/shared";
  */
 const PublicCollectionPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
-  // Routes carry "{slug}-{id}" but Firestore only ever knows the id.
+  // Routes carry "{slug}-{id}" but the API only ever knows the id.
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
 

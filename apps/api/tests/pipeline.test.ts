@@ -1,6 +1,6 @@
-// The Sharp pipeline (§6 step 2): geometry against the verbatim table,
-// EXIF orientation applied before any resize (G4), the no-upscale rule,
-// the document subset, and the keys.ts cross-check.
+// The Sharp pipeline: geometry against the variant table, EXIF orientation
+// applied before any resize, the no-upscale rule, the document subset, and
+// the keys.ts cross-check.
 //
 // Fixtures are generated with Sharp in-test — no committed binary
 // blobs, and the EXIF orientation fixture included (makeOrientedJpeg
@@ -42,9 +42,8 @@ async function makeJpeg(width: number, height: number): Promise<Buffer> {
 /**
  * A phone-camera-style JPEG: the pixels are stored sideways and the EXIF
  * Orientation tag says so — orientation 6 is 90° CW, an 800x600 stored
- * image that displays as 600x800. This is the G4 case: without the tag
- * being applied before any resize, every variant inherits the sideways
- * pixels permanently.
+ * image that displays as 600x800. Without the tag being applied before any
+ * resize, every variant inherits the sideways pixels permanently.
  *
  * Sharp is what writes the tag (`withMetadata({ orientation })` is the
  * documented write path in 0.35 — verified: `metadata().orientation`
@@ -148,10 +147,10 @@ describe("generateVariants (photo set)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// G4: EXIF orientation before any resize
+// EXIF orientation before any resize
 // ---------------------------------------------------------------------------
 
-describe("EXIF orientation (G4)", () => {
+describe("EXIF orientation", () => {
   it("reports the transposed source dimensions from metadata alone", async () => {
     // Orientation 6 = 90° CW: the 800x600 pixels display as 600x800.
     const source = await makeOrientedJpeg(800, 600, 6);
@@ -177,7 +176,8 @@ describe("EXIF orientation (G4)", () => {
       (v) => v.key === "xlarge",
     )!;
     // xlarge is an inside fit: at 600x800 post-rotation nothing caps,
-    // so the output is the transposed source — sideways if G4 regresses.
+    // so the output is the transposed source — sideways if the rotation
+    // regresses.
     expect({ width: xlarge.width, height: xlarge.height }).toEqual({
       width: 600,
       height: 800,
@@ -192,7 +192,7 @@ describe("EXIF orientation (G4)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The keys.ts cross-check promised in S1
+// The keys.ts cross-check
 // ---------------------------------------------------------------------------
 
 describe("key spaces agree", () => {

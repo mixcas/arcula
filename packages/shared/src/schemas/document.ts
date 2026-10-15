@@ -2,24 +2,22 @@ import { z } from "zod";
 import type { Artwork, Collection } from "../types";
 
 /**
- * The wire shape of the API's GET responses (plan §7), parsed at the service
- * boundary.
+ * The wire shape of the API's GET responses, parsed at the service boundary.
  *
- * The serializer emits the exact Firestore document shape — same keys, same
- * nesting, `url` fields as proxy paths — so these schemas are a re-declaration
- * of that shape, not a new one: whatever they accept, the old client types
- * accepted. Parsing on the way in buys two things at once: a runtime
+ * The serializer emits a fixed document shape — same keys, same nesting,
+ * `url` fields as proxy paths — so these schemas are a re-declaration of that
+ * shape, not a new one: whatever they accept, the client types accept.
+ * Parsing on the way in buys two things at once: a runtime
  * assertion that a server change cannot silently reshape the document the
  * app renders, and the narrowed `z.infer` type the service layer returns.
  *
  * Two deliberate absences, matching the serializer: a collection row never
- * carries `passwordHash` or `artworks` (neither is a client field), and blank
- * text fields are ABSENT keys, never `null` — so they are optional here, and
- * the client's looser types (`description?: string`) stay compatible with
- * both shapes.
+ * carries `artworks` (it is not a client field), and blank text fields are
+ * ABSENT keys, never `null` — so they are optional here, and the client's
+ * looser types (`description?: string`) stay compatible with both shapes.
  */
 
-/** The wire timestamp: `{ seconds, nanoseconds }`, Firestore's JSON shape. */
+/** The wire timestamp: `{ seconds, nanoseconds }`. */
 export const wireTimestamp = z.object({
   seconds: z.number(),
   nanoseconds: z.number(),

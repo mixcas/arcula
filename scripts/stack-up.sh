@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bring up the local dev stack (§9), idempotently: services that are
+# Bring up the local dev stack, idempotently: services that are
 # already up are left alone.
 #
 #   sh scripts/stack-up.sh                  # everything: postgres s3 mailpit
@@ -7,10 +7,9 @@
 #
 # Postgres runs as a docker (colima) container — the only stack service the
 # docker registry reachable from this machine actually hosts. The S3
-# stand-in (SeaweedFS) and Mailpit run natively (§15): seaweedfs as a
-# nohup'd binary, mailpit as a brew service. Credentials come from the
-# repo-root .env (sourced and exported below). Nothing in this file is
-# production (§10 is the prod stack).
+# stand-in (SeaweedFS) and Mailpit run natively: seaweedfs as a nohup'd
+# binary, mailpit as a brew service. Credentials come from the repo-root
+# .env (sourced and exported below). Nothing in this file is production.
 
 set -eu
 
@@ -72,8 +71,8 @@ ensure_s3() {
   }
   echo "s3 (SeaweedFS): starting (native binary)..."
   mkdir -p "$ROOT/.stack/seaweedfs" "$ROOT/.stack/logs"
-  # -volume.port: the default 8080 is the Firestore emulator's default port
-  # (test:rules, bun run emulators) — only the S3 API on 9000 is used here.
+  # -volume.port: 8080 is often already taken on a dev machine, so the
+  # volume server binds 8090 — only the S3 API on 9000 is used here.
   nohup "$WEED_BIN" server -dir="$ROOT/.stack/seaweedfs" -s3 \
     -s3.ip.bind 127.0.0.1 -s3.port 9000 \
     -volume.port 8090 \

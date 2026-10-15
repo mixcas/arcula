@@ -1,13 +1,13 @@
-// The opaque-sign-up gotcha, asserted (plan §5): every column the Better
+// The opaque-sign-up gotcha, asserted: every column the Better
 // Auth adapter is told about via `user.additionalFields` must exist on the
 // schema's user table — and the other way around, the declared tier default
 // must be the one the quota key (`COLLECTION_LIMITS`) keys on. Drift here
 // fails sign-up in production with no useful error, which is exactly what
 // this test exists to kill in CI.
 //
-// The live half of the criterion — a real sign-in through the adapter — is
-// not a test but the `db:reset` script: it signs the owner up and back in
-// against the local compose DB, which is also the Phase 1 exit criterion.
+// The live half — a real sign-in through the adapter — is not a test but
+// the `db:reset` script: it signs the owner up and back in against the
+// local compose DB.
 
 import { getTableColumns } from "drizzle-orm";
 import { schema, user } from "@arcula/db";
@@ -21,7 +21,7 @@ const { userAdditionalFields } = await import("../src/auth");
 
 const userColumns = getTableColumns(user);
 
-describe("the adapter declaration and the schema agree (§5)", () => {
+describe("the adapter declaration and the schema agree", () => {
   it("every additionalFields key is a column of the user table", () => {
     for (const key of Object.keys(userAdditionalFields)) {
       expect(

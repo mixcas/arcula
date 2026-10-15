@@ -1,4 +1,4 @@
-// API integration: static SPA serving (Phase 6 S2, plan §10.2) — the same
+// API integration: static SPA serving — the same
 // process that serves /api/v1 and /api/auth serves the built app: file
 // hits, the client-route fallback, the traversal refusal, the cache
 // header table, and inertness when there is no dist tree.

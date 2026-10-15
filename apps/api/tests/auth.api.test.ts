@@ -1,16 +1,14 @@
-// API integration: the /api/auth mount (Phase 2, plan §12).
+// API integration: the /api/auth mount.
 //
 // The app is driven in-process with app.request() against the real local
 // stack — real Hono routes and middleware, real adapter writes to
 // Postgres, real cookies. The elided hop is the outermost TCP one;
-// nothing else is stubbed (§11, G8; the decision is recorded in §15).
-// The stack (postgres, mailpit) is brought up by the test script before
-// vitest starts, and .env is sourced there too, so the requests carry
-// the same AUTH_BASE_URL the dev server uses.
+// nothing else is stubbed. The stack (postgres, mailpit) is brought up by
+// the test script before vitest starts, and .env is sourced there too, so
+// the requests carry the same AUTH_BASE_URL the dev server uses.
 //
-// The auth routes keep Better Auth's native response shape (decision,
-// §15) — so assertions below read Better Auth's bodies, not the §7
-// envelope.
+// The auth routes keep Better Auth's native response shape — so assertions
+// below read Better Auth's bodies, not the error envelope.
 
 import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
@@ -100,7 +98,7 @@ describe("sign-up", () => {
   it("creates the account, returns the custom fields, and sets the session cookie with the right flags", async () => {
     const email = unique();
     const res = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+      body: { email, password: "test-pass-12345", name: "Test User" },
     });
     expect(res.status).toBe(200);
     const body = await json(res);
@@ -132,11 +130,11 @@ describe("sign-in", () => {
   it("resolves a session for the right password and answers 401 with the native error for the wrong one", async () => {
     const email = unique();
     await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+      body: { email, password: "test-pass-12345", name: "Test User" },
     });
 
     const ok = await req("POST", "/api/auth/sign-in/email", {
-      body: { email, password: "s2-pass-12345" },
+      body: { email, password: "test-pass-12345" },
     });
     expect(ok.status).toBe(200);
     const body = await json(ok);
@@ -147,9 +145,9 @@ describe("sign-in", () => {
       body: { email, password: "wrong-password" },
     });
     expect(bad.status).toBe(401);
-    // Native Better Auth error shape — the decision that /api/auth/* is
-    // not re-wrapped in the §7 envelope (asserted so the envelope cannot
-    // creep onto the auth mount).
+    // Native Better Auth error shape — /api/auth/* is not re-wrapped in
+    // the error envelope (asserted so the envelope cannot creep onto the
+    // auth mount).
     const err = await json(bad);
     expect(err?.code).toBe("INVALID_EMAIL_OR_PASSWORD");
     expect(typeof err?.message).toBe("string");
@@ -158,11 +156,11 @@ describe("sign-in", () => {
 
 describe("change-password", () => {
   // The profile page's seam: the page calls this native endpoint, so its
-  // failure vocabulary (native codes, not the §7 envelope) is pinned here.
+  // failure vocabulary (native codes, not the error envelope) is pinned here.
   it("rejects a wrong current password with the native INVALID_PASSWORD code", async () => {
     const email = unique();
     const up = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+      body: { email, password: "test-pass-12345", name: "Test User" },
     });
     const cookies = cookieHeader(up)!;
 
@@ -180,7 +178,7 @@ describe("change-password", () => {
   it("changes the password — the old one stops resolving, the new one works", async () => {
     const email = unique();
     const up = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "old-pass-12345", name: "S2 Test" },
+      body: { email, password: "old-pass-12345", name: "Test User" },
     });
     const cookies = cookieHeader(up)!;
 
@@ -209,7 +207,7 @@ describe("sign-out", () => {
   it("kills the session and clears the cookie", async () => {
     const email = unique();
     const up = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+      body: { email, password: "test-pass-12345", name: "Test User" },
     });
     const token = (await json(up))?.token;
     expect(typeof token).toBe("string");
@@ -255,11 +253,11 @@ describe("sign-out", () => {
   });
 });
 
-describe("bearer resolution (the mobile path, §5)", () => {
+describe("bearer resolution (the mobile path)", () => {
   it("resolves the session from Authorization: Bearer and answers null for unknown or missing credentials", async () => {
     const email = unique();
     const up = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "s2-pass-12345", name: "S2 Test" },
+      body: { email, password: "test-pass-12345", name: "Test User" },
     });
     const token = (await json(up))?.token;
     expect(typeof token).toBe("string");

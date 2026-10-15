@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The G8 seam: the component suites will render against the real API
+// The transport seam: the component suites render against the real API
 // through the cookie-jar transport, so the transport itself gets one
 // focused test instead of a hundred accidental ones. It proves, end to
 // end against the local stack, that

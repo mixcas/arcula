@@ -1,8 +1,8 @@
-// The collection resource routes (Phase 3 S5, plan §7): list/create with
-// the tier cap, the owner/visitor reads, the settings-form PATCH
-// (absent-leave / null-clear), the CSV import's mixed-batch contract, the
-// bulk soft delete, and the unused-in-beta restore — driven in-process
-// with app.request() against the real stack.
+// The collection resource routes: list/create with the tier cap, the
+// owner/visitor reads, the settings-form PATCH (absent-leave / null-clear),
+// the CSV import's mixed-batch contract, the bulk soft delete, and the
+// unused-in-beta restore — driven in-process with app.request() against the
+// real stack.
 //
 // The beta cap is one collection per free account, so the users in this
 // file each get exactly one collection through the API; where a test
@@ -41,7 +41,7 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** The §7 envelope error: the code, plus the failed fields. */
+/** The error envelope: the code, plus the failed fields. */
 async function err(
   res: Response,
 ): Promise<{ code: string; fields?: Record<string, string> }> {
@@ -74,7 +74,7 @@ async function freshUser(): Promise<{ cookies: string; userId: string }> {
 
 const uuid = () => crypto.randomUUID();
 
-/** The wire timestamp is `{ seconds, nanoseconds }` — the Firestore shape. */
+/** The wire timestamp is `{ seconds, nanoseconds }`. */
 function isWireTimestamp(value: unknown): void {
   expect(Object.keys(value as Record<string, unknown>).sort()).toEqual([
     "nanoseconds",
@@ -110,7 +110,7 @@ describe("POST /collections", () => {
     });
     expect(res.status).toBe(201);
     const body = await json<Record<string, unknown>>(res);
-    // The exact Firestore document shape: no blank keys, no extras.
+    // The exact wire document shape: no blank keys, no extras.
     expect(Object.keys(body).sort()).toEqual([
       "createdAt",
       "id",
@@ -357,8 +357,7 @@ describe("POST /collections/{cid}/import/csv", () => {
     expect(body.inserted).toBe(2);
     expect(body.rejected).toHaveLength(1);
     expect(body.rejected[0].row).toBe(1);
-    // The contract is the failed field; the message wording is zod's,
-    // not the client's.
+    // The contract is the failed field; the message wording is zod's.
     expect(Object.keys(body.rejected[0].errors)).toEqual(["title"]);
 
     const list = await json<Record<string, unknown>[]>(

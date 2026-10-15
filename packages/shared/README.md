@@ -1,27 +1,28 @@
 # @arcula/shared
 
-The client contract: everything the web client and the API must agree on,
-written once. Wire types, the Zod schemas that validate the payloads they
-exchange, the caps the two sides enforce, the quota table, and the pure
-ordering/slug helpers.
+The client contract: everything the web app and the API must agree on, written
+once. The wire types, the Zod schemas that validate the payloads they exchange,
+the caps and the tier quota table both sides enforce, and the pure ordering and
+slug helpers.
 
-Nothing here may import from `apps/` — this package is consumed by both
-sides, and a dependency on either one is a cycle. The only runtime
-dependency is `zod`, which both sides import directly (G5: one version,
-pinned once).
+Nothing here may import from `apps/` — both sides consume this package, so a
+dependency on either is a cycle. The only runtime dependency is `zod`, imported
+directly by both sides (one version, pinned once).
 
-Two temporary seams, both reversed in Phase 4 of the API migration when
-the wire shape lands:
+The surface — `src/index.ts`, re-exported whole; importers use the bare package
+name, never a subpath:
 
-- `src/types.ts` keeps a **type-only** import of `firebase/firestore` for
-  the `Timestamp` annotation. Type-only: it is erased at build time, so it
-  has no runtime or server footprint. When the API's wire shape lands, the
-  annotation is replaced and the `firebase` devDependency goes with it.
-- `src/schemas/artwork.ts` is the split core of the old web schema file.
-  Its Firestore-flavoured comments are accurate for the client era it was
-  written in and are rewritten storage-neutral in Phase 4, along with the
-  web's `toArtworkUpdate` sentinel.
+- `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkPhoto`,
+  `ArtworkDocument`, `Collection`, `ImageVariant`.
+- `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`,
+  `document`, `user`.
+- `caps.ts` — the per-file size caps and the accepted-type maps.
+- `limits.ts` — `COLLECTION_LIMITS` and `collectionLimitForTier`, the per-tier
+  collection quota the API enforces on create.
+- `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
+  `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
+- `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
 
 Tests live in `tests/` and run with the repo's standard vitest setup
-(`bun run test:shared` from the root). The suite is pure-logic by
-construction: no DOM, no Firestore, no network.
+(`bun run test:shared` from the root). The suite is pure-logic by construction:
+no DOM, no network.

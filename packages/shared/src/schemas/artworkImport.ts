@@ -4,7 +4,7 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
 /**
  * Pure logic for the CSV artwork-import flow (`/manage/collection/:id/import/csv`).
  *
- * Nothing in this module touches React, Firestore or the filesystem: every
+ * Nothing in this module touches React or the filesystem: every
  * step of the pipeline — header-to-field guessing, cell normalization, date
  * conversion, and per-row validation against the same `artworkSchema` the
  * Add/Edit forms use — is a plain function so it can be unit-tested in

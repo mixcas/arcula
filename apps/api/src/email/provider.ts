@@ -1,4 +1,4 @@
-// The mail provider behind Better Auth's two hooks (plan §5):
+// The mail provider behind Better Auth's two hooks:
 // `emailAndPassword.sendResetPassword` and
 // `emailVerification.sendVerificationEmail`.
 //
@@ -7,7 +7,7 @@
 //                     Nothing local bills.
 //   resend (prod)   — a plain fetch to the Resend API: one POST endpoint,
 //                     and the SDK was ruled out (a dependency with its own
-//                     transitive pins for a single call, §15).
+//                     transitive pins for a single call).
 //
 // Chosen by EMAIL_PROVIDER; anything else is a config error, not a
 // silent fallback.
@@ -29,7 +29,7 @@ export interface EmailProvider {
 
 // Better Auth's hook URLs point at the API origin; the links in the mails
 // have to land on the web app that renders the reset/verification forms,
-// so the origin is rewritten to CLIENT_ORIGIN (§9) — path and query stay.
+// so the origin is rewritten to CLIENT_ORIGIN — path and query stay.
 export function clientUrl(apiUrl: string): string {
   if (!clientOrigin) {
     throw new Error(

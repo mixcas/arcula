@@ -14,7 +14,7 @@ import type { Artwork } from "../types";
  * This file is the pure core of the artwork schema; the PATCH-payload seam
  * (`toArtworkUpdate`) stayed in `apps/web/src/schemas/artwork.ts`, next to the
  * Edit form that supplies it the loaded values it clears against. The API
- * validates and writes with these same functions (plan §7).
+ * validates and writes with these same functions.
  */
 
 /** Blank text becomes `undefined` so an untouched field is never written. */
@@ -179,7 +179,7 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
 // the loaded values a cleared field is matched against.
 
 // ---------------------------------------------------------------------------
-// API save payloads (Phase 3 S4, plan §6.3 / §7)
+// API save payloads
 //
 // The form schemas above validate the inputs; these two validate the JSON a
 // save request carries — the fields, plus the staged entries the API
@@ -187,11 +187,10 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
 // ---------------------------------------------------------------------------
 
 /**
- * A client-minted id: the same character set the old client's nanoid gave
- * its Firestore-style ids, and what an object-key segment must be — letters,
- * digits, dash, underscore; nothing that could carry a dot or a path
- * separator. Entry ids and artwork ids are both minted under this rule, and
- * the stage routes apply it to the ids they accept (one regex, shared).
+ * A client-minted id: letters, digits, dash, underscore; nothing that could
+ * carry a dot or a path separator. It is what an object-key segment must be,
+ * and entry ids and artwork ids are both minted under it — the stage routes
+ * apply the same rule to the ids they accept (one regex, shared).
  */
 export const MINTED_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -205,7 +204,7 @@ export type StagedEntry = z.infer<typeof stagedEntrySchema>;
 
 /**
  * POST …/artworks. The form's fields plus the client-minted artwork id and
- * the staged entries to promote in the same transaction (§6.3).
+ * the staged entries to promote in the same transaction.
  *
  * The payload carries no `order`: the array position IS the order — the
  * server assigns it from position, which is the client's existing
@@ -268,8 +267,7 @@ export const UPDATABLE_TEXT_FIELDS = [
 ] as const;
 
 // In a JSON payload a field is either a value, `null` (clear), or absent
-// (leave alone) — JSON has no `deleteField()` sentinel, and `null` is what
-// replaces it. A string must be non-blank: clearing is the job of `null`.
+// (leave alone). A string must be non-blank: clearing is the job of `null`.
 const updatableText = z.string().trim().min(1).nullable().optional();
 
 /**

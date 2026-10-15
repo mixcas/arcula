@@ -1,9 +1,9 @@
-// db:reset (plan §4): one script — drop all tables, re-apply migrations,
-// clear both object prefixes in the S3 stand-in, seed the owner account
-// through the same Better Auth instance the app signs in with, and prove
-// sign-in through the adapter. That last step IS the Phase 1 exit criterion.
+// db:reset: one script — drop all tables, re-apply migrations, clear both
+// object prefixes in the S3 stand-in, seed the owner account through the
+// same Better Auth instance the app signs in with, and prove sign-in
+// through the adapter.
 //
-// Refuses to run in prod unless ALLOW_DB_RESET=true (§9).
+// Refuses to run in prod unless ALLOW_DB_RESET=true.
 
 import {
   CreateBucketCommand,
@@ -52,7 +52,7 @@ execSync("bunx drizzle-kit migrate", {
   cwd: `${repoRoot}packages/db`,
 });
 
-// 4. Clear both object prefixes (§6): staging/ and the final artworks/ tree.
+// 4. Clear both object prefixes: staging/ and the final artworks/ tree.
 const s3Endpoint = process.env.S3_ENDPOINT;
 const s3Key = process.env.S3_ACCESS_KEY;
 const s3Secret = process.env.S3_SECRET_KEY;
@@ -119,8 +119,8 @@ for (const prefix of ["staging/", "artworks/"]) {
   );
 }
 
-// 5. Seed the owner account through the app's own auth instance (§4), then
-// 6. prove sign-in through the adapter (the Phase 1 exit criterion).
+// 5. Seed the owner account through the app's own auth instance, then
+// 6. prove sign-in through the adapter.
 // A failed .api call THROWS an APIError ({ status, body: { message, code } });
 // a success resolves the endpoint body — so the guards below are checks on
 // a resolved body, and a real failure aborts the script with the thrown error.

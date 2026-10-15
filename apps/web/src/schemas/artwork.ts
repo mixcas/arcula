@@ -4,7 +4,7 @@
  *
  * Everything else (validation, coercion, `ArtworkFormValues`, the create
  * payload, the import pipeline) lives in `@arcula/shared/src/schemas/`: it is
- * pure, and the API validates and writes with the same code (plan §7). This
+ * pure, and the API validates and writes with the same code. This
  * file exists because a PATCH needs a third state the schema alone cannot
  * express: a field the user cleared. In the JSON the API accepts, a cleared
  * field is `null` and an absent one is "leave it alone" — so the payload has

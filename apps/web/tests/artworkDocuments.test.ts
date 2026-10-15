@@ -3,11 +3,11 @@
 // notice being wrong: which types the form admits, what an image tile reads,
 // and when a save is allowed to skip the field.
 //
-// What this file does not test anymore: naming a document's stored object.
-// The server mints the object key from the content type it decoded (plan §6),
-// so the client has no extension to choose and no allowlist to keep in step
-// with the rules — the accepted-type checks below are the form's only gate,
-// and the stage route enforces the same lists at the boundary.
+// What this file does not test: naming a document's stored object. The server
+// mints the object key from the content type it decoded, so the client has no
+// extension to choose and no allowlist to keep in step with the rules — the
+// accepted-type checks below are the form's only gate, and the stage route
+// enforces the same lists at the boundary.
 
 import { describe, expect, it } from "vitest";
 import {

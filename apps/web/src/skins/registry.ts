@@ -19,7 +19,7 @@ import type {
  * The skin a collection with no `skin` field — or an unrecognised one — gets.
  *
  * Exported as the *definition* and the id derived from it, so the constant the
- * app falls back to and the id written to Firestore cannot drift apart.
+ * app falls back to and the id written to the collection cannot drift apart.
  */
 export const DEFAULT_SKIN: SkinDefinition = basicxSkin;
 export const DEFAULT_SKIN_ID: string = DEFAULT_SKIN.id;

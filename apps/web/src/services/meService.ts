@@ -1,11 +1,11 @@
 /**
- * The /api/v1/me pair (Phase 5, plan §7).
+ * The /api/v1/me pair.
  *
  * The session the Better Auth client holds carries the core fields only;
  * the custom columns — tier, first/last name, settings — ride /me. The
- * responses are parsed through `sessionUserSchema` (the wire contract, plan
- * §7), the same doctrine as `collectionReadSchema`: a server reshape is a
- * parse error at the boundary, not a render of a half-shaped user.
+ * responses are parsed through `sessionUserSchema` (the wire contract), the
+ * same doctrine as `collectionReadSchema`: a server reshape is a parse error
+ * at the boundary, not a render of a half-shaped user.
  */
 
 import {

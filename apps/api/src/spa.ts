@@ -1,5 +1,5 @@
 /**
- * Static SPA serving (Phase 6, plan §10.2): the same process that serves
+ * Static SPA serving: the same process that serves
  * /api/v1 and /api/auth also serves the built app, so a deploy is one
  * artifact behind one origin — no second hosting stack in beta.
  *
@@ -25,7 +25,7 @@
  *
  * Runtime-agnostic on purpose: node:fs/path/url only, so the same file
  * runs under Bun (local dev, `bun run start`) and Node (the Lambda
- * package, Phase 6 S3). `WEB_DIST` is the one knob: the container and
+ * package). `WEB_DIST` is the one knob: the container and
  * the Lambda set it explicitly; the default is the repo layout (this
  * file lives in apps/api/src, the dist in apps/web/dist).
  */

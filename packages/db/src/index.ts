@@ -1,5 +1,5 @@
-// The Drizzle schema: nine tables (plan §4). Four Better Auth core tables
-// (extended with the typed `user` columns of §0.3) plus five domain tables.
+// The Drizzle schema: nine tables. Four Better Auth core tables (extended
+// with the typed `user` columns) plus five domain tables.
 //
 // This package is the single source of truth for the schema: the API imports
 // it over a live driver, the migration tooling reads it to generate SQL, and
@@ -8,8 +8,8 @@
 // into the server or the reverse.
 //
 // `user` is singular on purpose: the Better Auth drizzle adapter expects its
-// core tables under the names `user`, `session`, `account`, `verification`
-// (§0.3). The core tables keep the adapter's generated shape — do not
+// core tables under the names `user`, `session`, `account`, `verification`.
+// The core tables keep the adapter's generated shape — do not
 // hand-roll deviations; if the adapter's documented schema changes, change it
 // here in one place and regenerate.
 
@@ -27,7 +27,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-// timestamptz everywhere a timestamp is stored (plan §4).
+// timestamptz everywhere a timestamp is stored.
 const timestamptz = (name: string) =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
 
@@ -35,10 +35,10 @@ const timestamptz = (name: string) =>
 // Better Auth core tables
 // ---------------------------------------------------------------------------
 
-// Extended with the four custom columns (§0.3): typed, queryable, and
-// declared through the adapter's `additionalFields` in apps/api. An
-// undeclared custom column is the opaque sign-up failure (§5) — the
-// declaration and these columns are asserted in tests on both sides.
+// Extended with the four custom columns: typed, queryable, and declared
+// through the adapter's `additionalFields` in apps/api. An undeclared custom
+// column is the opaque sign-up failure — the declaration and these columns
+// are asserted in tests on both sides.
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -93,8 +93,8 @@ export const account = pgTable("account", {
   updatedAt: timestamptz("updatedAt"),
 });
 
-// Defined even though verification is gated off in beta (§5): that is what
-// makes later enablement a config flip, not a schema change (G6).
+// Defined even though verification is gated off in beta: that is what makes
+// later enablement a config flip, not a schema change.
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),
@@ -108,9 +108,9 @@ export const verification = pgTable("verification", {
 // Domain tables
 // ---------------------------------------------------------------------------
 
-// The Firestore `artworks: string[]` does not become a column: a denormalized
-// list that the join replaces (G2). `passwordHash` was dead; if Phase 8 builds
-// password-protected collections, its column is added then.
+// There is no `artworks: string[]` column: it would be a denormalized list the
+// join replaces. There is no `passwordHash` column either: collection password
+// protection is not built.
 export const collections = pgTable(
   "collections",
   {
@@ -118,8 +118,8 @@ export const collections = pgTable(
     userId: text("userId").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    // Read-time default `DEFAULT_SKIN_ID`; never queried on, so no backfill
-    // was ever needed — the deliberate contrast with `deletedAt`.
+    // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
+    // backfill — the deliberate contrast with `deletedAt`.
     skin: text("skin"),
     skinOptions: jsonb("skinOptions"),
     isPublic: boolean("isPublic").notNull().default(true),
@@ -130,7 +130,7 @@ export const collections = pgTable(
 );
 
 // `photos`/`documents` are tables, not array columns. Money stays text —
-// the string that was typed, no float drift (§4).
+// the string that was typed, no float drift.
 export const artworks = pgTable(
   "artworks",
   {
@@ -153,13 +153,13 @@ export const artworks = pgTable(
     currentValue: text("currentValue"),
     // Per-artwork, independent of the collection's flag.
     isPublic: boolean("isPublic").notNull().default(true),
-    // NULL = live. Soft delete stays; the column replaces the Firestore field.
+    // NULL = live. Soft delete: the column is the sole record of deletion.
     deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [
-    // The owner list: the Firestore composite, now a plain column.
+    // The owner list: the composite index behind it.
     index("artworks_collection_user_deleted_idx").on(
       table.collectionId,
       table.userId,

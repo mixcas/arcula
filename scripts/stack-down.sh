@@ -3,8 +3,8 @@
 #   sh scripts/stack-down.sh                  # everything
 #   sh scripts/stack-down.sh postgres s3      # just the named services
 #
-# Volumes (postgres data, MinIO state) are kept: db:reset wipes tables and
-# objects, never the volumes.
+# Volumes (postgres data, object-store state) are kept: db:reset wipes tables
+# and objects, never the volumes.
 
 set -eu
 

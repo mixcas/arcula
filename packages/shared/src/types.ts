@@ -1,8 +1,6 @@
-// `Timestamp` is the wire shape the API serializer emits —
-// `{ seconds, nanoseconds }`, exactly the shape Firestore used to hand the
-// client — so every type in this file keeps working unchanged across the
-// cutover. Firebase's `Timestamp` carried the same two fields plus methods
-// the client never called; the plain interface is what remains.
+// `Timestamp` is the wire shape the API serializer emits:
+// `{ seconds, nanoseconds }`. The plain interface carries those two fields and
+// nothing else — no methods for the client to ignore.
 export interface Timestamp {
   seconds: number;
   nanoseconds: number;
@@ -23,26 +21,20 @@ export interface Collection {
   userId: string; // Reference to the owner
   description?: string;
   isPublic?: boolean;
-  passwordHash?: string; // Optional password protection
   artworks?: string[]; // Array of artwork IDs
   // Which skin renders this collection's public view. An unknown or absent id
-  // falls back to DEFAULT_SKIN_ID — see src/skins/registry.ts.
+  // falls back to DEFAULT_SKIN_ID — see apps/web/src/skins/registry.ts.
   //
-  // Deliberately NOT a migration target, and that is a contrast with `deletedAt`
-  // worth stating: the migration doctrine bites when a `where(...)` filter stops
-  // matching documents that lack the field, which is what happened there. Nothing
-  // ever queries on `skin`. It is read off a document already fetched by id and
-  // defaulted at read time, so a collection written before this field existed
-  // simply renders the default skin. Adding a backfill for it would be cargo
-  // cult.
+  // Nothing ever queries on `skin`: it is read off a row already fetched by id
+  // and defaulted at read time, so a collection that never set it simply
+  // renders the default skin. A backfill would buy nothing.
   skin?: string;
   // The chosen skin's own option vocabulary, validated at read time against
   // that skin's `options` — an unknown key is dropped and a wrong type falls
   // back to the default, so a stale or hand-edited value cannot corrupt a
   // collection. Nothing outside the skin reads it.
   skinOptions?: Record<string, boolean | number | string>;
-  // Stamped by collectionService, not by callers. Firestore returns a
-  // Timestamp on read — a `Date` written by the client comes back as one.
+  // Stamped by collectionService, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -72,8 +64,8 @@ export interface Artwork {
   placeOfOrigin?: string;
   provenance?: string;
   // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public collection
-  // page, not in the public artwork view, and refused by storage.rules to
-  // anyone but the owner.
+  // page, not in the public artwork view, and served only to the owner —
+  // media reads re-check visibility per request.
   documents: ArtworkDocument[];
   notes?: string;
   condition?: string;
@@ -84,18 +76,15 @@ export interface Artwork {
   // isPublic. A public collection may keep individual works private (and, by
   // symmetry, a work flagged public stays readable by direct id even inside a
   // private collection; the collection gate hides it from the page). Public
-  // by default in every write path — see the schema in src/schemas/artwork.ts.
+  // by default in every write path — see packages/shared/src/schemas/artwork.ts.
   // Always written by the creating paths.
   isPublic: boolean;
-  // Soft delete. `null` means live; a timestamp means deleted and the document
-  // is kept (reversible). Stamped and cleared by artworkService only — the
+  // Soft delete. `null` means live; a timestamp means deleted and the row is
+  // kept (reversible). Stamped and cleared by artworkService only — the
   // Add/Edit form has no such field, so editing a deleted work leaves it
-  // deleted. Written explicitly as null by every create path: the list queries
-  // filter on `deletedAt == null`, and a *missing* field is not equivalent to
-  // null there (the emulator does not match it at all), so leaving it out would
-  // risk hiding the work from every list. Artworks written before this field
-  // existed have no `deletedAt`; rules tolerate that via
-  // data.get("deletedAt", null), so they stay publicly readable.
+  // deleted. Every create path writes it explicitly as null: the list queries
+  // filter on `deletedAt IS NULL`, so leaving it out would hide the work from
+  // every list.
   deletedAt?: Timestamp | null;
   // Stamped by artworkService, not by callers.
   createdAt?: Timestamp;
@@ -104,9 +93,9 @@ export interface Artwork {
 
 // Fields shared by both kinds of "other document".
 interface ArtworkDocumentBase {
-  // Firestore-style id, minted client-side. It appears in every generated
-  // filename, which is what makes a document's objects findable and safe to
-  // delete as a group.
+  // An opaque, hyphen-free id, minted client-side. It appears in every
+  // generated filename, which is what makes a document's objects findable and
+  // safe to delete as a group.
   id: string;
   // The user's original filename, preserved. This field cares about it, unlike
   // photos, where it is only a label. Still metadata only — it is never used to
@@ -171,12 +160,12 @@ export interface ImageVariant {
 //
 // `order` is the explicit sequence; index 0 is the primary thumbnail used
 // across the app. It is kept consistent with the array position by
-// `reindexPhotos` on every write — see src/utils/artworkPhotos.ts for why the
+// `reindexPhotos` on every write — see packages/shared/src/artworkPhotos.ts for why the
 // field and the array are not allowed to disagree.
 export interface ArtworkPhoto {
-  // Firestore-style document id, minted client-side. It appears in every
-  // generated filename, so it is what makes a photo's objects findable and
-  // safe to delete as a group.
+  // An opaque, hyphen-free document id, minted client-side. It appears in
+  // every generated filename, so it is what makes a photo's objects findable
+  // and safe to delete as a group.
   id: string;
   order: number;
   // The user's original filename. Metadata only — it is never used to build a

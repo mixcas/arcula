@@ -1,14 +1,14 @@
 /**
- * The beta stack (Phase 6, plan §10, amended): the Lambda shape.
+ * The beta stack: the Lambda shape.
  *
- * One Lambda runs the whole product — API and built SPA (plan §10.2, one
- * artifact behind one origin) — behind an HTTP API; S3 holds the media;
+ * One Lambda runs the whole product — API and built SPA (one artifact behind
+ * one origin) — behind an HTTP API; S3 holds the media;
  * Postgres lives in Supabase (created out of band on the free tier,
  * reached over its public connection string). No VPC, no ALB, no ECS:
  * the owner's ruling is an idle beta at ~$0–3/mo, and every one of those
- * constructs was a 24/7 line item (see the §15 cost ruling).
+ * constructs was a 24/7 line item.
  *
- * Values never live in this app (plan §10.1): the secrets arrive at
+ * Values never live in this app: the secrets arrive at
  * deploy time as CDK context (`cdk deploy -c DATABASE_URL=… -c
  * AUTH_SECRET=… -c RESEND_API_KEY=… -c PUBLIC_URL=…`), and the deploy
  * script enforces their presence before the deploy. At synth, absent
@@ -18,7 +18,7 @@
  * PUBLIC_URL is two-step by construction: the HTTP API's URL only exists
  * after the first deploy, so the deploy script deploys once, reads the
  * ExecuteApiUrl output, and re-deploys with the real URL (the Lambda is
- * stateless — the re-deploy costs nothing; Phase 7's custom domain makes
+ * stateless — the re-deploy costs nothing; the custom domain makes
  * the URL stable for good).
  */
 import * as cdk from "aws-cdk-lib";
@@ -41,7 +41,7 @@ export class ArculaStack extends cdk.Stack {
     };
 
     // Media: private, encrypted, and the staging/ prefix self-expires —
-    // the same rule the local self-heal counts on (§6).
+    // the same rule the local self-heal counts on.
     const media = new s3.Bucket(this, "Media", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -68,7 +68,7 @@ export class ArculaStack extends cdk.Stack {
       memorySize: 3008,
       timeout: cdk.Duration.seconds(300),
       environment: {
-        // §10.3: production so Better Auth marks the session cookie
+        // Production so Better Auth marks the session cookie
         // `Secure` (auth.ts gates `useSecureCookies` on this). Local dev is
         // plain http, where a Secure cookie is rejected — which is why the
         // code gates on NODE_ENV rather than hardcoding `true`, and why the
@@ -120,11 +120,11 @@ export class ArculaStack extends cdk.Stack {
       }),
     });
 
-    // For the two-step PUBLIC_URL deploy and the S5 verification.
+    // For the two-step PUBLIC_URL deploy and the prod verification.
     new cdk.CfnOutput(this, "ExecuteApiUrl", { value: api.url! });
     new cdk.CfnOutput(this, "MediaBucket", { value: media.bucketName });
 
-    // Phase 7 (plan §10.3): an optional custom domain on the HTTP API.
+    // An optional custom domain on the HTTP API.
     // Gated on `DOMAIN` so the beta deploys (no domain) are byte-for-byte
     // unchanged; the two-step PUBLIC_URL deploy still uses the execute-api
     // name. API Gateway HTTP-API custom domains are a per-name pair — a
@@ -146,8 +146,8 @@ export class ArculaStack extends cdk.Stack {
     const domainName = contextValue("DOMAIN", "");
     if (domainName) {
       const certArn = contextValue("CERT_ARN", "");
-      // A domain without a cert is an unfinished cutover: fail synth
-      // loudly rather than map a domain to a stage with no TLS.
+      // A domain without a cert is incomplete: fail synth loudly rather than
+      // map a domain to a stage with no TLS.
       if (!certArn) {
         throw new Error(
           `DOMAIN is set ("${domainName}") but CERT_ARN is empty — request the ACM cert in us-east-1 first`,
@@ -190,16 +190,16 @@ export class ArculaStack extends cdk.Stack {
       };
       // The apex keeps its existing logical IDs so a redeploy is an
       // in-place update, not a create: replacing ApiDomain/ApiMapping would
-      // briefly recreate the live arcula.art mid-cutover. www takes its own
-      // distinct IDs (ApiDomainForwww / ApiMappingForwww), so its first
-      // deploy creates a resource rather than touching the live apex.
+      // briefly recreate the live arcula.art. www takes its own distinct IDs
+      // (ApiDomainForwww / ApiMappingForwww), so its first deploy creates a
+      // resource rather than touching the live apex.
       const apexDomain = buildPair(domainName, "ApiDomain", "ApiMapping");
       const wwwName = domainName.startsWith("www.") ? "" : `www.${domainName}`;
       const wwwDomain = wwwName
         ? buildPair(wwwName, "ApiDomainForwww", "ApiMappingForwww")
         : undefined;
       // Each custom domain's regional endpoint is what the Porkbun records
-      // (§10.3) must point at; emitted so the deploy script can hand the
+      // must point at; emitted so the deploy script can hand the
       // exact ALIAS/CNAME target + hosted-zone id to publish. (The
       // references are guarded — these attributes only exist once the
       // DomainName does.) Every DomainName gets its OWN regional endpoint

@@ -1,11 +1,10 @@
-// The staged-media routes (Phase 3 S3, plan §6 steps 1-2): stage,
-// process, discard — photos and documents — driven in-process with
-// app.request() against the real stack (real Postgres rows, real S3
-// objects, real Sharp).
+// The staged-media routes: stage, process, discard — photos and
+// documents — driven in-process with app.request() against the real
+// stack (real Postgres rows, real S3 objects, real Sharp).
 //
 // Collections and artworks are inserted directly through drizzle: the
-// routes that would create them land in S4/S5, and this suite is about
-// the staging contract, not the resource routes.
+// resource routes that create them have their own suites, and this suite
+// is about the staging contract.
 
 import { afterAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
@@ -370,8 +369,8 @@ describe("POST …/photos/stage", () => {
     expect(badCollection.status).toBe(404);
 
     // Staging does not require the artwork row: the Add flow mints the
-    // artwork id and creates the row at save (S4). The artwork segment
-    // only has to be id-shaped — its existence is the save route's check.
+    // artwork id and creates the row at save. The artwork segment only has
+    // to be id-shaped — its existence is the save route's check.
     const otherCid = await makeCollection(owner.userId);
     const unknownArtwork = await stagePhoto(
       owner.cookies,

@@ -4,7 +4,7 @@ import { artworkService } from "@/services/artworkService";
 /**
  * The service's URLs, checked against the API's route table.
  *
- * The component suites stub the service (G8 — no MSW), and the API suites
+ * The component suites stub the service (no MSW), and the API suites
  * pin their routes, so the seam in between — which URL a method actually
  * posts to — is the one spot neither side tests. That is where
  * `createArtworks` lived for a while: on the single-artwork CREATE route,

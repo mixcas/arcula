@@ -1,10 +1,10 @@
 /**
- * The collection service layer (Phase 4 S2, plan §7).
+ * The collection service layer.
  *
  * One HTTP call per operation, through `apiRequest`; GET bodies are parsed
- * through `collectionReadSchema` (the wire contract, plan §7) so a server
- * reshape is a parse error at the boundary, not a render of a half-shaped
- * document. Writes return the server's answer parsed the same way.
+ * through `collectionReadSchema` (the wire contract) so a server reshape is
+ * a parse error at the boundary, not a render of a half-shaped document.
+ * Writes return the server's answer parsed the same way.
  */
 
 import {

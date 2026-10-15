@@ -1,4 +1,4 @@
-// Session resolution for /api/v1/* (plan §5): the same session rides a
+// Session resolution for /api/v1/*: the same session rides a
 // cookie (web) or an Authorization: Bearer header (the future mobile
 // client) — better-auth's bearer plugin makes both land in one call.
 
@@ -14,7 +14,7 @@ export interface SessionUser {
   emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
-  // The four custom columns (§0.3), declared in src/auth.ts.
+  // The four custom columns, declared in src/auth.ts.
   firstName: string | null;
   lastName: string | null;
   tier: string;

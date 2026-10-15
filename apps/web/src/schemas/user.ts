@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The beta account forms (Phase 5): sign-up and the password reset.
+ * The beta account forms: sign-up and the password reset.
  *
  * These payloads go to Better Auth's native endpoints (`/api/auth/*`), not
  * /api/v1, so they live on the web side of the contract — `packages/shared`

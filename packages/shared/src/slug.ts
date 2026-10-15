@@ -1,9 +1,9 @@
 /**
  * Readable route params for collections and artworks.
  *
- * Routes carry a `{urlizedName}-{id}` segment (FULLSPEC §10) while Firestore
- * only ever knows the raw document id. These helpers are the one place that
- * knows how the two relate, so no caller has to reason about it.
+ * Routes carry a `{urlizedName}-{id}` segment, while the stored id is a bare
+ * string on its own. These helpers are the one place that knows how the two
+ * relate, so no caller has to reason about it.
  */
 
 /**

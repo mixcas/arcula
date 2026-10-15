@@ -1,8 +1,8 @@
-// The media proxy and the staged sweep (Phase 3 S6, plan §6):
-// `GET /api/v1/media?key=` streamed against the real stack with the §6
-// authz table (final photo: owner-or-public; final document: owner only,
-// 403; staged: the owning session), and the sweep of staged entries that
-// name no row.
+// The media proxy and the staged sweep:
+// `GET /api/v1/media?key=` streamed against the real stack with the authz
+// table (final photo: owner-or-public; final document: owner only, 403;
+// staged: the owning session), and the sweep of staged entries that name
+// no row.
 
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -53,7 +53,7 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** The §7 envelope error: the code, plus the failed fields. */
+/** The error envelope: the code, plus the failed fields. */
 async function err(
   res: Response,
 ): Promise<{ code: string; fields?: Record<string, string> }> {

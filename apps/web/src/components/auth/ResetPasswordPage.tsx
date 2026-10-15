@@ -17,9 +17,7 @@ import {
 } from "@/schemas/user";
 
 /**
- * The reset form the reset mail's link lands on (`/reset-password/<token>`,
- * Phase 5). The API side has been live since the mail provider landed —
- * this page is the half the link pointed at but was missing.
+ * The reset form the reset mail's link lands on (`/reset-password/<token>`).
  *
  * The token comes from the URL and is not shown: it is neither an input
  * nor state, it is just part of the request, so a stale link fails with

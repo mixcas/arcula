@@ -22,19 +22,18 @@ import {
 } from "@/schemas/user";
 
 /**
- * The beta sign-up screen (Phase 5, plan §12): name, email and password in
- * one Better Auth sign-up — the custom first/last fields ride the same
- * body, so a fresh account lands with its profile half set.
+ * The beta sign-up screen: name, email and password in one Better Auth
+ * sign-up — the custom first/last fields ride the same body, so a fresh
+ * account lands with its profile half set.
  *
- * The second mode on this page is the password-reset request
- * (`project-plan.md`: reset "belongs on the same page"): it asks for an
+ * The second mode on this page is the password-reset request: it asks for an
  * address only, because the answer is always the same sentence — if the
  * address has an account, a mail is on its way. The mail's link lands on
  * the reset form, a different page.
  */
 
 /**
- * The native codes a sign-up failure carries (Better Auth, not the §7
+ * The native codes a sign-up failure carries (Better Auth, not the API
  * envelope — `/api/auth/*` keeps its own response shape). Everything else
  * stays generic so the alert does not leak a status line.
  */

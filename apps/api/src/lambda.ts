@@ -1,9 +1,9 @@
 /**
- * The Lambda entry (Phase 6, plan §10.2): the same Hono app behind an
- * API Gateway HTTP API proxy integration — one thin adapter, no
- * container, no long-running process. Local dev keeps `main.ts`
- * (`Bun.serve`); this file is the production entry and nothing else
- * imports it, so the app code stays runtime-agnostic.
+ * The Lambda entry: the same Hono app behind an API Gateway HTTP API
+ * proxy integration — one thin adapter, no container, no long-running
+ * process. Local dev keeps `main.ts` (`Bun.serve`); this file is the
+ * production entry and nothing else imports it, so the app code stays
+ * runtime-agnostic.
  *
  * Two conversions carry the weight, and both fail silently if done
  * wrong:
@@ -86,8 +86,8 @@ export const handler = async (event: GatewayEvent) => {
     statusCode: res.status,
     headers: outHeaders,
     // Payload format 2.0: a top-level cookies array, each entry becoming
-    // a set-cookie header. (multiValueHeaders is a 1.0 field — silently
-    // dropped here, which is how the session cookie vanished on the wire.)
+    // a set-cookie header. (multiValueHeaders is a 1.0 field, silently
+    // dropped here.)
     ...(setCookies.length > 0 ? { cookies: setCookies } : {}),
     body: responseBody,
     isBase64Encoded,

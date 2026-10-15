@@ -3,7 +3,7 @@
 //
 // A failed better-auth .api call THROWS an APIError ({ status, body:
 // { message, code } }); a success resolves the endpoint body. (Verified
-// against the live adapter, Phase 1.)
+// against the live adapter.)
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 

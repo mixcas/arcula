@@ -1,10 +1,9 @@
-// /api/v1/me (plan §5): the profile endpoint pair.
+// /api/v1/me: the profile endpoint pair.
 //
 //   GET   — the session user, serialized with the custom fields.
 //   PATCH — the writable set { firstName, lastName, settings }; a patch
 //           touching anything else on the row is rejected with
-//           `field-not-writable` — the typed-column equivalent of the old
-//           rules hasOnly(…) clause (§5).
+//           `field-not-writable`.
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";

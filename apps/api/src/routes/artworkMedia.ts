@@ -1,4 +1,4 @@
-// The staged-media routes (plan §6, steps 1-2 and the discard path):
+// The staged-media routes:
 //
 //   POST   …/photos/stage       — multipart original → the staged key
 //   POST   …/photos/process     — { entryId } → variants into staging
@@ -7,7 +7,7 @@
 //
 // Staging needs only COLLECTION ownership, not an existing artwork row:
 // the Add flow mints the artwork id client-side, stages under it, and
-// the save route (S4) creates the row and promotes the entries in one
+// the save route creates the row and promotes the entries in one
 // transaction. The artwork id is validated as an id-shaped segment and
 // used as the staging key's segment; nothing else is asked of it here.
 
@@ -44,17 +44,17 @@ import {
 } from "../media/variants";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
 
-// Ids are client-minted (nanoid / Firestore-style) and become key
-// segments: letters, digits, dash, underscore — nothing that could
-// carry a path separator or a dot. The shared MINTED_ID_RE is the
-// single owner of that character set (also the save payloads').
+// Ids are client-minted and become key segments: letters, digits, dash,
+// underscore — nothing that could carry a path separator or a dot. The
+// shared MINTED_ID_RE is the single owner of that character set (also
+// the save payloads').
 
 // The route patterns guarantee these segments; `?? ""` only exists to
 // satisfy Hono's optional param type. An empty segment either 404s at
 // the row lookup or fails the ID check below.
 const param = (c: Context, key: string): string => c.req.param(key) ?? "";
 
-/** A validation failure with the failed fields, per the §7 envelope. */
+/** A validation failure with the failed fields, per the error envelope. */
 function invalid(message: string, fields?: Record<string, string>) {
   return new ApiError("validation", message, fields ? { fields } : undefined);
 }

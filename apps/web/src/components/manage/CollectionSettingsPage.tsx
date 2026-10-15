@@ -45,7 +45,7 @@ const optionsChanged = (
 
 const CollectionSettingsPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
-  // Routes carry "{slug}-{id}" but Firestore needs the id alone.
+  // Routes carry "{slug}-{id}" but the API needs the id alone.
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
 

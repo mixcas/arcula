@@ -1,4 +1,4 @@
-// The test transport for the local API stack (plan §11, G8: no MSW — the
+// The test transport for the local API stack (no MSW — the
 // component suites render against the real API). It emulates the one thing
 // the browser provides that Node's fetch does not: the Vite dev proxy.
 //

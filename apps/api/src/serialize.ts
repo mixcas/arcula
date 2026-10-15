@@ -1,14 +1,13 @@
-// The wire shape of GET responses (plan §7): the exact Firestore document
-// shape — same keys, same nesting — with the `url` fields filled with
-// proxy paths. That is what keeps the client's types (`Artwork`,
-// `Collection` in @arcula/shared) working against the API unmodified.
+// The wire shape of GET responses: the exact wire document shape — same
+// keys, same nesting — with the `url` fields filled with proxy paths. That
+// is what keeps the client's types (`Artwork`, `Collection` in
+// @arcula/shared) working against the API unmodified.
 //
 // Three transforms, row → document:
 //
 //   - timestamps: a Postgres `Date` (millisecond precision, which is how
-//     every write stamps) becomes Firestore's wire shape
-//     `{ seconds, nanoseconds }` — the shape a document has when it leaves
-//     Firestore as JSON;
+//     every write stamps) becomes the wire timestamp shape
+//     `{ seconds, nanoseconds }`;
 //   - blank text fields: an ABSENT key, never a null value — that is the
 //     document shape (`blankText` → undefined → the key is not there);
 //   - `url`: computed from the key algebra. No row ever stores a URL; the
@@ -109,7 +108,7 @@ function serializePhoto(
   artworkId: string,
 ): Record<string, unknown> {
   // The photo row carries no metadata: the `original` variant row is where
-  // the source's size/type/dimensions live (plan §4).
+  // the source's size/type/dimensions live.
   const original = variants.find((v) => v.key === "original");
   if (!original) {
     throw new ApiError(
@@ -215,7 +214,7 @@ function serializeDocument(
   return { ...base, kind: "file" };
 }
 
-/** The exact Firestore document shape, urls filled with proxy paths. */
+/** The exact wire document shape, urls filled with proxy paths. */
 export function serializeArtwork(
   joined: ArtworkJoined,
 ): Record<string, unknown> {
@@ -256,15 +255,14 @@ export function serializeArtwork(
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),
   };
-  // A blank field is an ABSENT key, not a null value — the shape the
-  // Firestore document had.
+  // A blank field is an ABSENT key, not a null value — the document shape.
   for (const field of UPDATABLE_TEXT_FIELDS) {
     if (artwork[field] !== null) out[field] = artwork[field];
   }
   return out;
 }
 
-/** The exact Firestore collection document shape. */
+/** The exact wire collection document shape. */
 export function serializeCollection(
   row: CollectionRow,
 ): Record<string, unknown> {
@@ -278,8 +276,7 @@ export function serializeCollection(
   };
   if (row.description !== null) out.description = row.description;
   // `skin`/`skinOptions` are read-time defaulted on the client side
-  // (resolveSkin), so an unset value is an absent key — the shape a
-  // collection written before the fields existed had.
+  // (resolveSkin), so an unset value is an absent key.
   if (row.skin !== null) out.skin = row.skin;
   if (row.skinOptions !== null) out.skinOptions = row.skinOptions;
   return out;

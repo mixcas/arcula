@@ -1,8 +1,8 @@
-// API integration: /api/v1/me (Phase 2, plan §12) — the session
-// middleware, the writable set, and the §7 error envelope.
+// API integration: /api/v1/me — the session middleware, the writable set,
+// and the error envelope.
 //
 // Driven in-process with app.request() against the real stack, exactly
-// as tests/auth.api.test.ts (see the decision recorded in §15).
+// as tests/auth.api.test.ts.
 
 import { sessionUserSchema } from "@arcula/shared";
 import { app } from "../src/app";

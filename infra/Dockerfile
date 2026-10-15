@@ -1,10 +1,10 @@
-# Arcula — API + SPA container (Phase 6 S3).
+# Arcula — API + SPA container.
 #
-# The beta's primary target is Lambda (scripts/build-lambda.sh); this
-# image is the scale-up path for when the workload goes always-on: one
-# container runs the SAME `bun run start` as local dev and serves the
-# built SPA through WEB_DIST (apps/api/src/spa.ts, plan §10.2 — one
-# artifact behind one origin, no second hosting stack).
+# The primary target is Lambda (scripts/build-lambda.sh); this image is the
+# scale-up path for when the workload goes always-on: one container runs the
+# SAME `bun run start` as local dev and serves the built SPA through WEB_DIST
+# (apps/api/src/spa.ts — one artifact behind one origin, no second hosting
+# stack).
 #
 # Build on the target architecture: the Sharp prebuilt is picked for the
 # build platform (colima/this machine: linux/arm64; an x86_64 host needs

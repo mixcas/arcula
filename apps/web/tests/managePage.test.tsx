@@ -12,7 +12,7 @@ import { collectionService } from "@/services/collectionService";
 import type { Collection, SessionUserRead } from "@arcula/shared";
 
 /**
- * The dashboard's cap reflection (Phase 5): the "N of 1" counter, the
+ * The dashboard's cap reflection: the "N of 1" counter, the
  * New-collection button's link, and its disabled state at the cap.
  *
  * Enforcement is the API's (409 limit-reached — pinned by

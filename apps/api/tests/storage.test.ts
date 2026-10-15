@@ -1,5 +1,5 @@
-// The S3 primitives against the real stand-in (§11: the local stack is
-// the test environment — no MSW, no stubbed object layer).
+// The S3 primitives against the real stand-in: the local stack is
+// the test environment — no MSW, no stubbed object layer.
 //
 // The keys are random per run, so the suite never collides with what a
 // dev server has stored, and its afterAll removes only what it created;

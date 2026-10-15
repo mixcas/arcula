@@ -1,8 +1,8 @@
-// The user shape the web app has consumed since the Firebase days.
+// The user shape the web app consumes.
 //
-// `uid` is the Firebase id field kept as an alias: every owner-side
-// consumer reads `currentUser.uid`, so keeping it is what makes the Phase
-// 4 cutover (G1) a provider swap instead of a find-and-replace.
+// `uid` is the session user's id alias: every owner-side consumer reads
+// `currentUser.uid`, so the mapping in `toArculaUser` is what keeps that
+// name stable across the app.
 
 export interface ArculaUser {
   uid: string;

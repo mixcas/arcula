@@ -1,17 +1,16 @@
-// Shared route plumbing (plan §7): the JSON-body parser with the
+// Shared route plumbing: the JSON-body parser with the
 // validation envelope, and the transaction wrapper every write path
 // routes through.
 //
-// Both used to live in routes/artworks.ts; the collection routes (S5)
-// need the same two, and a helper copy-pasted between route files is two
-// places for the contract to drift.
+// Shared so the write paths cannot drift into copies of the same
+// contract.
 
 import type { Context } from "hono";
 import { ZodError, type ZodType } from "zod";
 import { db } from "./db";
 import { ApiError } from "./errors";
 
-/** The §7 validation envelope: the code, plus the failed fields. */
+/** The validation envelope: the code, plus the failed fields. */
 export async function parseBody<T>(c: Context, schema: ZodType<T>): Promise<T> {
   let raw: unknown;
   try {

@@ -6,8 +6,8 @@
 // declares.
 //
 // src modules that tests import must not read import.meta.env either:
-// the web client is same-origin by design (plan §8), so no client module
-// needs an env var — a future one belongs in this file, not in the app.
+// the web client is same-origin by design, so no client module needs an env
+// var — a future one belongs in this file, not in the app.
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }

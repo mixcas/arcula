@@ -1,4 +1,4 @@
-// The media proxy (plan §6): GET /api/v1/media?key={objectKey}.
+// The media proxy: GET /api/v1/media?key={objectKey}.
 //
 // The key parses back into its segments (the name is self-describing by
 // construction) and authz is checked per request, then the object
@@ -6,11 +6,10 @@
 //
 //   final photo    — the owner, or a visitor iff
 //                    `artwork.isPublic && collection.isPublic &&
-//                    deletedAt == null` — the storage-rules visitor rule,
-//                    mirrored. A private or deleted work 404s for a
-//                    visitor, uniformly: saying which was refused would
-//                    be a disclosure (the same call as the single-artwork
-//                    read).
+//                    deletedAt == null`. A private or deleted work 404s
+//                    for a visitor, uniformly: saying which was refused
+//                    would be a disclosure (the same call as the
+//                    single-artwork read).
 //   final document — the owner ONLY. Documents are never public; the
 //                    proxy 403s everyone else so a future UI that forgot
 //                    to hide them renders a 403 rather than a leak.
@@ -85,7 +84,7 @@ mediaRoutes.get("/media", async (c) => {
   }
 
   // A final object must name a row: the object without one is the orphan
-  // residual (§6), and 404 is its shape — owner or visitor.
+  // residual, and 404 is its shape — owner or visitor.
   const artwork = await loadArtworkInCollection(
     parsed.collectionId,
     parsed.artworkId,

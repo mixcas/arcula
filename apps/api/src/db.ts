@@ -1,4 +1,4 @@
-// The api's single database driver (plan §2: one schema, no drift).
+// The api's single database driver: one schema, no drift.
 //
 // `postgres()` is lazy — no connection happens until the first query — so
 // importing this module with no DATABASE_URL (a test environment) is safe.

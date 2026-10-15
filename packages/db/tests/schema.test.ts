@@ -1,13 +1,13 @@
-// Structural contract for the schema (plan §4, §0.3).
+// Structural contract for the schema.
 //
 // Two sources are asserted, because they can drift apart: the in-memory
 // Drizzle object — what the API and the Better Auth adapter import — and the
 // committed generated migration — what is actually applied to Postgres. A
-// schema edit that is not regenerated shows up here as a mismatch; a column
-// that the plan makes load-bearing (the (artworkId, order) uniqueness that
-// enforces "array position is the truth", the variant composite PK, the two
-// CHECKs, the indexes that replace the Firestore composites) missing from
-// either source fails here.
+// schema edit that is not regenerated shows up here as a mismatch; a
+// load-bearing column (the (artworkId, order) uniqueness that enforces "array
+// position is the truth", the variant composite PK, the two CHECKs, the
+// composite indexes behind the owner/visitor lists) missing from either source
+// fails here.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -72,12 +72,12 @@ const INIT_SQL = (() => {
   return readFileSync(pkgRoot + "migrations/0000_init.sql", "utf8");
 })();
 
-describe("the nine-table schema (§4)", () => {
-  it("declares exactly the nine tables, and `user` is singular (§0.3)", () => {
+describe("the nine-table schema", () => {
+  it("declares exactly the nine tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
-  it("user carries the four custom columns typed, not bagged (§0.3)", () => {
+  it("user carries the four custom columns typed, not bagged", () => {
     const c = cols(user);
     expect(c.firstName.dataType).toBe("string");
     expect(c.firstName.notNull).toBe(false);
@@ -139,7 +139,7 @@ describe("the nine-table schema (§4)", () => {
     ]);
     expect(c.title.notNull).toBe(true);
     expect(c.artistName.notNull).toBe(true);
-    // Money stays text (§4).
+    // Money stays text.
     expect(c.currentValue.dataType).toBe("string");
     expect(c.isPublic.notNull).toBe(true);
     expect(c.isPublic.default).toBe(true);
@@ -191,8 +191,8 @@ describe("the nine-table schema (§4)", () => {
   });
 });
 
-describe("the committed migration (§4 as it will actually be applied)", () => {
-  it("creates the nine tables with the plan's names, and never a `users` table", () => {
+describe("the committed migration (as it will actually be applied)", () => {
+  it("creates the nine tables with the expected names, and never a `users` table", () => {
     const created = [...INIT_SQL.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
       (m) => m[1],
     );
@@ -226,7 +226,7 @@ describe("the committed migration (§4 as it will actually be applied)", () => {
     expect(INIT_SQL).toContain('PRIMARY KEY("parentId","key")');
   });
 
-  it("carries the indexes that replace the Firestore composites", () => {
+  it("carries the composite indexes behind the owner/visitor lists", () => {
     expect(INIT_SQL).toContain(
       'USING btree ("collectionId","userId","deletedAt")',
     );
@@ -244,7 +244,7 @@ describe("the committed migration (§4 as it will actually be applied)", () => {
     );
   });
 
-  it("uses timestamptz for every timestamp and the plan's defaults", () => {
+  it("uses timestamptz for every timestamp and the expected defaults", () => {
     // Every `timestamp` in the DDL must be `timestamp with time zone`.
     expect(INIT_SQL.replace(/timestamp with time zone/g, "")).not.toContain(
       "timestamp",

@@ -1,4 +1,4 @@
-// The §6 key algebra: build → parse round-trips and `extensionFor`.
+// The key algebra: build → parse round-trips and `extensionFor`.
 //
 // Pure — no stack needed. The round-trip is the load-bearing case: the
 // proxy's per-request authz and the sweep both work from `parseMediaKey`
@@ -157,8 +157,7 @@ describe("extensionFor", () => {
   it("returns null — never `bin` — for any unaccepted type, whatever the name", () => {
     // The property, not the case: the stored extension is a function of
     // the content type alone, the filename is not even read. If a
-    // rewrite starts consulting the name (the old client's
-    // documentExtension path), this matrix fails.
+    // rewrite starts consulting the name, this matrix fails.
     const names = [
       "scan.pdf",
       "Get_Started_With_Smallpdf.pdf",

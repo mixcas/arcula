@@ -19,8 +19,7 @@ interface AppTitleProps {
  *
  * Both headers (the landing page's PublicNavBar and the authenticated
  * ManageNavBar) render the name through this component, so a rename is a
- * one-line change here rather than a hunt through every call site. See
- * RENAME.md for the identifiers that deliberately still say "Custodia".
+ * one-line change here rather than a hunt through every call site.
  */
 const AppTitle: React.FC<AppTitleProps> = ({
   component = "span",

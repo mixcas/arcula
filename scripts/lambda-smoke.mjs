@@ -1,12 +1,12 @@
 /**
- * The Lambda package smoke (Phase 6 S3) — run by `scripts/build-lambda.sh`
+ * The Lambda package smoke — run by `scripts/build-lambda.sh`
  * INSIDE a glibc Linux container (`node:20`, arm64). It proves the things
  * the deploy must not learn in production:
  *
  *   1. the deploy bundle (index.js) loads and answers on the target
  *      runtime — health, sign-up → /me (the DB path and the session
  *      cookie), the SPA shell, a binary asset;
- *   2. Sharp's NATIVE prebuilt works on glibc — the headline of risk #1 —
+ *   2. Sharp's NATIVE prebuilt works on glibc — the headline risk —
  *      driven straight through the pipeline on a real 12 MP source, with
  *      the per-photo number reported.
  *

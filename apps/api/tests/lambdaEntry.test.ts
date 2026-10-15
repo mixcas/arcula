@@ -1,4 +1,4 @@
-// API integration: the Lambda entry (Phase 6 S3) — the API Gateway
+// API integration: the Lambda entry — the API Gateway
 // event ↔ Request/Response conversions. The cases that matter are the
 // ones that fail silently in production: a session cookie mangled by
 // the Headers view's comma-join, or a binary answer delivered as text.

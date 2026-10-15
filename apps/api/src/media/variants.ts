@@ -1,13 +1,10 @@
 /**
  * The artwork image variant recipe — the server-side home.
  *
- * This is the verbatim port (Phase 3) of the client's table in
- * `apps/web/src/utils/imageVariants.ts`, which stays in place until
- * Phase 4 deletes the client encoding machinery. One table drives
- * everything: the encoder below, the tests that assert the geometry,
- * and the object-key algebra in `keys.ts`. Nothing else in the app
- * should hardcode a pixel size — if a variant is renamed, added or
- * resized, it changes here and the change propagates.
+ * One table drives everything: the encoder below, the tests that assert
+ * the geometry, and the object-key algebra in `keys.ts`. Nothing else in
+ * the app should hardcode a pixel size — if a variant is renamed, added
+ * or resized, it changes here and the change propagates.
  *
  * The names are a contract with `media/keys.ts` (`OBJECT_KEYS`), which
  * pattern-matches them into the object filename, and with the proxy,
@@ -59,11 +56,9 @@ export type ImageVariantSpec = SquareVariantSpec | BoundedVariantSpec;
  * two so a forgotten edit fails CI rather than production.
  *
  * Photos whose source is exactly a variant's target size are still encoded:
- * the client's `renderVariant` skipped the re-encode in that case to save
- * browser CPU, but the server keeps the object set fixed by design — a photo
- * always has its original plus one object per variant key — so the sweep,
- * the proxy and the serializer never have to reason about which keys might
- * be absent.
+ * the server keeps the object set fixed by design — a photo always has its
+ * original plus one object per variant key — so the sweep, the proxy and the
+ * serializer never have to reason about which keys might be absent.
  */
 export const IMAGE_VARIANTS: readonly ImageVariantSpec[] = [
   { key: "xlarge", fit: "inside", max: 2400 },

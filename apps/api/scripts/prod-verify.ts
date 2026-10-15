@@ -1,15 +1,14 @@
-// prod-verify.ts — the end-to-end pass against a deployed Arcula (Phase 6
-// S5). Usage: cd apps/api && bun scripts/prod-verify.ts <base-url>
+// prod-verify.ts — the end-to-end pass against a deployed Arcula.
+// Usage: cd apps/api && bun scripts/prod-verify.ts <base-url>
 //
-// It is the §10.4 verification, executable: health, the SPA (shell +
-// deep link + cache headers), sign-up (and that its cookie is `Secure`),
-// /me, the duplicate sign-up (the 422 over the gateway), create-collection,
+// It is the end-to-end pass, executable: health, the SPA (shell + deep
+// link + cache headers), sign-up (and that its cookie is `Secure`), /me,
+// the duplicate sign-up (the 422 over the gateway), create-collection,
 // the CAP (409 limit-reached on the second), a real 12 MP photo through
-// stage → process → save (Sharp + S3 on the deploy target — the number
-// the plan exists to measure), a visitor read, and a reset request
-// (the Resend call path). One account is created per run under
-// verify-<ts>@example.test; nothing is printed that is a credential.
-// Exit code 0 = every step passed.
+// stage → process → save (Sharp + S3 on the deploy target), a visitor
+// read, and a reset request (the Resend call path). One account is
+// created per run under verify-<ts>@example.test; nothing is printed that
+// is a credential. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 
@@ -83,8 +82,8 @@ const post = (path: string, body: unknown, authed = false) =>
   });
   const cookies = res.headers.getSetCookie();
   // In prod the cookie is Secure and carries Better Auth's `__Secure-`
-  // prefix (the stack sets NODE_ENV=production and the bundle defines it —
-  // §10.3), so match the attribute-prefixed name.
+  // prefix (the stack sets NODE_ENV=production and the bundle defines it),
+  // so match the attribute-prefixed name.
   sessionCookie =
     cookies.find((c) => c.startsWith("__Secure-better-auth.session_token=")) ??
     null;
@@ -93,7 +92,7 @@ const post = (path: string, body: unknown, authed = false) =>
     res.status === 200 && sessionCookie !== null,
     `status ${res.status}, ${cookies.length} cookie(s)`,
   );
-  // The Phase 7 close-out, proven at the live origin rather than assumed.
+  // The attribute, proven at the live origin rather than assumed.
   step(
     "session cookie is Secure",
     sessionCookie !== null && /;\s*Secure\b/i.test(sessionCookie),

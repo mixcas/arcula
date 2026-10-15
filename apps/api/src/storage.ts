@@ -1,4 +1,4 @@
-// The app's single S3 client (§6 object model, §9 env).
+// The app's single S3 client.
 //
 // One module owns every object operation the app performs — put, get,
 // head, delete, copy, list. It knows nothing about photos, documents or

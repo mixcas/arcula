@@ -68,7 +68,7 @@ vi.mock("@/services/artworkService", () => ({
 }));
 
 /**
- * A Firestore-style id.
+ * An opaque, hyphen-free id.
  *
  * Not `"collection-1"`: `parseId` treats everything after the *last* hyphen as
  * the document id, so a hyphenated id would be cut down to `"1"` — and the

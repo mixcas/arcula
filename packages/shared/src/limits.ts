@@ -1,7 +1,7 @@
 /**
  * The account tiers the quotas are keyed on.
  *
- * The `user.tier` column (Phase 1, default `'free'`) and `COLLECTION_LIMITS`
+ * The `user.tier` column (default `'free'`) and `COLLECTION_LIMITS`
  * below share this vocabulary, so the column and the table cannot name the
  * same thing differently.
  */

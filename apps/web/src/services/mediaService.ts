@@ -1,5 +1,5 @@
 /**
- * The staged-media operations of the service layer (Phase 4 S3, plan §6).
+ * The staged-media operations of the service layer.
  *
  * A file that lands in a form is PUT to staging the moment it is added —
  * `stage` — and the server generates its display variants on demand —
@@ -8,7 +8,7 @@
  * transaction, which is why staging needs only collection ownership, not an
  * existing artwork. An entry the form drops is `discard`ed; a save that
  * fails after promoting its entries leaves the final objects in place, and
- * that residual is the sweep's job (plan §6), not this module's.
+ * that residual is the sweep's job, not this module's.
  *
  * The methods come in photo/document pairs rather than one parameterised
  * call: the two populations have different caps and accepted types on the

@@ -12,7 +12,7 @@ import { authClient } from "@/auth/client";
 import { resetPasswordSchema } from "@/schemas/user";
 
 /**
- * The reset form the mail's token link lands on (Phase 5). The token is
+ * The reset form the mail's token link lands on. The token is
  * the seam: it comes from the URL, the page carries it in the request, and
  * a dead link is the server's 400 — asserted here, pinned API-side by
  * `email.api.test.ts`'s live reset flow.
