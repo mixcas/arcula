@@ -1,0 +1,33 @@
+{
+  "name": "@arcula/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "set -a && . ../../.env && set +a && bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "db:migrate": "set -a && . ../../.env && set +a && bun scripts/db-migrate.ts",
+    "db:reset": "set -a && . ../../.env && set +a && bun scripts/db-reset.ts",
+    "db:seed": "set -a && . ../../.env && set +a && bun scripts/db-seed.ts",
+    "db:studio": "set -a && . ../../.env && set +a && cd ../packages/db && bunx drizzle-kit studio",
+    "test": "set -a && . ../../.env && set +a && sh ../../scripts/stack-up.sh postgres s3 mailpit && vitest run"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/nodemailer": "^8.0.2",
+    "vitest": "5.0.2"
+  },
+  "dependencies": {
+    "@arcula/db": "workspace:*",
+    "@arcula/shared": "workspace:*",
+    "@aws-sdk/client-s3": "3.1146.0",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3",
+    "hono": "^4.13.12",
+    "nodemailer": "^10.0.14",
+    "postgres": "3.4.9",
+    "sharp": "^0.35.5",
+    "zod": "4.6.5"
+  }
+}

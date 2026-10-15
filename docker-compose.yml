@@ -1,0 +1,32 @@
+# Local dev stack — Postgres.
+#
+# Mailpit and the S3 stand-in (SeaweedFS) do NOT run as containers: they run
+# natively via Homebrew, and `scripts/stack-up.sh` starts them. This file is
+# postgres only.
+#
+# Runtime is colima (the docker context on this machine): `colima start`
+# before first use. `docker-compose up -d postgres` is idempotent.
+# Nothing here is production: production deploys via CDK, never compose.
+
+services:
+  postgres:
+    # Pinned to the minor the stack is actually running (16.15), so a fresh
+    # `docker compose up` on another machine pulls the same server. Prod runs
+    # the same major; the minor is a local concern.
+    image: postgres:16.15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: arcula
+      POSTGRES_PASSWORD: arcula
+      POSTGRES_DB: arcula
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arcula -d arcula"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

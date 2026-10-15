@@ -8,6 +8,8 @@ dist
 build
 coverage
 .pnp
+# CDK synth output (generated CloudFormation template + asset copies).
+cdk.out
 
 # Lockfiles are generated and should never be (re)formatted.
 # `bun.lock` is present locally but NOT git-ignored, and Prettier has no parser
@@ -22,6 +24,11 @@ skills-lock.json
 # upstream, so keep it out of Prettier.
 .agents/
 
+# Agent-harness artifacts (the llmstxt installer's CLAUDE.md and .llms/ state):
+# generated content, not repo source, regenerated whenever the installer runs.
+CLAUDE.md
+.llms/
+
 # Env / secrets. Not a Prettier extension today, but keep them out of any
 # formatter (e.g. OpenCode) as a guard against a future workflow touching them.
 .env
@@ -32,6 +39,11 @@ skills-lock.json
 # passed explicitly.
 firestore.rules
 storage.rules
+
+# Drizzle generated migration metadata (drizzle-kit's journal + snapshots).
+# Regenerated on every `db:generate`; keep byte-stable so Prettier never
+# drifts them from what drizzle-kit wrote.
+packages/db/migrations/meta/
 
 # Firebase CLI + functions build artifacts.
 .firebase/

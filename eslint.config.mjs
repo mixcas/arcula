@@ -17,9 +17,12 @@ import { globalIgnores } from "eslint/config";
 export default tseslint.config(
   // Files ESLint should never lint
   globalIgnores([
-    "dist/**",
-    "public/**",
-    "node_modules/**",
+    // Unanchored: build output and node_modules now live under apps/* too.
+    "**/dist/**",
+    "**/node_modules/**",
+    // CDK synth output (generated template + the 13 MB asset copy).
+    "**/cdk.out/**",
+    "apps/web/public/**",
     "functions/lib/**",
     "eslint.config.mjs",
   ]),
@@ -84,7 +87,23 @@ export default tseslint.config(
   // browser globals for Node's.
   {
     name: "ts/node",
-    files: ["functions/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+    files: [
+      "functions/**/*.ts",
+      "apps/web/tests/**/*.ts",
+      "apps/web/vitest.config.ts",
+      "packages/shared/tests/**/*.ts",
+      "packages/shared/vitest.config.ts",
+      "packages/db/tests/**/*.ts",
+      "packages/db/vitest.config.ts",
+      "packages/db/drizzle.config.ts",
+      "apps/api/src/**/*.ts",
+      "apps/api/scripts/**/*.ts",
+      "apps/api/tests/**/*.ts",
+      "apps/api/vitest.config.ts",
+      // The standalone CDK app (own tsconfig, own tsc at synth; Node
+      // context — process, __dirname, fs).
+      "infra/cdk/src/**/*.ts",
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },

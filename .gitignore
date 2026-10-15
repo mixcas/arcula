@@ -1,20 +1,24 @@
-# dependencies
-/node_modules
-/.pnp
+# dependencies (any level — workspaces get their own node_modules)
+node_modules
 .pnp
 
 # testing
 /coverage
 
-# build
-/dist
-/build
+# build (any level — apps/web/dist, future api dists)
+dist
+build
+# CDK synth output (generated template + the asset copy)
+cdk.out
 
 # env
 .env
 .env.development
 .env.local
 .env.*.local
+
+# local stack state (scripts/stack-up.sh): MinIO data dir, pids, logs
+.stack/
 
 # misc
 .DS_Store
@@ -30,7 +34,7 @@ firebase-debug.*.log
 *-debug.log
 
 # Vite
-/src/assets/*/*.map
-/public/*/*.map
+apps/web/src/assets/*/*.map
+apps/web/public/*/*.map
 
 FULLSPEC.md
