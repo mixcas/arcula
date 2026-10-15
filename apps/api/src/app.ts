@@ -28,6 +28,24 @@ app.onError((err, c) => {
   return c.json(body, status);
 });
 
+// `www.arcula.art` is a canonical-host alias of `arcula.art`. The www
+// custom domain reaches this same handler, so send every www request to
+// the apex before anything else runs — one canonical host, www never
+// serves the SPA or the API directly. `x-forwarded-host` is what API
+// Gateway sets over TLS; fall back to the plain host header. 308
+// preserves the method + body, so a POST to www/api/v1/… lands as a POST
+// at the apex. Registered first so it short-circuits every route.
+app.use("*", async (c, next) => {
+  const host = (c.req.header("x-forwarded-host") ?? c.req.header("host") ?? "")
+    .split(":")[0]
+    .toLowerCase();
+  if (host === "www.arcula.art") {
+    const u = new URL(c.req.url);
+    return c.redirect(`https://arcula.art${u.pathname}${u.search}`, 308);
+  }
+  await next();
+});
+
 // Locally the web client is a different origin (Vite on 3000, the api on
 // 8000); the same-origin prod deployment needs no CORS. `credentials`
 // keeps the session cookie flowing cross-origin in dev.
