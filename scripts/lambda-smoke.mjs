@@ -85,10 +85,17 @@ const up = await handler(
   }),
 );
 expectStatus("sign-up", up, 200);
+// The package is the production bundle (build-lambda.sh DEFINES
+// NODE_ENV="production"), so the session cookie must be Secure and carry
+// Better Auth's `__Secure-` prefix. Assert the attribute, not just the
+// name: a build that loses the define ships a non-Secure prod cookie
+// (the bundler inlining `process.env.NODE_ENV`) and no other check here
+// would notice.
 const cookie = (up.cookies ?? []).find((c) =>
-  c.startsWith("better-auth.session_token"),
+  c.startsWith("__Secure-better-auth.session_token="),
 );
-if (!cookie) fail("sign-up returned no session cookie");
+if (!cookie) fail("sign-up returned no Secure session cookie");
+if (!/;\s*Secure\b/i.test(cookie)) fail("session cookie is not marked Secure");
 
 const me = await handler(gw("/api/v1/me", { cookies: [cookie] }));
 expectStatus("/me", me, 200);

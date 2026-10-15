@@ -68,6 +68,12 @@ export class ArculaStack extends cdk.Stack {
       memorySize: 3008,
       timeout: cdk.Duration.seconds(300),
       environment: {
+        // §10.3: production so Better Auth marks the session cookie
+        // `Secure` (auth.ts gates `useSecureCookies` on this). Local dev is
+        // plain http, where a Secure cookie is rejected — which is why the
+        // code gates on NODE_ENV rather than hardcoding `true`, and why the
+        // lambda is the only place that sets it.
+        NODE_ENV: "production",
         // Supabase (out of band): the connection string, not a cluster.
         DATABASE_URL: contextValue("DATABASE_URL", ""),
         AUTH_SECRET: contextValue("AUTH_SECRET", ""),

@@ -34,12 +34,23 @@ mkdir -p "$STAGE"
 
 # 1. Bundle the deploy entry for Node. Everything is inlined except sharp
 #    — the native part arrives from node_modules inside the package.
+#
+#    `NODE_ENV` is DEFINED, not left to the runtime: `bun build` statically
+#    replaces dot-access `process.env.NODE_ENV` with the BUILD machine's value
+#    (unset here, so "development") and that literal is what ships. Any bundled
+#    code that gates on it — auth.ts's `useSecureCookies`, a dependency's
+#    dev-only branch — would then be baked wrong, and the Lambda's own
+#    `NODE_ENV` env var could not correct it (the read is gone). The bundle is
+#    always production, so say so. Bracket/dynamic reads survive untouched and
+#    still see the runtime env at the Lambda.
+DEFINE_NODE_ENV='process.env.NODE_ENV="production"'
+
 echo "==> bundling"
-bun build apps/api/src/lambda.ts --target node --format esm --external sharp --outdir "$STAGE"
+bun build apps/api/src/lambda.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
 # The smoke's pipeline access (never part of the package).
-bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --outdir "$STAGE"
+bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
 
 # 2. The SPA the Lambda serves (spa.ts reads WEB_DIST, which the deploy
