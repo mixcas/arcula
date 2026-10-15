@@ -117,5 +117,108 @@ export class ArculaStack extends cdk.Stack {
     // For the two-step PUBLIC_URL deploy and the S5 verification.
     new cdk.CfnOutput(this, "ExecuteApiUrl", { value: api.url! });
     new cdk.CfnOutput(this, "MediaBucket", { value: media.bucketName });
+
+    // Phase 7 (plan §10.3): an optional custom domain on the HTTP API.
+    // Gated on `DOMAIN` so the beta deploys (no domain) are byte-for-byte
+    // unchanged; the two-step PUBLIC_URL deploy still uses the execute-api
+    // name. API Gateway HTTP-API custom domains are a per-name pair — a
+    // `DomainName` (provisioned in API Gateway, carrying the us-east-1 ACM
+    // cert) and an `ApiMapping` (domain → the API's $default stage at the
+    // root path, so the SPA at "/" and the API at "/api/*" both serve
+    // under it). They need a construct the beta's aws-cdk-lib does not ship
+    // (that submodule is pruned), so they are declared as CloudFormation —
+    // the resource + property shapes are pinned below, and CI-equivalent is
+    // a synth that shows them.
+    //
+    // Each NAME is its own pair, because HTTP-API custom domains do not
+    // inherit a parent: a `DomainName` of `arcula.art` serves only the
+    // exact host `arcula.art`. A request for `www.arcula.art` reaches the
+    // same regional endpoint (their DNS resolves there) but is rejected
+    // there with `403 ForbiddenException` (x-amzn-errortype) — API Gateway
+    // sees a host with no matching pair, before the Lambda runs — so the
+    // www host is an explicit second pair over the same API + stage.
+    const domainName = contextValue("DOMAIN", "");
+    if (domainName) {
+      const certArn = contextValue("CERT_ARN", "");
+      // A domain without a cert is an unfinished cutover: fail synth
+      // loudly rather than map a domain to a stage with no TLS.
+      if (!certArn) {
+        throw new Error(
+          `DOMAIN is set ("${domainName}") but CERT_ARN is empty — request the ACM cert in us-east-1 first`,
+        );
+      }
+      // Build the DomainName + root-ApiMapping pair for one host. The root
+      // mapping key ("") serves both the SPA at "/" and the API at
+      // "/api/*", exactly like the execute-api URL; a key of "api" would
+      // hide the SPA. The mapping depends on the provisioned DomainName,
+      // which is why addResourceDependency wires it. The cert backs the
+      // host's TLS; the same cert already carries www as a SAN, so one
+      // ARN serves both pairs. Returns the DomainName for the output below.
+      const buildPair = (
+        host: string,
+        domainId: string,
+        mappingId: string,
+      ): cdk.CfnResource => {
+        const domain = new cdk.CfnResource(this, domainId, {
+          type: "AWS::ApiGatewayV2::DomainName",
+          properties: {
+            DomainName: host,
+            // REGIONAL (not EDGE): us-east-1 is the locked region and the
+            // only one a cert here can be in. Each configuration element is
+            // AWS::ApiGatewayV2::DomainName::DomainNameConfiguration.
+            DomainNameConfigurations: [
+              { EndpointType: "REGIONAL", CertificateArn: certArn },
+            ],
+          },
+        });
+        new cdk.CfnResource(this, mappingId, {
+          type: "AWS::ApiGatewayV2::ApiMapping",
+          properties: {
+            ApiId: api.apiId,
+            ApiMappingKey: "",
+            DomainName: host,
+            Stage: api.defaultStage ? api.defaultStage.stageName : "$default",
+          },
+        }).addResourceDependency(domain);
+        return domain;
+      };
+      // The apex keeps its existing logical IDs so a redeploy is an
+      // in-place update, not a create: replacing ApiDomain/ApiMapping would
+      // briefly recreate the live arcula.art mid-cutover. www takes its own
+      // distinct IDs (ApiDomainForwww / ApiMappingForwww), so its first
+      // deploy creates a resource rather than touching the live apex.
+      const apexDomain = buildPair(domainName, "ApiDomain", "ApiMapping");
+      const wwwName = domainName.startsWith("www.") ? "" : `www.${domainName}`;
+      const wwwDomain = wwwName
+        ? buildPair(wwwName, "ApiDomainForwww", "ApiMappingForwww")
+        : undefined;
+      // Each custom domain's regional endpoint is what the Porkbun records
+      // (§10.3) must point at; emitted so the deploy script can hand the
+      // exact ALIAS/CNAME target + hosted-zone id to publish. (The
+      // references are guarded — these attributes only exist once the
+      // DomainName does.) Every DomainName gets its OWN regional endpoint
+      // (`d-…`), so www needs its own output: it does NOT equal the apex's,
+      // and pointing the www CNAME at the apex target is the exact mistake
+      // that 403s.
+      new cdk.CfnOutput(this, "ApiRegionalDomainName", {
+        // `value` is typed `string`, but its doc permits intrinsic-function
+        // tokens (Fn::GetAtt) — the regional endpoint is exactly such a token.
+        value: apexDomain.getAtt("RegionalDomainName") as unknown as string,
+        description:
+          "API Gateway regional endpoint for the apex domain (Porkbun ALIAS target).",
+      });
+      new cdk.CfnOutput(this, "ApiRegionalHostedZone", {
+        value: apexDomain.getAtt("RegionalHostedZoneId") as unknown as string,
+        description:
+          "Route53 hosted zone for that regional endpoint (Porkbun ALIAS hosted-zone id).",
+      });
+      if (wwwDomain) {
+        new cdk.CfnOutput(this, "ApiRegionalDomainNameForwww", {
+          value: wwwDomain.getAtt("RegionalDomainName") as unknown as string,
+          description:
+            "API Gateway regional endpoint for www (Porkbun www CNAME target).",
+        });
+      }
+    }
   }
 }
