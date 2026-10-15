@@ -805,6 +805,60 @@ STACK_REGION=us-east-1` → the 443 listener and 80→443 redirect come on;
   CloudFront distribution from §14 — its endpoint is CNAME-able at the apex.
   That is the scale path, not a defect.
 
+**Live (2026-10-12; cookie + DNS closed 2026-10-15), as-built.** This flow
+is implemented for `arcula.art`; two corrections to the prose above: (1) the
+"cookie `secure: true`" line was **not** true at cutover, and the obvious
+fix (setting `NODE_ENV` on the Lambda) was **also** not enough: `bun build`
+statically replaces dot-access `process.env.NODE_ENV` with the build
+machine's value, so `auth.ts`'s `useSecureCookies` shipped hardcoded `false`
+(§15(g) records the trap). The 2026-10-15 close-out defines
+`process.env.NODE_ENV="production"` in `scripts/build-lambda.sh`, so the
+gate is `true` and the prod cookie is `Secure` — proven by a dedicated
+`prod-verify` step; (2) the custom domain is on the HTTP API's _regional_
+endpoint (not an ALB listener — API Gateway's plain-HTTP listener does the
+HTTPS redirect), and `www.arcula.art` is a **canonical-host redirect, not a
+403**.
+
+`www` serving: an HTTP-API custom domain serves only its _exact_ host — a
+request for `www.arcula.art` reached the same regional endpoint but was
+`ForbiddenException`ed there (no matching pair for that host), before the
+Lambda. The fix was to add a second custom domain pair for `www.arcula.art`
+(`infra/cdk/src/arcula-stack.ts`: `ApiDomainForwww` + `ApiMappingForwww`,
+same API, same cert — §10.4 note in the code) and, in the app (`apps/api/src/app.ts`),
+a first-run middleware that 308-redirects any `www.arcula.art` request to
+`https://arcula.art{path}`. The apex pair keeps the `ApiDomain`/`ApiMapping`
+logical IDs so the deploy is in-place; the www pair takes new IDs.
+
+**Two live regional endpoints** (hosted zone `Z1UJRXOUDOOFQ8` for both):
+
+| host                | regional endpoint                                  |
+| ------------------- | -------------------------------------------------- |
+| `arcula.art` (apex) | `d-r06knxhj8i.execute-api.us-east-1.amazonaws.com` |
+| `www.arcula.art`    | `d-pwuhoue0sf.execute-api.us-east-1.amazonaws.com` |
+
+The app is deployed and verified at the endpoint level (apex `200`, `www`
+`308 → https://arcula.art`), and **both Porkbun records are now published**,
+so the domain routes end-to-end. In Porkbun (console only — no API token
+here, and the deploy script prints, never writes):
+
+1. `arcula.art` (apex) → **ALIAS** → `d-r06knxhj8i.execute-api.us-east-1.amazonaws.com`,
+   hosted zone `Z1UJRXOUDOOFQ8`.
+2. `www.arcula.art` → **CNAME** → `d-pwuhoue0sf.execute-api.us-east-1.amazonaws.com`.
+
+`https://arcula.art` serves and `https://www.arcula.art` 308-redirects to it.
+
+The two endpoints are **different** and must stay so: each
+`AWS::ApiGatewayV2::DomainName` is assigned its own `d-…` regional host at
+creation, so `www` can never reuse the apex target — doing so is the
+`ForbiddenException` above. That host is fixed for the resource's life and
+changes only if CloudFormation _replaces_ the `DomainName` (a template that
+drops the resource, or a changed non-updatable property, does it); a normal
+in-place deploy keeps it, so the DNS target is stable across routine deploys
+and only a replacement needs a repoint. The stack emits
+`ApiRegionalDomainName` (apex) and `ApiRegionalDomainNameForwww`, and
+`scripts/deploy-prod.sh` prints each against the matching record, so the two
+cannot be crossed.
+
 ### 10.4 Deploy flow
 
 The deployed stack is the Lambda shape (§10.1), so the flow is the
@@ -828,6 +882,15 @@ two-step Lambda deploy (`scripts/deploy-prod.sh`), not an image push:
 Every later deploy: build the package → gate suites green → `cdk deploy`
 (drift) → `db:migrate` if the schema changed → verify. **`db:reset` never
 runs in prod** (the `ALLOW_DB_RESET` guard, §9).
+
+**Live (2026-10-12; DNS closed 2026-10-15).** Deploy 2 of the cutover
+re-pointed `PUBLIC_URL` to `https://arcula.art`; migrate + seed ran
+idempotently; the apex serves live §15(a). Both Porkbun records are now
+published (§10.3), so the domain routes end-to-end. The verify step
+(prod-verify.ts, §10.4 step 7) is the open item — its first run returned
+`ECONNRESET` from this machine's router cache (§15(c)), which cleared once
+the records resolved; the end-to-end sequence needs its one green run (§10.4
+step 7).
 
 The **custom-domain** cutover (ACM cert request → Porkbun records →
 validate → `cdk deploy -c DOMAIN=arcula.art -c CERT_ARN=…` → cookie
@@ -977,7 +1040,8 @@ Steps: compose pinning; SPA serving; Lambda package + smoke; oven/bun Dockerfile
 - package smokes green on glibc (Sharp verdict recorded)
 - `cdk synth` is green with no AWS account
 - the stack deployed with no `DOMAIN`/`CERT_ARN` and the app works against it (HTTPS comes free with the HTTP API; the custom domain is Phase 7)
-- all 16 verification steps pass in `prod-verify.ts`
+- all 17 verification steps pass in `prod-verify.ts` (the 17th, added in the
+  2026-10-15 Phase 7 close-out, asserts the live session cookie is `Secure`)
 - Lambda identity/payload-2.0 cookie handling verified against the live API
 
 ### Phase 7 — Production cutover + docs
@@ -990,8 +1054,19 @@ rewritten in this phase** — same doctrine (altitude, mutation testing),
 new targets; and the internal identifiers move to the `arcula` naming
 (`RENAME.md` — the Firebase project id `custodia-67307` stays where
 legacy references need it).
-**Done when:** `https://arcula.art` passes step 7, and `AGENTS.md`
-describes the tree as it now is.
+**Done (apex + www live 2026-10-12; DNS, cookie and `AGENTS.md` closed
+2026-10-15):** `https://arcula.art` serves live over the custom-domain cert
+and passes the health/SPA/`/api/v1` smoke (§15). `www.arcula.art` is a **308
+canonical-host redirect to `arcula.art`** (not a 403): a second custom-domain
+pair (`ApiDomainForwww`/`ApiMappingForwww`) plus a first-run app middleware
+redirect. **Both Porkbun DNS records are published** — the apex ALIAS points
+at its regional endpoint and the `www` CNAME at its _own_, distinct one
+(§10.3) — so the domain routes end-to-end. The cookie flip is real: the
+Lambda bundle is now built with `NODE_ENV=production` defined (the runtime
+env var alone was inert — §15(g)). `AGENTS.md` is rewritten for the
+Hono/Postgres/S3 tree, doctrine intact. The end-to-end `prod-verify.ts` pass
+(§10.4 step 7 — now 17 steps, the 17th asserting the `Secure` cookie) is the
+remaining item.
 
 ### Phase 8 — Optional (post-beta)
 
@@ -1636,14 +1711,24 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   the catch-all route is `/{proxy+}` (`$request: *` is REST-era syntax;
   `{$proxy}` is REST syntax, rejected by HTTP API; the greedy `/{proxy+}` is
   the HTTP form).
-  (g) **NODE_ENV / non-Secure cookies in prod — accepted for the beta.**
-  `useSecureCookies: process.env.NODE_ENV === "production"` (auth.ts) does
-  not flip in the Lambda (`NODE_ENV` is unset) — the prod session cookie is
-  therefore not `Secure`. Accepted while we are still reachable only over
-  the HTTPS HTTP API (the regional endpoint has no plain-HTTP path); the fix
-  is one env var (`NODE_ENV=production` in the stack env, or an explicit
-  knob), deferred to Phase 7 with the custom domain. Recorded so nobody
-  surprises themselves on the diag cookie.
+  (g) **NODE_ENV / non-Secure cookies in prod — accepted for the beta; fixed
+  2026-10-15 (in two parts).**
+  `useSecureCookies: process.env.NODE_ENV === "production"` (auth.ts) did not
+  flip in the Lambda — `NODE_ENV` was unset, so the prod session cookie was
+  not `Secure`. Accepted while reachable only over the HTTPS HTTP API (the
+  regional endpoint has no plain-HTTP path). The close-out set
+  `NODE_ENV: "production"` on the function and redeployed — **and the cookie
+  was still not `Secure`.** The real cause: `bun build` statically replaces
+  dot-access `process.env.NODE_ENV` with the _build_ machine's value (unset,
+  so `"development"`), so `useSecureCookies` shipped as the literal `false`;
+  the runtime env var could not correct a read that no longer existed, and the
+  explicit `false` even overrode better-auth's own https default
+  (`baseURLString.startsWith("https://")`). The decisive fix is the define in
+  `scripts/build-lambda.sh` (`--define 'process.env.NODE_ENV="production"'`),
+  which makes the bundle production for every NODE_ENV reader; the runtime
+  `NODE_ENV` stays for dynamic reads (better-auth's own `getEnvVar`). The
+  `lambda-smoke` and `prod-verify` checks now assert the cookie is `Secure`, so
+  a build that loses the define fails instead of shipping.
 
 - **2026-10-07 — Phase 6 container/deploy still carried the ALB/ECS/ECR
   wording (§10.2/§10.4 amended in place; §15 records the divergence).**
@@ -1669,6 +1754,99 @@ mail`: `bun` run from `apps/api/` loads no `.env` (there is none there, and
   No ACM, no ECR, no ALB — HTTPS comes free from the HTTP API. §10.4 rewritten
   to the Lambda flow, with the domain cutover kept as the Phase 7 reference
   §10.3 already carries.
+
+- **2026-10-12 — Phase 7.1: the custom domain is live on `https://arcula.art`.**
+  The Phase 7 cutover (ACM cert request → the two Porkbun records from §10.3
+  → validate → `cdk deploy -c DOMAIN=arcula.art -c CERT_ARN=… -c
+STACK_REGION=us-east-1`) is done, and the app was re-pointed to it by the
+  deploy-2 step of `scripts/deploy-prod.sh` (`PUBLIC_URL` →
+  `https://arcula.art`, which threads to `AUTH_BASE_URL`, `CLIENT_ORIGIN` and
+  `CORS_ORIGINS` — the `contextValue` props in arcula-stack.ts). The cert is
+  the ACM one (`CN=arcula.art`, SAN `www.arcula.art`, valid 2026-10-12 →
+  2027-04-27); the DNS records are the apex ALIAS → the
+  `ApiRegionalDomainName` regional endpoint (using `ApiRegionalHostedZone`)
+  and the `www` CNAME → `ApiRegionalDomainNameForwww`, a _distinct_ endpoint
+  (each `DomainName` gets its own `d-…`; "the same name" was wrong, corrected
+  2026-10-15). A `curl` smoke against the live domain
+  passes today: `/api/health` 200, the SPA `GET /` 200, `/api/v1/collections`
+  200, `/api/v1/me` 401 (session required). Three things here need correcting,
+  because an "everything green" summary is false in each:
+  (a) **`www.arcula.art` is still blocked, and not by the CORS list the prior
+  record assumed.** It returns `403 {"message":"Forbidden"}` on every path —
+  the SPA, `/api/health`, and `/api/v1/…` alike — and the response carries
+  `x-amzn-errortype: ForbiddenException` plus `x-amz-apigw-id`, which is API
+  Gateway **rejecting the request itself on the `www` Host before the Lambda
+  runs**. The app's own error envelope is `{error:{code,message}}` (never
+  `{message:"Forbidden"}`), and this repo's hono cors middleware is
+  permissive — it sets `ACAO` for a matching origin and `next()` otherwise,
+  and never emits a 403. So "add `https://www.arcula.art` to `corsOrigins`"
+  is **withdrawn**: the block is API-Gateway custom-domain config, fixed by an
+  AWS-side domain-mapping/security-policy check, not a client edit. Apex and
+  `www` share one custom domain and one `ApiMapping` key (""), so it is not a
+  missing mapping. The apex is the live entry point; `www` is the open item.
+  **Resolved this day (session):** it was the missing `www` domain pair — a
+  custom domain serves only its exact host, so `www` hit API Gateway with a
+  Host it did not recognize and was `ForbiddenException`ed. Fixed in
+  arcula-stack.ts by adding `ApiDomainForwww` + `ApiMappingForwww` (same API,
+  same cert) and in `apps/api/src/app.ts` by a first-run middleware that
+  **308-redirects** every `www.arcula.art` request to `https://arcula.art{path}`
+  (method/body preserved). Verified at the endpoint level (`www` → `308`),
+  and **end-to-end as of 2026-10-15**: both Porkbun records are published
+  (§10.3) — the apex ALIAS to `d-r06knxhj8i`, the `www` CNAME to its own
+  `d-pwuhoue0sf` — so `https://arcula.art` serves and `https://www.arcula.art`
+  308-redirects to it. See §10.3.
+  (b) **The prod session cookie was not `Secure` at cutover; fixed 2026-10-15.**
+  `useSecureCookies: process.env.NODE_ENV === "production"` (auth.ts) needs
+  `NODE_ENV=production`, but the stack env map (arcula-stack.ts) set none, so
+  this cutover did not flip it and §10.3's "the cookie flips to `secure: true`"
+  was **not true as-built**. The 2026-10-15 close-out fixed it in two parts —
+  `NODE_ENV: "production"` on the function _and_, decisively, the build-time
+  define in `scripts/build-lambda.sh` (the bundler had inlined
+  `process.env.NODE_ENV` to `"development"`; see the S5(g) entry for the trap).
+  Over HTTPS with a non-Secure cookie the browser still sent it (which is why
+  the app worked throughout); it was only a latent risk if the origin were
+  reached over plain HTTP, which it was not.
+  (c) **`prod-verify.ts`'s end-to-end pass is unverified, not failed.** Its
+  run returned `ECONNRESET` — its system resolver could not resolve the apex
+  (the local-DNS quirk the whole session hit: the _router_ held a stale
+  negative cache for `arcula.art` from when the ALIAS was absent, so
+  `dig`/Node's system resolver returned `ENOTFOUND` while the public
+  resolvers returned the regional endpoint IPs). That cache cleared
+  2026-10-15 once the records were published and re-resolved, so the
+  end-to-end sequence (§10.4 step 7) is now runnable and still needs its one
+  green run.
+
+- **2026-10-15 — Phase 7 closed out: DNS published, the two `www` defects
+  fixed, and the `Secure`-cookie flip made real.**
+  Both Porkbun records are live (§10.3): the apex ALIAS → `d-r06knxhj8i`, the
+  `www` CNAME → `d-pwuhoue0sf`. `https://arcula.art` serves and
+  `https://www.arcula.art` 308-redirects to it (verified through DNS). Two
+  corrections landed with it, both from the same root cause — the stack
+  assumed the two custom domains share one regional endpoint, and they do
+  not (each `AWS::ApiGatewayV2::DomainName` gets its own `d-…`):
+
+  1. `arcula-stack.ts` now captures the www `DomainName` and emits
+     `ApiRegionalDomainNameForwww`, and `scripts/deploy-prod.sh` prints each
+     endpoint against the matching Porkbun record. Before this, a fresh
+     cutover was told to point the `www` CNAME at the **apex** endpoint —
+     which is the `ForbiddenException` this whole thread began with.
+  2. §10.3's `www` endpoint was written `d-pwhoue0sf` (the missing-`u` typo
+     that had also been typed into the CNAME); corrected to `d-pwuhoue0sf`.
+
+  The regional endpoint is assigned at `DomainName` creation and is fixed for
+  the resource's life, so only a CloudFormation _replacement_ (a dropped
+  resource, or a changed non-updatable property) moves it and needs the DNS
+  repointed; a routine in-place deploy keeps it and does not.
+
+  Separately, the Phase 7 cookie flip landed — but not the way the plan
+  assumed. `NODE_ENV: "production"` on the function alone was inert: the Lambda
+  bundle had `process.env.NODE_ENV` inlined to `"development"` at build time,
+  so `auth.ts`'s `useSecureCookies` shipped `false` and even overrode
+  better-auth's https default. The decisive fix is the build-time define in
+  `scripts/build-lambda.sh`; the prod session cookie is now `Secure`, asserted
+  by a new `prod-verify` step (§15(b)/(g), §10.3). `AGENTS.md` was rewritten
+  for the Hono/Postgres/S3 tree (doctrine intact), and `prod-verify` grew its
+  17th step.
 
 ---
 
