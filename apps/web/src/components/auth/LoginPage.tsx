@@ -20,11 +20,12 @@ const LoginPage: React.FC = () => {
   const location = useLocation();
   const { login } = useAuth();
 
-  // Get the intended destination from the location state, fallback to dashboard
-  // TODO: from.pathname is not working yet
+  // Where a successful sign-in lands: the page that bounced the visitor here
+  // (ProtectedRoute puts it in router state), or the manage dashboard when
+  // they arrived from a public page's plain <Link>, which carries no state.
   const fromState = location.state as
     { from?: { pathname?: string } } | null | undefined;
-  const from = fromState?.from?.pathname || "/manage";
+  const from = fromState?.from?.pathname ?? "/manage";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
