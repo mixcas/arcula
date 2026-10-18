@@ -24,15 +24,6 @@ cdk.out
 .DS_Store
 *.log
 
-# Firebase CLI caches
-.firebase/
-
-# Firebase Emulator Suite
-firestore-debug.log
-ui-debug.log
-firebase-debug.*.log
-*-debug.log
-
 # Vite
 apps/web/src/assets/*/*.map
 apps/web/public/*/*.map

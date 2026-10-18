@@ -23,7 +23,6 @@ export default tseslint.config(
     // CDK synth output (generated template + the 13 MB asset copy).
     "**/cdk.out/**",
     "apps/web/public/**",
-    "functions/lib/**",
     "eslint.config.mjs",
   ]),
 
@@ -81,14 +80,12 @@ export default tseslint.config(
     },
   },
 
-  // Node-context TypeScript — functions and rules tests. Keeps the same
-  // type-aware settings as the block above (each file resolves its nearest
-  // tsconfig: functions/tsconfig.json, tests/tsconfig.json) but swaps the
-  // browser globals for Node's.
+  // Node-context TypeScript — the tests, the API and the CDK app. Keeps the
+  // same type-aware settings as the block above (each file resolves its
+  // nearest tsconfig) but swaps the browser globals for Node's.
   {
     name: "ts/node",
     files: [
-      "functions/**/*.ts",
       "apps/web/tests/**/*.ts",
       "apps/web/vitest.config.ts",
       "packages/shared/tests/**/*.ts",

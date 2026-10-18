@@ -34,22 +34,7 @@ CLAUDE.md
 .env
 .env.*
 
-# Firebase rules files: no Prettier parser exists for them. A directory walk
-# skips unknown extensions already; this keeps them out even when a file is
-# passed explicitly.
-firestore.rules
-storage.rules
-
 # Drizzle generated migration metadata (drizzle-kit's journal + snapshots).
 # Regenerated on every `db:generate`; keep byte-stable so Prettier never
 # drifts them from what drizzle-kit wrote.
 packages/db/migrations/meta/
-
-# Firebase CLI + functions build artifacts.
-.firebase/
-functions/lib
-functions/node_modules
-firebase-debug.log
-firebase-debug.*.log
-ui-debug.log
-firestore-debug.log
