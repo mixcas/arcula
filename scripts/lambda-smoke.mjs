@@ -112,7 +112,6 @@ process.env.WEB_DIST = dist;
 const shell = await handler(gw("/collection/smoke/artwork/x"));
 expectStatus("spa fallback", shell, 200);
 if (shell.body !== "<html>SMOKE-INDEX</html>") fail("SPA shell mismatch");
-expectStatus("spa no-cache", shell, 200);
 if (shell.headers["cache-control"] !== "no-cache")
   fail("shell must be no-cache");
 

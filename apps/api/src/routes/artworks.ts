@@ -613,10 +613,11 @@ artworkRoutes.patch(
       .from(artworkPhotosTable)
       .where(eq(artworkPhotosTable.artworkId, artwork.id))
       .orderBy(asc(artworkPhotosTable.order));
-    // Ordered by id — the only order a document sequence can have: a PATCH
-    // that leaves `documents` absent keeps the stored set, and the kept set
-    // must come back in the same order the serializer emits, whatever order
-    // the rows were inserted in.
+    // Documents carry no position column: id order is their canonical
+    // sequence, and the serializer applies it. This read sorts for
+    // determinism, but nothing downstream depends on its order —
+    // `currentDocs` feeds only `storedDocIds`, the cap check and the
+    // uniqueness check.
     const currentDocs = await db
       .select()
       .from(artworkDocumentsTable)

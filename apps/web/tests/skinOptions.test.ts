@@ -115,25 +115,16 @@ describe("Basicx's own vocabulary", () => {
     // visitor scrolls at their own pace, and it also removed the only option
     // that depended on another one, which is what keeps `resolveSkinOptions` a
     // flat per-key default with no cross-option logic.
+    //
+    // Nor is there an option for the nav's attribution slot: what belongs
+    // there is decided by *who is looking* — the owner gets a manage link,
+    // everyone else the attribution — so an option for it would be a control
+    // that does nothing. Pinning the exact key list is what keeps it absent
+    // rather than inert, which is why the weaker inch-by-inch assertion that
+    // used to sit beside this one is gone.
     expect(BASICX_OPTION_SPECS.map((spec) => spec.key)).toEqual([
       "transitionSeconds",
     ]);
-  });
-
-  it("does not offer an option for the nav's attribution slot", () => {
-    // What belongs in that slot is decided by *who is looking* — the owner gets
-    // a manage link, everyone else gets the attribution — so an option for it
-    // would be a control that does nothing. The option is absent rather than
-    // left inert, so it cannot be mistaken for one that works.
-    //
-    // The title is deliberately generic: it names the invariant, not the
-    // story of how the option went away, so it does not read as a historical
-    // note. A collection that stored `showPoweredBy: true` is unaffected
-    // either way — it is reported as a dropped key by `resolveSkinOptions`,
-    // which is tested above.
-    expect(BASICX_OPTION_SPECS.map((spec) => spec.key)).not.toContain(
-      "showPoweredBy",
-    );
   });
 
   // The spec's 0.5s is the default below.

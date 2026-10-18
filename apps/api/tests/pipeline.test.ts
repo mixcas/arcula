@@ -16,6 +16,7 @@ import {
   WEBP_TYPE,
 } from "../src/media/pipeline";
 import {
+  DOCUMENT_IMAGE_VARIANT_KEYS,
   DOCUMENT_VARIANT_SPECS,
   IMAGE_VARIANTS,
   VARIANT_KEYS,
@@ -211,12 +212,17 @@ describe("key spaces agree", () => {
     }
   });
 
-  it("the document specs are the photo table filtered, not a second table", () => {
-    const keys = DOCUMENT_VARIANT_SPECS.map((spec) => spec.key);
-    expect(keys).toEqual(["square_sm", "large"]);
+  it("documents draw their geometry from the photo table, not a copy of it", () => {
+    // Identity, not equality: a hand-copied spec compares equal by value and
+    // then drifts the next time the table is resized, which is the second
+    // table this rules out. The keys are pinned too, so changing which
+    // variants documents get is a visible edit rather than a side effect of
+    // editing the table.
     for (const spec of DOCUMENT_VARIANT_SPECS) {
-      const inTable = IMAGE_VARIANTS.find((v) => v.key === spec.key);
-      expect(JSON.stringify(spec)).toBe(JSON.stringify(inTable));
+      expect(IMAGE_VARIANTS).toContain(spec);
     }
+    expect(DOCUMENT_VARIANT_SPECS.map((spec) => spec.key)).toEqual([
+      ...DOCUMENT_IMAGE_VARIANT_KEYS,
+    ]);
   });
 });

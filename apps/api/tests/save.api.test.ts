@@ -807,16 +807,15 @@ describe("PATCH …/artworks/{aid}", () => {
   });
 
   it("answers an omitted document sequence in id order, whatever the rows sit in", async () => {
-    // Pin for the PATCH handler's `currentDocs` read: when the payload omits
-    // `documents`, the handler re-derives the sequence from the stored rows.
-    // Postgres gives no order without an explicit ORDER BY, so the read must
-    // sort — seeded and created in DESCENDING lexicographic order here, so the
-    // physical rows sit backwards against the id order the answer must carry.
+    // The client-visible contract: a PATCH that omits `documents` answers with
+    // the kept set in id order, not in whatever order the rows physically sit
+    // in. Documents carry no position column, so id order is the only sequence
+    // they have. Seeded and created in DESCENDING lexicographic order here, so
+    // the rows sit backwards against the order the answer must carry.
     //
-    // (The response is serialised through `loadJoined`, which sorts too — so
-    // this test would stay green if the handler's read lost its ORDER BY. It
-    // pins the contract the client relies on, not the one read that happens
-    // to satisfy it today.)
+    // The order comes from the serializer (`loadJoined`), not from the
+    // handler's read — so this pins the answer, which is what the client
+    // depends on, not that one query.
     const aid = uuid();
     const pdf = new Uint8Array([
       ...[0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
