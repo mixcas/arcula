@@ -76,7 +76,7 @@ async function createWork(
   aid: string,
   photos: { entryId: string; name: string }[],
   opts: {
-    isPublic?: boolean;
+    status?: "draft" | "published";
     documents?: { entryId: string; name: string }[];
   } = {},
 ): Promise<void> {
@@ -86,7 +86,7 @@ async function createWork(
       artworkId: aid,
       title: "Media Work",
       artistName: "C. Cas",
-      isPublic: opts.isPublic ?? true,
+      status: opts.status ?? "published",
       photos,
       documents: opts.documents ?? [],
     }),
@@ -97,7 +97,7 @@ async function createWork(
 const sourceJpeg = (async () => makeJpeg())();
 
 let pubWorkId = "";
-let privWorkId = "";
+let draftWorkId = "";
 let delWorkId = "";
 let privCollWorkId = "";
 
@@ -125,16 +125,16 @@ beforeAll(async () => {
     documents: [{ entryId: dA, name: "report.pdf" }],
   });
 
-  // privWork: private + live, one photo.
-  privWorkId = uuid();
+  // draftWork: a draft, live, one photo.
+  draftWorkId = uuid();
   await stage(
     "photos",
-    privWorkId,
+    draftWorkId,
     pB,
     new File([await sourceJpeg], "b.jpg", { type: "image/jpeg" }),
   );
-  await createWork(privWorkId, [{ entryId: pB, name: "b.jpg" }], {
-    isPublic: false,
+  await createWork(draftWorkId, [{ entryId: pB, name: "b.jpg" }], {
+    status: "draft",
   });
 
   // delWork: public but tombstoned, one photo.
@@ -259,11 +259,11 @@ describe("GET /api/v1/media — final photos", () => {
     );
   });
 
-  it("404s a visitor on a private work; the owner still reads it", async () => {
+  it("404s a visitor on a draft; the owner still reads it", async () => {
     const key = finalPhotoKey(
       owner.userId,
       cid,
-      privWorkId,
+      draftWorkId,
       pB,
       "original",
       "jpg",

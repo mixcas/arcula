@@ -14,8 +14,8 @@
 // exist to remove.
 //
 // Reader access: the owner always; a visitor on the collection's live
-// PUBLIC works in the list, and a single work by id when the work itself
-// is public — the collection's flag does not hide a direct id read.
+// PUBLISHED works in the list, and a single work by id when the work itself
+// is published — the collection's flag does not hide a direct id read.
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -124,9 +124,9 @@ artworkRoutes.get(
     const session = await resolveSession(c);
     const isOwner = session !== null && artwork.userId === session.user.id;
     if (!isOwner) {
-      // A private work and a deleted work are both a uniform 404 for a
+      // A draft work and a deleted work are both a uniform 404 for a
       // visitor: saying which was refused would be a disclosure.
-      if (artwork.deletedAt !== null || !artwork.isPublic) {
+      if (artwork.deletedAt !== null || artwork.status !== "published") {
         throw new ApiError("not-found", "The artwork does not exist");
       }
     }
@@ -135,7 +135,7 @@ artworkRoutes.get(
   },
 );
 
-// GET list — owner: every live work; visitor: the public ones; private
+// GET list — owner: every live work; visitor: the published ones; private
 // collection: 403 (never 404 — the client maps the refusal to "private").
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
   const collectionId = param(c, "collectionId");
@@ -165,7 +165,7 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
       .where(
         and(
           eq(artworksTable.collectionId, collectionId),
-          eq(artworksTable.isPublic, true),
+          eq(artworksTable.status, "published"),
           isNull(artworksTable.deletedAt),
         ),
       );
@@ -244,7 +244,7 @@ artworkRoutes.post(
         notes: payload.notes ?? null,
         condition: payload.condition ?? null,
         currentValue: payload.currentValue ?? null,
-        isPublic: payload.isPublic,
+        status: payload.status,
         // Always written, as null: the list filters on it, and a missing
         // field is not a null (the write-path doctrine).
         deletedAt: null,
@@ -357,8 +357,8 @@ artworkRoutes.patch(
           set[field] = payload[field] ?? null;
         }
       }
-      if (payload.isPublic !== undefined) {
-        set.isPublic = payload.isPublic;
+      if (payload.status !== undefined) {
+        set.status = payload.status;
       }
       await tx
         .update(artworksTable)

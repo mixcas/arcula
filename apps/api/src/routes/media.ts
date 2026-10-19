@@ -5,8 +5,8 @@
 // streams:
 //
 //   final photo    — the owner, or a visitor iff
-//                    `artwork.isPublic && collection.isPublic &&
-//                    deletedAt == null`. A private or deleted work 404s
+//                    `artwork.status == 'published' && collection.isPublic &&
+//                    deletedAt == null`. A draft or deleted work 404s
 //                    for a visitor, uniformly: saying which was refused
 //                    would be a disclosure (the same call as the
 //                    single-artwork read).
@@ -110,7 +110,7 @@ mediaRoutes.get("/media", async (c) => {
       const collection = await loadCollection(parsed.collectionId);
       if (
         artwork.deletedAt !== null ||
-        !artwork.isPublic ||
+        artwork.status !== "published" ||
         collection?.isPublic !== true
       ) {
         throw new ApiError(

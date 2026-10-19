@@ -87,8 +87,8 @@ export interface Artwork {
   isPublic: boolean;
   // The owner's choice a visitor is gated on. Present beside the old flag
   // while the sequence moves the API and the web onto it; absent on an older
-  // document and read as `published`. No code on this release branches on it —
-  // it is carried, not obeyed.
+  // document and read as `published`. The API answers it and gates the visitor
+  // on it; the web still reads `isPublic`, which the API derives from it.
   status?: ArtworkStatus;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
