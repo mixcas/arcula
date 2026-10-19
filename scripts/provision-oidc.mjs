@@ -1,9 +1,9 @@
 /**
  * Provision the GitHub Actions deploy identity, idempotently: the OIDC
  * provider, and one role per long-lived branch. Each role trusts exactly
- * its own branch (and the GitHub Environment its job runs in) and may do
- * one thing — assume the account's CDK bootstrap roles, which is all a
- * deploy needs.
+ * its own branch (and the GitHub Environment its job runs in), may assume
+ * the account's CDK bootstrap roles — which is how a deploy changes
+ * anything — and may read back the stack and function it just deployed.
  *
  *   node scripts/provision-oidc.mjs [owner/repo]
  *
@@ -164,6 +164,27 @@ const permissions = JSON.stringify({
   ],
 });
 
+// What a deploy reads back after writing: the stack's outputs (API URL,
+// function name, the custom domain's regional endpoints) and the function's
+// configuration, which is the seed's environment. Nothing that changes
+// anything is here — that still goes through the bootstrap roles — so this
+// stays read-only and account-scoped.
+const readBack = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Effect: "Allow",
+      Action: "cloudformation:DescribeStacks",
+      Resource: `arn:aws:cloudformation:*:${account}:stack/*`,
+    },
+    {
+      Effect: "Allow",
+      Action: "lambda:GetFunctionConfiguration",
+      Resource: `arn:aws:lambda:*:${account}:function:*`,
+    },
+  ],
+});
+
 const provisioned = [];
 
 for (const { branch, githubEnvironment, role, description } of BRANCHES) {
@@ -253,6 +274,16 @@ for (const { branch, githubEnvironment, role, description } of BRANCHES) {
     "AssumeCdkBootstrapRoles",
     "--policy-document",
     permissions,
+  ]);
+  aws([
+    "iam",
+    "put-role-policy",
+    "--role-name",
+    role,
+    "--policy-name",
+    "ReadDeploymentResults",
+    "--policy-document",
+    readBack,
   ]);
   provisioned.push({ branch, roleArn });
 }
