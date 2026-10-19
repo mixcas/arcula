@@ -84,14 +84,24 @@ _Avoid_: Attachments, files, documents
 ### What is seen
 
 **Public**:
-Readable by a visitor. A collection and an artwork each carry their own flag,
-independently of one another.
+Readable by a visitor. Only a collection carries this choice: it is the gate on
+everything inside it. A work is never public on its own account.
 _Avoid_: Published, shared, live
 
 **Private**:
-Readable by its owner alone. To a visitor a private work is indistinguishable
-from one that does not exist.
+Readable by its owner alone. To a visitor a private collection is
+indistinguishable from one that does not exist.
 _Avoid_: Hidden, unpublished, draft
+
+**Published**:
+An artwork the owner has put in front of the collection's gate. A published
+work is visible to a visitor exactly when its collection is public.
+
+**Draft**:
+An artwork the owner keeps inside the collection but has not put in front of
+the gate. The owner sees it everywhere; a visitor never does, whatever the
+collection's own visibility. A draft counts as part of the collection.
+_Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
 Taken out of the collection as far as its owner is concerned: it leaves every

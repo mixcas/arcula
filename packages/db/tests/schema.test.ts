@@ -5,13 +5,14 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the variant composite PK, the two CHECKs, the
+// position is the truth", the variant composite PK, the three CHECKs, the
 // composite indexes behind the owner/visitor lists) missing from either source
 // fails here.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -54,6 +55,22 @@ const extraConfigs = (table: PgTable): Array<Record<string, unknown>> => {
   return [];
 };
 
+// A CHECK's predicate as SQL text, off the SQL object drizzle stores: the
+// literal chunks are where the predicate lives.
+const predicateOf = (value: unknown): string => {
+  const chunks =
+    (value as { queryChunks?: Array<{ value?: unknown }> }).queryChunks ?? [];
+  return chunks
+    .map((chunk) => (Array.isArray(chunk.value) ? chunk.value.join("") : ""))
+    .join("");
+};
+
+const checksOf = (table: PgTable): Array<{ name?: string; sql: string }> =>
+  getTableConfig(table).checks.map((c) => ({
+    name: c.name,
+    sql: predicateOf(c.value),
+  }));
+
 const TABLE_NAMES = [
   "user",
   "session",
@@ -70,6 +87,12 @@ const TABLE_NAMES = [
 const INIT_SQL = (() => {
   const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
   return readFileSync(pkgRoot + "migrations/0000_init.sql", "utf8");
+})();
+
+// The committed migration that adds `status`, likewise as applied.
+const STATUS_SQL = (() => {
+  const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
+  return readFileSync(pkgRoot + "migrations/0001_artwork_status.sql", "utf8");
 })();
 
 describe("the nine-table schema", () => {
@@ -112,7 +135,7 @@ describe("the nine-table schema", () => {
     expect(v.expiresAt.notNull).toBe(true);
   });
 
-  it("artworks is field-for-field with the shared Artwork type, and has no array columns", () => {
+  it("artworks carries the descriptive fields, the old flag and its status, and no array columns", () => {
     const c = cols(artworks);
     expect(Object.keys(c)).toEqual([
       "id",
@@ -133,6 +156,7 @@ describe("the nine-table schema", () => {
       "condition",
       "currentValue",
       "isPublic",
+      "status",
       "deletedAt",
       "createdAt",
       "updatedAt",
@@ -143,8 +167,18 @@ describe("the nine-table schema", () => {
     expect(c.currentValue.dataType).toBe("string");
     expect(c.isPublic.notNull).toBe(true);
     expect(c.isPublic.default).toBe(true);
+    // The owner's gate, required and defaulting to published.
+    expect(c.status.notNull).toBe(true);
+    expect(c.status.default).toBe("published");
     // NULL = live.
     expect(c.deletedAt.notNull).toBe(false);
+  });
+
+  it("artworks restricts `status` to draft or published in the Drizzle object", () => {
+    expect(checksOf(artworks)).toContainEqual({
+      name: "artworks_status_check",
+      sql: "\"status\" in ('draft', 'published')",
+    });
   });
 
   it("artwork_photos keeps `order`; the uniqueness on (artworkId, order) is the order invariant", () => {
@@ -252,5 +286,32 @@ describe("the committed migration (as it will actually be applied)", () => {
     expect(INIT_SQL).toContain("DEFAULT 'free'");
     expect(INIT_SQL.match(/DEFAULT true NOT NULL/g)).toHaveLength(2);
     expect(INIT_SQL).toContain("DEFAULT false NOT NULL");
+  });
+});
+
+describe("the committed status migration (as it will actually be applied)", () => {
+  it("adds a required `status` defaulting to published, checked to draft or published", () => {
+    expect(STATUS_SQL).toContain(
+      `ALTER TABLE "artworks" ADD COLUMN "status" text DEFAULT 'published' NOT NULL`,
+    );
+    expect(STATUS_SQL).toContain(
+      `CONSTRAINT "artworks_status_check" CHECK ("status" in ('draft', 'published'))`,
+    );
+  });
+
+  it("backfills after the column exists: an old private work becomes a draft", () => {
+    const adds = STATUS_SQL.indexOf(`ADD COLUMN "status"`);
+    const backfill = STATUS_SQL.indexOf(
+      `UPDATE "artworks" SET "status" = 'draft' WHERE "isPublic" = false`,
+    );
+    expect(adds).toBeGreaterThan(-1);
+    expect(backfill).toBeGreaterThan(adds);
+  });
+
+  it("leaves the old per-work flag and its index in place", () => {
+    expect(STATUS_SQL).not.toContain('DROP COLUMN "isPublic"');
+    expect(STATUS_SQL).not.toContain(
+      `DROP INDEX "artworks_collection_public_deleted_idx"`,
+    );
   });
 });

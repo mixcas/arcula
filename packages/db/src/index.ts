@@ -151,8 +151,13 @@ export const artworks = pgTable(
     notes: text("notes"),
     condition: text("condition"),
     currentValue: text("currentValue"),
-    // Per-artwork, independent of the collection's flag.
+    // Per-artwork, independent of the collection's flag. The gate this
+    // release replaces: the next one drops it, so nothing new may read it.
     isPublic: boolean("isPublic").notNull().default(true),
+    // The owner's choice a visitor is gated on: `published` or `draft`. Not
+    // read yet — this release adds it and backfills it from `isPublic`, and
+    // the next one switches the reads and drops the flag.
+    status: text("status").notNull().default("published"),
     // NULL = live. Soft delete: the column is the sole record of deletion.
     deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
@@ -173,6 +178,7 @@ export const artworks = pgTable(
     ),
     // The artwork-by-id-in-collection check (create authorization).
     index("artworks_collection_id_idx").on(table.collectionId),
+    check("artworks_status_check", sql`"status" in ('draft', 'published')`),
   ],
 );
 
