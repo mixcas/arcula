@@ -7,7 +7,7 @@
  * left bare: AWS allows only `[A-Za-z_][A-Za-z0-9_]*` in an environment
  * key, which every shell reads as a name.
  *
- * Used by `scripts/deploy-prod.sh`, whose seed must run with the deployed
+ * Used by `scripts/deploy.sh`, whose seed must run with the deployed
  * function's own configuration rather than a second hand-written list.
  *
  *   node scripts/lambda-env-to-dotenv.mjs variables.json > seed.env

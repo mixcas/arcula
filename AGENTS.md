@@ -38,10 +38,15 @@ All from the repo root (`bun run <script>`):
 | `bun run build`                                             | Build the web app                                                                    |
 | `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
 
-Deploy is a shell script, not a package script: **`sh scripts/deploy-prod.sh`**
-(build the Lambda package → `cdk deploy` → migrate → seed → re-deploy with the
-real `PUBLIC_URL` → `prod-verify`). `scripts/build-lambda.sh` builds the zip;
+Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
+`sh scripts/deploy-dev.sh` are thin wrappers over the one sequence in
+**`scripts/deploy.sh`** (cdk build → `cdk deploy` → resolve the URL → migrate →
+seed → re-deploy with the real `PUBLIC_URL` → `deploy-verify`).
+`sh scripts/build-lambda.sh <prod|dev>` builds that environment's zip first;
 `scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships.
+`scripts/provision-cert.mjs` and `scripts/provision-oidc.mjs` provision a
+host's certificate and the GitHub deploy roles; `scripts/reset-dev.sh --yes`
+drops the dev schema and empties the dev bucket.
 
 The **local stack** is Postgres (a docker/colima container), SeaweedFS (the S3
 stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
@@ -204,8 +209,9 @@ restated here.
   Prefer subpath imports (`import debounce from "lodash/debounce"`) for smaller
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
-  inlined at build time. Never commit real secrets — `infra/cdk/.env` (which
-  holds `DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
+  inlined at build time. Never commit real secrets — `infra/cdk/.env` and the
+  per-environment `infra/cdk/.env.<env>` (which hold `DATABASE_URL`,
+  `AUTH_SECRET`, `CERT_ARN`, …) are gitignored.
 
 ## Validation
 
@@ -218,16 +224,17 @@ restated here.
   (see Gotchas). `npx vitest run <file>` inside a package runs a single file.
 - Before writing a test, read **What to test** above. A green suite is not the
   goal; a test that fails only when we change something is.
-- **Deploy**: `sh scripts/deploy-prod.sh`, then
-  `cd apps/api && bun scripts/prod-verify.ts https://arcula.art` — the 17-step
+- **Deploy**: `sh scripts/deploy-prod.sh` (production) or
+  `sh scripts/deploy-dev.sh` (dev), then
+  `cd apps/api && bun scripts/deploy-verify.ts https://arcula.art` — the 17-step
   end-to-end pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real 12 MP photo through
   stage → process → save, a visitor read, and the reset-mail path). It creates a
   throwaway `verify-<ts>@example.test` account per run, so treat it as a write
-  against prod.
+  against the environment.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and
-  `scripts/deploy-prod.sh` prints each against the matching Porkbun record.
+  `scripts/deploy.sh` prints each against the matching Porkbun record.
   Those DNS records are console-only (no API access), and the apex and `www`
   targets are **different** `d-…` values — do not point one at the other.
 
