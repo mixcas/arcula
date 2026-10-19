@@ -125,7 +125,11 @@ cd "$ROOT/infra/cdk"
 
 echo "==> cdk build + bootstrap (idempotent)"
 bun run build
-npx cdk bootstrap --region "$REGION"
+# bootstrap synthesises too — the bootstrap qualifier and the account/region
+# come from the app — so it needs the same context the deploy gets. Without
+# it the app sees no ENV and refuses to guess, which failed the first dev
+# deploy at this line.
+npx cdk bootstrap --region "$REGION" "$@"
 
 echo "==> deploy 1 (values in, PUBLIC_URL placeholder)"
 npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never "$@"
