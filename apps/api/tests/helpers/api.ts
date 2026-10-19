@@ -66,13 +66,15 @@ export async function err(
 
 /**
  * The live (not-expired) cookies a response sets, as a Cookie header. An
- * expired cookie is a deletion, not a session.
+ * expired cookie is a deletion, not a session — and that is an attribute, so
+ * it has to be read off the full header rather than the name=value the header
+ * is truncated to below.
  */
 export function sessionCookies(res: Response): string {
   return res.headers
     .getSetCookie()
+    .filter((raw) => !raw.split("; ").some((attr) => /^max-age=0$/i.test(attr)))
     .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
     .join("; ");
 }
 
