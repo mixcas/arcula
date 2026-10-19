@@ -123,13 +123,16 @@ print_dns_records() {
 # ---- deploy -------------------------------------------------------------
 cd "$ROOT/infra/cdk"
 
-echo "==> cdk build + bootstrap (idempotent)"
+echo "==> cdk build"
+# Bootstrapping the account is a one-time operator step with admin
+# credentials, not part of a deploy: `cdk bootstrap` runs straight against
+# CloudFormation, SSM, S3 and ECR, while the deploy identity may only assume
+# the cdk-* bootstrap roles (`provision-oidc.mjs`). It lived here once, and
+# the first dev deploy failed on cloudformation:DescribeStacks against the
+# CDKToolkit stack — the line had only ever run under an admin identity.
+# An account that is not bootstrapped yet gets CDK's own message, which names
+# the command to run (infra/cdk/README.md, "First run").
 bun run build
-# bootstrap synthesises too — the bootstrap qualifier and the account/region
-# come from the app — so it needs the same context the deploy gets. Without
-# it the app sees no ENV and refuses to guess, which failed the first dev
-# deploy at this line.
-npx cdk bootstrap --region "$REGION" "$@"
 
 echo "==> deploy 1 (values in, PUBLIC_URL placeholder)"
 npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never "$@"
