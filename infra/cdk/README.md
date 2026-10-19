@@ -49,7 +49,8 @@ domain then makes the URL stable.
 
 ## Outputs
 
-`ExecuteApiUrl` and `MediaBucket`, plus — when `DOMAIN` is set —
+`ExecuteApiUrl`, `MediaBucket`, and `ApiFunctionName` (whose environment the
+deploy script reads back to run the seed), plus — when `DOMAIN` is set —
 `ApiRegionalDomainName`, `ApiRegionalHostedZone`, and
 `ApiRegionalDomainNameForwww`: the exact targets the DNS records point at. Every
 `DomainName` gets its own regional endpoint, so the `www` target is **not** the
