@@ -4,9 +4,9 @@ This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
 For the user-facing overview and setup, see [README.md](README.md). For the agent
-working guide, see [AGENTS.md](AGENTS.md). Per-package detail lives in each
-package's own `README.md` (`apps/api`, `packages/shared`, `packages/db`,
-`infra/cdk`).
+working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
+[GLOSSARY.md](GLOSSARY.md). Per-package detail lives in each package's own
+`README.md` (`apps/api`, `packages/shared`, `packages/db`, `infra/cdk`).
 
 ## What the product is
 
@@ -37,6 +37,41 @@ browser → API Gateway (custom domain) → Lambda (Hono) → Postgres / S3
 - `packages/shared` — the client⇄server contract.
 - `packages/db` — the Drizzle schema.
 - `infra/cdk` — the AWS stack.
+
+## Environments
+
+Two permanent environments, and they are the same thing twice: one Lambda
+carrying the API and the built SPA, behind one HTTP API, with its own S3 media
+bucket and its own optional custom domain. Only what must differ differs.
+
+| Environment | Host             | Stack       | Fed by | Disposable |
+| ----------- | ---------------- | ----------- | ------ | ---------- |
+| production  | `arcula.art`     | `Arcula`    | `main` | no         |
+| dev         | `dev.arcula.art` | `ArculaDev` | `dev`  | yes        |
+
+Dev is a full replica and not a toy: its own Postgres project, media bucket,
+certificate, `AUTH_SECRET` and Resend key, so a wrecked dev database, a wiped
+dev bucket or a revoked dev mail key cannot touch production's. It is public —
+no authentication wall — and noindexed, which is what lets the same client the
+product ships and the end-to-end verify pass run against it unchanged. Its
+`/api/health` carries the deployed commit; production's carries no such key.
+`NODE_ENV=production` on both, because it is what makes the session cookie
+`Secure`.
+
+Merging is deploying: a push to a branch deploys that branch's environment
+through the same deploy script a laptop runs. Each environment's secrets live
+in a GitHub Environment restricted to its branch, and the deploy identity is a
+GitHub OIDC role pinned to that branch — no long-lived AWS key exists.
+
+Migrations are forward-only, so a revert redeploys the code but not the schema.
+
+The reasoning, and the alternatives that were turned down, are not restated
+here:
+
+- [ADR-0001 — two long-lived branches, two permanent environments](docs/adr/0001-two-branches-two-environments.md)
+- [ADR-0002 — one AWS account and one CDK bootstrap for both](docs/adr/0002-one-account-one-bootstrap.md)
+
+The first-run order is in `infra/cdk/README.md`.
 
 ## The data model
 

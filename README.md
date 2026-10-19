@@ -96,8 +96,8 @@ deleted work disappears from every list without its bytes going anywhere.
 
 ## Architecture
 
-Arcula is a **Bun workspaces monorepo**. One product, a few packages, and one
-deploy target — one Lambda behind one HTTP API:
+Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
+environments of the same deploy shape — one Lambda behind one HTTP API:
 
 - **`apps/web`** — the React 19 + Vite single-page app (Mantine v9), including
   the public collection pages (the "skins").
@@ -107,7 +107,7 @@ deploy target — one Lambda behind one HTTP API:
   file caps, the tier quota, and the pure ordering/slug helpers.
 - **`packages/db`** — the Drizzle schema and the generated migration.
 - **`infra/cdk`** — the AWS CDK stack.
-- **`scripts`** — the local stack, the Lambda build, and the production deploy.
+- **`scripts`** — the local stack, the Lambda build, and both deploys.
 
 ```
 browser → API Gateway (custom domain) → Lambda (Hono) → Postgres / S3
@@ -254,8 +254,22 @@ starts an API automatically.
 
 An environment is one Lambda (API + SPA) behind an HTTP API, an S3 media
 bucket, and an optional custom domain, all described in `infra/cdk`. There are
-two: production at `arcula.art` and dev at `dev.arcula.art`. Deploy through the
-scripts, not a bare `cdk deploy`:
+two:
+
+| Environment | Address                  | Deploys from | Purpose                                           |
+| ----------- | ------------------------ | ------------ | ------------------------------------------------- |
+| dev         | `https://dev.arcula.art` | `dev`        | a rehearsal space, public and kept out of indexes |
+| production  | `https://arcula.art`     | `main`       | the product a collector uses                      |
+
+They are the same thing twice. Dev has its own database, media bucket,
+certificate, auth secret and mail key, so nothing done there can reach
+production's data — and it is disposable: dev's schema and bucket can be
+dropped and rebuilt from the branch.
+
+`dev` is the integration branch and the repository's default. Changes land
+there first, and a release is a pull request from `dev` into `main`. Merging is
+deploying: CI deploys whichever environment's branch moved, through the same
+scripts you can run yourself. The scripts, not a bare `cdk deploy`:
 
 ```bash
 sh scripts/build-lambda.sh prod   # or: dev — each writes its own artifact
@@ -268,12 +282,20 @@ URL, apply the migration, seed the owner account, re-deploy with the real
 public URL, and run `deploy-verify` — a full end-to-end pass against the live
 site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
 production's fallback), which is gitignored; see `infra/cdk/README.md` for the
-stack's context values and outputs.
+stack's context values, its outputs and the first-run order.
 
 `scripts/provision-cert.mjs <host>` provisions a host's TLS certificate and
 prints the DNS records to publish, `scripts/provision-oidc.mjs` provisions the
-GitHub OIDC provider and the two branch-pinned deploy roles, and
-`sh scripts/reset-dev.sh --yes` drops the dev schema and empties the dev bucket.
+GitHub OIDC provider and the two branch-pinned deploy roles,
+`sh scripts/setup-dev.sh` walks dev's first run, and
+`sh scripts/reset-dev.sh --yes` drops the dev schema and empties the dev
+bucket.
+
+The reasoning behind two branches and two environments, and behind their
+sharing one AWS account, is in
+[ADR-0001](docs/adr/0001-two-branches-two-environments.md) and
+[ADR-0002](docs/adr/0002-one-account-one-bootstrap.md); the product's
+vocabulary is in [GLOSSARY.md](GLOSSARY.md).
 
 ## Project structure
 
@@ -304,7 +326,9 @@ packages/
 infra/
   cdk/                       # the AWS CDK stack
   Dockerfile                 # the scale-up container (documented, not deployed)
-scripts/                     # stack, build, deploy
+scripts/                     # stack, build, provision, reset, deploy
+docs/adr/                    # decision records, with rejected alternatives
+GLOSSARY.md                  # the product's own vocabulary
 ```
 
 There is no global stylesheet. Typography, spacing and component defaults all
@@ -346,13 +370,21 @@ the schema does not match how you actually think about your own collection, that
 is a bug worth reporting.
 
 1. Fork the repository
-2. Create a branch (`git checkout -b feature/my-change`)
+2. Branch from `dev`, the default branch (`git checkout dev`, then
+   `git checkout -b feat/my-change`)
 3. Commit your changes
-4. Push and open a pull request
+4. Push and open a pull request **against `dev`**
 
 Before opening a PR, `bun run check` must pass. It runs `tsc`, ESLint with
 type-aware rules, and Prettier, so a type error, a lint warning, or a formatting
-diff will each fail it.
+diff will each fail it. CI runs the same command, so green locally means green
+in the pipeline.
+
+A change reaches production only by release: a pull request from `dev` into
+`main`, merged by the maintainer. The working rules — branch model, the two
+things never to commit, and why a revert is only safe for an additive schema
+change — are in [AGENTS.md](AGENTS.md), which is written for contributors as
+well as agents.
 
 ## License
 

@@ -6,10 +6,12 @@
 > user-facing overview.
 >
 > The product is **Arcula** (`arcula.art`), and the packages, the repository
-> and the identifiers all say `arcula` too.
+> and the identifiers all say `arcula` too. The product's own vocabulary is in
+> **`GLOSSARY.md`**; decisions with their rejected alternatives are in
+> **`docs/adr/`**.
 
-Arcula is a **Bun workspaces monorepo**. One product, a few packages, and one
-deploy target:
+Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
+environments of one deploy shape:
 
 - **`apps/web`** — the React 19 + Vite SPA (Mantine v9), including the public
   collection pages (the "skins").
@@ -19,11 +21,77 @@ deploy target:
   file caps, the photo-ordering helpers.
 - **`packages/db`** — the Drizzle schema and the generated migration.
 - **`infra/cdk`** — the CDK stack: one Lambda (API + SPA), an S3 media bucket,
-  an HTTP API, and the optional custom domain.
-- **`scripts`** — the local stack, the Lambda build, the prod deploy.
+  an HTTP API, and the optional custom domain. One class, instantiated once per
+  environment.
+- **`scripts`** — the local stack, the Lambda build, and both deploys.
 
 The API and the SPA deploy as **one Lambda behind one HTTP API**, so the app is
 same-origin in production and there is no CORS to configure.
+
+## Branches and environments
+
+Two long-lived branches, each feeding one permanent environment. The reasoning
+is [ADR-0001](docs/adr/0001-two-branches-two-environments.md); this is the
+working rule.
+
+| Branch | Environment               | Deploys on |
+| ------ | ------------------------- | ---------- |
+| `dev`  | dev — `dev.arcula.art`    | every push |
+| `main` | production — `arcula.art` | every push |
+
+- **`dev` is the default branch** and the integration branch. **Cut every
+  feature branch from `dev`**, and open the PR against `dev`.
+- **Feature PRs are squash-merged into `dev`** — one commit per change, so its
+  log stays readable.
+- **A release is a PR from `dev` into `main`, merged as a merge commit, never
+  squashed.** Squashing it would lose the release boundary and make the next
+  release PR replay shipped work as ghosts.
+- **A hotfix branches from `main`** and is back-merged into `dev`.
+- `main` is production only: its log is the list of what has shipped.
+- Both branches are protected: a PR is required, the `check` status is
+  required, force pushes and deletion are blocked. Required approvals are off
+  (a solo maintainer cannot approve their own PR), and administrator bypass
+  stays possible. Squash and merge-commit are enabled, rebase is not, and
+  merged branches are deleted.
+- **Merging is deploying.** `check.yml` runs the gate on PRs into either
+  branch; `deploy-dev.yml` and `deploy-prod.yml` run the gate again on push,
+  then build and deploy through `scripts/deploy.sh` — the same script a laptop
+  runs. Both can be `workflow_dispatch`ed to re-run a deploy without a new
+  commit. Dev cancels a superseded run; production never cancels, so two
+  migrations cannot interleave against the production database.
+- Dev is public and noindexed, disposable, and has its own database, bucket,
+  certificate, `AUTH_SECRET` and Resend key. Its `/api/health` reports the
+  deployed commit; production's does not.
+- The limits of the isolation are real and recorded: the two environments
+  share one AWS account and one CDK bootstrap, so a modified `dev` workflow
+  could reach production's stack — but cannot read production's secrets. See
+  [ADR-0002](docs/adr/0002-one-account-one-bootstrap.md).
+
+### Two rules that are load-bearing
+
+The repository is public, so both of these are not style preferences:
+
+- **Never commit a secret.** Not in a file, not in a test, not in a workflow,
+  not in a logged command. Per-environment values live in `infra/cdk/.env.<env>`
+  (gitignored) and in the GitHub Environments; `SEED_*`, `DATABASE_URL`,
+  `AUTH_SECRET`, `RESEND_API_KEY` and `CERT_ARN` are secrets or variables
+  there, never in the tree.
+- **Never use the fork-exposing pull-request event.** A workflow that needs to
+  run on a PR uses the plain `pull_request` event, never
+  `pull_request_target`: the latter runs with the repository's secrets and
+  hands them to a fork's code. `check.yml` is the model — it reads the PR's
+  code and needs no secret at all.
+
+### Migrations are forward-only
+
+`packages/db/migrations/` is generated and applied, never reversed. A deploy
+runs them forward — dev's on dev's deploy, production's on its own — and
+nothing un-migrates a database. So **reverting a commit redeploys the code but
+leaves the schema where it was**: a revert is safe only when the release's
+change was additive (a new nullable column, a new table, a new index). A revert
+of a destructive migration (a dropped column or table, a tightened constraint)
+leaves the old code running against a schema that no longer matches it, and
+needs a compensating migration written by hand.
 
 ## Key commands
 
@@ -41,7 +109,8 @@ All from the repo root (`bun run <script>`):
 Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
 `sh scripts/deploy-dev.sh` are thin wrappers over the one sequence in
 **`scripts/deploy.sh`** (cdk build → `cdk deploy` → resolve the URL → migrate →
-seed → re-deploy with the real `PUBLIC_URL` → `deploy-verify`).
+seed → re-deploy with the real `PUBLIC_URL` → `deploy-verify`). CI calls the
+same two scripts, so the sequence has one definition.
 `sh scripts/build-lambda.sh <prod|dev>` builds that environment's zip first;
 `scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships —
 except on a CI runner, which sets `SKIP_LAMBDA_SMOKE=1` (it has no local
@@ -50,7 +119,9 @@ the equivalent proof. `scripts/write-env-file.sh <env>` writes the
 environment's file from a CI run's GitHub Environment values.
 `scripts/provision-cert.mjs` and `scripts/provision-oidc.mjs` provision a
 host's certificate and the GitHub deploy roles; `scripts/reset-dev.sh --yes`
-drops the dev schema and empties the dev bucket.
+drops the dev schema and empties the dev bucket; `scripts/setup-dev.sh` walks
+dev's first run interactively. The first-run order, in the order it must be
+performed, is in `infra/cdk/README.md`.
 
 The **local stack** is Postgres (a docker/colima container), SeaweedFS (the S3
 stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
@@ -213,9 +284,11 @@ restated here.
   Prefer subpath imports (`import debounce from "lodash/debounce"`) for smaller
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
-  inlined at build time. Never commit real secrets — `infra/cdk/.env` and the
-  per-environment `infra/cdk/.env.<env>` (which hold `DATABASE_URL`,
-  `AUTH_SECRET`, `CERT_ARN`, …) are gitignored.
+  inlined at build time. The repo-root file is the local fallback: a deploy
+  reads `infra/cdk/.env.<env>` instead (`infra/cdk/.env` is production's
+  fallback, and dev deliberately has none — falling back would put
+  production's database URL into a dev deploy). Never commit real secrets; see
+  **Two rules that are load-bearing** above.
 
 ## Validation
 
@@ -229,12 +302,15 @@ restated here.
 - Before writing a test, read **What to test** above. A green suite is not the
   goal; a test that fails only when we change something is.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
-  `sh scripts/deploy-dev.sh` (dev), then
-  `cd apps/api && bun scripts/deploy-verify.ts https://arcula.art` — the 17-step
-  end-to-end pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real 12 MP photo through
-  stage → process → save, a visitor read, and the reset-mail path). It creates a
-  throwaway `verify-<ts>@example.test` account per run, so treat it as a write
-  against the environment.
+  `sh scripts/deploy-dev.sh` (dev). Both end by running
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 17-step end-to-end
+  pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real
+  12 MP photo through stage → process → save, a visitor read, and the
+  reset-mail path). It takes the URL, not an environment, so it runs against
+  either one by hand. It creates a throwaway `verify-<ts>@example.test` account
+  per run, so treat it as a write against the environment. A deploy whose host
+  does not resolve yet prints the DNS records and exits successfully instead of
+  verifying — that is the first dev deploy's shape, not a failure.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and
@@ -257,5 +333,10 @@ The five default triage roles, unchanged: `needs-triage`, `needs-info`,
 
 ### Domain docs
 
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. Both exist
+now. The glossary holds the product's own vocabulary — the nouns in the data
+model and the design record — and **not** deployment, branch or process
+vocabulary, which belongs in this file. ADRs hold decisions with their rejected
+alternatives: two long-lived branches feeding two permanent environments, and
+both environments sharing one AWS account and CDK bootstrap. See
 `docs/agents/domain.md`.
