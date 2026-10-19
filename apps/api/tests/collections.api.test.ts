@@ -12,67 +12,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { collections as collectionsTable } from "@arcula/db";
 import { MINTED_ID_RE } from "@arcula/shared";
-import { app } from "../src/app";
 import { closeDb, db } from "../src/db";
-
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
-
-async function req(
-  method: string,
-  path: string,
-  opts: {
-    cookies?: string;
-    body?: string;
-  } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  headers.Origin = ORIGIN;
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body,
-  });
-}
-
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-/** The error envelope: the code, plus the failed fields. */
-async function err(
-  res: Response,
-): Promise<{ code: string; fields?: Record<string, string> }> {
-  const body = await json<{
-    error: { code: string; fields?: Record<string, string> };
-  }>(res);
-  return body.error;
-}
-
-async function freshUser(): Promise<{ cookies: string; userId: string }> {
-  const email = `coll-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-  const up = await req("POST", "/api/auth/sign-up/email", {
-    body: JSON.stringify({
-      email,
-      password: "coll-pass-12345",
-      name: "Coll Test",
-    }),
-  });
-  expect(up.status).toBe(200);
-  const cookies = up.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  const me = await json<{ id: string }>(
-    await req("GET", "/api/v1/me", { cookies }),
-  );
-  return { cookies, userId: me.id };
-}
-
-const uuid = () => crypto.randomUUID();
+import { err, freshUser, json, req, uuid } from "./helpers/api";
 
 /** The wire timestamp is `{ seconds, nanoseconds }`. */
 function isWireTimestamp(value: unknown): void {
@@ -94,8 +35,8 @@ let blueId = "";
 let foreignId = "";
 
 beforeAll(async () => {
-  owner = await freshUser();
-  stranger = await freshUser();
+  owner = await freshUser("Coll");
+  stranger = await freshUser("Coll");
 });
 
 afterAll(async () => {

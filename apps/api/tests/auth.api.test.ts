@@ -10,41 +10,9 @@
 // The auth routes keep Better Auth's native response shape — so assertions
 // below read Better Auth's bodies, not the error envelope.
 
-import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
 import { afterAll, describe, expect, it } from "vitest";
-
-// The request URL's host must match the one in AUTH_BASE_URL for the
-// handler's origin handling to see what a browser on :3000 would send.
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000"; // CORS_ORIGINS / trustedOrigins
-
-type ReqOpts = {
-  body?: unknown;
-  cookies?: string;
-  bearer?: string;
-  /** Send the trusted web Origin (browsers do; curl doesn't). */
-  origin?: boolean;
-};
-
-// Hono's app.request() resolves to Response | Promise<Response> on Bun;
-// awaiting normalizes it.
-async function req(
-  method: string,
-  path: string,
-  opts: ReqOpts = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  if (opts.bearer) headers.Authorization = `Bearer ${opts.bearer}`;
-  if (opts.origin !== false) headers.Origin = ORIGIN;
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-  });
-}
+import { req, sessionCookies } from "./helpers/api";
 
 // res.json() is typed any by the platform; this is the native Better
 // Auth shape the suite asserts against. `get-session` answers
@@ -75,16 +43,6 @@ function setCookies(res: Response): Cookie[] {
     const eq = pair.indexOf("=");
     return { name: pair.slice(0, eq), value: pair.slice(eq + 1), attrs };
   });
-}
-
-/** The live (not-expired) cookies a response sets, as a Cookie header. */
-function cookieHeader(res: Response): string | undefined {
-  const live = setCookies(res).filter(
-    (c) => !c.attrs.some((a) => /^Max-Age=0/i.test(a)),
-  );
-  return live.length
-    ? live.map((c) => `${c.name}=${c.value}`).join("; ")
-    : undefined;
 }
 
 const unique = () =>
@@ -162,7 +120,7 @@ describe("change-password", () => {
     const up = await req("POST", "/api/auth/sign-up/email", {
       body: { email, password: "test-pass-12345", name: "Test User" },
     });
-    const cookies = cookieHeader(up)!;
+    const cookies = sessionCookies(up);
 
     const wrong = await req("POST", "/api/auth/change-password", {
       cookies,
@@ -180,7 +138,7 @@ describe("change-password", () => {
     const up = await req("POST", "/api/auth/sign-up/email", {
       body: { email, password: "old-pass-12345", name: "Test User" },
     });
-    const cookies = cookieHeader(up)!;
+    const cookies = sessionCookies(up);
 
     const changed = await req("POST", "/api/auth/change-password", {
       cookies,
@@ -211,7 +169,7 @@ describe("sign-out", () => {
     });
     const token = (await json(up))?.token;
     expect(typeof token).toBe("string");
-    const cookies = cookieHeader(up)!;
+    const cookies = sessionCookies(up);
 
     const out = await req("POST", "/api/auth/sign-out", { cookies });
     expect(out.status).toBe(200);

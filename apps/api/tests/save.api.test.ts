@@ -8,13 +8,8 @@
 // exact document shape on the wire.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import sharp from "sharp";
-import {
-  artworks as artworksTable,
-  collections as collectionsTable,
-} from "@arcula/db";
+import { artworks as artworksTable } from "@arcula/db";
 import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
-import { app } from "../src/app";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -26,58 +21,14 @@ import {
   stagedVariantPrefix,
 } from "../src/media/keys";
 import { listObjects } from "../src/storage";
-
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
-
-async function req(
-  method: string,
-  path: string,
-  opts: {
-    cookies?: string;
-    body?: string;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = { ...opts.headers };
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  headers.Origin = ORIGIN;
-  if (opts.body !== undefined && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body,
-  });
-}
-
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-async function freshUser(): Promise<{ cookies: string; userId: string }> {
-  const email = `save-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-  const up = await req("POST", "/api/auth/sign-up/email", {
-    body: JSON.stringify({
-      email,
-      password: "save-pass-12345",
-      name: "Save Test",
-    }),
-  });
-  expect(up.status).toBe(200);
-  const cookies = up.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  const me = await json<{ id: string }>(
-    await req("GET", "/api/v1/me", { cookies }),
-  );
-  return { cookies, userId: me.id };
-}
-
-const uuid = () => crypto.randomUUID();
+import { freshUser, json, req, uuid } from "./helpers/api";
+import {
+  makeCollection,
+  makeJpeg,
+  processEntry,
+  stageDocument,
+  stagePhoto,
+} from "./helpers/fixtures";
 
 // Entry ids are global primary keys (artwork_photos.id,
 // artwork_documents.id), and the test stack persists across runs — so
@@ -101,101 +52,6 @@ const pX = entry("p-x");
 const twoC = entry("two-c");
 const raceA = entry("race-a");
 const raceB = entry("race-b");
-
-async function makeCollection(
-  userId: string,
-  opts: { isPublic?: boolean } = {},
-): Promise<string> {
-  const id = uuid();
-  await db.insert(collectionsTable).values({
-    id,
-    userId,
-    name: "Save Test",
-    isPublic: opts.isPublic ?? true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  return id;
-}
-
-// `Uint8Array.from` (not a view over Sharp's Buffer): File's BlobPart
-// wants an ArrayBuffer-backed view.
-const makeJpeg = async (
-  width: number,
-  height: number,
-): Promise<Uint8Array<ArrayBuffer>> =>
-  Uint8Array.from(
-    (
-      await sharp({
-        create: {
-          width,
-          height,
-          channels: 3,
-          background: { r: 40, g: 90, b: 200 },
-        },
-      })
-        .jpeg()
-        .toBuffer({ resolveWithObject: true })
-    ).data,
-  );
-
-async function stagePhoto(
-  cookies: string,
-  cid: string,
-  aid: string,
-  entryId: string,
-  file: File,
-): Promise<Response> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/photos/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
-}
-
-async function stageDocument(
-  cookies: string,
-  cid: string,
-  aid: string,
-  entryId: string,
-  file: File,
-): Promise<Response> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/documents/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
-}
-
-async function processEntry(
-  cookies: string,
-  cid: string,
-  aid: string,
-  population: "photos" | "documents",
-  body: string,
-): Promise<Response> {
-  return req(
-    "POST",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/process`,
-    {
-      cookies,
-      headers: { "Content-Type": "application/json" },
-      body,
-    },
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Wire shapes (the exact wire document shapes)
@@ -267,7 +123,7 @@ let cid: string;
 let privateCid: string;
 
 beforeAll(async () => {
-  owner = await freshUser();
+  owner = await freshUser("Save");
   cid = await makeCollection(owner.userId, { isPublic: true });
   privateCid = await makeCollection(owner.userId, { isPublic: false });
 });

@@ -8,12 +8,8 @@
 
 import { afterAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
-import {
-  artworks as artworksTable,
-  collections as collectionsTable,
-} from "@arcula/db";
 import { app } from "../src/app";
-import { closeDb, db } from "../src/db";
+import { closeDb } from "../src/db";
 import {
   stagedOriginalPrefix,
   stagedVariantPrefix,
@@ -22,185 +18,16 @@ import {
 } from "../src/media/keys";
 import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from "@arcula/shared";
 import { listObjects, putObject } from "../src/storage";
-
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
-
-async function req(
-  method: string,
-  path: string,
-  opts: {
-    cookies?: string;
-    body?: string;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = { ...opts.headers };
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  headers.Origin = ORIGIN;
-  if (opts.body !== undefined && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body,
-  });
-}
-
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-async function freshUser(): Promise<{ cookies: string; userId: string }> {
-  const email = `media-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-  const up = await req("POST", "/api/auth/sign-up/email", {
-    body: JSON.stringify({
-      email,
-      password: "media-pass-12345",
-      name: "Media Test",
-    }),
-  });
-  expect(up.status).toBe(200);
-  const cookies = up.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  const me = await json<{ id: string }>(
-    await req("GET", "/api/v1/me", { cookies }),
-  );
-  return { cookies, userId: me.id };
-}
-
-const uuid = () => crypto.randomUUID();
-
-async function makeCollection(userId: string): Promise<string> {
-  const id = uuid();
-  await db.insert(collectionsTable).values({
-    id,
-    userId,
-    name: "Media Test",
-    isPublic: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  return id;
-}
-
-async function makeArtwork(
-  userId: string,
-  collectionId: string,
-): Promise<string> {
-  const id = uuid();
-  await db.insert(artworksTable).values({
-    id,
-    userId,
-    collectionId,
-    title: "Media Artwork",
-    artistName: "Test Artist",
-    isPublic: true,
-    deletedAt: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  return id;
-}
-
-// `Uint8Array.from` (not a view over Sharp's Buffer): File's BlobPart
-// wants an ArrayBuffer-backed view.
-const makeJpeg = async (
-  width: number,
-  height: number,
-): Promise<Uint8Array<ArrayBuffer>> =>
-  Uint8Array.from(
-    (
-      await sharp({
-        create: {
-          width,
-          height,
-          channels: 3,
-          background: { r: 200, g: 60, b: 40 },
-        },
-      })
-        .jpeg()
-        .toBuffer({ resolveWithObject: true })
-    ).data,
-  );
-
-async function stagePhoto(
-  cookies: string,
-  cid: string,
-  aid: string,
-  entryId: string,
-  file: File,
-): Promise<Response> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/photos/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
-}
-
-async function stageDocument(
-  cookies: string,
-  cid: string,
-  aid: string,
-  entryId: string,
-  file: File,
-): Promise<Response> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/documents/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
-}
-
-async function processEntry(
-  cookies: string,
-  cid: string,
-  aid: string,
-  population: "photos" | "documents",
-  body: string,
-): Promise<Response> {
-  return req(
-    "POST",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/process`,
-    {
-      cookies,
-      headers: { "Content-Type": "application/json" },
-      body,
-    },
-  );
-}
-
-async function discardEntry(
-  cookies: string,
-  cid: string,
-  aid: string,
-  population: "photos" | "documents",
-  entryId: string,
-): Promise<Response> {
-  return req(
-    "DELETE",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/${entryId}`,
-    {
-      cookies,
-    },
-  );
-}
+import { API, ORIGIN, freshUser, json } from "./helpers/api";
+import {
+  discardEntry,
+  makeArtwork,
+  makeCollection,
+  makeJpeg,
+  processEntry,
+  stageDocument,
+  stagePhoto,
+} from "./helpers/fixtures";
 
 afterAll(async () => {
   await closeDb();
@@ -217,8 +44,8 @@ describe("POST …/photos/stage", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
-    stranger = await freshUser();
+    owner = await freshUser("Media");
+    stranger = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
@@ -394,7 +221,7 @@ describe("POST …/documents/stage", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
+    owner = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
@@ -495,7 +322,7 @@ describe("POST …/photos/process", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
+    owner = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
@@ -621,7 +448,7 @@ describe("POST …/documents/process", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
+    owner = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
@@ -680,7 +507,7 @@ describe("DELETE …/{population}/{entryId}", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
+    owner = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
@@ -758,7 +585,7 @@ describe("re-staging replaces", () => {
   let aid: string;
 
   it("sets up an owned collection and artwork", async () => {
-    owner = await freshUser();
+    owner = await freshUser("Media");
     cid = await makeCollection(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
