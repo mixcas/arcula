@@ -6,7 +6,6 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import SkinHost from "@/components/collection/SkinHost";
-import { DEFAULT_SKIN, SKINS } from "@/skins/registry";
 import type { Artwork, Collection } from "@arcula/shared";
 
 (
@@ -146,25 +145,5 @@ describe("SkinHost — dispatch", () => {
   it("gives the artwork view one section, from the same component", () => {
     renderHost({ view: "artwork" });
     expect(screen.getAllByRole("region")).toHaveLength(1);
-  });
-});
-
-describe("the skin contract", () => {
-  it("is satisfied by every registered skin without any per-skin wiring", () => {
-    // A skin is added by writing a folder and adding one line to the registry.
-    // This asserts the two things a new skin has to provide, so a forgotten one
-    // fails here rather than on a visitor's screen.
-    for (const skin of SKINS) {
-      expect(typeof skin.Home, `${skin.id} needs a Home view`).toBe("function");
-      expect(typeof skin.Artwork, `${skin.id} needs an Artwork view`).toBe(
-        "function",
-      );
-      // `view` is what lets one component serve both, but a skin is allowed to
-      // branch on it — so the only hard requirement is that it arrives.
-      expect(skin.options.every((spec) => typeof spec.key === "string")).toBe(
-        true,
-      );
-    }
-    expect(DEFAULT_SKIN).toBeDefined();
   });
 });

@@ -3,39 +3,40 @@ import { Modal, Group, Text, ActionIcon, Box } from "@mantine/core";
 import { photoUrl } from "@arcula/shared";
 import type { ArtworkPhoto } from "@arcula/shared";
 
-interface PhotoPreviewModalProps {
+interface ImagePreviewModalProps {
   /**
    * A `Pick`, not an `ArtworkPhoto`: an image attached as a document has the
    * same variants, original and name but no `order`. This modal reads only those
    * three — the sequence lives in the `position` prop — so naming them is what
-   * lets a document open in here without carrying a field it cannot maintain.
+   * lets a document image open in here without carrying a field it cannot
+   * maintain.
    */
-  photo: Pick<ArtworkPhoto, "name" | "variants" | "original"> | null;
-  /** The photo's 1-based position, for the counter in the footer. */
+  image: Pick<ArtworkPhoto, "name" | "variants" | "original"> | null;
+  /** The image's 1-based position, for the counter in the footer. */
   position?: { current: number; total: number };
   onClose: () => void;
   onNavigate?: (direction: 1 | -1) => void;
 }
 
 /**
- * Full-screen preview of one photo.
+ * Full-screen preview of one image — a photo, or a document that is one.
  *
  * Shows the `large` variant rather than the original: it is the highest
  * resolution that has been decoded to fit a screen, and pulling a 12-megapixel
  * original over the wire to display it in a modal is slower and heavier for no
  * visible gain. `photoUrl` falls back to the original when the variant is
- * missing, so a partially-migrated photo still opens.
+ * missing, so a partially-migrated image still opens.
  *
  * Arrow keys and the on-screen buttons step through the sequence, which is why
  * navigation is a prop: the modal does not own the list, the form does.
  */
-const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
-  photo,
+const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
+  image,
   position,
   onClose,
   onNavigate,
 }) => {
-  const url = photoUrl(photo, "large");
+  const url = photoUrl(image, "large");
 
   const go = useCallback(
     (direction: 1 | -1) => {
@@ -45,7 +46,7 @@ const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
   );
 
   useEffect(() => {
-    if (!photo) {
+    if (!image) {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -57,9 +58,9 @@ const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [go, photo]);
+  }, [go, image]);
 
-  if (!photo) {
+  if (!image) {
     return null;
   }
 
@@ -71,7 +72,7 @@ const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
       onClose={onClose}
       fullScreen
       withCloseButton
-      title={photo.name}
+      title={image.name}
       // The image is the content, so the frame is padded out to give the dark
       // backdrop room and keep a portrait image from touching the edges.
       padding="lg"
@@ -93,7 +94,7 @@ const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
         {url ? (
           <img
             src={url}
-            alt={photo.name}
+            alt={image.name}
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
@@ -148,4 +149,4 @@ const PhotoPreviewModal: React.FC<PhotoPreviewModalProps> = ({
   );
 };
 
-export default PhotoPreviewModal;
+export default ImagePreviewModal;

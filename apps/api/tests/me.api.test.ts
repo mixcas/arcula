@@ -5,29 +5,9 @@
 // as tests/auth.api.test.ts.
 
 import { sessionUserSchema } from "@arcula/shared";
-import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
 import { afterAll, describe, expect, it } from "vitest";
-
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
-
-async function req(
-  method: string,
-  path: string,
-  opts: { cookies?: string; bearer?: string; body?: unknown } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  if (opts.bearer) headers.Authorization = `Bearer ${opts.bearer}`;
-  headers.Origin = ORIGIN;
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-  });
-}
+import { json, req, sessionCookies, signUp } from "./helpers/api";
 
 type MeUser = {
   id: string;
@@ -42,33 +22,13 @@ type Envelope = {
   error: { code: string; message: string; fields?: Record<string, string> };
 };
 
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-/** Sign up through the auth mount; returns everything a client would hold. */
-async function freshUser() {
-  const email = `me-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-  const up = await req("POST", "/api/auth/sign-up/email", {
-    body: { email, password: "me-pass-12345", name: "Me Test" },
-  });
-  expect(up.status).toBe(200);
-  const body = await json<{ token?: string }>(up);
-  const cookies = up.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  return { email, cookies, token: body.token! };
-}
-
 afterAll(async () => {
   await closeDb();
 });
 
 describe("GET /api/v1/me", () => {
   it("returns the session user with the custom fields, by cookie and by bearer", async () => {
-    const u = await freshUser();
+    const u = await signUp("Me");
 
     const byCookie = await req("GET", "/api/v1/me", { cookies: u.cookies });
     expect(byCookie.status).toBe(200);
@@ -107,11 +67,7 @@ describe("GET /api/v1/me", () => {
       },
     });
     expect(up.status).toBe(200);
-    const cookies = up.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .filter((c) => !c.includes("Max-Age=0"))
-      .join("; ");
+    const cookies = sessionCookies(up);
 
     const res = await req("GET", "/api/v1/me", { cookies });
     expect(res.status).toBe(200);
@@ -127,7 +83,7 @@ describe("GET /api/v1/me", () => {
 
 describe("PATCH /api/v1/me", () => {
   it("writes the writable set and returns the updated user", async () => {
-    const u = await freshUser();
+    const u = await signUp("Me");
 
     const res = await req("PATCH", "/api/v1/me", {
       cookies: u.cookies,
@@ -152,7 +108,7 @@ describe("PATCH /api/v1/me", () => {
   }, 15000);
 
   it("rejects a patch that touches a server-managed field with field-not-writable, leaving the row untouched", async () => {
-    const u = await freshUser();
+    const u = await signUp("Me");
 
     const res = await req("PATCH", "/api/v1/me", {
       cookies: u.cookies,
@@ -169,7 +125,7 @@ describe("PATCH /api/v1/me", () => {
   }, 15000);
 
   it("rejects email the same way", async () => {
-    const u = await freshUser();
+    const u = await signUp("Me");
     const res = await req("PATCH", "/api/v1/me", {
       cookies: u.cookies,
       body: { email: "someone-else@example.test" },
@@ -179,7 +135,7 @@ describe("PATCH /api/v1/me", () => {
   }, 15000);
 
   it("answers 400 validation with the failed fields for a bad value", async () => {
-    const u = await freshUser();
+    const u = await signUp("Me");
     const res = await req("PATCH", "/api/v1/me", {
       cookies: u.cookies,
       body: { firstName: 42 },

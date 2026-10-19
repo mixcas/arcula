@@ -32,6 +32,7 @@ import { loadArtworkInCollection, loadCollection } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { parseMediaKey, type ParsedFinalKey } from "../media/keys";
+import { kindOf } from "../media/populations";
 import { isObjectMissing, streamObject } from "../storage";
 import { resolveSession } from "../session";
 
@@ -166,7 +167,7 @@ async function rowMetadata(
     return { contentType: row.contentType, size: row.size };
   }
 
-  const parentKind = parsed.population === "photos" ? "photo" : "document";
+  const parentKind = kindOf(parsed.population);
   const variant = (
     await db
       .select()

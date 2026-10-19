@@ -11,6 +11,7 @@
 
 import { getTableColumns } from "drizzle-orm";
 import { schema, user } from "@arcula/db";
+import { COLLECTION_LIMITS } from "@arcula/shared";
 import { describe, expect, it } from "vitest";
 
 // auth.ts builds the betterAuth instance at import, which needs a secret;
@@ -31,17 +32,34 @@ describe("the adapter declaration and the schema agree", () => {
     }
   });
 
-  it("tier is required on write and defaults to the free tier", () => {
-    expect(userAdditionalFields.tier.required).toBe(true);
-    expect(userAdditionalFields.tier.defaultValue).toBe("free");
+  it("declares types and required-ness that mirror the user table", () => {
+    // Read off the columns, never restated: the declaration exists to describe
+    // the schema, so a literal here would just be a third copy to keep in
+    // step. `required` must match NOT NULL — a required field sitting over a
+    // nullable column is the drift that fails sign-up with no useful error.
+    const keys = Object.keys(
+      userAdditionalFields,
+    ) as (keyof typeof userAdditionalFields)[];
+    for (const key of keys) {
+      expect(userAdditionalFields[key].type, `${key}.type`).toBe(
+        userColumns[key].dataType,
+      );
+      expect(userAdditionalFields[key].required, `${key}.required`).toBe(
+        userColumns[key].notNull,
+      );
+    }
   });
 
-  it("settings is the json freeform bag; the names are plain optional strings", () => {
-    expect(userAdditionalFields.settings.type).toBe("json");
-    expect(userAdditionalFields.settings.required).toBe(false);
-    expect(userAdditionalFields.firstName.type).toBe("string");
-    expect(userAdditionalFields.firstName.required).toBe(false);
-    expect(userAdditionalFields.lastName.required).toBe(false);
+  it("defaults a new account to a tier the quota table keys on", () => {
+    // The default must be a key of COLLECTION_LIMITS: a default outside the
+    // table falls through `collectionLimitForTier` to `undefined` (limits.ts),
+    // so every new account would be uncapped and nothing would raise.
+    expect(userAdditionalFields.tier.defaultValue).toBe(
+      userColumns.tier.default,
+    );
+    expect(Object.keys(COLLECTION_LIMITS)).toContain(
+      userAdditionalFields.tier.defaultValue,
+    );
   });
 
   it("the adapter is pointed at a schema that has all four core auth tables", () => {

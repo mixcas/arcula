@@ -11,17 +11,12 @@
 // transaction. The artwork id is validated as an id-shaped segment and
 // used as the staging key's segment; nothing else is asked of it here.
 
-import {
-  ACCEPTED_DOCUMENT_TYPES,
-  ACCEPTED_IMAGE_TYPES,
-  MAX_DOCUMENT_BYTES,
-  MAX_IMAGE_BYTES,
-  MINTED_ID_RE,
-} from "@arcula/shared";
-import { Hono, type Context } from "hono";
+import { MINTED_ID_RE } from "@arcula/shared";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { requireOwnedCollection } from "../authorize";
 import { errorResponse, ApiError } from "../errors";
+import { param } from "../http";
 import { requireSession } from "../session";
 import {
   extensionFor,
@@ -32,16 +27,16 @@ import {
   stagingVariantKey,
 } from "../media/keys";
 import {
+  POPULATION_KINDS,
+  POPULATIONS,
+  type PopulationKind,
+} from "../media/populations";
+import {
   generateVariants,
   orientSource,
   sourceDimensions,
   WEBP_TYPE,
 } from "../media/pipeline";
-import {
-  IMAGE_VARIANTS,
-  DOCUMENT_VARIANT_SPECS,
-  type ImageVariantSpec,
-} from "../media/variants";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
 
 // Ids are client-minted and become key segments: letters, digits, dash,
@@ -49,39 +44,10 @@ import { deleteObject, listObjects, putObject, readObject } from "../storage";
 // shared MINTED_ID_RE is the single owner of that character set (also
 // the save payloads').
 
-// The route patterns guarantee these segments; `?? ""` only exists to
-// satisfy Hono's optional param type. An empty segment either 404s at
-// the row lookup or fails the ID check below.
-const param = (c: Context, key: string): string => c.req.param(key) ?? "";
-
 /** A validation failure with the failed fields, per the error envelope. */
 function invalid(message: string, fields?: Record<string, string>) {
   return new ApiError("validation", message, fields ? { fields } : undefined);
 }
-
-interface MediaPopulation {
-  /** The path segment: `photos` | `documents`. */
-  population: "photos" | "documents";
-  cap: number;
-  accepted: Record<string, string[]>;
-  /** What process generates for an image of this population. */
-  specs: readonly ImageVariantSpec[];
-}
-
-const POPULATIONS: Record<"photos" | "documents", MediaPopulation> = {
-  photos: {
-    population: "photos",
-    cap: MAX_IMAGE_BYTES,
-    accepted: ACCEPTED_IMAGE_TYPES,
-    specs: IMAGE_VARIANTS,
-  },
-  documents: {
-    population: "documents",
-    cap: MAX_DOCUMENT_BYTES,
-    accepted: ACCEPTED_DOCUMENT_TYPES,
-    specs: DOCUMENT_VARIANT_SPECS,
-  },
-};
 
 const isImage = (contentType: string | null): boolean =>
   contentType !== null && contentType.startsWith("image/");
@@ -113,8 +79,8 @@ async function discardEntry(
   return doomed.length;
 }
 
-export function buildMediaRoutes(population: "photos" | "documents"): Hono {
-  const pop = POPULATIONS[population];
+export function buildMediaRoutes(kind: PopulationKind): Hono {
+  const pop = POPULATIONS[kind];
   const r = new Hono();
 
   // requireSession is attached per route, NOT via `use("*")`: this sub-app
@@ -324,8 +290,8 @@ export function buildMediaRoutes(population: "photos" | "documents"): Hono {
 /** The media routes, mounted at `/api/v1` (paths carry their own segments). */
 export const artworkMediaRoutes = new Hono();
 
-for (const population of ["photos", "documents"] as const) {
-  const routes = buildMediaRoutes(population);
+for (const kind of POPULATION_KINDS) {
+  const routes = buildMediaRoutes(kind);
   artworkMediaRoutes.route(
     `/collections/:collectionId/artworks/:artworkId`,
     routes,

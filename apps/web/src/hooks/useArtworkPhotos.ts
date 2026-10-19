@@ -40,6 +40,12 @@ import {
 } from "@arcula/shared";
 import { mediaService } from "@/services/mediaService";
 import { ApiRequestError } from "@/services/api";
+import {
+  keySequence,
+  useUploadPool,
+  type Rejection,
+  type StageOutcome,
+} from "./useUploadPool";
 
 /**
  * One entry in the form's photo list.
@@ -73,24 +79,15 @@ export type PhotoEntry =
 
 export interface AddPhotosResult {
   added: PhotoEntry[];
-  /** Files rejected, with the reason. Shown to the user; never swallowed. */
-  rejected: Array<{ file: File; reason: string }>;
+  rejected: Rejection[];
 }
 
 /** The staged arm of the union, named so a helper's return type can say it
  *  without widening to the whole entry type. */
 type StagedPhotoEntry = Extract<PhotoEntry, { status: "staged" }>;
 
-/** The answer for one file through stage + process. */
-type StageOutcome =
-  | { entry: StagedPhotoEntry; rejection: null }
-  | { entry: null; rejection: string };
-
-let keyCounter = 0;
-const nextKey = (): string => {
-  keyCounter += 1;
-  return `photo-${keyCounter}`;
-};
+/** The shared counter, prefixed so a failure names the list it came from. */
+const nextKey = keySequence("photo");
 
 /**
  * One file through stage + process. Resolves to the finished entry on
@@ -102,7 +99,7 @@ async function stageAndProcess(
   collectionId: string,
   artworkId: string,
   file: File,
-): Promise<StageOutcome> {
+): Promise<StageOutcome<StagedPhotoEntry>> {
   const entryId = crypto.randomUUID();
   try {
     const staged = await mediaService.stagePhoto(
@@ -200,11 +197,7 @@ export const useArtworkPhotos = ({
       photo,
     })),
   );
-  const [processing, setProcessing] = useState(false);
-  const [progress, setProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
+  const { processing, progress, run } = useUploadPool();
 
   /**
    * Add files, staging each one as it is accepted.
@@ -215,13 +208,13 @@ export const useArtworkPhotos = ({
    * same `rejected` list with a reason the user can act on, which is why a
    * too-large file does not need a client-side size check of its own.
    *
-   * Three files stage at a time, and the batch is appended only once every
-   * file has settled, in drop order: a slow second file must not sit behind a
-   * fast one in the sequence the user dropped.
+   * The pool — three files in flight, appended in drop order once the batch
+   * has settled — is `useUploadPool`'s; what stays here is the sequence the
+   * appended entries take.
    */
   const addFiles = useCallback(
     async (files: File[]): Promise<AddPhotosResult> => {
-      const rejected: AddPhotosResult["rejected"] = [];
+      const rejected: Rejection[] = [];
       const accepted: File[] = [];
 
       // Counted against the cap as we go, so a drop of twenty files with a
@@ -248,67 +241,24 @@ export const useArtworkPhotos = ({
         return { added: [], rejected };
       }
 
-      setProcessing(true);
-      setProgress({ done: 0, total: accepted.length });
-
-      // The pool: at most three files in flight, each through stage + process.
-      // `results` keeps drop order — the append below reads it in order —
-      // while `done` counts settlements, so the bar moves on failures too.
-      // Holes until the pool fills them; only read after `Promise.all` below.
-      // The explicit type argument keeps the constructor's `any[]` overload
-      // from winning, which is what made the slots lint as `any`.
-      const results = new Array<StageOutcome>(accepted.length);
-      let cursor = 0;
-      let done = 0;
-      const worker = async (file: File) => {
-        const result = await stageAndProcess(collectionId, artworkId, file);
-        done += 1;
-        setProgress({ done, total: accepted.length });
-        return result;
-      };
-      const runners = Array.from({ length: Math.min(3, accepted.length) }, () =>
-        (async () => {
-          for (;;) {
-            const index = cursor;
-            cursor += 1;
-            if (index >= accepted.length) {
-              return;
-            }
-            results[index] = await worker(accepted[index]);
-          }
-        })(),
+      const staged = await run(accepted, (file) =>
+        stageAndProcess(collectionId, artworkId, file),
       );
-      await Promise.all(runners);
-      setProcessing(false);
-      setProgress(null);
 
-      const added: PhotoEntry[] = [];
-      results.forEach((result, index) => {
-        if (result.entry) {
-          // Drop order, offset by whatever was already in the list: a remove
-          // that landed while the batch ran must not collide with a slot, and
-          // a failed file must not leave a gap in the numbering.
-          added.push({
-            ...result.entry,
-            preview: {
-              ...result.entry.preview,
-              order: entries.length + added.length,
-            },
-          });
-        } else {
-          rejected.push({
-            file: accepted[index],
-            reason: result.rejection,
-          });
-        }
-      });
+      // Drop order, offset by whatever is already in the list: a remove that
+      // landed while the batch ran must not collide with a slot, and a failed
+      // file must not leave a gap in the numbering.
+      const added = staged.added.map((entry, index) => ({
+        ...entry,
+        preview: { ...entry.preview, order: entries.length + index },
+      }));
 
       if (added.length > 0) {
         setEntries((current) => [...current, ...added]);
       }
-      return { added, rejected };
+      return { added, rejected: [...rejected, ...staged.rejected] };
     },
-    [collectionId, artworkId, entries.length],
+    [collectionId, artworkId, entries.length, run],
   );
 
   /**

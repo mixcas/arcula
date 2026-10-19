@@ -11,8 +11,10 @@
 # values, placeholder PUBLIC_URL) → read the live API URL → db:migrate +
 # db:seed against the prod DATABASE_URL (the seed creates the owner
 # account from the root .env's SEED_* — prod is an empty DB, so seeding
-# IS the bootstrap) → deploy 2 (PUBLIC_URL = the live URL — the Lambda
-# is stateless, so the re-deploy is free) → prod-verify against it.
+# IS the bootstrap; its own configuration is read back off the deployed
+# function rather than restated here) → deploy 2 (PUBLIC_URL = the live
+# URL — the Lambda is stateless, so the re-deploy is free) → prod-verify
+# against it.
 #
 # Values are read from infra/cdk/.env and never echoed.
 
@@ -33,12 +35,6 @@ set +a
   echo "missing dist/lambda/arcula-api.zip — run: sh scripts/build-lambda.sh"; exit 1;
 }
 
-# Keep the prod values under their own names: the seed subshell sources
-# the root .env (for SEED_*), which would otherwise shadow them.
-PROD_DATABASE_URL="$DATABASE_URL"
-PROD_AUTH_SECRET="$AUTH_SECRET"
-PROD_RESEND_KEY="$RESEND_API_KEY"
-
 CTX="-c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RESEND_API_KEY=$RESEND_API_KEY"
 [ -n "${EMAIL_FROM:-}" ] && CTX="$CTX -c EMAIL_FROM=$EMAIL_FROM"
 # Custom domain: only carried when both are set, and
@@ -57,8 +53,6 @@ npx cdk bootstrap --region us-east-1
 echo "==> deploy 1 (values in, PUBLIC_URL placeholder)"
 npx cdk deploy --region us-east-1 --require-approval never $CTX
 
-BUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
-  --query "Stacks[0].Outputs[?OutputKey=='MediaBucket'].OutputValue | [0]" --output text)
 if [ -n "${DOMAIN:-}" ]; then
   # Custom domain: the public origin is the domain itself — its
   # cert is validated before this deploy runs — so the seed's mail links
@@ -91,26 +85,39 @@ else
 fi
 echo "live URL: $URL"
 
+# The seed's configuration is the deployed function's environment, so its
+# name is read here rather than derived from the construct id.
+FUNCTION_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiFunctionName'].OutputValue | [0]" --output text)
+[ "$FUNCTION_NAME" != "None" ] && [ -n "$FUNCTION_NAME" ] || {
+  echo "no ApiFunctionName output — deploy failed?"; exit 1;
+}
+
 echo "==> db:migrate against prod"
-( cd "$ROOT/packages/db" && DATABASE_URL="$PROD_DATABASE_URL" bunx drizzle-kit migrate )
+( cd "$ROOT/packages/db" && DATABASE_URL="$DATABASE_URL" bunx drizzle-kit migrate )
 
 echo "==> db:seed (owner account from SEED_* — idempotent)"
 (
   cd "$ROOT/apps/api"
   set -a
-  . "$ROOT/.env" # SEED_* lives here; the prod overrides below win
+  . "$ROOT/.env" # SEED_* lives here; the function's values below win
   set +a
-  DATABASE_URL="$PROD_DATABASE_URL" \
-  AUTH_SECRET="$PROD_AUTH_SECRET" \
-  AUTH_BASE_URL="$URL" \
-  CLIENT_ORIGIN="$URL" \
-  CORS_ORIGINS="$URL" \
-  EMAIL_PROVIDER="resend" \
-  RESEND_API_KEY="$PROD_RESEND_KEY" \
-  S3_ENDPOINT="https://s3.us-east-1.amazonaws.com" \
-  S3_REGION="us-east-1" \
-  S3_BUCKET="$BUCKET" \
-  bun scripts/db-seed.ts
+  # Prod's configuration is written once, in arcula-stack.ts (the Lambda's
+  # environment), so it is read back rather than restated — a variable
+  # added to the stack cannot be forgotten here. Only the public origin is
+  # overridden: deploy 2 bakes the real one in, and the mail links the
+  # seed may send have to land on it.
+  FUNCTION_ENV=$(mktemp)
+  SEED_ENV=$(mktemp)
+  trap 'rm -f "$FUNCTION_ENV" "$SEED_ENV"' EXIT INT TERM
+  aws lambda get-function-configuration --function-name "$FUNCTION_NAME" \
+    --query 'Environment.Variables' --output json > "$FUNCTION_ENV"
+  node "$ROOT/scripts/lambda-env-to-dotenv.mjs" "$FUNCTION_ENV" > "$SEED_ENV"
+  set -a
+  . "$SEED_ENV"
+  set +a
+  AUTH_BASE_URL="$URL" CLIENT_ORIGIN="$URL" CORS_ORIGINS="$URL" \
+    bun scripts/db-seed.ts
 )
 
 echo "==> deploy 2 (PUBLIC_URL = $URL)"

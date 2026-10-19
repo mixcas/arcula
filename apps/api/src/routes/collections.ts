@@ -31,7 +31,7 @@ import {
   type CollectionCreatePayload,
   type CollectionUpdatePayload,
 } from "@arcula/shared";
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import {
   loadCollection,
   requireOwnedArtwork,
@@ -40,18 +40,13 @@ import {
 } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
-import { parseBody, safeTx } from "../http";
+import { param, parseBody, safeTx } from "../http";
 import { parseMediaKey } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
 import { serializeCollection } from "../serialize";
 
 export const collectionRoutes = new Hono();
-
-// The route patterns guarantee these segments; `?? ""` only exists to
-// satisfy Hono's optional param type. An empty segment 404s at the row
-// lookup.
-const param = (c: Context, key: string): string => c.req.param(key) ?? "";
 
 /**
  * A fresh row id: a UUID with its hyphens removed.

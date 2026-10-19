@@ -17,21 +17,12 @@ cdk.out
 .env.local
 .env.*.local
 
-# local stack state (scripts/stack-up.sh): MinIO data dir, pids, logs
+# local stack state (scripts/stack-up.sh): SeaweedFS data dir, pids, logs
 .stack/
 
 # misc
 .DS_Store
 *.log
-
-# Firebase CLI caches
-.firebase/
-
-# Firebase Emulator Suite
-firestore-debug.log
-ui-debug.log
-firebase-debug.*.log
-*-debug.log
 
 # Vite
 apps/web/src/assets/*/*.map

@@ -23,21 +23,13 @@ import { ApiError } from "../errors";
 import { copyObject, headObject, listObjects, readObject } from "../storage";
 import {
   extensionFor,
-  finalDocumentKey,
-  finalPhotoKey,
   parseMediaKey,
   stagedOriginalPrefix,
   stagedVariantPrefix,
 } from "./keys";
 import { sourceDimensions } from "./pipeline";
-import {
-  DOCUMENT_VARIANT_SPECS,
-  IMAGE_VARIANTS,
-  variantSize,
-  type ImageVariantSpec,
-} from "./variants";
-
-export type PromotionPopulation = "photo" | "document";
+import { POPULATIONS, type PopulationKind } from "./populations";
+import { variantSize } from "./variants";
 
 export interface PromotedObject {
   /** `original` for the source; a variant key otherwise. */
@@ -59,13 +51,14 @@ export interface PromotedEntry {
 }
 
 export async function promoteEntry(params: {
-  population: PromotionPopulation;
+  population: PopulationKind;
   userId: string;
   collectionId: string;
   artworkId: string;
   entryId: string;
 }): Promise<PromotedEntry> {
   const { population, userId, collectionId, artworkId, entryId } = params;
+  const pop = POPULATIONS[population];
 
   // 1. The staged original: stage writes exactly one, so anything else
   //    means the entry does not exist (any more).
@@ -98,7 +91,7 @@ export async function promoteEntry(params: {
   // document is image/* or application/pdf — the stage route's allowlist
   // again — and `kind` is what the document row records.
   const isImage = contentType.startsWith("image/");
-  if (population === "photo" && !isImage) {
+  if (pop.imagesOnly && !isImage) {
     throw new ApiError(
       "validation",
       `The staged entry "${entryId}" is not an image`,
@@ -108,8 +101,6 @@ export async function promoteEntry(params: {
 
   // 2. The staged variants (none for a `file` document: process is a
   //    no-op for a PDF).
-  const specs: readonly ImageVariantSpec[] =
-    population === "photo" ? IMAGE_VARIANTS : DOCUMENT_VARIANT_SPECS;
   const stagedVariantKeys = await listObjects(
     stagedVariantPrefix(userId, collectionId, artworkId, entryId),
   );
@@ -135,7 +126,7 @@ export async function promoteEntry(params: {
           "Unexpected object in the entry's staging area",
         );
       }
-      const spec = specs.find((s) => s.key === parsed.key);
+      const spec = pop.specs.find((s) => s.key === parsed.key);
       if (!spec) {
         throw new ApiError(
           "internal",
@@ -178,7 +169,7 @@ export async function promoteEntry(params: {
 
   // 3. Copy to the final keys. REPLACE: re-saving overwrites the same
   //    objects, which is what makes the promote idempotent.
-  const finalKey = population === "photo" ? finalPhotoKey : finalDocumentKey;
+  const { finalKey } = pop;
   await copyObject(
     originalKey,
     finalKey(userId, collectionId, artworkId, entryId, "original", originalExt),

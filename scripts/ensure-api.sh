@@ -15,17 +15,18 @@
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/scripts/services.sh"
 set -a
 . "$ROOT/.env"
 set +a
 
 PORT=${PORT:-8000}
-probe() {
-  curl -s --noproxy "*" -o /dev/null --max-time 2 -w '%{http_code}' \
-    "http://127.0.0.1:$PORT/api/health"
-}
+# One probe, used for the check now and for the poll below. `wait_ready`
+# takes a command string — it runs under `sh -c` — so this is a command and
+# not the function it used to be.
+API_PROBE="curl -s --noproxy '*' -o /dev/null --max-time 2 -w '%{http_code}' http://127.0.0.1:$PORT/api/health | grep -q 200"
 
-if [ "$(probe)" = "200" ]; then
+if sh -c "$API_PROBE" 2>/dev/null; then
   echo "api: already up ($PORT)"
   exit 0
 fi
@@ -36,14 +37,7 @@ cd "$ROOT/apps/api"
 nohup bun src/main.ts >"$ROOT/.stack/logs/api.log" 2>&1 &
 echo $! >"$ROOT/.stack/api.pid"
 
-i=0
-while [ "$i" -lt 30 ]; do
-  if [ "$(probe)" = "200" ]; then
-    echo "api: ready ($PORT)"
-    exit 0
-  fi
-  i=$((i + 1))
-  sleep 1
-done
-echo "api: not ready after 30s (log: .stack/logs/api.log)" >&2
-exit 1
+if ! wait_ready "$API_PROBE" 30 "api ($PORT)"; then
+  echo "api: see .stack/logs/api.log" >&2
+  exit 1
+fi

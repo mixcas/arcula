@@ -6,12 +6,7 @@
 
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import sharp from "sharp";
-import {
-  artworks as artworksTable,
-  collections as collectionsTable,
-} from "@arcula/db";
-import { app } from "../src/app";
+import { artworks as artworksTable } from "@arcula/db";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -23,71 +18,15 @@ import {
   stagingVariantKey,
 } from "../src/media/keys";
 import { listObjects } from "../src/storage";
+import { err, freshUser, json, req, uuid } from "./helpers/api";
+import {
+  makeCollection,
+  makeJpeg,
+  processEntry,
+  stageEntry,
+  stagePhoto,
+} from "./helpers/fixtures";
 
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
-
-async function req(
-  method: string,
-  path: string,
-  opts: {
-    cookies?: string;
-    body?: string;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = { ...opts.headers };
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  headers.Origin = ORIGIN;
-  if (opts.body !== undefined && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body,
-  });
-}
-
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-/** The error envelope: the code, plus the failed fields. */
-async function err(
-  res: Response,
-): Promise<{ code: string; fields?: Record<string, string> }> {
-  const body = await json<{
-    error: { code: string; fields?: Record<string, string> };
-  }>(res);
-  return body.error;
-}
-
-async function freshUser(): Promise<{ cookies: string; userId: string }> {
-  const email = `media-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-  const up = await req("POST", "/api/auth/sign-up/email", {
-    body: JSON.stringify({
-      email,
-      password: "media-pass-12345",
-      name: "Media Test",
-    }),
-  });
-  expect(up.status).toBe(200);
-  const cookies = up.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  const me = await json<{ id: string }>(
-    await req("GET", "/api/v1/me", { cookies }),
-  );
-  return { cookies, userId: me.id };
-}
-
-const uuid = () => crypto.randomUUID();
-
-// Entry ids are global primary keys and the stack persists across runs:
-// every run gets its own namespace, the way the save suite does.
 const RUN = Math.random().toString(36).slice(2, 10);
 const entry = (label: string): string => `${label}-${RUN}`;
 
@@ -100,24 +39,6 @@ const pOrph = entry("media-orph");
 const pKept = entry("media-kept");
 const dA = entry("media-doc");
 
-// `Uint8Array.from` (not a view over Sharp's Buffer): File's BlobPart
-// wants an ArrayBuffer-backed view.
-const makeJpeg = async (): Promise<Uint8Array<ArrayBuffer>> =>
-  Uint8Array.from(
-    (
-      await sharp({
-        create: {
-          width: 400,
-          height: 300,
-          channels: 3,
-          background: { r: 40, g: 90, b: 200 },
-        },
-      })
-        .jpeg()
-        .toBuffer({ resolveWithObject: true })
-    ).data,
-  );
-
 const makePdf = (): Uint8Array<ArrayBuffer> =>
   Uint8Array.from(new TextEncoder().encode("%PDF-1.4 (test) %%EOF"));
 
@@ -126,44 +47,27 @@ let stranger: { cookies: string; userId: string };
 let cid = "";
 let privCid = "";
 
-async function makeCollection(
-  userId: string,
-  isPublic: boolean,
-): Promise<string> {
-  const id = uuid();
-  await db.insert(collectionsTable).values({
-    id,
-    userId,
-    name: "Media Test",
-    isPublic,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-  return id;
-}
-
 async function stage(
   population: "photos" | "documents",
   aid: string,
   entryId: string,
   file: File,
 ): Promise<void> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  const res = await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/${population}/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: owner.cookies, Origin: ORIGIN },
-      body: form,
-    },
+  const staged = await stageEntry(
+    population,
+    owner.cookies,
+    cid,
+    aid,
+    entryId,
+    file,
   );
-  expect(res.status).toBe(200);
-  const processed = await req(
-    "POST",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/process`,
-    { cookies: owner.cookies, body: JSON.stringify({ entryId }) },
+  expect(staged.status).toBe(200);
+  const processed = await processEntry(
+    owner.cookies,
+    cid,
+    aid,
+    population,
+    JSON.stringify({ entryId }),
   );
   expect(processed.status).toBe(200);
 }
@@ -198,10 +102,10 @@ let delWorkId = "";
 let privCollWorkId = "";
 
 beforeAll(async () => {
-  owner = await freshUser();
-  stranger = await freshUser();
-  cid = await makeCollection(owner.userId, true);
-  privCid = await makeCollection(owner.userId, false);
+  owner = await freshUser("Media");
+  stranger = await freshUser("Media");
+  cid = await makeCollection(owner.userId, { isPublic: true });
+  privCid = await makeCollection(owner.userId, { isPublic: false });
 
   // pubWork: public + live, one photo and one PDF document.
   pubWorkId = uuid();
@@ -260,25 +164,20 @@ async function stagePhotosIn(
   aid: string,
   entryId: string,
 ): Promise<void> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append(
-    "file",
+  const staged = await stagePhoto(
+    owner.cookies,
+    c,
+    aid,
+    entryId,
     new File([await sourceJpeg], "d.jpg", { type: "image/jpeg" }),
   );
-  const res = await app.request(
-    `${API}/api/v1/collections/${c}/artworks/${aid}/photos/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: owner.cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
-  expect(res.status).toBe(200);
-  const processed = await req(
-    "POST",
-    `/api/v1/collections/${c}/artworks/${aid}/photos/process`,
-    { cookies: owner.cookies, body: JSON.stringify({ entryId }) },
+  expect(staged.status).toBe(200);
+  const processed = await processEntry(
+    owner.cookies,
+    c,
+    aid,
+    "photos",
+    JSON.stringify({ entryId }),
   );
   expect(processed.status).toBe(200);
 }

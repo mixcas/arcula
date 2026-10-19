@@ -7,13 +7,11 @@
 // .env is sourced by the test script, so EMAIL_FROM / CLIENT_ORIGIN here
 // are the dev values.
 
-import { app } from "../src/app";
 import { client, closeDb } from "../src/db";
 import { createEmailProvider } from "../src/email/provider";
 import { afterAll, describe, expect, it } from "vitest";
+import { json, req, signUp } from "./helpers/api";
 
-const API = "http://localhost:8000";
-const ORIGIN = "http://localhost:3000";
 const MAILPIT = "http://127.0.0.1:8025";
 
 // --- Mailpit (its REST API is PascalCase; the list gives snippets, the
@@ -60,44 +58,6 @@ async function waitForMail(
   }
 }
 
-// --- app helpers (same shape as auth.api.test.ts)
-
-async function req(
-  method: string,
-  path: string,
-  opts: { cookies?: string; body?: unknown } = {},
-): Promise<Response> {
-  const headers: Record<string, string> = { Origin: ORIGIN };
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-  if (opts.cookies) headers.Cookie = opts.cookies;
-  return await app.request(`${API}${path}`, {
-    method,
-    headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-  });
-}
-
-async function json<T>(res: Response): Promise<T> {
-  return (await res.json()) as T;
-}
-
-const unique = () =>
-  `s4-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-
-async function signUp(): Promise<{ email: string; cookies: string }> {
-  const email = unique();
-  const res = await req("POST", "/api/auth/sign-up/email", {
-    body: { email, password: "test-pass-12345", name: "Test User" },
-  });
-  expect(res.status).toBe(200);
-  const cookies = res.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .filter((c) => !c.includes("Max-Age=0"))
-    .join("; ");
-  return { email, cookies };
-}
-
 afterAll(async () => {
   await closeDb();
 });
@@ -132,7 +92,7 @@ describe("provider selection (offline)", () => {
 describe("password reset — live (fully live in beta)", () => {
   it("mails a link on the CLIENT_ORIGIN that resets the password", async () => {
     await mailpitClear();
-    const { email } = await signUp();
+    const { email } = await signUp("s4");
 
     const asked = await req("POST", "/api/auth/request-password-reset", {
       body: { email },
@@ -172,7 +132,7 @@ describe("password reset — live (fully live in beta)", () => {
 describe("email verification — built but gated", () => {
   it("stays gated: the wired hook sends nothing at sign-up", async () => {
     await mailpitClear();
-    await signUp();
+    await signUp("s4");
 
     // The hook is configured, so if the auto-send gate (sendOnSignUp ??
     // requireEmailVerification) were ever flipped, this would catch it:
@@ -183,7 +143,7 @@ describe("email verification — built but gated", () => {
 
   it("the on-demand endpoint mails a CLIENT_ORIGIN link that verifies the account", async () => {
     await mailpitClear();
-    const { email, cookies } = await signUp();
+    const { email, cookies } = await signUp("s4");
 
     const sent = await req("POST", "/api/auth/send-verification-email", {
       cookies,
