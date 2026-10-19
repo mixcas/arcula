@@ -219,6 +219,14 @@ run_wizard() {
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# gh pages its output through $PAGER when stdout is a terminal. A wizard is a
+# sequence of prompts, not a reader: on a machine with PAGER=less, stage 5's
+# two Environment listings each opened less, so the run needed one "q" per
+# listing before it could ask anything. Nothing printed here is longer than a
+# screen. Exported, so every gh call in this run is covered and the caller's
+# own PAGER is left alone.
+export GH_PAGER=cat
+
 # Dev has its own file and no fallback to production's — the rule
 # scripts/environment.sh enforces, so a dev deploy can never read
 # production's database URL or auth secret. Production's file path and its
