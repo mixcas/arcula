@@ -409,6 +409,8 @@ if ( cd "$ROOT" && node scripts/provision-cert.mjs "$DEV_HOST" 2>&1 | tee "$CERT
   CERT_ARN=$(grep -o 'certificate issued: .*' "$CERT_LOG" | tail -n1 | awk '{print $3}' || true)
 else
   warn "provision-cert did not finish; re-run it — it reuses the same certificate."
+  warn "If it named a credential or permission error, fix that before re-running:"
+  warn "a pasted ARN cannot stand in for it, and the cert still has to be validated."
   CERT_ARN=""
 fi
 rm -f "$CERT_LOG"
