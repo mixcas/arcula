@@ -10,6 +10,12 @@ import { ZodError, type ZodType } from "zod";
 import { db } from "./db";
 import { ApiError } from "./errors";
 
+// The route patterns guarantee these segments; `?? ""` only exists to satisfy
+// Hono's optional param type. An empty segment either 404s at the row lookup
+// or fails the id-shape check in the handler.
+export const param = (c: Context, key: string): string =>
+  c.req.param(key) ?? "";
+
 /** The validation envelope: the code, plus the failed fields. */
 export async function parseBody<T>(c: Context, schema: ZodType<T>): Promise<T> {
   let raw: unknown;

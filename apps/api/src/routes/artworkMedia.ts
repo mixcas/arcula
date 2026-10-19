@@ -12,10 +12,11 @@
 // used as the staging key's segment; nothing else is asked of it here.
 
 import { MINTED_ID_RE } from "@arcula/shared";
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { requireOwnedCollection } from "../authorize";
 import { errorResponse, ApiError } from "../errors";
+import { param } from "../http";
 import { requireSession } from "../session";
 import {
   extensionFor,
@@ -42,11 +43,6 @@ import { deleteObject, listObjects, putObject, readObject } from "../storage";
 // underscore — nothing that could carry a path separator or a dot. The
 // shared MINTED_ID_RE is the single owner of that character set (also
 // the save payloads').
-
-// The route patterns guarantee these segments; `?? ""` only exists to
-// satisfy Hono's optional param type. An empty segment either 404s at
-// the row lookup or fails the ID check below.
-const param = (c: Context, key: string): string => c.req.param(key) ?? "";
 
 /** A validation failure with the failed fields, per the error envelope. */
 function invalid(message: string, fields?: Record<string, string>) {
