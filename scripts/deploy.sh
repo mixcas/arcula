@@ -55,17 +55,38 @@ require_env RESEND_API_KEY "${RESEND_API_KEY:-}"
   exit 1
 }
 
-CTX="-c ENV=$ENV -c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RESEND_API_KEY=$RESEND_API_KEY"
-[ -n "${EMAIL_FROM:-}" ] && CTX="$CTX -c EMAIL_FROM=$EMAIL_FROM"
+# The CDK context, one array of arguments rather than one string.
+#
+# `-c KEY=VALUE` pairs used to be accumulated in a variable and expanded
+# unquoted, so every value was word-split: a sender with a display name
+# (`Arcula dev <noreply@…>`) arrived as three arguments and a value with a
+# glob in it expanded against the working directory. Positional parameters
+# keep each value exactly one argument, whatever it holds.
+#
+# `set --` is safe here: ENV was read off $1 above and nothing below reads
+# the script's own arguments again.
+set -- -c "ENV=$ENV" \
+  -c "DATABASE_URL=$DATABASE_URL" \
+  -c "AUTH_SECRET=$AUTH_SECRET" \
+  -c "RESEND_API_KEY=$RESEND_API_KEY"
+if [ -n "${EMAIL_FROM:-}" ]; then
+  set -- "$@" -c "EMAIL_FROM=$EMAIL_FROM"
+fi
 # Custom domain: only carried when both are set, and CERT_ARN is required
 # when DOMAIN is — the stack hard-fails synth otherwise. They live in this
 # environment's file; the cert ARN is added there only after the ACM cert
 # has been validated (scripts/provision-cert.mjs).
-[ -n "${DOMAIN:-}" ] && CTX="$CTX -c DOMAIN=$DOMAIN"
-[ -n "${CERT_ARN:-}" ] && CTX="$CTX -c CERT_ARN=$CERT_ARN"
+if [ -n "${DOMAIN:-}" ]; then
+  set -- "$@" -c "DOMAIN=$DOMAIN"
+fi
+if [ -n "${CERT_ARN:-}" ]; then
+  set -- "$@" -c "CERT_ARN=$CERT_ARN"
+fi
 # Dev reports the commit it is running (/api/health); production leaves it
 # unset and its health body carries no such key.
-[ -n "${DEPLOYED_COMMIT:-}" ] && CTX="$CTX -c DEPLOYED_COMMIT=$DEPLOYED_COMMIT"
+if [ -n "${DEPLOYED_COMMIT:-}" ]; then
+  set -- "$@" -c "DEPLOYED_COMMIT=$DEPLOYED_COMMIT"
+fi
 
 # ---- helpers ------------------------------------------------------------
 # A host that answers A or CNAME. A custom domain does not route until the
@@ -107,7 +128,7 @@ bun run build
 npx cdk bootstrap --region "$REGION"
 
 echo "==> deploy 1 (values in, PUBLIC_URL placeholder)"
-npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never $CTX
+npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never "$@"
 
 # The one public origin: the API, the SPA and the mail links all live on it
 # (same-origin by design — no CORS to configure). A custom domain is stable
@@ -172,8 +193,8 @@ echo "==> db:seed (owner account from SEED_* — idempotent)"
 )
 
 echo "==> deploy 2 (PUBLIC_URL = $URL)"
-npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never $CTX \
-  -c PUBLIC_URL="$URL"
+npx cdk deploy "$STACK_NAME" --region "$REGION" --require-approval never "$@" \
+  -c "PUBLIC_URL=$URL"
 
 echo "==> verify"
 # A host whose DNS is still unfinished is dev's case (production gated

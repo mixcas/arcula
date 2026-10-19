@@ -230,11 +230,10 @@ PROD_ENV_FILE=$(cd "$ROOT" && ENV=prod ROOT="$ROOT" sh -c '. "$ROOT/scripts/envi
 DEV_HOST="dev.arcula.art"
 DEV_ZONE="arcula.art"
 
-# The display-name sender the environment should carry. Resend accepts it;
-# scripts/deploy.sh cannot, because it word-splits its CDK context, so the
-# deploy gets the bare address below and this is the difference the human
-# is told about.
-EMAIL_FROM_DISPLAY="Arcula dev <noreply@dev.arcula.art>"
+# The sender, display name and all. scripts/deploy.sh keeps each CDK
+# context value one argument, so the spaces and angle brackets survive into
+# the Lambda's EMAIL_FROM as written.
+EMAIL_FROM="Arcula dev <noreply@dev.arcula.art>"
 
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
 [[ -n "$REPO" ]] || REPO="<owner>/<repo>"
@@ -338,16 +337,7 @@ step "Back in Resend, click Verify and wait for 'Verified'."
 open_url "https://resend.com/api-keys"
 step "Create API key → name it 'arcula dev' → Permission: Sending access → Domain: dev.arcula.art → Create."
 ask_secret RESEND_API_KEY "Paste the dev API key:"
-# The address alone, no display name. scripts/deploy.sh builds its CDK
-# context as one unquoted string and lets the word split it, so a display
-# name arrives as `-c EMAIL_FROM=Arcula`, `dev`, `<noreply@…>` — three
-# arguments, one of which is not a context value. The subdomain is what
-# makes dev's mail unmistakable in an inbox; say so rather than drop it
-# silently.
-EMAIL_FROM="noreply@dev.arcula.art"
-warn "Sender set to $EMAIL_FROM, not '$EMAIL_FROM_DISPLAY':"
-warn "scripts/deploy.sh word-splits its CDK context, so a display name would break the deploy."
-note "The dev.arcula.art subdomain is what makes it obvious in your inbox."
+note "Sender: $EMAIL_FROM"
 write_env RESEND_API_KEY "$RESEND_API_KEY"
 write_env EMAIL_FROM "$EMAIL_FROM"
 set_env_secret dev RESEND_API_KEY "$RESEND_API_KEY"
@@ -538,15 +528,16 @@ open_url "https://github.com/$REPO/actions/workflows/deploy-prod.yml"
 pause "Press Enter once the production deploy is green."
 
 # ── 13 ────────────────────────────────────────────────────────────────────
-stage "Prove production's template is unchanged"
+stage "Prove the release did not disturb production's resources"
 if [[ -s "$TEMPLATE_BEFORE" ]] &&
   aws cloudformation get-template --stack-name "$PROD_STACK" --query TemplateBody --output json > "$TEMPLATE_AFTER" 2>/dev/null; then
   if diff -u "$TEMPLATE_BEFORE" "$TEMPLATE_AFTER" >/dev/null; then
     say "Byte-identical: the release did not perturb production."
   else
     warn "the template differs — read the diff below."
-    warn "Expected: the stack Description (rewritten when the two stacks were named apart) and possibly CDKMetadata's analytics blob."
-    warn "Anything else — a resource added, removed or replaced — is a real change and must be explained."
+    warn "The stack Description is the expected difference: it is the text the two environments were named apart with,"
+    warn "and it changes the console's label for the stack, not anything CloudFormation creates."
+    warn "CDKMetadata's analytics blob may differ with the CDK version. Anything else — a resource added, removed or replaced — is a real change."
     diff -u "$TEMPLATE_BEFORE" "$TEMPLATE_AFTER" | head -n 60 || true
   fi
 else
