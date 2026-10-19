@@ -1,49 +1,61 @@
-// Canonical-host redirect: `www.arcula.art` is an alias of
-// `arcula.art`, so every www request is 308-redirected to the apex before
-// any route runs. Driven in-process with app.request() against the real
-// app — real middleware, no second server.
+// Canonical-host redirect: a deployment's configured origin (CLIENT_ORIGIN)
+// has exactly one alias — `www.<its host>` — and every alias request is
+// 308-redirected to the origin before any route runs. Driven in-process with
+// app.request() against the real app, and asserted against the configured
+// origin rather than a literal, so a hostname hardcoded in the middleware
+// fails here.
 
 import { app } from "../src/app";
+import { clientOrigin } from "../src/env";
 import { describe, expect, it } from "vitest";
 
-const www = { headers: { Host: "www.arcula.art" } };
-const wwwPort = { headers: { Host: "www.arcula.art:443" } };
+const origin = new URL(clientOrigin);
+const aliasHost = `www.${origin.hostname}`;
 
-describe("www.arcula.art → apex canonical redirect", () => {
-  it("308-redirects a www path, host swapped to the apex", async () => {
-    const res = await app.request("/collections/flores-solares", www);
+describe("the configured origin's www alias", () => {
+  it("308-redirects to the origin, preserving path, query and method", async () => {
+    // POST on purpose: a 308 re-issues the same method, where a 301/302
+    // would let a client downgrade the body to a GET.
+    const res = await app.request("/collections/flores-solares?a=1&b=2", {
+      method: "POST",
+      headers: { Host: aliasHost },
+    });
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe(
-      "https://arcula.art/collections/flores-solares",
+      `${clientOrigin}/collections/flores-solares?a=1&b=2`,
     );
   });
 
-  it("redirects the SPA shell at / on www", async () => {
-    const res = await app.request("/", www);
+  it("redirects the SPA shell at /", async () => {
+    const res = await app.request("/", { headers: { Host: aliasHost } });
     expect(res.status).toBe(308);
-    expect(res.headers.get("location")).toBe("https://arcula.art/");
+    expect(res.headers.get("location")).toBe(`${clientOrigin}/`);
   });
 
-  it("preserves the query string and drops the host port", async () => {
-    const res = await app.request("/api/v1/collections?x=1&y=2", wwwPort);
+  it("treats the alias host's port as irrelevant", async () => {
+    const res = await app.request("/", {
+      headers: { Host: `${aliasHost}:443` },
+    });
     expect(res.status).toBe(308);
-    expect(res.headers.get("location")).toBe(
-      "https://arcula.art/api/v1/collections?x=1&y=2",
-    );
+    expect(res.headers.get("location")).toBe(`${clientOrigin}/`);
   });
+});
 
-  it("does not touch the apex host — a real request passes through", async () => {
-    // Known-good route under the canonical host, default (localhost) host.
-    const res = await app.request("/api/health");
+describe("a host that is not the alias", () => {
+  it("leaves the origin's own host alone — a real request passes through", async () => {
+    const res = await app.request("/api/health", {
+      headers: { Host: origin.host },
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it("ignores a differently- www host (only www.arcula.art redirects)", async () => {
-    // www elsewhere on the domain is not our alias; it must not be
-    // redirected by this rule.
+  it("leaves another www host alone — it is not this origin's alias", async () => {
+    // The proof the middleware consults the configured origin: a rule that
+    // named a literal hostname would redirect www.arcula.art here, but the
+    // configured origin is CLIENT_ORIGIN.
     const res = await app.request("/", {
-      headers: { Host: "www.other-art.example" },
+      headers: { Host: "www.arcula.art" },
     });
     expect(res.headers.get("location")).toBeNull();
   });

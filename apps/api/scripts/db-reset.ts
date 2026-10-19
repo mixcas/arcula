@@ -13,6 +13,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { DROP_APP_SCHEMAS_SQL } from "./schema";
 
 if (
   process.env.NODE_ENV === "production" &&
@@ -35,14 +36,11 @@ execSync("sh scripts/stack-up.sh postgres s3", {
   cwd: repoRoot,
 });
 
-// 2. Wipe the schema — every table, no survivors. The `drizzle` schema is
-// dropped too: drizzle-orm 0.45 keeps its migration bookkeeping in a
-// dedicated `drizzle` schema by default, and a surviving bookkeeping row
-// makes the re-apply below a silent no-op (the migration "succeeds"
-// without writing a single table).
+// 2. Wipe the schema — every table, no survivors. The SQL (and why the
+// `drizzle` schema goes too) is shared with the dev reset's db-drop.ts.
 execSync(
   "docker-compose exec -T postgres psql -U arcula -d arcula " +
-    '-c "DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;"',
+    `-c "${DROP_APP_SCHEMAS_SQL}"`,
   { stdio: "inherit", cwd: repoRoot },
 );
 

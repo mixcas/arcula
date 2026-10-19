@@ -100,6 +100,8 @@ export default tseslint.config(
       // The standalone CDK app (own tsconfig, own tsc at synth; Node
       // context — process, __dirname, fs).
       "infra/cdk/src/**/*.ts",
+      "infra/cdk/tests/**/*.ts",
+      "infra/cdk/vitest.config.mts",
     ],
     languageOptions: {
       globals: { ...globals.node },

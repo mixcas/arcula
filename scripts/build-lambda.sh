@@ -1,13 +1,16 @@
 #!/bin/sh
-# Build the Lambda deploy package and smoke it on a glibc Linux runtime.
-# Usage: sh scripts/build-lambda.sh
+# Build one environment's Lambda deploy package and smoke it on a glibc
+# Linux runtime. Usage: sh scripts/build-lambda.sh <prod|dev>
 #
-# Produces dist/lambda/arcula-api.zip — the code bundle, Sharp's native
-# prebuilt, and the built SPA (web/dist, served by spa.ts with
-# WEB_DIST=/var/task/web/dist) — with the handler at `index.handler`
-# (index.js). The smoke runs the package INSIDE the container, so a
-# broken bundle or a Sharp prebuilt that does not load stops the build
-# instead of shipping.
+# Produces dist/lambda/<artifact> — `arcula-api.zip` for production,
+# `arcula-api-dev.zip` for dev, the name the CDK stack reads for that
+# environment. Each environment stages into its own directory and writes
+# its own file, so a dev build never disturbs production's artifact. That
+# package is the code bundle, Sharp's native prebuilt and the built SPA
+# (web/dist, served by spa.ts with WEB_DIST=/var/task/web/dist) — with the
+# handler at `index.handler` (index.js). The smoke runs the package INSIDE
+# the container, so a broken bundle or a Sharp prebuilt that does not load
+# stops the build instead of shipping.
 #
 # Runtime note: the target is the Lambda Node.js 24 runtime — the stack
 # pins `NODEJS_24_X` (glibc, arm64). The AWS public ECR images are not
@@ -28,9 +31,19 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
-STAGE=dist/lambda/stage
-OUT=dist/lambda
-rm -rf "$STAGE" "$OUT/arcula-api.zip"
+ENV="${1:-}"
+case "$ENV" in
+  prod | dev) ;;
+  *)
+    echo "usage: sh scripts/build-lambda.sh <prod|dev>" >&2
+    exit 2
+    ;;
+esac
+. "$ROOT/scripts/environment.sh"
+
+STAGE="dist/lambda/stage-$ENV"
+OUT="dist/lambda/$LAMBDA_ARTIFACT"
+rm -rf "$STAGE" "$OUT"
 mkdir -p "$STAGE"
 
 # 1. Bundle the deploy entry for Node. Everything is inlined except sharp
@@ -46,7 +59,7 @@ mkdir -p "$STAGE"
 #    still see the runtime env at the Lambda.
 DEFINE_NODE_ENV='process.env.NODE_ENV="production"'
 
-echo "==> bundling"
+echo "==> bundling ($ENV)"
 bun build apps/api/src/lambda.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
@@ -79,21 +92,51 @@ EOF
 # 4. Install Sharp for the TARGET platform (the host would pick darwin
 #    prebuilts) and run the smoke in the same container, on Node, on the
 #    compose network so `postgres` resolves to the dev database.
-cp scripts/lambda-smoke.mjs "$STAGE/lambda-smoke.mjs"
-TMP_ENV=$(mktemp)
-trap 'rm -f "$TMP_ENV"' EXIT
-sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://arcula:arcula@postgres:5432/arcula|" \
-    "$ROOT/.env" > "$TMP_ENV"
+#
+#    The smoke runs the bundle against the local stand-ins, so its config is
+#    the repo-root .env — the S3 endpoint, the mail sink and the rest that
+#    only a dev machine has. The deployed environment's file is not a
+#    substitute: it names the real bucket, not the stand-in. DATABASE_URL is
+#    repointed at the compose service, which the container reaches by
+#    service name rather than localhost.
+#
+#    A CI runner has no compose network and no root .env, so a deploy
+#    workflow sets SKIP_LAMBDA_SMOKE=1. The install still happens — it is
+#    what puts the target platform's Sharp into the package — and only the
+#    smoke's assertions are skipped. Their equivalent on the runner is the
+#    deploy's own end-to-end pass, which drives this same pipeline through
+#    the deployed Lambda (a real 12 MP photo is part of it).
+#
+#    Skipping is a runner's privilege, not a switch: `CI` has to be set, so
+#    a stray `SKIP_LAMBDA_SMOKE=1` on a laptop cannot disarm the build. (The
+#    same guard, for the same reason, is what keeps db-seed from starting a
+#    stack in CI.)
+if [ -n "${CI:-}" ] && [ "${SKIP_LAMBDA_SMOKE:-}" = "1" ]; then
+  echo "==> smoke skipped on CI (SKIP_LAMBDA_SMOKE=1): installing the target package only"
+  docker run --rm --platform linux/arm64 \
+    -v "$ROOT/$STAGE":/app -w /app node:24 \
+    sh -c "npm install --omit=dev --no-audit --no-fund"
+else
+  cp scripts/lambda-smoke.mjs "$STAGE/lambda-smoke.mjs"
+  [ -f "$ROOT/.env" ] || {
+    echo "missing $ROOT/.env — the smoke needs the local stand-ins' config" >&2
+    exit 1
+  }
+  TMP_ENV=$(mktemp)
+  trap 'rm -f "$TMP_ENV"' EXIT
+  sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://arcula:arcula@postgres:5432/arcula|" \
+      "$ROOT/.env" > "$TMP_ENV"
 
-echo "==> smoke (node:24, glibc, arm64, compose network)"
-docker run --rm --platform linux/arm64 \
-  --network arcula_default --env-file "$TMP_ENV" \
-  -v "$ROOT/$STAGE":/app -w /app node:24 \
-  sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
+  echo "==> smoke (node:24, glibc, arm64, compose network)"
+  docker run --rm --platform linux/arm64 \
+    --network arcula_default --env-file "$TMP_ENV" \
+    -v "$ROOT/$STAGE":/app -w /app node:24 \
+    sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
+fi
 
 # 5. Zip the package (the smoke files are not part of the deploy).
-rm "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
+rm -f "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
 echo "==> zipping"
-(cd "$STAGE" && zip -qr "../arcula-api.zip" .)
-du -h "$OUT/arcula-api.zip"
-echo "==> done: $OUT/arcula-api.zip (handler: index.handler)"
+(cd "$STAGE" && zip -qr "$ROOT/$OUT" .)
+du -h "$OUT"
+echo "==> done: $OUT (handler: index.handler)"

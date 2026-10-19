@@ -29,19 +29,28 @@ same-origin in production and there is no CORS to configure.
 
 All from the repo root (`bun run <script>`):
 
-| Command                                                     | What it does                                                               |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)         |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                      |
-| `bun run check`                                             | Typecheck all four packages + ESLint + Prettier — **the gate before a PR** |
-| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`   |
-| `bun run build`                                             | Build the web app                                                          |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                               |
+| Command                                                     | What it does                                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                   |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                |
+| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**                |
+| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
+| `bun run build`                                             | Build the web app                                                                    |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
 
-Deploy is a shell script, not a package script: **`sh scripts/deploy-prod.sh`**
-(build the Lambda package → `cdk deploy` → migrate → seed → re-deploy with the
-real `PUBLIC_URL` → `prod-verify`). `scripts/build-lambda.sh` builds the zip;
-`scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships.
+Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
+`sh scripts/deploy-dev.sh` are thin wrappers over the one sequence in
+**`scripts/deploy.sh`** (cdk build → `cdk deploy` → resolve the URL → migrate →
+seed → re-deploy with the real `PUBLIC_URL` → `deploy-verify`).
+`sh scripts/build-lambda.sh <prod|dev>` builds that environment's zip first;
+`scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships —
+except on a CI runner, which sets `SKIP_LAMBDA_SMOKE=1` (it has no local
+stand-ins), where the deploy's own end-to-end pass on the deployed Lambda is
+the equivalent proof. `scripts/write-env-file.sh <env>` writes the
+environment's file from a CI run's GitHub Environment values.
+`scripts/provision-cert.mjs` and `scripts/provision-oidc.mjs` provision a
+host's certificate and the GitHub deploy roles; `scripts/reset-dev.sh --yes`
+drops the dev schema and empties the dev bucket.
 
 The **local stack** is Postgres (a docker/colima container), SeaweedFS (the S3
 stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
@@ -51,8 +60,10 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 
 **`apps/api/src/`**
 
-- `app.ts` — the Hono app: the error envelope, the `www`→apex redirect, CORS,
-  route mounting. `main.ts` runs it under Bun; `lambda.ts` is the Lambda handler.
+- `app.ts` — the Hono app: the error envelope, the `www`→configured-origin
+  redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
+  the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
+  holds the pure decisions derived from it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller; `authorize.ts` is the ownership/visibility check.
@@ -202,26 +213,49 @@ restated here.
   Prefer subpath imports (`import debounce from "lodash/debounce"`) for smaller
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
-  inlined at build time. Never commit real secrets — `infra/cdk/.env` (which
-  holds `DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
+  inlined at build time. Never commit real secrets — `infra/cdk/.env` and the
+  per-environment `infra/cdk/.env.<env>` (which hold `DATABASE_URL`,
+  `AUTH_SECRET`, `CERT_ARN`, …) are gitignored.
 
 ## Validation
 
-- `bun run check` (tsc ×4 + ESLint + Prettier) must pass before and after any
-  change, and before a PR.
+- `bun run check` (tsc over every package + ESLint + Prettier) must pass before
+  and after any change, and before a PR. The `infra/cdk` package is deliberately
+  not a workspace member and installs its own dependencies, so run
+  `cd infra/cdk && bun install` once before the check can resolve
+  `aws-cdk-lib`.
 - `bun run test` runs every suite; the API and web suites need the local stack
   (see Gotchas). `npx vitest run <file>` inside a package runs a single file.
 - Before writing a test, read **What to test** above. A green suite is not the
   goal; a test that fails only when we change something is.
-- **Deploy**: `sh scripts/deploy-prod.sh`, then
-  `cd apps/api && bun scripts/prod-verify.ts https://arcula.art` — the 17-step
+- **Deploy**: `sh scripts/deploy-prod.sh` (production) or
+  `sh scripts/deploy-dev.sh` (dev), then
+  `cd apps/api && bun scripts/deploy-verify.ts https://arcula.art` — the 17-step
   end-to-end pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real 12 MP photo through
   stage → process → save, a visitor read, and the reset-mail path). It creates a
   throwaway `verify-<ts>@example.test` account per run, so treat it as a write
-  against prod.
+  against the environment.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and
-  `scripts/deploy-prod.sh` prints each against the matching Porkbun record.
+  `scripts/deploy.sh` prints each against the matching Porkbun record.
   Those DNS records are console-only (no API access), and the apex and `www`
   targets are **different** `d-…` values — do not point one at the other.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`mixcas/arcula`), driven by the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage roles, unchanged: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See
+`docs/agents/domain.md`.

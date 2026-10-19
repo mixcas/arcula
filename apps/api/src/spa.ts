@@ -1,7 +1,7 @@
 /**
  * Static SPA serving: the same process that serves
  * /api/v1 and /api/auth also serves the built app, so a deploy is one
- * artifact behind one origin — no second hosting stack in beta.
+ * artifact behind one origin — no second hosting stack.
  *
  * Path logic, in order:
  *  1. /api (and everything under it) is never the SPA's — the guard below

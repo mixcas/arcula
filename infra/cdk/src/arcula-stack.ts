@@ -1,12 +1,18 @@
 /**
- * The beta stack: the Lambda shape.
+ * The Arcula stack: the Lambda shape, for one environment.
  *
  * One Lambda runs the whole product — API and built SPA (one artifact behind
  * one origin) — behind an HTTP API; S3 holds the media;
  * Postgres lives in Supabase (created out of band on the free tier,
  * reached over its public connection string). No VPC, no ALB, no ECS:
- * the owner's ruling is an idle beta at ~$0–3/mo, and every one of those
- * constructs was a 24/7 line item.
+ * the owner's ruling is an idle environment at ~$0–3/mo, and every one of
+ * those constructs was a 24/7 line item.
+ *
+ * The same construct tree serves both environments; `environment` is the
+ * only thing that makes them differ, and it changes only the stack's name
+ * and description, the API's display name, the Lambda artifact, and whether
+ * the dev-only function environment applies. Construct ids and logical ids
+ * are environment-independent, so production's template is unchanged.
  *
  * Values never live in this app: the secrets arrive at
  * deploy time as CDK context (`cdk deploy -c DATABASE_URL=… -c
@@ -29,10 +35,41 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import * as path from "node:path";
+import { ENVIRONMENTS, type EnvironmentName } from "./environments";
+
+export interface ArculaStackProps extends cdk.StackProps {
+  /**
+   * Which environment this stack is. Required — there is no default — so a
+   * stack is never synthesised without a deliberate choice, and the
+   * dev-only values cannot reach production by omission.
+   */
+  environment: EnvironmentName;
+  /**
+   * Where this environment's Lambda artifact lives. Defaults to the
+   * repository's `dist/lambda/`, where `scripts/build-lambda.sh` writes it;
+   * the tests point it at a fixture so they do not depend on a built
+   * package.
+   */
+  lambdaArtifactDirectory?: string;
+}
 
 export class ArculaStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
+  /** This environment's Lambda artifact — the file `ApiFunction` deploys. */
+  readonly lambdaArtifactPath: string;
+
+  constructor(scope: Construct, id: string, props: ArculaStackProps) {
+    const { environment, lambdaArtifactDirectory, ...stackProps } = props;
+    const config = ENVIRONMENTS[environment];
+    super(scope, id, { ...stackProps, description: config.description });
+
+    // The artifact is named per environment, so a stale build for one
+    // environment can never be deployed to the other.
+    const artifactDirectory =
+      lambdaArtifactDirectory ?? path.join(__dirname, "../../../dist/lambda");
+    this.lambdaArtifactPath = path.join(
+      artifactDirectory,
+      config.lambdaArtifact,
+    );
 
     const contextValue = (name: string, fallback: string): string => {
       // tryGetContext is typed `any` in CDK; only a string is a value we
@@ -62,9 +99,7 @@ export class ArculaStack extends cdk.Stack {
     const fn = new lambda.Function(this, "ApiFunction", {
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64,
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../../dist/lambda/arcula-api.zip"),
-      ),
+      code: lambda.Code.fromAsset(this.lambdaArtifactPath),
       handler: "index.handler",
       memorySize: 3008,
       timeout: cdk.Duration.seconds(300),
@@ -96,6 +131,16 @@ export class ArculaStack extends cdk.Stack {
         S3_BUCKET: media.bucketName,
         // The SPA the Lambda serves (spa.ts).
         WEB_DIST: "/var/task/web/dist",
+        // Dev-only, and absent from production on purpose: the commit makes
+        // /api/health answer "is my change live?" in one request, and the
+        // flag keeps the dev environment out of search indexes. Neither is
+        // set on production, whose responses stay exactly as they are.
+        ...(config.devOnly
+          ? {
+              DEPLOYED_COMMIT: contextValue("DEPLOYED_COMMIT", ""),
+              NOINDEX: "true",
+            }
+          : {}),
       },
     });
 
@@ -112,7 +157,10 @@ export class ArculaStack extends cdk.Stack {
     // — set it on purpose: the measured worst case (a 10-photo save) is
     // single digits, and a request that outgrows 29 s is a signal to move
     // the work off the request path, not to wait longer for it.
-    const api = new apigw.HttpApi(this, "Api", { apiName: "arcula" });
+    //
+    // The display name is per environment, so the console does not show two
+    // identically-named APIs.
+    const api = new apigw.HttpApi(this, "Api", { apiName: config.apiName });
     api.addRoutes({
       path: "/{proxy+}",
       methods: [apigw.HttpMethod.ANY],
@@ -125,12 +173,12 @@ export class ArculaStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ExecuteApiUrl", { value: api.url! });
     new cdk.CfnOutput(this, "MediaBucket", { value: media.bucketName });
     // The deploy script reads this function's environment back to run the
-    // seed (deploy-prod.sh), so the Lambda is the one place prod's
-    // configuration is written.
+    // seed (scripts/deploy.sh), so the Lambda is the one place an
+    // environment's configuration is written.
     new cdk.CfnOutput(this, "ApiFunctionName", { value: fn.functionName });
 
     // An optional custom domain on the HTTP API.
-    // Gated on `DOMAIN` so the beta deploys (no domain) are byte-for-byte
+    // Gated on `DOMAIN` so a deploy with no domain is byte-for-byte
     // unchanged; the two-step PUBLIC_URL deploy still uses the execute-api
     // name. API Gateway HTTP-API custom domains are a per-name pair — a
     // `DomainName` (provisioned in API Gateway, carrying the us-east-1 ACM

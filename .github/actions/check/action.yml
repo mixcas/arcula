@@ -1,0 +1,45 @@
+# The repository's own gate, in one place: the pull-request check and the two
+# deploy workflows all run this, so a gate added locally cannot be forgotten
+# in one of them. It runs the local commands verbatim — `check` (tsc over
+# every package, ESLint, Prettier) and every suite that needs no services:
+# shared, db and cdk. The API and web suites need Postgres, object storage
+# and a mail sink, which the runner does not host; they stay a laptop's job.
+name: Check
+description: Typecheck, lint, format and the service-free test suites.
+
+runs:
+  using: composite
+  steps:
+    # The pin lives in .bun-version, read explicitly: without the input the
+    # action falls back to its own latest, which the lockfile was not made
+    # with.
+    - name: Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: .bun-version
+    - name: Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    # The CDK app is deliberately not a workspace member and installs its
+    # own dependencies, so the typecheck of infra/cdk resolves nothing
+    # without this second install.
+    - name: Install the workspaces
+      shell: bash
+      run: bun install --frozen-lockfile
+    - name: Install the CDK app
+      shell: bash
+      working-directory: infra/cdk
+      run: bun install --frozen-lockfile
+    - name: Typecheck, lint and format
+      shell: bash
+      run: bun run check
+    - name: Shared suite
+      shell: bash
+      run: bun run test:shared
+    - name: DB suite
+      shell: bash
+      run: bun run test:db
+    - name: CDK suite
+      shell: bash
+      run: bun run test:cdk

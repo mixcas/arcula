@@ -12,17 +12,26 @@ import { fileURLToPath } from "node:url";
 // repo root is three up.
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
-execSync("sh scripts/stack-up.sh postgres", {
-  stdio: "inherit",
-  cwd: repoRoot,
-});
+// The local stack is a dev-machine thing: in CI the database is the
+// environment's own, and there is nothing to start. `CI` is "true" on the
+// actions runner; an explicit `CI=false` is not CI.
+const inCi = /^(1|true|yes)$/i.test(process.env.CI ?? "");
+if (!inCi) {
+  execSync("sh scripts/stack-up.sh postgres", {
+    stdio: "inherit",
+    cwd: repoRoot,
+  });
+}
 
 const { auth } = await import("../src/auth");
 const { closeDb } = await import("../src/db");
 const email = process.env.SEED_EMAIL;
 const password = process.env.SEED_PASSWORD;
 if (!email || !password) {
-  throw new Error("SEED_EMAIL / SEED_PASSWORD are required in the root .env");
+  throw new Error(
+    "SEED_EMAIL / SEED_PASSWORD are required (the environment's file, " +
+      "with the root .env as the local fallback)",
+  );
 }
 
 try {

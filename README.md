@@ -235,35 +235,45 @@ bun run db:seed
 
 All from the repo root:
 
-| Command                                                     | Description                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)          |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                 |
-| `bun run build`                                             | Build the web app                                                     |
-| `bun run preview`                                           | Preview the production web build                                      |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR** |
-| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                         |
-| `bun run format` / `format:check`                           | Prettier                                                              |
-| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`          |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                          |
+| Command                                                     | Description                                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)             |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                    |
+| `bun run build`                                             | Build the web app                                                        |
+| `bun run preview`                                           | Preview the production web build                                         |
+| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**    |
+| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                            |
+| `bun run format` / `format:check`                           | Prettier                                                                 |
+| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                             |
 
 `bun run test:api` and `bun run test:web` need the local stack; `test:web` also
 starts an API automatically.
 
 ## Deploying
 
-Production is one Lambda (API + SPA) behind an HTTP API, an S3 media bucket, and
-an optional custom domain, all described in `infra/cdk`. Deploy through the
-script, not a bare `cdk deploy`:
+An environment is one Lambda (API + SPA) behind an HTTP API, an S3 media
+bucket, and an optional custom domain, all described in `infra/cdk`. There are
+two: production at `arcula.art` and dev at `dev.arcula.art`. Deploy through the
+scripts, not a bare `cdk deploy`:
 
 ```bash
-sh scripts/deploy-prod.sh
+sh scripts/build-lambda.sh prod   # or: dev — each writes its own artifact
+sh scripts/deploy-prod.sh         # or: sh scripts/deploy-dev.sh
 ```
 
-It builds the Lambda package (`scripts/build-lambda.sh`, smoked in a glibc
-container first), deploys via CDK, applies the migration, seeds, re-deploys with
-the real public URL, and runs `prod-verify` — a full end-to-end pass against the
-live site. See `infra/cdk/README.md` for the stack's context values and outputs.
+The two deploy scripts are thin wrappers over one shared sequence
+(`scripts/deploy.sh`): build the environment's CDK app, deploy, resolve the
+URL, apply the migration, seed the owner account, re-deploy with the real
+public URL, and run `deploy-verify` — a full end-to-end pass against the live
+site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
+production's fallback), which is gitignored; see `infra/cdk/README.md` for the
+stack's context values and outputs.
+
+`scripts/provision-cert.mjs <host>` provisions a host's TLS certificate and
+prints the DNS records to publish, `scripts/provision-oidc.mjs` provisions the
+GitHub OIDC provider and the two branch-pinned deploy roles, and
+`sh scripts/reset-dev.sh --yes` drops the dev schema and empties the dev bucket.
 
 ## Project structure
 
