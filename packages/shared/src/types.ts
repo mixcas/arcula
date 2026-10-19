@@ -39,6 +39,12 @@ export interface Collection {
   updatedAt?: Timestamp;
 }
 
+// The owner's choice for a work: `published` puts it in front of the
+// collection's gate, `draft` keeps it inside. Absent on a document written
+// before the field existed, and absent reads as `published` — the same reading
+// the old per-work flag gets.
+export type ArtworkStatus = "draft" | "published";
+
 // Artwork type
 //
 // Only `title` and `artistName` are required; every other descriptive field is
@@ -79,6 +85,11 @@ export interface Artwork {
   // by default in every write path — see packages/shared/src/schemas/artwork.ts.
   // Always written by the creating paths.
   isPublic: boolean;
+  // The owner's choice a visitor is gated on. Present beside the old flag
+  // while the sequence moves the API and the web onto it; absent on an older
+  // document and read as `published`. No code on this release branches on it —
+  // it is carried, not obeyed.
+  status?: ArtworkStatus;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
   // Add/Edit form has no such field, so editing a deleted work leaves it

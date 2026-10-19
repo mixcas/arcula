@@ -12,8 +12,8 @@ directly by both sides (one version, pinned once).
 The surface — `src/index.ts`, re-exported whole; importers use the bare package
 name, never a subpath:
 
-- `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkPhoto`,
-  `ArtworkDocument`, `Collection`, `ImageVariant`.
+- `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkStatus`,
+  `ArtworkPhoto`, `ArtworkDocument`, `Collection`, `ImageVariant`.
 - `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`,
   `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.

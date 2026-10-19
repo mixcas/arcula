@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Artwork, Collection } from "../types";
+import { artworkStatusSchema } from "./artwork";
 
 /**
  * The wire shape of the API's GET responses, parsed at the service boundary.
@@ -109,6 +110,9 @@ export const artworkReadSchema = z.object({
   photos: z.array(artworkPhotoReadSchema),
   collectionId: z.string(),
   isPublic: z.boolean(),
+  // Absent on a document written before the field, and read as published —
+  // the same reading the old flag gets when it is absent.
+  status: artworkStatusSchema.default("published"),
   deletedAt: wireTimestamp.nullable(),
   createdAt: wireTimestamp,
   updatedAt: wireTimestamp,
