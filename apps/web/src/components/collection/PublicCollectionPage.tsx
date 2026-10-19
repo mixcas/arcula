@@ -60,7 +60,7 @@ const PublicCollectionPage: React.FC = () => {
     // this page has always done.
     return (
       <Container size="xl" py="2rem">
-        <Text>No public artworks in this collection yet.</Text>
+        <Text>This collection has no artworks yet.</Text>
       </Container>
     );
   }

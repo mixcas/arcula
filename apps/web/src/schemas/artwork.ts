@@ -20,7 +20,8 @@ import type {
 
 /**
  * The 12 text fields a PATCH may set or clear — `null` clears, an absent key
- * leaves the stored value, a string sets.
+ * leaves the stored value, a string sets. `status` has no third state: the
+ * form always has one selected, and the patch carries it as it stands.
  *
  * The three-way decision per field is against the loaded values, not against
  * the schema: the schema says whether the *current* input is blank, and only
@@ -36,9 +37,11 @@ export const toArtworkUpdate = (
     // the cast.
     title: payload.title ?? "",
     artistName: payload.artistName ?? "",
-    // Always sent: the form owns the switch, and the patch contract wants the
-    // flag's value, not a change detection on it.
-    isPublic: payload.isPublic ?? true,
+    // Always sent, for the same reason as `title`: the form owns the control,
+    // and the PATCH wants the chosen value rather than a change detection on
+    // it. `loaded` says nothing about it, because there is no third state to
+    // decide against — a status is chosen, never cleared.
+    status: payload.status ?? "published",
   };
   for (const field of UPDATABLE_TEXT_FIELDS) {
     const next = payload[field];

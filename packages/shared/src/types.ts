@@ -78,17 +78,13 @@ export interface Artwork {
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
   collectionId: string; // Reference to parent collection
-  // Public visibility, owned by the artwork — independent of its collection's
-  // isPublic. A public collection may keep individual works private (and, by
-  // symmetry, a work flagged public stays readable by direct id even inside a
-  // private collection; the collection gate hides it from the page). Public
-  // by default in every write path — see packages/shared/src/schemas/artwork.ts.
-  // Always written by the creating paths.
+  // Retired: the API still answers this on the wire, derived from `status`,
+  // for readers written before the change. Nothing reads it — the web reads
+  // `status`, and the column behind it is dropped by the ticket that removes
+  // this field.
   isPublic: boolean;
-  // The owner's choice a visitor is gated on. Present beside the old flag
-  // while the sequence moves the API and the web onto it; absent on an older
-  // document and read as `published`. The API answers it and gates the visitor
-  // on it; the web still reads `isPublic`, which the API derives from it.
+  // The owner's choice, and the only per-work field a visitor is gated on.
+  // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
