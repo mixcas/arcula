@@ -1,6 +1,6 @@
 /**
  * The Lambda package smoke — run by `scripts/build-lambda.sh`
- * INSIDE a glibc Linux container (`node:20`, arm64). It proves the things
+ * INSIDE a glibc Linux container (`node:24`, arm64). It proves the things
  * the deploy must not learn in production:
  *
  *   1. the deploy bundle (index.js) loads and answers on the target

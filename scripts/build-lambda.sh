@@ -9,11 +9,12 @@
 # broken bundle or a Sharp prebuilt that does not load stops the build
 # instead of shipping.
 #
-# Runtime note: the target is the Lambda Node.js 20 runtime (glibc,
-# arm64). The AWS public ECR images are not reachable from this machine's
-# docker registry, so the smoke runs on `node:20` (Debian glibc, arm64) —
-# the same Node ABI and glibc the Lambda runtime has. The Lambda runtime
-# itself is verified by the real deploy.
+# Runtime note: the target is the Lambda Node.js 24 runtime — the stack
+# pins `NODEJS_24_X` (glibc, arm64). The AWS public ECR images are not
+# reachable from this machine's docker registry, so the smoke runs on
+# Docker Hub's `node:24` (Debian glibc, arm64): the same Node major and the
+# same libc as the runtime, which is what the Sharp prebuilt and the bundle
+# depend on. The Lambda runtime itself is verified by the real deploy.
 #
 # Postgres: the local dev database, reached over the compose network
 # (`arcula_default`, service `postgres`) — the same database the API
@@ -84,10 +85,10 @@ trap 'rm -f "$TMP_ENV"' EXIT
 sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://arcula:arcula@postgres:5432/arcula|" \
     "$ROOT/.env" > "$TMP_ENV"
 
-echo "==> smoke (node:20, glibc, arm64, compose network)"
+echo "==> smoke (node:24, glibc, arm64, compose network)"
 docker run --rm --platform linux/arm64 \
   --network arcula_default --env-file "$TMP_ENV" \
-  -v "$ROOT/$STAGE":/app -w /app node:20 \
+  -v "$ROOT/$STAGE":/app -w /app node:24 \
   sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
 
 # 5. Zip the package (the smoke files are not part of the deploy).
