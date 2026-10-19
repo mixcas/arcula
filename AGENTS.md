@@ -43,7 +43,11 @@ Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
 **`scripts/deploy.sh`** (cdk build → `cdk deploy` → resolve the URL → migrate →
 seed → re-deploy with the real `PUBLIC_URL` → `deploy-verify`).
 `sh scripts/build-lambda.sh <prod|dev>` builds that environment's zip first;
-`scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships.
+`scripts/lambda-smoke.mjs` smokes it in a glibc container before it ships —
+except on a CI runner, which sets `SKIP_LAMBDA_SMOKE=1` (it has no local
+stand-ins), where the deploy's own end-to-end pass on the deployed Lambda is
+the equivalent proof. `scripts/write-env-file.sh <env>` writes the
+environment's file from a CI run's GitHub Environment values.
 `scripts/provision-cert.mjs` and `scripts/provision-oidc.mjs` provision a
 host's certificate and the GitHub deploy roles; `scripts/reset-dev.sh --yes`
 drops the dev schema and empties the dev bucket.

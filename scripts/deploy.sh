@@ -70,7 +70,16 @@ CTX="-c ENV=$ENV -c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RE
 # ---- helpers ------------------------------------------------------------
 # A host that answers A or CNAME. A custom domain does not route until the
 # records below are published.
+#
+# `dig` is a real dependency: without it every lookup "fails", and a dev
+# deploy would take the unfinished-DNS path — printing records and exiting 0
+# — while claiming a verification it never ran. A CI runner that lacks it
+# stops here instead.
 host_resolves() {
+  command -v dig >/dev/null 2>&1 || {
+    echo "dig is required to tell whether $1 routes (install dnsutils)" >&2
+    exit 1
+  }
   { dig +short A "$1" || dig +short CNAME "$1"; } | grep -q .
 }
 
