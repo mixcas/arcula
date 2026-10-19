@@ -158,7 +158,9 @@ system.
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `collections`, `artworks`, `artworkPhotos`,
 `artworkPhotoVariants`, `artworkDocuments`) and the `schema` object the adapter
-consumes. `packages/db/migrations/` is generated, never hand-edited.
+consumes. `packages/db/migrations/` is generated; the only hand-added
+statement is a data backfill appended to the generated file (see
+`packages/db/README.md`).
 
 **`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
 the custom domain; the apex and `www` are **separate** `DomainName` pairs that

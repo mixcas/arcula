@@ -14,7 +14,10 @@ Layout:
   over a live driver, `drizzle-kit` reads it to generate migrations, and the
   tests assert its shape.
 - `migrations/` — generated SQL (`drizzle-kit generate --name init`),
-  committed. `db:reset`/`db:migrate` (in `apps/api`) apply it.
+  committed. The one hand-added statement is a **data backfill** appended
+  after generation, because drizzle-kit renders schema and never data: the
+  `0001_artwork_status` migration's `UPDATE … WHERE "isPublic" = false` is
+  the case. Nothing else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the composite indexes behind the owner and visitor lists,
@@ -32,5 +35,6 @@ disk) — the DOM-free guarantee is the `lib` array, and `@arcula/shared` is the
 client-contract side of the same wall.
 
 Regenerating a migration: `cd packages/db && bunx drizzle-kit generate` (after
-sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Never
-hand-edit `migrations/` — change `src/index.ts` and regenerate.
+sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
+`src/index.ts` and regenerate; the only hand-added line is a data backfill,
+appended to the generated file with a comment saying what it reads.
