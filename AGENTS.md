@@ -51,8 +51,10 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 
 **`apps/api/src/`**
 
-- `app.ts` — the Hono app: the error envelope, the `www`→apex redirect, CORS,
-  route mounting. `main.ts` runs it under Bun; `lambda.ts` is the Lambda handler.
+- `app.ts` — the Hono app: the error envelope, the `www`→configured-origin
+  redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
+  the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
+  holds the pure decisions derived from it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller; `authorize.ts` is the ownership/visibility check.

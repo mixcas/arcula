@@ -109,6 +109,21 @@ describe("the built SPA", () => {
   });
 });
 
+describe("with nothing dev-only configured", () => {
+  it("answers the SPA with no noindex header", async () => {
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+  });
+
+  it("does not special-case robots.txt — it falls through to the app shell", async () => {
+    const res = await app.request("/robots.txt");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(INDEX);
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+  });
+});
+
 describe("with no dist tree", () => {
   it("is inert: / is a plain 404 and the API is unaffected", async () => {
     process.env.WEB_DIST = join(distDir, "does-not-exist");

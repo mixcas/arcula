@@ -12,9 +12,10 @@ media pipeline, and — in production — serving the built SPA.
   format 2.0) to a `Request` and back. Two details carry the weight: `Set-Cookie`
   travels in the response's top-level `cookies` array (not `multiValueHeaders`),
   and binary bodies are base64-encoded.
-- `src/app.ts` — the Hono app: the `onError` error envelope, the `www.` → apex
-  308 redirect, CORS for the dev origin, `GET /api/health`, and the mounts
-  (`/api/auth` → Better Auth; `/api/v1` → the resource routes; then the SPA).
+- `src/app.ts` — the Hono app: the `onError` error envelope, the canonical-host
+  (`www` → configured origin) 308 redirect, CORS for the dev origin,
+  `GET /api/health`, and the mounts (`/api/auth` → Better Auth; `/api/v1` →
+  the resource routes; then the SPA).
 - `src/spa.ts` — serves the built SPA for every non-`/api` path (deep links
   included): `index.html` is never cached, hashed assets are immutable, and a
   missing dist tree leaves the middleware inert (Vite is the SPA in dev).
@@ -67,6 +68,10 @@ route exist to clean up.
 - `serialize.ts` — the exact wire shape of the `GET` responses.
 - `errors.ts` · `http.ts` · `env.ts` — the error envelope, body parsing +
   transactions, and the parsed environment.
+- `responsePolicy.ts` — the environment-derived response decisions as pure
+  functions: the canonical-host redirect, the health body, and the noindex
+  flag. `env.ts` reads their inputs once at import; the app hands them in, so
+  no environment's hostname or commit is written into the source.
 
 ## Development
 

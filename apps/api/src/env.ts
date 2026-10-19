@@ -17,7 +17,20 @@ export const corsOrigins: string[] = (
 // The web app's origin — where the links in the reset/verification mails
 // have to land. Locally the Vite dev server; in prod the same host
 // the static hosting serves from. A trailing slash is dropped: links are
-// built as `${clientOrigin}${pathname}`.
+// built as `${clientOrigin}${pathname}`. It is also the canonical host the
+// www redirect derives from (environment.ts), so no hostname lives in the
+// source.
 export const clientOrigin = (process.env.CLIENT_ORIGIN ?? "")
   .trim()
   .replace(/\/$/, "");
+
+// The commit this deployment was built from, when one is configured. The
+// dev environment sets it so `/api/health` answers "is my change live?" in
+// one request; production leaves it unset and the health body carries no
+// key at all.
+export const deployedCommit = (process.env.DEPLOYED_COMMIT ?? "").trim();
+
+// Dev-only: keep this environment out of search indexes. Unset everywhere
+// else, where both the header and the robots path behave exactly as they
+// always have.
+export const noindexFlag = process.env.NOINDEX;
