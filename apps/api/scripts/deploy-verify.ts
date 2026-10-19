@@ -1,5 +1,5 @@
-// prod-verify.ts — the end-to-end pass against a deployed Arcula.
-// Usage: cd apps/api && bun scripts/prod-verify.ts <base-url>
+// deploy-verify.ts — the end-to-end pass against a deployed Arcula.
+// Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
 // link + cache headers), sign-up (and that its cookie is `Secure`), /me,
@@ -14,7 +14,7 @@ import sharp from "sharp";
 
 const base = (process.argv[2] ?? "").replace(/\/$/, "");
 if (!base) {
-  console.error("usage: bun scripts/prod-verify.ts <base-url>");
+  console.error("usage: bun scripts/deploy-verify.ts <base-url>");
   process.exit(2);
 }
 
@@ -76,12 +76,12 @@ const post = (path: string, body: unknown, authed = false) =>
 // 3. Sign-up → session cookie.
 {
   const res = await post("/api/auth/sign-up/email", {
-    name: "Prod Verify",
+    name: "Deploy Verify",
     email,
     password: "verify-pass-12345",
   });
   const cookies = res.headers.getSetCookie();
-  // In prod the cookie is Secure and carries Better Auth's `__Secure-`
+  // In a deploy the cookie is Secure and carries Better Auth's `__Secure-`
   // prefix (the stack sets NODE_ENV=production and the bundle defines it),
   // so match the attribute-prefixed name.
   sessionCookie =
@@ -102,7 +102,7 @@ const post = (path: string, body: unknown, authed = false) =>
 // 4. The duplicate sign-up answers the native 422, over the gateway.
 {
   const res = await post("/api/auth/sign-up/email", {
-    name: "Prod Verify",
+    name: "Deploy Verify",
     email,
     password: "verify-pass-12345",
   });

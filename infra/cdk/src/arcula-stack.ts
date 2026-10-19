@@ -173,8 +173,8 @@ export class ArculaStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ExecuteApiUrl", { value: api.url! });
     new cdk.CfnOutput(this, "MediaBucket", { value: media.bucketName });
     // The deploy script reads this function's environment back to run the
-    // seed (deploy-prod.sh), so the Lambda is the one place prod's
-    // configuration is written.
+    // seed (scripts/deploy.sh), so the Lambda is the one place an
+    // environment's configuration is written.
     new cdk.CfnOutput(this, "ApiFunctionName", { value: fn.functionName });
 
     // An optional custom domain on the HTTP API.

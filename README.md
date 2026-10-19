@@ -252,18 +252,28 @@ starts an API automatically.
 
 ## Deploying
 
-Production is one Lambda (API + SPA) behind an HTTP API, an S3 media bucket, and
-an optional custom domain, all described in `infra/cdk`. Deploy through the
-script, not a bare `cdk deploy`:
+An environment is one Lambda (API + SPA) behind an HTTP API, an S3 media
+bucket, and an optional custom domain, all described in `infra/cdk`. There are
+two: production at `arcula.art` and dev at `dev.arcula.art`. Deploy through the
+scripts, not a bare `cdk deploy`:
 
 ```bash
-sh scripts/deploy-prod.sh
+sh scripts/build-lambda.sh prod   # or: dev — each writes its own artifact
+sh scripts/deploy-prod.sh         # or: sh scripts/deploy-dev.sh
 ```
 
-It builds the Lambda package (`scripts/build-lambda.sh`, smoked in a glibc
-container first), deploys via CDK, applies the migration, seeds, re-deploys with
-the real public URL, and runs `prod-verify` — a full end-to-end pass against the
-live site. See `infra/cdk/README.md` for the stack's context values and outputs.
+The two deploy scripts are thin wrappers over one shared sequence
+(`scripts/deploy.sh`): build the environment's CDK app, deploy, resolve the
+URL, apply the migration, seed the owner account, re-deploy with the real
+public URL, and run `deploy-verify` — a full end-to-end pass against the live
+site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
+production's fallback), which is gitignored; see `infra/cdk/README.md` for the
+stack's context values and outputs.
+
+`scripts/provision-cert.mjs <host>` provisions a host's TLS certificate and
+prints the DNS records to publish, `scripts/provision-oidc.mjs` provisions the
+GitHub OIDC provider and the two branch-pinned deploy roles, and
+`sh scripts/reset-dev.sh --yes` drops the dev schema and empties the dev bucket.
 
 ## Project structure
 

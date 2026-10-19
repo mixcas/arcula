@@ -16,6 +16,10 @@ cdk.out
 .env.development
 .env.local
 .env.*.local
+# per-environment deploy values (infra/cdk/.env.prod, .env.dev) — never
+# commit these; the shared infra/cdk/.env above is covered by `.env`
+infra/cdk/.env.*
+!infra/cdk/.env.example
 
 # local stack state (scripts/stack-up.sh): SeaweedFS data dir, pids, logs
 .stack/
