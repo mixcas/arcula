@@ -80,17 +80,30 @@ apex's.
 The order is forced: a host's routing target (a `d-…` endpoint) does not
 exist until the stack has been deployed once.
 
-1. The environment's Postgres project exists out of band, and
+1. **Bootstrap the account once**, with an identity that has administrator
+   access:
+
+   ```sh
+   cd infra/cdk && npx cdk bootstrap aws://<account>/us-east-1
+   ```
+
+   It is not part of a deploy and no deploy will do it for you: it writes the
+   `CDKToolkit` stack and the `cdk-*` roles, going straight at CloudFormation,
+   SSM, S3 and ECR, while the deploy identity may only _assume_ those roles
+   (`scripts/provision-oidc.mjs`). Running it from a laptop with admin
+   credentials once is the whole of it.
+
+2. The environment's Postgres project exists out of band, and
    `infra/cdk/.env.<env>` holds its `DATABASE_URL`, `AUTH_SECRET`,
    `RESEND_API_KEY`, `EMAIL_FROM`, `DOMAIN` and the `SEED_*` owner account.
-2. `node scripts/provision-cert.mjs <host>`: publish the validation record it
+3. `node scripts/provision-cert.mjs <host>`: publish the validation record it
    prints, wait for it to be issued, and put the ARN in the file as
    `CERT_ARN`.
-3. `sh scripts/build-lambda.sh <env>`, then `sh scripts/deploy-<env>.sh`. While
+4. `sh scripts/build-lambda.sh <env>`, then `sh scripts/deploy-<env>.sh`. While
    the host does not resolve, the deploy prints the routing records it waits
    on and finishes successfully instead of failing. Dev has finished its
    migrate and seed by then; production stops before touching the database.
-4. Publish those records against the stack's own regional endpoint (the apex
+5. Publish those records against the stack's own regional endpoint (the apex
    and www targets are printed), then run the deploy again: it continues,
    re-deploys with the real `PUBLIC_URL`, and verifies.
 
