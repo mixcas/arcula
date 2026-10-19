@@ -1,0 +1,7 @@
+{
+  "app": "node dist/main.js",
+  "context": {
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:enablePartitionLiterals": true
+  }
+}

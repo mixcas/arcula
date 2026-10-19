@@ -1,0 +1,23 @@
+{
+  "name": "@arcula/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "drizzle-kit": "0.31.11",
+    "vitest": "5.0.2"
+  }
+}
