@@ -25,6 +25,8 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  *
  * `isPublic` is intentionally NOT a mappable column: imported works inherit the
  * app-wide public-by-default posture and can be flipped per-work afterwards.
+ * `status` is pinned the same way, to `published` — an import is the owner
+ * adding works to a collection, not a way to declare them drafts.
  */
 
 // ---------------------------------------------------------------------------
@@ -504,12 +506,16 @@ export const attachIssues = (rows: ImportRow[]): ReviewRow[] =>
 /**
  * Validate one row against the same schema as the Add/Edit forms. The schema's
  * messages are reused verbatim so the fix instructions match everywhere, and
- * `isPublic` is pinned to the app-wide default.
+ * `isPublic` and `status` are pinned to the app-wide defaults.
  */
 export const validateImportRow = (
   values: ImportRowValues,
 ): ImportRowIssue[] => {
-  const parsed = artworkSchema.safeParse({ ...values, isPublic: true });
+  const parsed = artworkSchema.safeParse({
+    ...values,
+    isPublic: true,
+    status: "published",
+  });
   if (parsed.success) {
     return [];
   }
