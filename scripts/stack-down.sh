@@ -8,24 +8,15 @@
 
 set -eu
 
-if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
-  WANT="postgres s3 mailpit"
-else
-  WANT=""
-  for s in "$@"; do
-    case "$s" in
-      # `api` is opt-in, never part of the default: a dev API started by
-      # `bun run dev` must survive a plain stack-down.
-      postgres | s3 | mailpit | api) WANT="$WANT $s" ;;
-      *) printf 'unknown service: %s (postgres | s3 | mailpit | api | all)\n' "$s" >&2
-         exit 2 ;;
-    esac
-  done
-  WANT=${WANT# }
-fi
-
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT
+. "$ROOT/scripts/services.sh"
+
+if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
+  WANT="$STACK_SERVICES"
+else
+  validate_services "$STACK_SERVICES_WITH_API" "$@"
+fi
 
 for s in $WANT; do
   case "$s" in

@@ -13,40 +13,19 @@
 
 set -eu
 
-if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
-  WANT="postgres s3 mailpit"
-else
-  WANT=""
-  for s in "$@"; do
-    case "$s" in
-      postgres | s3 | mailpit) WANT="$WANT $s" ;;
-      *) printf 'unknown service: %s (postgres | s3 | mailpit | all)\n' "$s" >&2
-         exit 2 ;;
-    esac
-  done
-  WANT=${WANT# }
-fi
-
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT
+. "$ROOT/scripts/services.sh"
+
+if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
+  WANT="$STACK_SERVICES"
+else
+  validate_services "$STACK_SERVICES" "$@"
+fi
+
 set -a
 . "$ROOT/.env"
 set +a
-
-# Wait until the probe command $1 succeeds, at most $2 seconds ($3 = label).
-wait_ready() {
-  i=0
-  while [ "$i" -lt "$2" ]; do
-    if sh -c "$1" 2>/dev/null; then
-      echo "$3: ready"
-      return 0
-    fi
-    i=$((i + 1))
-    sleep 1
-  done
-  echo "$3: not ready after ${2}s" >&2
-  return 1
-}
 
 ensure_postgres() {
   if docker-compose exec -T postgres pg_isready -U arcula -d arcula >/dev/null 2>&1; then

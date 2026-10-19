@@ -17,7 +17,7 @@ cdk.out
 .env.local
 .env.*.local
 
-# local stack state (scripts/stack-up.sh): MinIO data dir, pids, logs
+# local stack state (scripts/stack-up.sh): SeaweedFS data dir, pids, logs
 .stack/
 
 # misc
