@@ -541,6 +541,33 @@ describe("POST …/artworks", () => {
     expect(err.error.fields?.artworkId).toBeDefined();
   });
 
+  it("rejects an entry id another artwork already holds", async () => {
+    const holder = uuid();
+    const entryId = entry("taken");
+    await stageAndProcessPhoto(holder, entryId);
+    expect(
+      (
+        await createArtwork({
+          artworkId: holder,
+          title: "Holder",
+          artistName: "C. Cas",
+          photos: [{ entryId, name: "taken.jpg" }],
+        })
+      ).status,
+    ).toBe(201);
+
+    const res = await createArtwork({
+      artworkId: uuid(),
+      title: "Thief",
+      artistName: "C. Cas",
+      photos: [{ entryId, name: "taken.jpg" }],
+    });
+    expect(res.status).toBe(400);
+    const err = await json<WireError>(res);
+    expect(err.error.code).toBe("validation");
+    expect(err.error.fields?.photos).toBeDefined();
+  });
+
   it("refuses more photos than the cap", async () => {
     const photos = Array.from({ length: MAX_ARTWORK_PHOTOS + 1 }, (_, i) => ({
       entryId: `p-${i}`,

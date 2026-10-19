@@ -45,11 +45,8 @@ import {
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { parseBody, safeTx, type Tx } from "../http";
-import {
-  finalDocumentPrefix,
-  finalPhotoPrefix,
-  parseMediaKey,
-} from "../media/keys";
+import { parseMediaKey } from "../media/keys";
+import { POPULATIONS, type PopulationKind } from "../media/populations";
 import { promoteEntry, type PromotedObject } from "../media/promote";
 import { deleteObject, listObjects } from "../storage";
 import { serializeArtwork, type ArtworkJoined } from "../serialize";
@@ -86,26 +83,20 @@ function checkUniqueEntryIds(entries: StagedEntry[], field: string): void {
  * prevent: refuse it, like the artworkId collision check on create.
  */
 async function assertEntriesFree(
-  population: "photo" | "document",
+  kind: PopulationKind,
   entryIds: string[],
 ): Promise<void> {
   if (entryIds.length === 0) return;
-  const field = population === "photo" ? "photos" : "documents";
-  const taken =
-    population === "photo"
-      ? await db
-          .select({ id: artworkPhotosTable.id })
-          .from(artworkPhotosTable)
-          .where(inArray(artworkPhotosTable.id, entryIds))
-      : await db
-          .select({ id: artworkDocumentsTable.id })
-          .from(artworkDocumentsTable)
-          .where(inArray(artworkDocumentsTable.id, entryIds));
+  const { population, table } = POPULATIONS[kind];
+  const taken = await db
+    .select({ id: table.id })
+    .from(table)
+    .where(inArray(table.id, entryIds));
   if (taken.length > 0) {
     throw new ApiError(
       "validation",
       `The entry id "${taken[0].id}" is already in use`,
-      { fields: { [field]: "An entry id is already in use" } },
+      { fields: { [population]: "An entry id is already in use" } },
     );
   }
 }
@@ -395,14 +386,12 @@ async function deleteFinalEntryObjects(
   userId: string,
   collectionId: string,
   artworkId: string,
-  population: "photo" | "document",
+  kind: PopulationKind,
   entryIds: string[],
 ): Promise<void> {
+  const { finalPrefix } = POPULATIONS[kind];
   for (const entryId of entryIds) {
-    const prefix =
-      population === "photo"
-        ? finalPhotoPrefix(userId, collectionId, artworkId, entryId)
-        : finalDocumentPrefix(userId, collectionId, artworkId, entryId);
+    const prefix = finalPrefix(userId, collectionId, artworkId, entryId);
     const keys = await listObjects(prefix);
     for (const key of keys) {
       const parsed = parseMediaKey(key);

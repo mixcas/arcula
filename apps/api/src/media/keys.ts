@@ -29,6 +29,20 @@ export const OBJECT_KEYS = [
 
 export type MediaPopulation = "photos" | "documents";
 
+/**
+ * The final entry's base. The two populations differ by this one segment —
+ * which is why the four builders below (and the table in `populations.ts`)
+ * name the population rather than their own copy of the shape.
+ */
+const finalBase = (
+  population: MediaPopulation,
+  userId: string,
+  collectionId: string,
+  artworkId: string,
+  entryId: string,
+): string =>
+  `artworks/${userId}/${collectionId}/${artworkId}/${population}/${entryId}`;
+
 export const finalPhotoKey = (
   userId: string,
   collectionId: string,
@@ -37,7 +51,7 @@ export const finalPhotoKey = (
   key: string,
   ext: string,
 ): string =>
-  `artworks/${userId}/${collectionId}/${artworkId}/photos/${entryId}_${key}.${ext}`;
+  `${finalBase("photos", userId, collectionId, artworkId, entryId)}_${key}.${ext}`;
 
 export const finalDocumentKey = (
   userId: string,
@@ -47,7 +61,7 @@ export const finalDocumentKey = (
   key: string,
   ext: string,
 ): string =>
-  `artworks/${userId}/${collectionId}/${artworkId}/documents/${entryId}_${key}.${ext}`;
+  `${finalBase("documents", userId, collectionId, artworkId, entryId)}_${key}.${ext}`;
 
 export const stagingOriginalKey = (
   userId: string,
@@ -80,7 +94,7 @@ export const finalPhotoPrefix = (
   artworkId: string,
   entryId: string,
 ): string =>
-  `artworks/${userId}/${collectionId}/${artworkId}/photos/${entryId}_`;
+  `${finalBase("photos", userId, collectionId, artworkId, entryId)}_`;
 
 export const finalDocumentPrefix = (
   userId: string,
@@ -88,7 +102,7 @@ export const finalDocumentPrefix = (
   artworkId: string,
   entryId: string,
 ): string =>
-  `artworks/${userId}/${collectionId}/${artworkId}/documents/${entryId}_`;
+  `${finalBase("documents", userId, collectionId, artworkId, entryId)}_`;
 
 /**
  * The prefixes that address one staged entry without its siblings.
