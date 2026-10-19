@@ -7,8 +7,7 @@
 //             (stage/process/discard/save/sweep) goes through here.
 //   visitor — the resource is public. The read paths combine this with
 //             their own per-resource rule (a collection's isPublic hides
-//             its page; an artwork's isPublic admits it by id even inside
-//             a private collection).
+//             its page; an artwork's status is what admits it by id).
 //
 // The split between "does not exist" (404) and "you may not see it"
 // matters for visitors: a private collection 403s, never 404s — the web

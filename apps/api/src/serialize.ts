@@ -250,7 +250,10 @@ export function serializeArtwork(
       ),
     ),
     collectionId: artwork.collectionId,
-    isPublic: artwork.isPublic,
+    status: artwork.status,
+    // Derived, not read: the old column is no longer consulted, and the wire
+    // keeps `isPublic` — from the status — until the web stops asking for it.
+    isPublic: artwork.status === "published",
     deletedAt: wireTimestamp(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),

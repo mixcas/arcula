@@ -285,7 +285,7 @@ describe("POST /collections/{cid}/import/csv", () => {
               acquisitionDate: "2024-05-01",
             },
             { artistName: "No Title" },
-            { title: "Blue No. 9", artistName: "C. Cas", isPublic: false },
+            { title: "Blue No. 9", artistName: "C. Cas", status: "draft" },
           ],
         }),
       },
@@ -316,17 +316,21 @@ describe("POST /collections/{cid}/import/csv", () => {
     expect(red.acquisitionDate).toBe("2024-05-01");
     // A blank optional field is an absent key, not an empty one.
     expect("media" in red).toBe(false);
-    // The row said nothing about isPublic: the schema default stands.
-    expect(red.isPublic).toBe(true);
+    // A row that names a status is not obeyed: an import is the owner adding
+    // works to a collection, so every imported work is published.
+    expect(red.status).toBe("published");
     expect(red.deletedAt).toBeNull();
-    expect(byTitle.get("Blue No. 9")!.isPublic).toBe(false);
+    expect(byTitle.get("Blue No. 9")!.status).toBe("published");
   });
 
-  it("keeps a private imported work off the visitor list", async () => {
+  it("puts every imported work on the visitor list, since all are published", async () => {
     const visitor = await json<Record<string, unknown>[]>(
       await req("GET", `/api/v1/collections/${studyWallId}/artworks`),
     );
-    expect(visitor.map((w) => w.title)).toEqual(["Red No. 7"]);
+    expect(visitor.map((w) => w.title).sort()).toEqual([
+      "Blue No. 9",
+      "Red No. 7",
+    ]);
   });
 
   it("403s a non-owner, 401s an anonymous call, 400s a non-array rows", async () => {

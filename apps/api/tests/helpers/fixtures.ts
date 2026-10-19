@@ -41,7 +41,7 @@ export async function makeArtwork(
     collectionId,
     title: "Test Artwork",
     artistName: "Test Artist",
-    isPublic: true,
+    status: "published",
     deletedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
