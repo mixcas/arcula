@@ -10,6 +10,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { artworks as artworksTable } from "@arcula/db";
 import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import { canSeeArtwork } from "../src/access";
+import { loadArtworkInCollection, loadCollection } from "../src/authorize";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -120,11 +122,13 @@ interface WireError {
 // ---------------------------------------------------------------------------
 
 let owner: Awaited<ReturnType<typeof freshUser>>;
+let visitor: Awaited<ReturnType<typeof freshUser>>;
 let cid: string;
 let privateCid: string;
 
 beforeAll(async () => {
   owner = await freshUser("Save");
+  visitor = await freshUser("SaveVisitor");
   cid = await makeCollection(owner.userId, { isPublic: true });
   privateCid = await makeCollection(owner.userId, { isPublic: false });
 });
@@ -889,12 +893,17 @@ describe("GET reads", () => {
     expect(visitorIds).not.toContain(del);
   });
 
-  it("answers the visitor list and the single read the same way for one fixture", async () => {
-    // The two declarations meet here: the list is a SQL filter over `status`,
-    // the single read is a verdict over a loaded row. A draft in a public
-    // collection is in neither answer.
+  it("answers the visitor list, the single read and the verdict the same way for one fixture", async () => {
+    // The two declarations meet here: the list is a SQL filter over `status`
+    // and `deletedAt`, the single read is the pure verdict in access.ts over
+    // the loaded rows. A draft or a deleted work of a public collection is in
+    // none of the three answers; a published, live one is in all of them.
     const pub = await insertRow(cid, { status: "published" });
     const draft = await insertRow(cid, { status: "draft" });
+    const del = await insertRow(cid, { status: "published", deleted: true });
+
+    const collection = await loadCollection(cid);
+    if (!collection) throw new Error("the fixture collection is missing");
 
     const visitorList = await json<WireArtwork[]>(
       await listArtworks(undefined),
@@ -904,10 +913,14 @@ describe("GET reads", () => {
     for (const [id, listed] of [
       [pub, true],
       [draft, false],
+      [del, false],
     ] as const) {
-      const single = await getArtwork(id);
-      expect(visitorIds.includes(id)).toBe(listed);
-      expect(single.status).toBe(listed ? 200 : 404);
+      const row = await loadArtworkInCollection(cid, id);
+      if (!row) throw new Error("the fixture row is missing");
+      const verdict = canSeeArtwork(null, collection, row);
+      expect(verdict).toBe(listed);
+      expect(visitorIds.includes(id)).toBe(verdict);
+      expect((await getArtwork(id)).status).toBe(verdict ? 200 : 404);
     }
   });
 
@@ -919,30 +932,21 @@ describe("GET reads", () => {
     expect(err.error.code).toBe("forbidden");
   });
 
-  it("lets a visitor read a public work by id even inside a private collection", async () => {
-    const aid = uuid();
-    const created = await req(
-      "POST",
-      `/api/v1/collections/${privateCid}/artworks`,
-      {
-        cookies: owner.cookies,
-        body: JSON.stringify({
-          artworkId: aid,
-          title: "Visible",
-          artistName: "C. Cas",
-          status: "published",
-        }),
-      },
-    );
-    expect(created.status).toBe(201);
-    const asVisitor = await req(
-      "GET",
-      `/api/v1/collections/${privateCid}/artworks/${aid}`,
-    );
-    expect(asVisitor.status).toBe(200);
-    const body = await json<WireArtwork>(asVisitor);
-    expect(body.id).toBe(aid);
-    expect(body.status).toBe("published");
+  it("hides a published work inside a private collection from a stranger and an anonymous reader", async () => {
+    // The case ADR-0003 removes: the collection is the whole gate, so a
+    // direct id read no longer reaches a work hidden behind it.
+    const aid = await insertRow(privateCid, { status: "published" });
+    const path = `/api/v1/collections/${privateCid}/artworks/${aid}`;
+
+    const anon = await req("GET", path);
+    expect(anon.status).toBe(404);
+
+    const asVisitor = await req("GET", path, { cookies: visitor.cookies });
+    expect(asVisitor.status).toBe(404);
+
+    const asOwner = await req("GET", path, { cookies: owner.cookies });
+    expect(asOwner.status).toBe(200);
+    expect((await json<WireArtwork>(asOwner)).id).toBe(aid);
   });
 
   it("404s a visitor on a draft or deleted work; the owner still reads the deleted one", async () => {

@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { collections as collectionsTable } from "@arcula/db";
 import { MINTED_ID_RE } from "@arcula/shared";
+import { canSeeCollection } from "../src/access";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 
@@ -133,6 +134,14 @@ describe("GET /collections", () => {
     expect(anonNames).toContain("Study Wall");
     expect(anonNames).not.toContain("AAA Test Wall");
     expect(anonNames).not.toContain("Private Wall");
+
+    // The public list's SQL filter is the anonymous verdict in access.ts
+    // spelled in SQL: every row it returns is one canSeeCollection admits.
+    for (const row of anon) {
+      expect(
+        canSeeCollection(null, row as { userId: string; isPublic: boolean }),
+      ).toBe(true);
+    }
   });
 });
 

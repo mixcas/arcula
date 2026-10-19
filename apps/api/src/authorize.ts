@@ -1,13 +1,11 @@
 // Resource authorization for /api/v1: load a row, check the caller
 // against it, and hand the route a row it can trust.
 //
-// Two access shapes:
+//   owner — the session user owns the row. Every write path
+//           (stage/process/discard/save/sweep) goes through here.
 //
-//   owner   — the session user owns the collection. Every write path
-//             (stage/process/discard/save/sweep) goes through here.
-//   visitor — the resource is public. The read paths combine this with
-//             their own per-resource rule (a collection's isPublic hides
-//             its page; an artwork's status is what admits it by id).
+// The visitor rule itself is not spelled out here: the read paths call the
+// pure verdicts in access.ts over rows they have already loaded.
 //
 // The split between "does not exist" (404) and "you may not see it"
 // matters for visitors: a private collection 403s, never 404s — the web
@@ -19,6 +17,7 @@ import {
   artworks as artworksTable,
   collections as collectionsTable,
 } from "@arcula/db";
+import { canSeeCollection } from "./access";
 import { db } from "./db";
 import { ApiError } from "./errors";
 import { resolveSession } from "./session";
@@ -77,8 +76,7 @@ export async function requireReadableCollection(
     throw new ApiError("not-found", "The collection does not exist");
   }
   const session = await resolveSession(c);
-  const isOwner = session !== null && collection.userId === session.user.id;
-  if (!isOwner && !collection.isPublic) {
+  if (!canSeeCollection(session?.user.id ?? null, collection)) {
     throw new ApiError("forbidden", "This collection is private");
   }
   return collection;
