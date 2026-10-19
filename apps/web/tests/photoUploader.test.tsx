@@ -316,6 +316,43 @@ describe("PhotoUploader", () => {
     expect(screen.queryByText(/^notes\.pdf$/)).toBeNull();
   });
 
+  it("keeps the validator's reason when the hook refuses another in the same drop", async () => {
+    // The two rejection paths fire in one drop here, and they are not the same
+    // tick: the Dropzone's validator refuses the PDF synchronously, and the
+    // hook's refusal of the JPEG settles with the staging a moment later. The
+    // later list must be appended to the earlier one — a replacement erases the
+    // PDF's line, which is a message the user only ever sees go missing, so it
+    // is pinned rather than assumed.
+    vi.mocked(mediaService.stagePhoto).mockRejectedValue(
+      new ApiRequestError(400, "tooMany", "The file is too large", {
+        file: "The file is over 10 MB",
+      }),
+    );
+    await renderHarness();
+
+    const input = fileInput();
+    Object.defineProperty(input, "files", {
+      value: [
+        jpegFile("scan.jpg"),
+        new File([new Uint8Array([1])], "notes.pdf", {
+          type: "application/pdf",
+        }),
+      ],
+      configurable: true,
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("2 images could not be added"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText(/^notes\.pdf: /)).toBeInTheDocument();
+    expect(
+      screen.getByText("scan.jpg: The file is over 10 MB"),
+    ).toBeInTheDocument();
+  });
+
   it("surfaces the stage route's refusal with its own reason", async () => {
     // The size cap is the route's to answer, and its envelope carries the
     // prose: `fields.file` is the field-level message the form should show,

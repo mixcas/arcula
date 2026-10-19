@@ -1,20 +1,17 @@
 import React, { useState } from "react";
 import {
   ActionIcon,
-  Alert,
   Anchor,
   Box,
   Group,
   Image,
   Paper,
-  Progress,
   Stack,
   Text,
   ThemeIcon,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
-import { Dropzone, type FileRejection } from "@mantine/dropzone";
 import {
   IconFileText,
   IconFileTypePdf,
@@ -22,6 +19,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import ImagePreviewModal from "./ImagePreviewModal";
+import StagedDropzone from "./StagedDropzone";
 import type {
   DocumentEntry,
   UseArtworkDocuments,
@@ -55,8 +53,6 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
   description,
 }) => {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
-  const [rejected, setRejected] = useState<string[]>([]);
-
   // Only the images have a modal, so the preview is looked up by key rather than
   // by index: removing a row above the open one would otherwise silently show a
   // different document than the one that was clicked.
@@ -69,110 +65,27 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
       ? previewDocument
       : null;
 
-  const handleDrop = async (files: File[]) => {
-    const result = await documents.addFiles(files);
-    // Never swallowed. The accept list here is broader than the photos one, so
-    // a mixed drop rejecting half its files is an ordinary thing to do, and a
-    // file that silently vanished from the list is worse than a message.
-    //
-    // Appended, and skipped when empty: the reject handler below fires
-    // synchronously for the files the Dropzone's own validator refused, and
-    // this settles a tick later. Replacing here would erase that half of the
-    // list the moment the staging settled, and the two halves are disjoint —
-    // a file is either validator-refused or hook-processed, never both.
-    if (result.rejected.length === 0) {
-      return;
-    }
-    setRejected((current) => [
-      ...current,
-      ...result.rejected.map((entry) => `${entry.file.name}: ${entry.reason}`),
-    ]);
-  };
-
-  // The other rejection path, and the one that actually fires for an oversized
-  // file: Dropzone checks `maxSize` itself and never calls `onDrop`, so an
-  // unhandled `onReject` means a 30 MB PDF produces a one-frame flicker of
-  // "That file cannot be added" and no explanation. The 25 MiB cap makes that
-  // routine rather than exotic. This fires synchronously, before any staging
-  // has settled, so it starts the list and the hook's rejections are appended
-  // to it.
-  const handleReject = (failures: FileRejection[]) => {
-    setRejected(
-      failures.map(
-        (failure) =>
-          `${failure.file.name}: ${failure.errors
-            .map((error) => error.message)
-            .join(", ")}`,
-      ),
-    );
-  };
-
   return (
     <Stack gap="sm">
-      <Dropzone
-        onDrop={(files) => {
-          void handleDrop(files);
-        }}
-        // `accept` is enforced twice: the Dropzone's validator refuses a
-        // mismatch on the way in (the `onReject` path below), and the hook
-        // re-checks the same list for any caller that bypasses the component.
-        // Neither spends a round trip on a wrong type.
+      <StagedDropzone
         accept={ACCEPTED_DOCUMENT_TYPES}
         maxSize={MAX_DOCUMENT_BYTES}
-        maxFiles={Math.max(1, MAX_ARTWORK_DOCUMENTS - documents.count)}
-        disabled={!documents.hasRoom || documents.processing}
-        onReject={handleReject}
-      >
-        <Group
-          justify="center"
-          gap="xl"
-          mih={90}
-          style={{ pointerEvents: "none" }}
-        >
-          <Dropzone.Accept>
-            <Text size="sm">Add these documents</Text>
-          </Dropzone.Accept>
-          <Dropzone.Reject>
-            <Text size="sm">That file cannot be added</Text>
-          </Dropzone.Reject>
-          <Dropzone.Idle>
-            <Text size="sm">
+        room={MAX_ARTWORK_DOCUMENTS - documents.count}
+        processing={documents.processing}
+        progress={documents.progress}
+        onFiles={(files) => documents.addFiles(files)}
+        words={{
+          accept: "Add these documents",
+          idle: (
+            <>
               Drag files here, or click to choose up to{" "}
               {MAX_ARTWORK_DOCUMENTS - documents.count} more
-            </Text>
-          </Dropzone.Idle>
-        </Group>
-      </Dropzone>
-
-      {documents.processing && documents.progress ? (
-        <Progress
-          value={(documents.progress.done / documents.progress.total) * 100}
-          animated
-          aria-label="Preparing images"
-        />
-      ) : null}
-
-      {rejected.length > 0 ? (
-        <Alert
-          color="yellow"
-          icon={<IconPhoto size={16} />}
-          title={`${rejected.length} file${rejected.length === 1 ? "" : "s"} could not be added`}
-          withCloseButton
-          onClose={() => setRejected([])}
-        >
-          <Stack gap={2}>
-            {rejected.map((line, index) => (
-              // Indexed, not keyed on the line: two files can share a name and a
-              // reason — a folder of `scan.pdf`s is ordinary — and a duplicate
-              // key silently drops a row from the very alert meant to say what
-              // went missing.
-              <Text key={`${index}-${line}`} size="xs">
-                {line}
-              </Text>
-            ))}
-          </Stack>
-        </Alert>
-      ) : null}
+            </>
+          ),
+          noun: "file",
+          icon: <IconPhoto size={16} />,
+        }}
+      />
 
       {documents.entries.length === 0 ? (
         <Text size="sm" c="dimmed">
