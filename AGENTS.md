@@ -29,14 +29,14 @@ same-origin in production and there is no CORS to configure.
 
 All from the repo root (`bun run <script>`):
 
-| Command                                                     | What it does                                                               |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)         |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                      |
-| `bun run check`                                             | Typecheck all four packages + ESLint + Prettier — **the gate before a PR** |
-| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`   |
-| `bun run build`                                             | Build the web app                                                          |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                               |
+| Command                                                     | What it does                                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                   |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                |
+| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**                |
+| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
+| `bun run build`                                             | Build the web app                                                                    |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
 
 Deploy is a shell script, not a package script: **`sh scripts/deploy-prod.sh`**
 (build the Lambda package → `cdk deploy` → migrate → seed → re-deploy with the
@@ -209,8 +209,11 @@ restated here.
 
 ## Validation
 
-- `bun run check` (tsc ×4 + ESLint + Prettier) must pass before and after any
-  change, and before a PR.
+- `bun run check` (tsc over every package + ESLint + Prettier) must pass before
+  and after any change, and before a PR. The `infra/cdk` package is deliberately
+  not a workspace member and installs its own dependencies, so run
+  `cd infra/cdk && bun install` once before the check can resolve
+  `aws-cdk-lib`.
 - `bun run test` runs every suite; the API and web suites need the local stack
   (see Gotchas). `npx vitest run <file>` inside a package runs a single file.
 - Before writing a test, read **What to test** above. A green suite is not the

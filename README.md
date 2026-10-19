@@ -235,17 +235,17 @@ bun run db:seed
 
 All from the repo root:
 
-| Command                                                     | Description                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)          |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                 |
-| `bun run build`                                             | Build the web app                                                     |
-| `bun run preview`                                           | Preview the production web build                                      |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR** |
-| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                         |
-| `bun run format` / `format:check`                           | Prettier                                                              |
-| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`          |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                          |
+| Command                                                     | Description                                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)             |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                    |
+| `bun run build`                                             | Build the web app                                                        |
+| `bun run preview`                                           | Preview the production web build                                         |
+| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**    |
+| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                            |
+| `bun run format` / `format:check`                           | Prettier                                                                 |
+| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                             |
 
 `bun run test:api` and `bun run test:web` need the local stack; `test:web` also
 starts an API automatically.

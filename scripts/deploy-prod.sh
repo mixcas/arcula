@@ -17,6 +17,10 @@
 # against it.
 #
 # Values are read from infra/cdk/.env and never echoed.
+#
+# The app selects an environment by context and synthesises exactly one
+# stack, and the deploy still names its stack: an unattended deploy can only
+# ever touch production.
 
 set -eu
 
@@ -35,7 +39,7 @@ set +a
   echo "missing dist/lambda/arcula-api.zip — run: sh scripts/build-lambda.sh"; exit 1;
 }
 
-CTX="-c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RESEND_API_KEY=$RESEND_API_KEY"
+CTX="-c ENV=prod -c DATABASE_URL=$DATABASE_URL -c AUTH_SECRET=$AUTH_SECRET -c RESEND_API_KEY=$RESEND_API_KEY"
 [ -n "${EMAIL_FROM:-}" ] && CTX="$CTX -c EMAIL_FROM=$EMAIL_FROM"
 # Custom domain: only carried when both are set, and
 # CERT_ARN is required when DOMAIN is — the stack hard-fails synth
@@ -51,7 +55,7 @@ bun run build
 npx cdk bootstrap --region us-east-1
 
 echo "==> deploy 1 (values in, PUBLIC_URL placeholder)"
-npx cdk deploy --region us-east-1 --require-approval never $CTX
+npx cdk deploy "$STACK_NAME" --region us-east-1 --require-approval never $CTX
 
 if [ -n "${DOMAIN:-}" ]; then
   # Custom domain: the public origin is the domain itself — its
@@ -121,9 +125,9 @@ echo "==> db:seed (owner account from SEED_* — idempotent)"
 )
 
 echo "==> deploy 2 (PUBLIC_URL = $URL)"
-npx cdk deploy --region us-east-1 --require-approval never $CTX -c PUBLIC_URL="$URL"
+npx cdk deploy "$STACK_NAME" --region us-east-1 --require-approval never $CTX -c PUBLIC_URL="$URL"
 
 echo "==> verify"
 ( cd "$ROOT/apps/api" && bun scripts/prod-verify.ts "$URL" )
 
-echo "==> done. The beta is live at: $URL"
+echo "==> done. Production is live at: $URL"
