@@ -21,7 +21,7 @@ import {
   IconPhoto,
   IconTrash,
 } from "@tabler/icons-react";
-import PhotoPreviewModal from "./PhotoPreviewModal";
+import ImagePreviewModal from "./ImagePreviewModal";
 import type {
   DocumentEntry,
   UseArtworkDocuments,
@@ -197,8 +197,8 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
         </Text>
       ) : null}
 
-      <PhotoPreviewModal
-        photo={previewImage}
+      <ImagePreviewModal
+        image={previewImage}
         onClose={() => setPreviewKey(null)}
       />
     </Stack>

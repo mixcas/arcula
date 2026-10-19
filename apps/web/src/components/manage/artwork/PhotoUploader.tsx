@@ -30,7 +30,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { IconPhoto } from "@tabler/icons-react";
-import PhotoPreviewModal from "./PhotoPreviewModal";
+import ImagePreviewModal from "./ImagePreviewModal";
 import type { PhotoEntry, UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import {
   ACCEPTED_IMAGE_TYPES,
@@ -239,8 +239,8 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         </Text>
       ) : null}
 
-      <PhotoPreviewModal
-        photo={previewPhoto.photo}
+      <ImagePreviewModal
+        image={previewPhoto.photo}
         position={{
           current: previewPhoto.index + 1,
           total: photos.entries.length,
