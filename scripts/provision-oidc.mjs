@@ -87,7 +87,41 @@ const account = aws([
   "--output",
   "text",
 ]);
+
+// The repository's numeric IDs, which the OIDC subject now carries.
+//
+// GitHub moved to immutable subject claims: a token from a repository that
+// was created, renamed or transferred after 2026-07-15 presents
+//
+//   repo:owner@<owner-id>/repo@<repo-id>:environment:dev
+//
+// rather than `repo:owner/repo:environment:dev`. A trust policy written with
+// the names alone then matches nothing, and every deploy dies at assume-role
+// with "Not authorized to perform sts:AssumeRoleWithWebIdentity". The IDs do
+// not change when the repository is renamed, so they are also the spelling
+// that survives one.
+let repoIds;
+try {
+  repoIds = JSON.parse(
+    execFileSync(
+      "gh",
+      ["api", `repos/${repo}`, "--jq", "{ownerId: .owner.id, repoId: .id}"],
+      { encoding: "utf8" },
+    ),
+  );
+} catch (error) {
+  process.stderr.write(error.stderr ?? "");
+  console.error(
+    `could not read the repository's IDs with gh (needed for the OIDC subject) — ` +
+      "is gh installed and signed in?",
+  );
+  process.exit(2);
+}
+const [owner, name] = repo.split("/");
+const immutableRepo = `repo:${owner}@${repoIds.ownerId}/${name}@${repoIds.repoId}`;
+
 console.log(`==> account ${account}, repository ${repo}`);
+console.log(`    subject repo: ${immutableRepo}`);
 
 // The identity provider. AWS now derives the provider's CA from the URL, so
 // no thumbprint is supplied (a supplied one would be ignored).
@@ -147,10 +181,18 @@ for (const { branch, githubEnvironment, role, description } of BRANCHES) {
           // The branch, and the GitHub Environment the deploy job runs in:
           // a job that sets `environment:` presents `environment:<name>` as
           // its subject instead of the branch ref, so both are trusted.
+          //
+          // Both spellings of the repository's name are listed. The immutable
+          // one (with IDs) is what GitHub issues for this repository; the
+          // name-only one is what a repository created before 2026-07-15
+          // that has never been renamed still issues. Neither can be reached
+          // by a workflow this repository does not own.
           StringLike: {
             "token.actions.githubusercontent.com:sub": [
               `repo:${repo}:ref:refs/heads/${branch}`,
               `repo:${repo}:environment:${githubEnvironment}`,
+              `${immutableRepo}:ref:refs/heads/${branch}`,
+              `${immutableRepo}:environment:${githubEnvironment}`,
             ],
           },
         },
