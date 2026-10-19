@@ -99,24 +99,43 @@ EOF
 #    substitute: it names the real bucket, not the stand-in. DATABASE_URL is
 #    repointed at the compose service, which the container reaches by
 #    service name rather than localhost.
-cp scripts/lambda-smoke.mjs "$STAGE/lambda-smoke.mjs"
-[ -f "$ROOT/.env" ] || {
-  echo "missing $ROOT/.env — the smoke needs the local stand-ins' config" >&2
-  exit 1
-}
-TMP_ENV=$(mktemp)
-trap 'rm -f "$TMP_ENV"' EXIT
-sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://arcula:arcula@postgres:5432/arcula|" \
-    "$ROOT/.env" > "$TMP_ENV"
+#
+#    A CI runner has no compose network and no root .env, so a deploy
+#    workflow sets SKIP_LAMBDA_SMOKE=1. The install still happens — it is
+#    what puts the target platform's Sharp into the package — and only the
+#    smoke's assertions are skipped. Their equivalent on the runner is the
+#    deploy's own end-to-end pass, which drives this same pipeline through
+#    the deployed Lambda (a real 12 MP photo is part of it).
+#
+#    Skipping is a runner's privilege, not a switch: `CI` has to be set, so
+#    a stray `SKIP_LAMBDA_SMOKE=1` on a laptop cannot disarm the build. (The
+#    same guard, for the same reason, is what keeps db-seed from starting a
+#    stack in CI.)
+if [ -n "${CI:-}" ] && [ "${SKIP_LAMBDA_SMOKE:-}" = "1" ]; then
+  echo "==> smoke skipped on CI (SKIP_LAMBDA_SMOKE=1): installing the target package only"
+  docker run --rm --platform linux/arm64 \
+    -v "$ROOT/$STAGE":/app -w /app node:24 \
+    sh -c "npm install --omit=dev --no-audit --no-fund"
+else
+  cp scripts/lambda-smoke.mjs "$STAGE/lambda-smoke.mjs"
+  [ -f "$ROOT/.env" ] || {
+    echo "missing $ROOT/.env — the smoke needs the local stand-ins' config" >&2
+    exit 1
+  }
+  TMP_ENV=$(mktemp)
+  trap 'rm -f "$TMP_ENV"' EXIT
+  sed -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://arcula:arcula@postgres:5432/arcula|" \
+      "$ROOT/.env" > "$TMP_ENV"
 
-echo "==> smoke (node:24, glibc, arm64, compose network)"
-docker run --rm --platform linux/arm64 \
-  --network arcula_default --env-file "$TMP_ENV" \
-  -v "$ROOT/$STAGE":/app -w /app node:24 \
-  sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
+  echo "==> smoke (node:24, glibc, arm64, compose network)"
+  docker run --rm --platform linux/arm64 \
+    --network arcula_default --env-file "$TMP_ENV" \
+    -v "$ROOT/$STAGE":/app -w /app node:24 \
+    sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
+fi
 
 # 5. Zip the package (the smoke files are not part of the deploy).
-rm "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
+rm -f "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
 echo "==> zipping"
 (cd "$STAGE" && zip -qr "$ROOT/$OUT" .)
 du -h "$OUT"

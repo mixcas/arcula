@@ -1,0 +1,25 @@
+# Every pull request into a long-lived branch is checked, and this check is
+# required on both branches, so a red gate blocks the merge rather than
+# being noticed afterwards.
+#
+# The job is named `check` and that name is the required context: a check
+# run is named after its job, and no other workflow here reuses it.
+#
+# The plain `pull_request` event, never `pull_request_target`: the repository
+# is public, and the fork-exposing variant would hand a fork the repository's
+# secrets. This workflow needs none — it reads the PR's code and nothing else.
+name: Check
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/check

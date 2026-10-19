@@ -1,0 +1,10 @@
+# The lockfile records `configVersion = 1`, which is what makes bun default
+# this workspace to its isolated (pnpm-style) linker. The repository is not
+# isolated-clean: `packages/shared` typechecks against a root `@types/node`
+# it does not declare, and `eslint.config.mjs` imports
+# `@typescript-eslint/parser` and `@typescript-eslint/eslint-plugin` directly
+# (alongside the `typescript-eslint` aggregate). Under the isolated linker a
+# fresh clone cannot run `bun run check` at all — every dependency has to be
+# declared first. Pin the flat layout until they are.
+[install]
+linker = "hoisted"

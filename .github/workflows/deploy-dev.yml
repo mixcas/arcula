@@ -1,0 +1,92 @@
+# Every push to dev deploys the dev environment through the same scripts a
+# laptop runs — the deploy sequence itself lives once, in scripts/deploy.sh,
+# and nothing here restates it. The porcelain around that call (toolchain,
+# installs, the artifact) repeats in deploy-prod.yml on purpose, so each
+# workflow reads end to end and a failed deploy points at a file that does
+# too.
+#
+# Configuration comes from the `dev` GitHub Environment, which is restricted
+# to the dev branch, so a workflow running anywhere else cannot read it. The
+# only AWS credential is the OIDC role: no long-lived key exists.
+name: Deploy dev
+
+on:
+  push:
+    branches: [dev]
+  # A half-finished deploy can be re-run without an empty commit.
+  workflow_dispatch:
+
+# A newer push supersedes a dev deploy still running: the disposable
+# environment should end up on the newest commit, not on a backlog of stale
+# ones. Production does not do this (see deploy-prod.yml).
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Named `gate`, not `check`: a check run's name is its job's, and `check` is
+  # the context branch protection requires — from check.yml alone. A second
+  # workflow reporting a job of the same name is the ambiguity the branch
+  # protection docs warn about.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/check
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-24.04-arm
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write this environment's file
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DOMAIN: ${{ vars.DOMAIN }}
+          CERT_ARN: ${{ vars.CERT_ARN }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          SEED_EMAIL: ${{ vars.SEED_EMAIL }}
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
+          SEED_NAME: ${{ vars.SEED_NAME }}
+          DEPLOYED_COMMIT: ${{ github.sha }}
+        run: sh scripts/write-env-file.sh dev
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE }}
+          aws-region: us-east-1
+      - name: Install the workspaces
+        run: bun install --frozen-lockfile
+      - name: Install the CDK app
+        working-directory: infra/cdk
+        run: bun install --frozen-lockfile
+      # The package is the environment's own artifact; build-lambda.sh writes
+      # it into dist/lambda/ and never uploads it as an artifact — on a public
+      # repository, artifacts are downloadable by anyone signed in. The smoke
+      # is skipped because the runner has no local stand-ins; the deploy's own
+      # end-to-end pass, on the deployed Lambda, is the equivalent proof.
+      - name: Build the dev artifact
+        run: sh scripts/build-lambda.sh dev
+        env:
+          SKIP_LAMBDA_SMOKE: "1"
+      # deploy.sh tells whether its host routes yet with dig, and a runner
+      # image does not promise it. Without it the dev path would take the
+      # "DNS unfinished" exit instead of verifying.
+      - name: Install dig
+        run: sudo apt-get update && sudo apt-get install -y dnsutils
+      - name: Deploy
+        run: sh scripts/deploy-dev.sh
