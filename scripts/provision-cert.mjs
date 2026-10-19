@@ -87,20 +87,40 @@ const INTERVAL_MS = 10_000;
 let printedValidation = false;
 
 for (let attempt = 0; ; attempt++) {
-  const { Certificate: cert } = JSON.parse(
-    aws([
-      "acm",
-      "describe-certificate",
-      "--region",
-      REGION,
-      "--certificate-arn",
-      arn,
-      "--query",
-      "Certificate",
-      "--output",
-      "json",
-    ]),
-  );
+  const elapsed = ((attempt + 1) * INTERVAL_MS) / 1000;
+
+  // `--query Certificate` already projects into the Certificate key, so what
+  // comes back IS the certificate — there is no wrapper to unwrap. Reading
+  // `.Certificate` off it gave undefined and ended the run with a TypeError
+  // on its very first attempt.
+  //
+  // An empty body is a "wait" rather than a crash, which is also what an
+  // empty DomainValidationOptions list means below. A real CLI error (denied,
+  // wrong region) still throws from `aws()` and shows its stderr.
+  const body = aws([
+    "acm",
+    "describe-certificate",
+    "--region",
+    REGION,
+    "--certificate-arn",
+    arn,
+    "--query",
+    "Certificate",
+    "--output",
+    "json",
+  ]);
+  let cert;
+  try {
+    cert = JSON.parse(body || "null") ?? undefined;
+  } catch {
+    cert = undefined;
+  }
+
+  if (!cert) {
+    console.log(`     waiting for the certificate to appear (${elapsed}s)`);
+    await sleep(INTERVAL_MS);
+    continue;
+  }
 
   if (cert.Status === "FAILED") {
     console.error(`\ncertificate ${arn} failed validation`);
@@ -125,7 +145,6 @@ for (let attempt = 0; ; attempt++) {
     printedValidation = true;
   }
 
-  const elapsed = ((attempt + 1) * INTERVAL_MS) / 1000;
   console.log(`     waiting for validation: ${cert.Status} (${elapsed}s)`);
   await sleep(INTERVAL_MS);
 }
