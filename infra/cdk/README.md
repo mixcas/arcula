@@ -97,6 +97,12 @@ exist until the stack has been deployed once.
 The GitHub side — the two Environments, their configuration, and the two
 deploy roles `scripts/provision-oidc.mjs` creates — belongs to the pipeline.
 
+For dev, `sh scripts/setup-dev.sh` walks that sequence interactively: it opens
+each console, captures every value into `infra/cdk/.env.dev` (gitignored) and
+the `dev` GitHub Environment, dispatches the two pipeline deploys that the
+first run needs, and ends on the release. The list above is the shape it
+follows, so run it rather than repeating the steps by hand.
+
 ## Commands
 
 `bun run build` (emit `src/` to `dist/` via `tsconfig.build.json`) and
