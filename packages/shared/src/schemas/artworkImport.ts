@@ -24,9 +24,9 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  * validates each row against this same `artworkSchema`, so an imported work
  * lands byte-identical to one created by hand.
  *
- * `isPublic` is intentionally NOT a mappable column, and `status` is pinned to
- * `published`: an import is the owner adding works to a collection, not a way
- * to declare one a draft. A work can be turned into a draft afterwards, by id.
+ * `status` is not a mappable column either, and is pinned to `published`: an
+ * import is the owner adding works to a collection, not a way to declare one a
+ * draft. A work can be turned into a draft afterwards, by id.
  */
 
 // ---------------------------------------------------------------------------
@@ -513,14 +513,13 @@ export const attachIssues = (rows: ImportRow[]): ReviewRow[] =>
 /**
  * Validate one row against the same schema as the Add/Edit forms. The schema's
  * messages are reused verbatim so the fix instructions match everywhere, and
- * `isPublic` and `status` are pinned to the app-wide defaults.
+ * `status` is pinned to the app-wide default.
  */
 export const validateImportRow = (
   values: ImportRowValues,
 ): ImportRowIssue[] => {
   const parsed = artworkSchema.safeParse({
     ...values,
-    isPublic: true,
     status: IMPORTED_WORK_STATUS,
   });
   if (parsed.success) {

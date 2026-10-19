@@ -196,17 +196,19 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         // `sortable` is not the default: without it the header renders as
         // plain text and clicking it does nothing at all.
         sortable: true,
-        // The privacy flag rides along in the title cell rather than claiming a
-        // column of its own: it is an attribute of the work, and a third
-        // data column for a single badge would crowd the actions.
+        // The status rides along in the title cell rather than claiming a
+        // column of its own: it is an attribute of the work, and a third data
+        // column for a single badge would crowd the actions. Only a draft is
+        // marked — published is the ordinary case, and badging it would make
+        // every row say the same thing.
         render: (artwork) => (
           <Group gap="xs" wrap="nowrap">
             <Text>{artwork.title}</Text>
-            {artwork.isPublic ? null : (
+            {artwork.status === "draft" ? (
               <Badge color="gray" variant="light" size="sm">
-                Private
+                Draft
               </Badge>
-            )}
+            ) : null}
           </Group>
         ),
       },

@@ -81,13 +81,9 @@ export const artworkSchema = z.object({
   notes: optionalText,
   condition: optionalText,
   currentValue: optionalText,
-  // Per-artwork public visibility, independent of the collection's own flag.
-  // Public by default — a work is visible to visitors unless the owner
-  // explicitly turns it off in the Add/Edit form.
-  isPublic: z.boolean().default(true),
-  // The owner's own state for the work, carried beside the old flag while the
-  // sequence moves the API and the web onto it. Published by default, so a
-  // save that says nothing about it puts the work in front of the gate.
+  // Published by default, so a save that says nothing about it puts the work
+  // in front of the collection's gate. The collection is the only gate on a
+  // visitor (ADR-0003); this is the owner's own choice within it.
   status: artworkStatusSchema.default("published"),
 });
 
@@ -117,7 +113,6 @@ export interface ArtworkFormValues {
   notes: string;
   condition: string;
   currentValue: string;
-  isPublic: boolean;
   status: ArtworkStatus;
 }
 
@@ -151,7 +146,6 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   notes: "",
   condition: "",
   currentValue: "",
-  isPublic: true,
   status: "published",
 };
 
@@ -194,11 +188,8 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   notes: artwork.notes ?? "",
   condition: artwork.condition ?? "",
   currentValue: artwork.currentValue ?? "",
-  // A stored work without the field predates the public default; treat it as
-  // public, consistent with how new works are written.
-  isPublic: artwork.isPublic ?? true,
-  // Likewise: an absent status is a document written before the field, and
-  // reads as published.
+  // An absent status is a document written before the field, and reads as
+  // published.
   status: artwork.status ?? "published",
 });
 
@@ -258,8 +249,8 @@ export type ArtworkCreatePayload = z.infer<typeof artworkCreateSchema>;
  * the form hands to its submit handler (`transformValues: toArtworkPayload`),
  * and a caller holding raw form values runs them through the schema first:
  * one parse, in one place. The cast is safe: the schema guarantees
- * `title`, `artistName`, `isPublic` and `status` on a valid submit, and the
- * three added keys are exactly what `artworkCreateSchema.extend` requires on
+ * `title`, `artistName` and `status` on a valid submit, and the three added
+ * keys are exactly what `artworkCreateSchema.extend` requires on
  * top of the payload.
  */
 export const toArtworkCreatePayload = (

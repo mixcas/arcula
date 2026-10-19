@@ -111,7 +111,7 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   collectionId: COLLECTION_ID,
   title: "Estudio en rojo",
   artistName: "María López",
-  isPublic: true,
+  status: "published",
   documents: [],
   photos: [],
   ...overrides,
