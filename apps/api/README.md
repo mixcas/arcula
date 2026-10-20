@@ -52,8 +52,10 @@ route exist to clean up.
 ## Sharing (invitations built)
 
 The read and write sides of sharing are built, and so is the invitation loop —
-create, mail, preview, accept and decline. The rest of access administration
-(access card, resend, revoke, remove, leave, transfer) is not.
+create, mail, preview, accept and decline — with the owner's administration of
+the offers (the access read, resend, revoke) and the invitee's in-app list.
+The rest of access administration (the access card's UI, remove, leave,
+transfer) is not.
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
 accepted design for all of it.
 
@@ -82,8 +84,14 @@ pending row and mails `CLIENT_ORIGIN/invite/:token`; the public
 `GET /invitations/:token` previews it, and the invited account accepts or
 declines with that token. The raw token is never stored — only its SHA-256
 hash — and acceptance needs both the token and a session whose email matches.
-Still not built: resend, revoke, the access card, collaborator removal,
-leaving, ownership transfer and `GET /me/invitations`.
+`GET /collections/:id/access` is the access read: the caller's role, the owner
+and the collaborators to every member, plus the pending invitations (expired
+ones included) to the owner alone. Resend rotates the token, the expiry and the
+issue time on the same pending row, once every 60 seconds; revoke records the
+resolution. The invitee's `GET /me/invitations` lists the pending, unexpired
+offers for their own address — never a token — and the in-app decline answers
+`not-found` for anything that is not their own live offer. Still not built:
+collaborator removal, leaving and ownership transfer.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |
@@ -103,7 +111,8 @@ A malformed email is `validation` (400); a state conflict is `conflict` (409); a
 collaborator attempting an owner-only access change is `forbidden` (403); a
 wrong-account acceptance is `forbidden` with the invited email in `details`; an
 invalid, expired, revoked, consumed or unknown invitation token is one
-`not-found`. The SPA's landing page is `/invite/:token`; the API preview is
+`not-found`, and so is the in-app decline of anything that is not the caller's
+own live offer. The SPA's landing page is `/invite/:token`; the API preview is
 `GET /invitations/:token`.
 
 ## Modules

@@ -50,3 +50,32 @@ export function linkIn(text: string): URL {
   if (!match) throw new Error("the mail carries no link");
   return new URL(match[0]);
 }
+
+/** Every message addressed to `to`, newest first (Mailpit's own order). */
+export function mailsFor(to: string): Promise<MailpitMessage[]> {
+  return mailpitMessages().then((all) =>
+    all.filter((m) => m.To[0]?.Address.toLowerCase() === to.toLowerCase()),
+  );
+}
+
+/**
+ * Poll until a message for `to` arrives that is not one of `seen`. A resend
+ * mails the same address again, so the second delivery is only visible by
+ * comparing ids — `waitForMail` would keep answering with the first one.
+ */
+export async function waitForNewMail(
+  to: string,
+  seen: Iterable<string> = [],
+  timeoutMs = 8000,
+): Promise<MailpitMessage> {
+  const known = new Set(seen);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const found = (await mailsFor(to)).find((m) => !known.has(m.ID));
+    if (found) return found;
+    if (Date.now() > deadline) {
+      throw new Error(`no new mail for ${to} within ${timeoutMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}

@@ -3,7 +3,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  INVITATION_RESEND_COOLDOWN_MS,
   hashInvitationToken,
+  isInvitationResendable,
   isInvitationUsable,
   mintInvitationToken,
 } from "../src/invitations";
@@ -48,6 +50,55 @@ describe("isInvitationUsable", () => {
       expect(isInvitationUsable({ status, expiresAt: FUTURE }, NOW)).toBe(
         false,
       );
+    }
+  });
+});
+
+describe("isInvitationResendable", () => {
+  const issuedAgo = (ageMs: number) => ({
+    status: "pending",
+    createdAt: new Date(NOW.getTime() - ageMs),
+  });
+
+  it("allows a resend once the cooldown has passed", () => {
+    // The exact cooldown instant is already a different send.
+    expect(
+      isInvitationResendable(issuedAgo(INVITATION_RESEND_COOLDOWN_MS), NOW),
+    ).toBe(true);
+    expect(
+      isInvitationResendable(issuedAgo(INVITATION_RESEND_COOLDOWN_MS + 1), NOW),
+    ).toBe(true);
+  });
+
+  it("refuses a resend inside the cooldown, measured from the last send", () => {
+    expect(
+      isInvitationResendable(issuedAgo(INVITATION_RESEND_COOLDOWN_MS - 1), NOW),
+    ).toBe(false);
+    expect(isInvitationResendable(issuedAgo(0), NOW)).toBe(false);
+  });
+
+  it("allows an expired pending invitation to be resent: expiry is not a reason to refuse", () => {
+    // The owner must be able to revive a lapsed offer from the access card;
+    // only the clock on the last send and the status decide.
+    expect(
+      isInvitationResendable(
+        {
+          status: "pending",
+          createdAt: new Date(NOW.getTime() - 8 * 86_400_000),
+        },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses every resolved status, however old the row is", () => {
+    for (const status of ["accepted", "declined", "revoked"] as const) {
+      expect(
+        isInvitationResendable(
+          { status, createdAt: new Date(NOW.getTime() - 8 * 86_400_000) },
+          NOW,
+        ),
+      ).toBe(false);
     }
   });
 });
