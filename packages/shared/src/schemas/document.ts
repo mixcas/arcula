@@ -109,9 +109,8 @@ export const artworkReadSchema = z.object({
   documents: z.array(artworkDocumentReadSchema),
   photos: z.array(artworkPhotoReadSchema),
   collectionId: z.string(),
-  isPublic: z.boolean(),
-  // Absent on a document written before the field, and read as published —
-  // the same reading the old flag gets when it is absent.
+  // The owner's choice, and the only per-work field a visitor is gated on.
+  // Absent on a document written before it existed, and read as `published`.
   status: artworkStatusSchema.default("published"),
   deletedAt: wireTimestamp.nullable(),
   createdAt: wireTimestamp,

@@ -57,26 +57,26 @@ is yours to argue with.
 
 Early, and honest about what is missing:
 
-| Area                                                    | State                                            |
-| ------------------------------------------------------- | ------------------------------------------------ |
-| Email/password auth, protected routes                   | Working (Better Auth)                            |
-| Sign up                                                 | Working                                          |
-| Sign in / sign out, password reset by email             | Working                                          |
-| Account profile (name), change password                 | Working                                          |
-| Create, list, view, rename collections                  | Working                                          |
-| Collections per account                                 | One on the free tier, enforced by the API        |
-| Public/private flag per collection                      | Working                                          |
-| List a collection's artworks                            | Working                                          |
-| Add and edit an artwork                                 | Working                                          |
-| Per-artwork visibility flag (independent of collection) | Working                                          |
-| Public collection and single-artwork pages              | Working (the "skins")                            |
-| Photo uploads                                           | Working — server-side variants (5 + original)    |
-| "Other Documents" uploads (images and PDFs)             | Working; owner-only, enforced by the media proxy |
-| Soft delete of artworks (in bulk)                       | Working                                          |
-| Restore a soft-deleted artwork                          | API route present; no trash UI yet               |
-| CSV import of artworks                                  | Working                                          |
-| Private-collection password protection                  | Not implemented                                  |
-| Delete a collection, export, search                     | Not implemented (see the roadmap)                |
+| Area                                        | State                                            |
+| ------------------------------------------- | ------------------------------------------------ |
+| Email/password auth, protected routes       | Working (Better Auth)                            |
+| Sign up                                     | Working                                          |
+| Sign in / sign out, password reset by email | Working                                          |
+| Account profile (name), change password     | Working                                          |
+| Create, list, view, rename collections      | Working                                          |
+| Collections per account                     | One on the free tier, enforced by the API        |
+| Public/private flag per collection          | Working                                          |
+| List a collection's artworks                | Working                                          |
+| Add and edit an artwork                     | Working                                          |
+| Published/draft status per artwork          | Working; the collection is the gate              |
+| Public collection and single-artwork pages  | Working (the "skins")                            |
+| Photo uploads                               | Working — server-side variants (5 + original)    |
+| "Other Documents" uploads (images and PDFs) | Working; owner-only, enforced by the media proxy |
+| Soft delete of artworks (in bulk)           | Working                                          |
+| Restore a soft-deleted artwork              | API route present; no trash UI yet               |
+| CSV import of artworks                      | Working                                          |
+| Private-collection password protection      | Not implemented                                  |
+| Delete a collection, export, search         | Not implemented (see the roadmap)                |
 
 ### How access control works
 
@@ -88,10 +88,10 @@ proxies each object and re-checks visibility per request, so one authorization
 rule covers both the database row and the bytes. A photo is never more readable
 than the artwork it belongs to, and a document is owner-only.
 
-Two visibility flags exist and are independent: a collection may be public while
-individual works stay private, and a work flagged public is readable by direct
-id even inside a private collection (the collection gate hides it from the page,
-not from its own URL). Soft delete is a `deletedAt` stamp, not a removal: a
+The collection is the only gate: a visitor sees a published, live work exactly
+when its collection is public, and a draft, a deleted work and a private
+collection are one answer to them. A work is published or draft; it carries no
+visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
 deleted work disappears from every list without its bytes going anywhere.
 
 ## Architecture

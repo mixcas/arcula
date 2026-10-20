@@ -1,10 +1,9 @@
-// The contract speaks **status**: `draft` or `published`, beside the old
-// per-work flag rather than instead of it. These pin the two words and the
-// published default at every seam the sequence moves one end at a time: the
-// form and its payload, the PATCH body, and the wire read.
+// The contract speaks **status**: `draft` or `published`. These pin the two
+// words and the published default at every seam: the form and its payload, the
+// PATCH body, and the wire read.
 //
-// The old flag's behaviour is deliberately not restated here — nothing in this
-// release changes it.
+// The collection is the only gate, so there is no per-work visibility field
+// left to disagree with it (ADR-0003).
 
 import { describe, expect, it } from "vitest";
 import {
@@ -32,7 +31,6 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
   documents: [],
   photos: [],
   collectionId: "c1",
-  isPublic: true,
   deletedAt: null,
   createdAt: { seconds: 0, nanoseconds: 0 },
   updatedAt: { seconds: 0, nanoseconds: 0 },
@@ -47,7 +45,6 @@ const storedArtwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   artistName: "Whistler",
   documents: [],
   photos: [],
-  isPublic: true,
   ...overrides,
 });
 

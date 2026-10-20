@@ -40,7 +40,7 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  */
 export const IMPORTED_WORK_STATUS: ArtworkStatus = "published";
 
-/** Every writable artwork field an import may populate, minus `isPublic`. */
+/** Every writable artwork field an import may populate. */
 const IMPORTABLE_KEYS = [
   "title",
   "artistName",

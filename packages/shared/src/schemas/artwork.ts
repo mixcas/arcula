@@ -310,7 +310,6 @@ export const artworkUpdateSchema = z.object({
   notes: updatableText,
   condition: updatableText,
   currentValue: updatableText,
-  isPublic: z.boolean().optional(),
   // Carried, not obeyed: a PATCH that names it says what the owner chose, and
   // one that omits it leaves the stored value alone.
   status: artworkStatusSchema.optional(),

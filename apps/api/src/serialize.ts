@@ -251,10 +251,6 @@ export function serializeArtwork(
     ),
     collectionId: artwork.collectionId,
     status: artwork.status,
-    // Derived, not read: the old column is no longer consulted. The wire keeps
-    // `isPublic` — from the status — for readers written before the change;
-    // the web no longer reads it, and the field goes when the column does.
-    isPublic: artwork.status === "published",
     deletedAt: wireTimestamp(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),
