@@ -194,9 +194,14 @@ async function makeTwoPhotoArtwork(): Promise<{
 /** A bare artwork row, inserted directly (the route's job is tested elsewhere). */
 async function insertRow(
   collectionId: string,
-  opts: { status?: "draft" | "published"; deleted?: boolean } = {},
+  opts: {
+    id?: string;
+    status?: "draft" | "published";
+    deleted?: boolean;
+    createdAt?: Date;
+  } = {},
 ): Promise<string> {
-  const id = uuid();
+  const id = opts.id ?? uuid();
   const now = new Date();
   await db.insert(artworksTable).values({
     id,
@@ -206,7 +211,7 @@ async function insertRow(
     artistName: "C. Cas",
     status: opts.status ?? "published",
     deletedAt: opts.deleted ? now : null,
-    createdAt: now,
+    createdAt: opts.createdAt ?? now,
     updatedAt: now,
   });
   return id;
@@ -807,6 +812,102 @@ describe("GET reads", () => {
     expect(visitorIds).toContain(pub);
     expect(visitorIds).not.toContain(draft);
     expect(visitorIds).not.toContain(del);
+  });
+
+  it("answers every work on the page with its photos, documents and variants", async () => {
+    // Two published works, each with a photo and a document: a child loader
+    // that reads only the first work's id leaves the second row bare.
+    const first = uuid();
+    const second = uuid();
+    const firstPhoto = entry(`page-a-p-${uuid().slice(0, 8)}`);
+    const firstDoc = entry(`page-a-d-${uuid().slice(0, 8)}`);
+    const secondPhoto = entry(`page-b-p-${uuid().slice(0, 8)}`);
+    const secondDoc = entry(`page-b-d-${uuid().slice(0, 8)}`);
+
+    await stageAndProcessPhoto(first, firstPhoto);
+    await stageAndProcessDocument(first, firstDoc);
+    await stageAndProcessPhoto(second, secondPhoto);
+    await stageAndProcessDocument(second, secondDoc);
+
+    for (const [aid, photo, doc] of [
+      [first, firstPhoto, firstDoc],
+      [second, secondPhoto, secondDoc],
+    ] as const) {
+      const created = await createArtwork({
+        artworkId: aid,
+        title: "Page Work",
+        artistName: "C. Cas",
+        photos: [{ entryId: photo, name: "page.jpg" }],
+        documents: [{ entryId: doc, name: "page.jpg" }],
+      });
+      expect(created.status).toBe(201);
+    }
+
+    const list = await json<ArtworkRead[]>(await listArtworks(owner.cookies));
+    const rows = new Map(list.map((row) => [row.id, row]));
+
+    for (const [aid, photo, doc] of [
+      [first, firstPhoto, firstDoc],
+      [second, secondPhoto, secondDoc],
+    ] as const) {
+      const row = rows.get(aid);
+      if (!row) throw new Error("the listed work is missing");
+
+      expect(row.photos.map((p) => p.id)).toEqual([photo]);
+      // The Variants rode the batch too: they are this work's, not a
+      // neighbour's.
+      expect(row.photos[0].variants.length).toBeGreaterThan(0);
+      expect(row.photos[0].variants.every((v) => v.url.includes(aid))).toBe(
+        true,
+      );
+
+      expect(row.documents.map((d) => d.id)).toEqual([doc]);
+      const document = row.documents[0];
+      if (document.kind !== "image") {
+        throw new Error("expected an image document");
+      }
+      expect(document.variants.length).toBeGreaterThan(0);
+      expect(document.variants.every((v) => v.url.includes(aid))).toBe(true);
+    }
+  });
+
+  it("answers a list in creation-then-id order, the same on a repeated read", async () => {
+    const orderedCid = await makeCollection(owner.userId, { isPublic: true });
+    const shared = new Date("2026-01-02T03:04:05.000Z");
+    const late = await insertRow(orderedCid, {
+      createdAt: new Date("2026-01-03T00:00:00.000Z"),
+    });
+    // One timestamp between them: only the id can separate these two, and the
+    // row that sorts first is inserted last, so a read that leans on insertion
+    // order answers them the wrong way round.
+    const tieLater = await insertRow(orderedCid, {
+      id: `zzz-tie-${RUN}`,
+      createdAt: shared,
+    });
+    const tieEarlier = await insertRow(orderedCid, {
+      id: `aaa-tie-${RUN}`,
+      createdAt: shared,
+    });
+    const early = await insertRow(orderedCid, {
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    const path = `/api/v1/collections/${orderedCid}/artworks`;
+    const first = (await json<ArtworkRead[]>(await req("GET", path))).map(
+      (a) => a.id,
+    );
+    const again = (await json<ArtworkRead[]>(await req("GET", path))).map(
+      (a) => a.id,
+    );
+
+    expect(first).toEqual([early, tieEarlier, tieLater, late]);
+    expect(again).toEqual(first);
+  });
+
+  it("404s a list on a missing collection", async () => {
+    const res = await req("GET", `/api/v1/collections/${uuid()}/artworks`);
+    expect(res.status).toBe(404);
+    expect((await json<WireError>(res)).error.code).toBe("not-found");
   });
 
   it("answers the visitor list, the single read and the verdict the same way for one fixture", async () => {

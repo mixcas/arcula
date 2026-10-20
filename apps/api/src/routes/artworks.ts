@@ -16,12 +16,11 @@
 // Reader access: the owner always; a visitor on the collection's live
 // PUBLISHED works in the list, and a single work of a PUBLIC collection
 // when the work itself is published and live — the collection is the whole
-// gate (docs/adr/0003). The single read, and the read-back after a save,
-// go through artworkRead.ts; the list keeps its SQL filter and its rows are
-// read through the same module, with a test pinning the filter and the
-// verdict together.
+// gate (docs/adr/0003). The single read, the list read and the read-back
+// after a save all go through artworkRead.ts, which now owns the list's SQL
+// filter too; a test pins that filter and the verdict together.
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
   artworks as artworksTable,
   artworkDocuments as artworkDocumentsTable,
@@ -39,11 +38,10 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
-import { canSeeCollection, isOwner, type Viewer } from "../access";
-import { readArtwork } from "../artworkRead";
+import type { Viewer } from "../access";
+import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   loadArtworkById,
-  loadCollection,
   requireOwnedArtwork,
   requireOwnedCollection,
 } from "../authorize";
@@ -108,56 +106,21 @@ artworkRoutes.get(
 // GET list — owner: every live work; visitor: the published ones; private
 // collection: 403 (never 404 — the client maps the refusal to "private").
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
-  const collectionId = param(c, "collectionId");
-  const collection = await loadCollection(collectionId);
-  if (!collection) {
+  const session = await resolveSession(c);
+  const read = await readArtworkList(
+    param(c, "collectionId"),
+    session?.user.id ?? null,
+  );
+  if (read.status === "not-found") {
     throw new ApiError("not-found", "The collection does not exist");
   }
-  const session = await resolveSession(c);
-  const viewer = session?.user.id ?? null;
-
-  let rows: (typeof artworksTable.$inferSelect)[];
-  if (session !== null && isOwner(session.user.id, collection)) {
-    rows = await db
-      .select()
-      .from(artworksTable)
-      .where(
-        and(
-          eq(artworksTable.collectionId, collectionId),
-          eq(artworksTable.userId, session.user.id),
-          isNull(artworksTable.deletedAt),
-        ),
-      );
-  } else if (canSeeCollection(viewer, collection)) {
-    rows = await db
-      .select()
-      .from(artworksTable)
-      .where(
-        and(
-          eq(artworksTable.collectionId, collectionId),
-          eq(artworksTable.status, "published"),
-          isNull(artworksTable.deletedAt),
-        ),
-      );
-  } else {
+  if (read.status === "forbidden") {
     throw new ApiError(
       "forbidden",
       "You do not have access to this collection",
     );
   }
-
-  const out: ArtworkRead[] = [];
-  for (const row of rows) {
-    // The SQL filter above and the read's verdict are proved to agree on a
-    // fixture. If they ever disagree — a work unpublished between the two
-    // queries — the row is not visible, so it simply does not appear: the
-    // list fails closed rather than answering a work the read refuses.
-    // The list read batches this loop; until then every row reads through
-    // the one artwork module, so there is no second child loader.
-    const read = await readArtwork(collectionId, row.id, viewer);
-    if (read.status === "ok") out.push(read.artwork);
-  }
-  return c.json(out);
+  return c.json(read.artworks);
 });
 
 // POST — create the row and promote the staged entries, one transaction.
