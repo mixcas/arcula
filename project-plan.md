@@ -108,12 +108,17 @@ collection password protection is not built.
 optional descriptive fields `serie`, `dateOfCreation`, `media`, `dimensions`,
 `editions`, `acquisitionDate`, `acquisitionPrice`, `placeOfOrigin`, `provenance`,
 `notes`, `condition`, `currentValue` — all `text`, so the string that was typed
-is the string that is stored. Plus `isPublic` (default `true`), `deletedAt`
-(nullable), `createdAt`, `updatedAt`.
+is the string that is stored. Plus `status` (`published` or `draft`, default
+`published`), `deletedAt` (nullable), `createdAt`, `updatedAt`.
+
+The collection is the only gate on a visitor: a visitor sees a published, live
+work exactly when its collection is public. There is no per-work visibility
+flag — a work's only choice of its own is published or draft, and a draft counts
+as part of its collection.
 
 Three composite indexes back the two list queries and the create-time check: the
 owner list (`collectionId, userId, deletedAt`), the visitor list
-(`collectionId, isPublic, deletedAt`), and `collectionId` alone.
+(`collectionId, status, deletedAt`), and `collectionId` alone.
 
 ### `artwork_photos` and `artwork_documents`
 

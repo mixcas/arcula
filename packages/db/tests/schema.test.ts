@@ -71,6 +71,15 @@ const checksOf = (table: PgTable): Array<{ name?: string; sql: string }> =>
     sql: predicateOf(c.value),
   }));
 
+// The table's indexes, by name, as their ordered column names.
+const indexesOf = (table: PgTable): Record<string, string[]> =>
+  Object.fromEntries(
+    getTableConfig(table).indexes.map((i) => [
+      i.config.name ?? "",
+      i.config.columns.map((c) => (c as { name: string }).name),
+    ]),
+  );
+
 const TABLE_NAMES = [
   "user",
   "session",
@@ -83,17 +92,21 @@ const TABLE_NAMES = [
   "artworkDocuments",
 ];
 
-// The committed init migration: the DDL as it will actually be applied.
-const INIT_SQL = (() => {
-  const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
-  return readFileSync(pkgRoot + "migrations/0000_init.sql", "utf8");
-})();
+// A committed migration, read off disk: the DDL as it will actually be applied.
+const readMigration = (tag: string): string =>
+  readFileSync(
+    fileURLToPath(new URL("..", import.meta.url)) + `migrations/${tag}.sql`,
+    "utf8",
+  );
 
-// The committed migration that adds `status`, likewise as applied.
-const STATUS_SQL = (() => {
-  const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
-  return readFileSync(pkgRoot + "migrations/0001_artwork_status.sql", "utf8");
-})();
+// The committed init migration.
+const INIT_SQL = readMigration("0000_init");
+
+// The committed migration that adds `status`.
+const STATUS_SQL = readMigration("0001_artwork_status");
+
+// The committed migration that retires the old per-work visibility column.
+const DROP_SQL = readMigration("0002_drop_artwork_ispublic");
 
 describe("the nine-table schema", () => {
   it("declares exactly the nine tables, and `user` is singular", () => {
@@ -135,7 +148,7 @@ describe("the nine-table schema", () => {
     expect(v.expiresAt.notNull).toBe(true);
   });
 
-  it("artworks carries the descriptive fields, the old flag and its status, and no array columns", () => {
+  it("artworks carries the descriptive fields and its status, and no array columns", () => {
     const c = cols(artworks);
     expect(Object.keys(c)).toEqual([
       "id",
@@ -155,7 +168,6 @@ describe("the nine-table schema", () => {
       "notes",
       "condition",
       "currentValue",
-      "isPublic",
       "status",
       "deletedAt",
       "createdAt",
@@ -165,8 +177,6 @@ describe("the nine-table schema", () => {
     expect(c.artistName.notNull).toBe(true);
     // Money stays text.
     expect(c.currentValue.dataType).toBe("string");
-    expect(c.isPublic.notNull).toBe(true);
-    expect(c.isPublic.default).toBe(true);
     // The owner's gate, required and defaulting to published.
     expect(c.status.notNull).toBe(true);
     expect(c.status.default).toBe("published");
@@ -178,6 +188,16 @@ describe("the nine-table schema", () => {
     expect(checksOf(artworks)).toContainEqual({
       name: "artworks_status_check",
       sql: "\"status\" in ('draft', 'published')",
+    });
+  });
+
+  it("artworks carries the visitor index over the collection, the status and the deletion stamp", () => {
+    expect(indexesOf(artworks)).toMatchObject({
+      artworks_collection_status_deleted_idx: [
+        "collectionId",
+        "status",
+        "deletedAt",
+      ],
     });
   });
 
@@ -260,12 +280,9 @@ describe("the committed migration (as it will actually be applied)", () => {
     expect(INIT_SQL).toContain('PRIMARY KEY("parentId","key")');
   });
 
-  it("carries the composite indexes behind the owner/visitor lists", () => {
+  it("carries the owner-list, by-id and lookup indexes the init migration creates", () => {
     expect(INIT_SQL).toContain(
       'USING btree ("collectionId","userId","deletedAt")',
-    );
-    expect(INIT_SQL).toContain(
-      'USING btree ("collectionId","isPublic","deletedAt")',
     );
     expect(INIT_SQL).toMatch(
       /CREATE INDEX "artworks_collection_id_idx" ON "artworks" USING btree \("collectionId"\)/,
@@ -299,19 +316,25 @@ describe("the committed status migration (as it will actually be applied)", () =
     );
   });
 
-  it("backfills after the column exists: an old private work becomes a draft", () => {
+  it("backfills the status only after the column exists", () => {
     const adds = STATUS_SQL.indexOf(`ADD COLUMN "status"`);
-    const backfill = STATUS_SQL.indexOf(
-      `UPDATE "artworks" SET "status" = 'draft' WHERE "isPublic" = false`,
-    );
+    const backfill = STATUS_SQL.indexOf(`UPDATE "artworks" SET "status"`);
     expect(adds).toBeGreaterThan(-1);
     expect(backfill).toBeGreaterThan(adds);
   });
+});
 
-  it("leaves the old per-work flag and its index in place", () => {
-    expect(STATUS_SQL).not.toContain('DROP COLUMN "isPublic"');
-    expect(STATUS_SQL).not.toContain(
-      `DROP INDEX "artworks_collection_public_deleted_idx"`,
+describe("the committed drop migration (as it will actually be applied)", () => {
+  it("retires the old visibility column and the index built on it", () => {
+    expect(DROP_SQL).toContain('ALTER TABLE "artworks" DROP COLUMN "isPublic"');
+    expect(DROP_SQL).toContain(
+      'DROP INDEX "artworks_collection_public_deleted_idx"',
+    );
+  });
+
+  it("builds the visitor index over the collection, the status and the deletion stamp", () => {
+    expect(DROP_SQL).toMatch(
+      /CREATE INDEX "artworks_collection_status_deleted_idx" ON "artworks" USING btree \("collectionId","status","deletedAt"\)/,
     );
   });
 });

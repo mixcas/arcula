@@ -16,8 +16,8 @@ Layout:
 - `migrations/` — generated SQL (`drizzle-kit generate --name init`),
   committed. The one hand-added statement is a **data backfill** appended
   after generation, because drizzle-kit renders schema and never data: the
-  `0001_artwork_status` migration's `UPDATE … WHERE "isPublic" = false` is
-  the case. Nothing else is edited by hand.
+  `0001_artwork_status` migration's `UPDATE … SET "status" = 'draft'` from the
+  retired per-work flag is the case. Nothing else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the composite indexes behind the owner and visitor lists,

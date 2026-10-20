@@ -41,8 +41,7 @@ export interface Collection {
 
 // The owner's choice for a work: `published` puts it in front of the
 // collection's gate, `draft` keeps it inside. Absent on a document written
-// before the field existed, and absent reads as `published` — the same reading
-// the old per-work flag gets.
+// before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
 
 // Artwork type
@@ -78,11 +77,6 @@ export interface Artwork {
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
   collectionId: string; // Reference to parent collection
-  // Retired: the API still answers this on the wire, derived from `status`,
-  // for readers written before the change. Nothing reads it — the web reads
-  // `status`, and the column behind it is dropped by the ticket that removes
-  // this field.
-  isPublic: boolean;
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;

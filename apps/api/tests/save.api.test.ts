@@ -103,7 +103,6 @@ interface WireArtwork {
   title: string;
   artistName: string;
   collectionId: string;
-  isPublic: boolean;
   status: string;
   deletedAt: WireTimestamp | null;
   createdAt: WireTimestamp;
@@ -330,7 +329,6 @@ describe("POST …/artworks", () => {
       "deletedAt",
       "documents",
       "id",
-      "isPublic",
       "photos",
       "serie",
       "status",
@@ -340,7 +338,6 @@ describe("POST …/artworks", () => {
     ]);
     expect(body.userId).toBe(owner.userId);
     expect(body.collectionId).toBe(cid);
-    expect(body.isPublic).toBe(true);
     expect(body.status).toBe("published");
     expect(body.deletedAt).toBe(null);
     expect(body.serie).toBe("Early works");
@@ -435,29 +432,6 @@ describe("POST …/artworks", () => {
     });
     expect(silent.status).toBe(201);
     expect((await json<WireArtwork>(silent)).status).toBe("published");
-  });
-
-  it("answers from the status, not from the old column when they disagree", async () => {
-    // Only a row written before #24 can disagree — the migration backfilled
-    // every one — so the fixture makes the disagreement by hand. The API must
-    // answer from `status`: the column is no longer consulted.
-    const id = uuid();
-    const now = new Date();
-    await db.insert(artworksTable).values({
-      id,
-      userId: owner.userId,
-      collectionId: cid,
-      title: "Off Diagonal",
-      artistName: "C. Cas",
-      isPublic: true,
-      status: "draft",
-      deletedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const body = await json<WireArtwork>(await getArtwork(id, owner.cookies));
-    expect(body.status).toBe("draft");
-    expect(body.isPublic).toBe(false);
   });
 
   it("promotes a staged PDF document as a file with no variants", async () => {
