@@ -13,7 +13,7 @@
 // save leaves behind is exactly what the sweep and the staging lifecycle
 // exist to remove.
 //
-// Reader access: the owner always; a visitor on the collection's live
+// Reader access: a member of the collection always; a visitor on the live
 // PUBLISHED works in the list, and a single work of a PUBLIC collection
 // when the work itself is published and live — the collection is the whole
 // gate (docs/adr/0003). The single read, the list read and the read-back
@@ -38,7 +38,6 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
-import type { Viewer } from "../access";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   loadArtworkById,
@@ -68,7 +67,7 @@ import {
 async function readSavedArtwork(
   collectionId: string,
   artworkId: string,
-  viewer: Viewer,
+  viewer: string,
 ): Promise<ArtworkRead> {
   const read = await readArtwork(collectionId, artworkId, viewer);
   if (read.status !== "ok") {
@@ -83,13 +82,14 @@ async function readSavedArtwork(
 
 export const artworkRoutes = new Hono();
 
-// GET one — owner always; a visitor when collection and work both admit it.
+// GET one — a member always; a visitor when collection and work both admit it.
 artworkRoutes.get(
   "/collections/:collectionId/artworks/:artworkId",
   async (c) => {
     const session = await resolveSession(c);
+    const collectionId = param(c, "collectionId");
     const read = await readArtwork(
-      param(c, "collectionId"),
+      collectionId,
       param(c, "artworkId"),
       session?.user.id ?? null,
     );
@@ -103,14 +103,12 @@ artworkRoutes.get(
   },
 );
 
-// GET list — owner: every live work; visitor: the published ones; private
+// GET list — member: every live work; non-member: the published ones; private
 // collection: 403 (never 404 — the client maps the refusal to "private").
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
   const session = await resolveSession(c);
-  const read = await readArtworkList(
-    param(c, "collectionId"),
-    session?.user.id ?? null,
-  );
+  const collectionId = param(c, "collectionId");
+  const read = await readArtworkList(collectionId, session?.user.id ?? null);
   if (read.status === "not-found") {
     throw new ApiError("not-found", "The collection does not exist");
   }
@@ -192,16 +190,16 @@ artworkRoutes.post(
       });
       const photos = await writePhotoSequence(
         tx,
+        collection,
         user.id,
-        collection.id,
         payload.artworkId,
         payload.photos,
         [],
       );
       const documents = await writeDocumentSequence(
         tx,
+        collection,
         user.id,
-        collection.id,
         payload.artworkId,
         payload.documents,
         new Set(),
@@ -312,8 +310,8 @@ artworkRoutes.patch(
         payload.photos !== undefined
           ? await writePhotoSequence(
               tx,
+              collection,
               user.id,
-              collection.id,
               artwork.id,
               nextPhotos,
               currentPhotos,
@@ -323,8 +321,8 @@ artworkRoutes.patch(
         payload.documents !== undefined
           ? await writeDocumentSequence(
               tx,
+              collection,
               user.id,
-              collection.id,
               artwork.id,
               nextDocs,
               storedDocIds,
@@ -341,15 +339,13 @@ artworkRoutes.patch(
       await deleteObject(key);
     }
     await deleteFinalEntryObjects(
-      user.id,
-      collection.id,
+      collection,
       artwork.id,
       "photo",
       result.removedPhotos,
     );
     await deleteFinalEntryObjects(
-      user.id,
-      collection.id,
+      collection,
       artwork.id,
       "document",
       result.removedDocuments,

@@ -51,7 +51,7 @@ export interface Population {
   /** A non-image is inadmissible (photos). A document may be a `file`. */
   imagesOnly: boolean;
   finalKey: (
-    userId: string,
+    namespaceId: string,
     collectionId: string,
     artworkId: string,
     entryId: string,
@@ -59,7 +59,7 @@ export interface Population {
     ext: string,
   ) => string;
   finalPrefix: (
-    userId: string,
+    namespaceId: string,
     collectionId: string,
     artworkId: string,
     entryId: string,

@@ -10,10 +10,12 @@
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**.
 >
-> **Sharing is designed, not built.** The collaborator, invitation and transfer
-> model is accepted in
+> **Sharing is partly built.** The read side — access as membership, the shared
+> dashboard list, documents for members — has landed. Invitations, the
+> collaborator and transfer routes, and the write paths a collaborator needs are
+> still the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
-> below that describe it are the target until it lands.
+> below that describe the write side are the target until it lands.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -149,22 +151,24 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
   the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
   holds the pure decisions derived from it.
-- `access.ts` — the access verdicts, pure over loaded rows: the visitor rule
-  (the collection is the only gate) and, with sharing, the
-  owner-or-collaborator rule; `authorize.ts` loads the collection, its
-  membership row and the rows for the write paths.
+- `access.ts` — the access verdicts, pure over loaded rows: the membership
+  fact (owner, collaborator, nobody) and the visitor rule (the collection is
+  the only gate); `authorize.ts` loads the collection, the viewer's membership
+  row and the row each route acts on.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
   Collection, the work, its photos, documents and Variants) or a Collection's
   list (the Collection, the works once, each child table once for the whole
-  page — at most five queries), returning ok, not-found, or forbidden for the
-  list. The verdict is `access.ts`'s; the module carries no Hono type and the
-  route owns the wire code. The save routes read their work back through it.
+  page — at most five queries, six for a collaborator's membership row),
+  returning ok, not-found, or forbidden for the list. The verdict is
+  `access.ts`'s over rows the module loads through `authorize.ts`; the module
+  carries no Hono type and the route owns the wire code. The save routes read
+  their work back through it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
 - `routes/` — `collections` (with the access, invitation, collaborator and
-  transfer routes once sharing lands), `artworks`, `me` (with the invitation
-  list), `media` (the object proxy), `artworkMedia` (stage/process).
+  transfer routes to come), `artworks`, `me` (with the invitation list to
+  come), `media` (the object proxy), `artworkMedia` (stage/process).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
@@ -185,8 +189,9 @@ system.
 `account`, `verification`, `collections`, `collectionCollaborators`,
 `collectionInvitations`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
 `artworkDocuments`) and the `schema` object the adapter consumes. The two
-sharing tables are in the schema; the feature code that reads and writes them
-is not built yet.
+sharing tables are in the schema; the read side reads `collectionCollaborators`,
+and the code that writes both tables (invitations, removal, transfer) is not
+built yet.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an

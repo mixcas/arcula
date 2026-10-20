@@ -1,18 +1,20 @@
 // The single read path for Artworks, single and listed.
 //
 // One module owns reading works: the Collection, the works, their photos,
-// their documents and their Variants — at most five queries, whatever the
+// their documents and their Variants — at most five queries for an owner or
+// a non-member (a collaborator's membership row is one more), whatever the
 // number of works. The child loader takes a set of Artwork ids, so a page of
 // works batches through the same loader the single read uses instead of
 // growing a second one.
 //
-// The visibility verdict is the pure rule in access.ts over the rows loaded
-// here; this module reports `not-found` or `forbidden` and carries no HTTP
-// code or framework type. The route owns the wire codes. Only the list can
-// answer `forbidden` — a Private Collection the viewer does not own — because
-// that is the list's existing wire, and a single read answers `not-found` for
-// every refusal (a Private Collection included) so the refusal discloses
-// nothing.
+// The access verdict is the pure rule in access.ts over the rows loaded here
+// — the Collection, the work and the viewer's membership row, loaded by
+// `authorize.ts`; this module reports `not-found` or `forbidden` and carries
+// no HTTP code or framework type. The route owns the wire codes. Only the
+// list can answer `forbidden` — a Private Collection the viewer is not a
+// member of — because that is the list's existing wire, and a single read
+// answers `not-found` for every refusal (a Private Collection included) so
+// the refusal discloses nothing.
 //
 // No transaction spans the reads: a work or child added or removed between
 // them is a torn read the product tolerates, and no caller may assume a
@@ -31,14 +33,14 @@ import {
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import type { ArtworkRead } from "@arcula/shared";
+import { canSeeArtwork, canSeeCollection } from "./access";
 import {
-  canSeeArtwork,
-  canSeeCollection,
-  isOwner,
-  type Viewer,
-} from "./access";
-import { loadArtworkInCollection, loadCollection } from "./authorize";
+  loadArtworkInCollection,
+  loadCollection,
+  loadMembership,
+} from "./authorize";
 import { db } from "./db";
+import { mediaNamespaceOf } from "./media/keys";
 import { serializeArtwork, type ArtworkJoined } from "./serialize";
 
 /** What a single read answers: the document, or one uniform refusal. */
@@ -133,9 +135,9 @@ function groupChildren(
  *
  * A missing Collection, a missing work, a Draft, a Deleted work, a work
  * behind a Private Collection and a work under the wrong Collection are one
- * answer for anyone but the Owner: saying which was refused would be a
- * disclosure. The Owner reads every work of their own Collection, deleted
- * ones included.
+ * answer for anyone but a member: saying which was refused would be a
+ * disclosure. A member — the Owner or any Collaborator — reads every work of
+ * the collection, deleted ones included.
  *
  * The Collection, the work and the three child reads run without a
  * transaction: a row added or removed between them is a torn read the
@@ -144,29 +146,34 @@ function groupChildren(
 export async function readArtwork(
   collectionId: string,
   artworkId: string,
-  viewer: Viewer,
+  viewer: string | null,
 ): Promise<ArtworkReadResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
   const artwork = await loadArtworkInCollection(collectionId, artworkId);
   if (!artwork) return { status: "not-found" };
-  if (!canSeeArtwork(viewer, collection, artwork)) {
+  const membership = await loadMembership(collectionId, collection, viewer);
+  if (!canSeeArtwork(membership, collection, artwork)) {
     return { status: "not-found" };
   }
   const children = await loadChildren([artworkId]);
   return {
     status: "ok",
-    artwork: serializeArtwork({ artwork, ...children }),
+    artwork: serializeArtwork(
+      { artwork, ...children },
+      mediaNamespaceOf(collection),
+    ),
   };
 }
 
 /**
  * A Collection's Artwork list as its Viewer sees it.
  *
- * The works query keeps the two filters the route has always used: an Owner
- * gets every live work of their Collection, a Visitor only Published, live
- * works; a Deleted work is in neither. A Private Collection the viewer does
- * not own is `forbidden` (never `not-found` — the client maps it to
+ * The works query keeps the two filters it has always used: a member gets
+ * every live work of the collection — no `userId` filter, because every
+ * member reads the same list — and a non-member only Published, live works;
+ * a Deleted work is in neither. A Private Collection the viewer is not a
+ * member of is `forbidden` (never `not-found` — the client maps it to
  * "private"), and a missing Collection is `not-found`.
  *
  * The rows are ordered by creation time and then id, so repeated reads agree,
@@ -176,20 +183,20 @@ export async function readArtwork(
  */
 export async function readArtworkList(
   collectionId: string,
-  viewer: Viewer,
+  viewer: string | null,
 ): Promise<ArtworkListResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
-  if (!canSeeCollection(viewer, collection)) return { status: "forbidden" };
+  const member = await loadMembership(collectionId, collection, viewer);
+  if (!canSeeCollection(member, collection)) return { status: "forbidden" };
 
   const rows = await db
     .select()
     .from(artworksTable)
     .where(
-      isOwner(viewer, collection)
+      member !== null
         ? and(
             eq(artworksTable.collectionId, collectionId),
-            eq(artworksTable.userId, collection.userId),
             isNull(artworksTable.deletedAt),
           )
         : and(
@@ -200,16 +207,19 @@ export async function readArtworkList(
     )
     .orderBy(asc(artworksTable.createdAt), asc(artworksTable.id));
 
-  const works = rows.filter((row) => canSeeArtwork(viewer, collection, row));
+  const works = rows.filter((row) => canSeeArtwork(member, collection, row));
   const artworkIds = works.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {
     status: "ok",
     artworks: works.map((work) =>
-      serializeArtwork({
-        artwork: work,
-        ...(grouped.get(work.id) ?? noChildren()),
-      }),
+      serializeArtwork(
+        {
+          artwork: work,
+          ...(grouped.get(work.id) ?? noChildren()),
+        },
+        mediaNamespaceOf(collection),
+      ),
     ),
   };
 }

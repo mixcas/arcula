@@ -37,6 +37,7 @@ import {
   type ArtworkRead,
   type ArtworkStatus,
   type CollectionRead,
+  type CollectionRole,
   type ImageVariantKey,
   type Timestamp,
 } from "@arcula/shared";
@@ -54,6 +55,14 @@ export type ArtworkRow = typeof artworksTable.$inferSelect;
 export type PhotoRow = typeof artworkPhotosTable.$inferSelect;
 export type DocumentRow = typeof artworkDocumentsTable.$inferSelect;
 export type VariantRow = typeof artworkPhotoVariantsTable.$inferSelect;
+
+/** The dashboard list's per-row extras. Absent on every other read, which is
+ *  what keeps the otherwise-identical documents distinguishable: a shared row
+ *  carries `role` and `ownerName`, an owned one `role` alone. */
+export interface SerializeCollectionOptions {
+  role?: CollectionRole;
+  ownerName?: string;
+}
 
 /** The joined shape the read routes hand to the serializer. */
 export interface ArtworkJoined {
@@ -177,7 +186,7 @@ const variantEntry = (
 function serializePhoto(
   row: PhotoRow,
   variants: VariantRow[],
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
 ): PhotoRead {
@@ -199,7 +208,7 @@ function serializePhoto(
   }
   const originalUrl = mediaUrl(
     finalPhotoKey(
-      userId,
+      namespaceId,
       collectionId,
       artworkId,
       row.id,
@@ -223,7 +232,7 @@ function serializePhoto(
         v,
         mediaUrl(
           finalPhotoKey(
-            userId,
+            namespaceId,
             collectionId,
             artworkId,
             row.id,
@@ -239,7 +248,7 @@ function serializePhoto(
 function serializeDocument(
   row: DocumentRow,
   variants: VariantRow[],
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
 ): DocumentRead {
@@ -252,7 +261,7 @@ function serializeDocument(
     original: {
       url: mediaUrl(
         finalDocumentKey(
-          userId,
+          namespaceId,
           collectionId,
           artworkId,
           row.id,
@@ -277,7 +286,7 @@ function serializeDocument(
             v,
             mediaUrl(
               finalDocumentKey(
-                userId,
+                namespaceId,
                 collectionId,
                 artworkId,
                 row.id,
@@ -292,8 +301,15 @@ function serializeDocument(
   return { ...base, kind };
 }
 
-/** The exact wire document shape, urls filled with proxy paths. */
-export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
+/** The exact wire document shape, urls filled with proxy paths.
+ *
+ *  `namespaceId` is the collection's fixed media namespace
+ *  (`mediaNamespaceOf`), not the artwork's `userId`: a transfer changes the
+ *  owner and must leave every URL pointing at the same object. */
+export function serializeArtwork(
+  joined: ArtworkJoined,
+  namespaceId: string,
+): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
   for (const v of variants) {
@@ -311,7 +327,7 @@ export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
       serializeDocument(
         d,
         byParent.get(d.id) ?? [],
-        artwork.userId,
+        namespaceId,
         artwork.collectionId,
         artwork.id,
       ),
@@ -320,7 +336,7 @@ export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
       serializePhoto(
         p,
         byParent.get(p.id) ?? [],
-        artwork.userId,
+        namespaceId,
         artwork.collectionId,
         artwork.id,
       ),
@@ -335,8 +351,17 @@ export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
   };
 }
 
-/** The exact wire collection document shape. */
-export function serializeCollection(row: CollectionRow): CollectionRead {
+/** The exact wire collection document shape.
+ *
+ *  `role`/`ownerName` are the dashboard list's additions: the signed-in list
+ *  passes the viewer's role on every row, and the owner's display name on a
+ *  shared one. Every other read — the public list, the single read — is
+ *  anonymous, so it emits the plain document, which is the shape the public
+ *  pages have always parsed. */
+export function serializeCollection(
+  row: CollectionRow,
+  opts: SerializeCollectionOptions = {},
+): CollectionRead {
   const out: CollectionRead = {
     id: row.id,
     name: row.name,
@@ -345,6 +370,8 @@ export function serializeCollection(row: CollectionRow): CollectionRead {
     createdAt: wireTimestamp(row.createdAt),
     updatedAt: wireTimestamp(row.updatedAt),
   };
+  if (opts.role !== undefined) out.role = opts.role;
+  if (opts.ownerName !== undefined) out.ownerName = opts.ownerName;
   if (row.description !== null) out.description = row.description;
   // `skin`/`skinOptions` are read-time defaulted on the client side
   // (resolveSkin), so an unset value is an absent key.

@@ -9,10 +9,15 @@
 // needs a second row it inserts one directly, which keeps the cap test
 // about the route and not the table.
 
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { collections as collectionsTable } from "@arcula/db";
+import {
+  collectionCollaborators as collaboratorsTable,
+  collections as collectionsTable,
+  user as userTable,
+} from "@arcula/db";
 import { MINTED_ID_RE } from "@arcula/shared";
-import { canSeeCollection } from "../src/access";
+import { canSeeCollection, membershipOf } from "../src/access";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 
@@ -24,13 +29,15 @@ function isWireTimestamp(value: unknown): void {
   ]);
 }
 
-let owner: { cookies: string; userId: string };
+let owner: { cookies: string; userId: string; email: string };
 let stranger: { cookies: string; userId: string };
+let mate: { cookies: string; userId: string };
 
 // Module-level ids, set by the test that creates them: the cap leaves
 // each user one collection, so the later describes reuse what the
 // earlier ones made.
 let studyWallId = "";
+let sharedBoardId = "";
 let redId = "";
 let blueId = "";
 let foreignId = "";
@@ -38,6 +45,7 @@ let foreignId = "";
 beforeAll(async () => {
   owner = await freshUser("Coll");
   stranger = await freshUser("Coll");
+  mate = await freshUser("Coll");
 });
 
 afterAll(async () => {
@@ -139,9 +147,103 @@ describe("GET /collections", () => {
     // spelled in SQL: every row it returns is one canSeeCollection admits.
     for (const row of anon) {
       expect(
-        canSeeCollection(null, row as { userId: string; isPublic: boolean }),
+        canSeeCollection(
+          membershipOf(
+            null,
+            row as { userId: string; isPublic: boolean },
+            null,
+          ),
+          row as { userId: string; isPublic: boolean },
+        ),
       ).toBe(true);
     }
+  });
+
+  it("returns owned and shared collections in one name-ordered list, each row with its role", async () => {
+    // One collection of the owner's, shared with `mate`, who also owns one of
+    // their own: the list is one list, distinguished by the row's role. The
+    // two names are chosen so the order can only come from the sort — "Aaa"
+    // is the SHARED one — because the route builds owned rows first and a
+    // list that forgot to sort would answer them the other way round.
+    sharedBoardId = uuid();
+    await db.insert(collectionsTable).values({
+      id: sharedBoardId,
+      userId: owner.userId,
+      name: "Aaa Shared Board",
+      isPublic: false,
+    });
+    await db.insert(collaboratorsTable).values({
+      collectionId: sharedBoardId,
+      userId: mate.userId,
+    });
+    const own = await req("POST", "/api/v1/collections", {
+      cookies: mate.cookies,
+      body: JSON.stringify({ name: "Zzz Mate Owned" }),
+    });
+    expect(own.status).toBe(201);
+
+    const theirs = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+    );
+    expect(theirs.map((c) => c.name)).toEqual([
+      "Aaa Shared Board",
+      "Zzz Mate Owned",
+    ]);
+
+    const shared = theirs.find((c) => c.name === "Aaa Shared Board")!;
+    expect(shared.role).toBe("collaborator");
+    // The owner's display name (their sign-up name here), not their id.
+    expect(shared.ownerName).toBe("Coll Test");
+
+    const owned = theirs.find((c) => c.name === "Zzz Mate Owned")!;
+    expect(owned.role).toBe("owner");
+    expect("ownerName" in owned).toBe(false);
+
+    // The owner's own list carries the same roles from the other side.
+    const owners = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: owner.cookies }),
+    );
+    const board = owners.find((c) => c.name === "Aaa Shared Board")!;
+    expect(board.role).toBe("owner");
+    expect("ownerName" in board).toBe(false);
+  });
+
+  it("falls back to the owner's email when the account has no display name", async () => {
+    // `user.name` is nullable; a shared row still has to be attributable.
+    await db
+      .update(userTable)
+      .set({ name: null })
+      .where(eq(userTable.id, owner.userId));
+    try {
+      const theirs = await json<Record<string, unknown>[]>(
+        await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+      );
+      const shared = theirs.find((c) => c.name === "Aaa Shared Board")!;
+      expect(shared.ownerName).toBe(owner.email);
+    } finally {
+      await db
+        .update(userTable)
+        .set({ name: "Coll Test" })
+        .where(eq(userTable.id, owner.userId));
+    }
+  });
+
+  it("keeps the anonymous list's shape: public rows only, no role or ownerName", async () => {
+    const anon = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections"),
+    );
+    expect(anon.map((c) => c.name)).toContain("Study Wall");
+    for (const row of anon) {
+      expect("role" in row).toBe(false);
+      expect("ownerName" in row).toBe(false);
+    }
+  });
+
+  it("does not put another account's shared collection on a signed-in visitor's list", async () => {
+    const theirs = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: stranger.cookies }),
+    );
+    expect(theirs.map((c) => c.name)).toEqual(["Private Wall"]);
   });
 });
 

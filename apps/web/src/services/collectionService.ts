@@ -18,7 +18,8 @@ import { ApiRequestError, apiRequest } from "./api";
 const BASE = "/api/v1/collections";
 
 export const collectionService = {
-  /** The collections the session owns — the /manage dashboard. */
+  /** The collections the session owns and those shared with it — the
+   *  /manage dashboard, each row carrying its `role`. */
   async getUserCollections(): Promise<Collection[]> {
     const rows = await apiRequest<unknown[]>(BASE);
     return rows.map((row) => collectionReadSchema.parse(row));
