@@ -49,3 +49,9 @@ The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Published**, **Draft**,
   the single-row verdict agree on the same fixture.
 - Documents are unaffected: they are owner-only, at any status, in any
   collection.
+
+**Amended by [ADR-0004](0004-collections-are-shared-by-membership.md):** the
+visitor rule above is unchanged. The owner side of the gate is now membership —
+the owner and collaborators — so the last consequence's "owner-only" reads
+"owner and collaborators" from that decision on. A visitor still never reads a
+document.

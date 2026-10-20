@@ -1,5 +1,6 @@
-// The Drizzle schema: nine tables. Four Better Auth core tables (extended
-// with the typed `user` columns) plus five domain tables.
+// The Drizzle schema: eleven tables. Four Better Auth core tables (extended
+// with the typed `user` columns), five domain tables and the two sharing
+// tables (`collection_collaborators`, `collection_invitations`).
 //
 // This package is the single source of truth for the schema: the API imports
 // it over a live driver, the migration tooling reads it to generate SQL, and
@@ -116,6 +117,11 @@ export const collections = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("userId").notNull(),
+    // Fixed at creation and the second segment of every final object key, so
+    // an ownership transfer moves no object. Nullable until
+    // `0004_media_namespace_not_null`; the feature code reads
+    // `mediaNamespaceId ?? userId` in the gap.
+    mediaNamespaceId: text("mediaNamespaceId"),
     name: text("name").notNull(),
     description: text("description"),
     // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
@@ -127,6 +133,54 @@ export const collections = pgTable(
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [index("collections_user_id_idx").on(table.userId)],
+);
+
+// Everyone with access except the owner. The owner is `collections.userId`
+// and is never duplicated here: one owner fact, one place.
+export const collectionCollaborators = pgTable(
+  "collection_collaborators",
+  {
+    collectionId: text("collectionId").notNull(),
+    userId: text("userId").notNull(),
+    createdAt: timestamptz("createdAt"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.collectionId, table.userId] }),
+    // The dashboard list: the collections shared with one account.
+    index("collection_collaborators_user_id_idx").on(table.userId),
+  ],
+);
+
+// The offer: one row per invitation, kept as history after it resolves.
+// Expiry is computed from `expiresAt`, never stored as a status.
+export const collectionInvitations = pgTable(
+  "collection_invitations",
+  {
+    id: text("id").primaryKey(),
+    collectionId: text("collectionId").notNull(),
+    // Stored trimmed and lowercased; the index below compares lower(email).
+    email: text("email").notNull(),
+    invitedByUserId: text("invitedByUserId").notNull(),
+    // The raw token exists only in the mail; the row keeps its hash.
+    tokenHash: text("tokenHash").notNull().unique(),
+    status: text("status").notNull().default("pending"),
+    // The time of the current issue; refreshed on resend, which is what gives
+    // the 60-second cooldown a clock without another column.
+    createdAt: timestamptz("createdAt"),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    resolvedAt: timestamp("resolvedAt", { withTimezone: true }),
+  },
+  (table) => [
+    // One pending invitation per collection and address. Resolved rows are
+    // history, so they fall outside the partial index.
+    uniqueIndex("collection_invitations_pending_collection_email_idx")
+      .on(table.collectionId, sql`lower(${table.email})`)
+      .where(sql`${table.status} = 'pending'`),
+    check(
+      "collection_invitations_status_check",
+      sql`"status" in ('pending', 'accepted', 'declined', 'revoked')`,
+    ),
+  ],
 );
 
 // `photos`/`documents` are tables, not array columns. Money stays text —
@@ -161,10 +215,10 @@ export const artworks = pgTable(
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [
-    // The owner list: the composite index behind it.
-    index("artworks_collection_user_deleted_idx").on(
+    // The owner list: a collection's live works, no `userId` filter — the
+    // owner and every collaborator see the same list.
+    index("artworks_collection_deleted_idx").on(
       table.collectionId,
-      table.userId,
       table.deletedAt,
     ),
     // The visitor list: a public collection's published, live works.
@@ -252,6 +306,8 @@ export const schema = {
   account,
   verification,
   collections,
+  collectionCollaborators,
+  collectionInvitations,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,
