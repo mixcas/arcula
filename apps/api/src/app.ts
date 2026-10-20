@@ -17,6 +17,7 @@ import { clientOrigin, corsOrigins, deployedCommit, noindexFlag } from "./env";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
 import { artworkRoutes } from "./routes/artworks";
 import { collectionRoutes } from "./routes/collections";
+import { invitationRoutes } from "./routes/invitations";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
 import { spaMiddleware } from "./spa";
@@ -68,6 +69,7 @@ app.route(
 app.route("/api/v1", meRoutes);
 app.route("/api/v1", mediaRoutes);
 app.route("/api/v1", collectionRoutes);
+app.route("/api/v1", invitationRoutes);
 app.route("/api/v1", artworkMediaRoutes);
 app.route("/api/v1", artworkRoutes);
 

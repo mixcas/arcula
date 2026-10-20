@@ -46,7 +46,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 // A save's "impossible" failure: two writes raced for the same
 // (artworkId, order) slot. Postgres reports it as a unique violation;
 // the client can only retry, and the upserts make the retry safe.
-const isUniqueViolation = (err: unknown): boolean =>
+export const isUniqueViolation = (err: unknown): boolean =>
   typeof err === "object" &&
   err !== null &&
   "code" in err &&

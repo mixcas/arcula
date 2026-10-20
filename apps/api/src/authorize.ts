@@ -182,6 +182,26 @@ export async function requireMemberCollection(
   return collection;
 }
 
+/**
+ * The owner-only check for access administration — invitations today, and
+ * collaborator removal, leaving and transfer when those routes land. A
+ * collaborator is a member (and may edit everything), but only the owner
+ * decides who else gets in (ADR-0004).
+ */
+export async function requireOwnerCollection(
+  c: Context,
+  collectionId: string,
+): Promise<CollectionRow> {
+  const collection = await requireMemberCollection(c, collectionId);
+  if (collection.userId !== c.get("user").id) {
+    throw new ApiError(
+      "forbidden",
+      "Only the collection's owner can manage access",
+    );
+  }
+  return collection;
+}
+
 /** The membership check plus the artwork existing inside that collection. */
 export async function requireMemberArtwork(
   c: Context,
