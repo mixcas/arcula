@@ -3,6 +3,11 @@
 This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
+> **Sharing is designed, not built.** Collaborators, invitations and ownership
+> transfer are accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
+> passages that describe them are the target, not the current code.
+
 For the user-facing overview and setup, see [README.md](README.md). For the agent
 working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
 [GLOSSARY.md](GLOSSARY.md). Per-package detail lives in each package's own
@@ -11,10 +16,11 @@ working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
 ## What the product is
 
 An art collection manager for independent collectors. Accounts sign themselves
-up, own a collection (one on the free tier), and record the artworks in it:
-title, artist, and the descriptive fields a real collection needs — with photos
-and other documents attached. A collection can be shared publicly through a
-read-only page whose presentation is chosen by a "skin".
+up, own a collection (one on the free tier), invite collaborators by email, and
+record the artworks in it: title, artist, and the descriptive fields a real
+collection needs — with photos and other documents attached. A collection can be
+shared with collaborators, who edit it alongside the owner, and given a public
+page whose presentation is chosen by a "skin".
 
 The design bet, stated in the README, is that art is not tidy data: an unset
 field is not an empty one, `acquisitionDate` is a string ("circa 1889") rather
@@ -64,6 +70,12 @@ in a GitHub Environment restricted to its branch, and the deploy identity is a
 GitHub OIDC role pinned to that branch — no long-lived AWS key exists.
 
 Migrations are forward-only, so a revert redeploys the code but not the schema.
+A schema change the next release depends on therefore ships **alone** first:
+`scripts/deploy.sh` deploys the Lambda before it migrates, so a release carrying
+both would serve requests against tables that do not exist yet. A column that
+must end up `NOT NULL` ships nullable first and is tightened in the release that
+writes it; one migration that sets `NOT NULL` would break the old code's
+inserts.
 
 The reasoning, and the alternatives that were turned down, are not restated
 here:
@@ -75,8 +87,8 @@ The first-run order is in `infra/cdk/README.md`.
 
 ## The data model
 
-Nine tables in Postgres, defined in `packages/db/src/index.ts` and migrated in
-`packages/db/migrations/`.
+Eleven tables in Postgres with sharing, defined in `packages/db/src/index.ts`
+and migrated in `packages/db/migrations/`.
 
 ### Auth (Better Auth core)
 
@@ -90,8 +102,14 @@ a config flip rather than a schema change.
 
 ### `collections`
 
-`id`, `userId`, `name`, `description?`, `skin?`, `skinOptions` (jsonb),
-`isPublic` (default `true`), `createdAt`, `updatedAt`.
+`id`, `userId`, `mediaNamespaceId`, `name`, `description?`, `skin?`,
+`skinOptions` (jsonb), `isPublic` (default `true`), `createdAt`, `updatedAt`.
+
+`userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
+namespace every final media key uses; the schema release backfills existing rows
+from `userId`, and the feature release makes the column `NOT NULL`. A transfer
+changes the owner but not the namespace, so no object moves and existing URLs
+keep working.
 
 `skin` is read-time defaulted to the default skin and is never queried on, so it
 needs no backfill — the deliberate contrast with `deletedAt`. `skinOptions` is
@@ -102,6 +120,21 @@ hand-edited value cannot corrupt a collection.
 Collections are never deleted in this model. There is no `passwordHash` column:
 collection password protection is not built.
 
+### `collection_collaborators` and `collection_invitations`
+
+`collection_collaborators`: `collectionId`, `userId`, `createdAt`, primary key
+`(collectionId, userId)`, with an index on `userId` for the dashboard. The owner
+is not duplicated here; a row is what makes an account a collaborator and is the
+authorization fact for everything inside the collection.
+
+`collection_invitations`: `id`, `collectionId`, `email`, `invitedByUserId`,
+`tokenHash`, `status` (`pending` | `accepted` | `declined` | `revoked`),
+`createdAt`, `expiresAt`, `resolvedAt?`, with a unique `tokenHash`. There is at
+most one pending invitation per collection and email (stored trimmed and
+lowercased); resending rotates the token and expiry on that row. Accepted,
+declined and revoked rows are kept as history. Expiry is computed from
+`expiresAt`, not a status. The raw token exists only in the mail.
+
 ### `artworks`
 
 `id`, `userId`, `collectionId`, `title`, `artistName` (both required), and the
@@ -111,14 +144,19 @@ optional descriptive fields `serie`, `dateOfCreation`, `media`, `dimensions`,
 is the string that is stored. Plus `status` (`published` or `draft`, default
 `published`), `deletedAt` (nullable), `createdAt`, `updatedAt`.
 
+`userId` is a mirror of the collection owner, kept in step when a collection is
+transferred; no route authorizes on it, and media URLs no longer derive their
+namespace from it. No per-work creator is recorded.
+
 The collection is the only gate on a visitor: a visitor sees a published, live
 work exactly when its collection is public. There is no per-work visibility
 flag — a work's only choice of its own is published or draft, and a draft counts
 as part of its collection.
 
-Three composite indexes back the two list queries and the create-time check: the
-owner list (`collectionId, userId, deletedAt`), the visitor list
-(`collectionId, status, deletedAt`), and `collectionId` alone.
+Three indexes back the two list queries and the create-time check: the owner
+list (`collectionId, deletedAt`), the visitor list (`collectionId, status,
+deletedAt`), and `collectionId` alone. The owner list lost its `userId` segment
+with sharing: every collaborator reads the same list.
 
 ### `artwork_photos` and `artwork_documents`
 
@@ -149,9 +187,14 @@ segments are ids and variant keys, and no user-supplied filename ever reaches a
 path.
 
 ```
-final:    artworks/{userId}/{collectionId}/{artworkId}/{photos|documents}/{entryId}_{key}.{ext}
-staging:  staging/{userId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+final:    artworks/{mediaNamespaceId}/{collectionId}/{artworkId}/{photos|documents}/{entryId}_{key}.{ext}
+staging:  staging/{uploaderId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
 ```
+
+The final namespace is the collection's `mediaNamespaceId`, fixed at creation:
+a transfer changes the owner but never the key, so no object moves. Staging is
+per uploader, so one collaborator's staged object is never under another's
+prefix, and the sweep lists only the caller's prefix.
 
 The `staging/` prefix leads deliberately: object-store lifecycle rules match
 literal prefixes, so one rule expires every staged object everywhere.
@@ -177,29 +220,36 @@ literal prefixes, so one rule expires every staged object everywhere.
 Reads never touch S3 directly. `GET /api/v1/media?key=…` parses the key back into
 its segments, re-checks visibility against the row, and streams the object:
 
-- **final photo** — the owner, or a visitor when the work is published **and**
-  live **and** its collection is public;
-- **final document** — the owner only (a `403`, so a forgotten-to-hide UI fails
-  closed);
-- **staged object** — the owner of the collection the entry was staged under.
+- **final photo** — the owner or a collaborator, or a visitor when the work is
+  published **and** live **and** its collection is public;
+- **final document** — the owner and collaborators only (a visitor gets a `403`,
+  so a forgotten-to-hide UI fails closed);
+- **staged object** — the uploader whose staging prefix holds it.
 
 ## Access control
 
 There is no rules language to audit: **the API is the only path to the data.**
-`requireSession` / `resolveSession` establish the caller, and
-`apps/api/src/authorize.ts` loads and ownership-checks the rows every write
-route shares.
+`requireSession` / `resolveSession` establish the caller; `authorize.ts` loads
+the collection, its membership row and the rows every write route shares, and
+`access.ts` answers the access questions as pure functions over those rows.
 
-The visitor rule is one pure module, `apps/api/src/access.ts`, over rows a
-caller has already loaded: no database, no session, no framework. **The
-collection is the only gate.** A visitor sees a published, live work exactly
-when its collection is public; a draft, a deleted work and a private collection
-are one answer to them, and a blocked work answers a uniform `404` — saying
-which was refused would be a disclosure. (A private _collection_ answers `403`,
-which the web client maps to its "private" state.) Documents are owner-only at
-every status, in every collection. The list route keeps its SQL filter, and a
+The visitor rule lives in `apps/api/src/access.ts`, pure over rows a caller has
+already loaded: no database, no session, no framework. **The collection is the
+only gate.** A visitor sees a published, live work exactly when its collection
+is public; a draft, a deleted work and a private collection are one answer to
+them, and a blocked work answers a uniform `404` — saying which was refused
+would be a disclosure. (A private _collection_ answers `403`, which the web
+client maps to its "private" state.) The list route keeps its SQL filter, and a
 test pins the filter and the verdict to the same answer
 ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
+
+On the owner side, access is membership: the owner and every collaborator see
+the whole collection, drafts and deleted works included, and may edit every
+artwork and every setting; the owner alone manages access. A collaborator is a
+row in `collection_collaborators`, never a second `userId` on the collection,
+and the owner is not duplicated there. Documents are readable by the owner and
+collaborators at every status, never by a visitor
+([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
 
 Soft delete is a `deletedAt` stamp: the work leaves every list, the bytes stay,
 and a restore route flips it back (there is no trash UI yet).
@@ -212,13 +262,21 @@ own handler. The full route table is in `apps/api/README.md`. The shape of a
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
 
+Sharing adds the access read (`GET /collections/:id/access`), the invitation and
+collaborator routes under `/collections/:id`, the transfer route, the token
+preview/accept/decline routes under `/invitations`, and `GET /me/invitations`
+for the dashboard. The error envelope gains `conflict` (409) for state
+conflicts; an invalid, expired, revoked or consumed invitation token answers
+`not-found` like an unknown one.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
 
 - **Public** — `/` (product page), `/login`, `/signup`,
-  `/reset-password/:token`, and the skin-rendered `/collection/:collectionId`
-  and `/collection/:collectionId/artwork/:artworkId`.
+  `/reset-password/:token`, `/invite/:token` (the invitation landing page, which
+  shows the collection and invited email before sign-in), and the skin-rendered
+  `/collection/:collectionId` and `/collection/:collectionId/artwork/:artworkId`.
 - **Protected** — everything under `/manage`: the dashboard, a collection and its
   settings, artwork add/edit, the CSV import, and the account profile.
 
@@ -231,20 +289,43 @@ scope. Skins are registered in `src/skins/registry.ts` (`basicx` is the default)
 and a collection's stored options are resolved against the skin's declared specs
 with an unknown key reported rather than silently dropped.
 
+The dashboard lists owned and shared collections together with a role badge, and
+an invitation card for pending invitations (decline only — acceptance is the
+emailed link). A collection's settings has an access card: the owner invites,
+resends, revokes, removes and transfers; a collaborator sees who else has access
+and can leave.
+
 ## Tiers and quotas
 
 `packages/shared/src/limits.ts` holds `COLLECTION_LIMITS` and
 `collectionLimitForTier`. One map, imported by both sides, so the API's
 enforcement and the client's messaging cannot disagree. The API checks the cap on
 create and returns `limit-reached` (409); the client reads the same table to
-reflect the cap in the UI. The free tier is one collection.
+reflect the cap in the UI. The cap counts collections an account **owns**;
+collaborations do not count, and a transfer may take the recipient over the cap
+without being refused. The free tier is one owned collection.
 
 ## What is not built
 
 Roughly in order of how much it matters:
 
-- **Password protection for shared collections.** There is no `passwordHash`
+- **Sharing itself.** Collaborators, invitations and ownership transfer are
+  designed in
+  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and are not
+  in the code yet.
+- **Password protection for public collections.** There is no `passwordHash`
   column and no verification path; the public page is public or it is not shown.
+- **A read-only collaborator role.** Every collaborator can edit; a viewer would
+  need a second permission matrix on the server and in every management screen.
+- **Per-work attribution or an audit trail.** `artworks.userId` mirrors the
+  collection owner, so the record does not say who added or edited a work.
+- **Accepting or declining an ownership transfer.** A transfer is immediate and
+  sends a notice; reversing it is another transfer.
+- **Invitation rate limiting.** The password-reset mail is unthrottled too; both
+  need one limiter.
+- **A collaborator cap.** A collection may invite any number of collaborators.
+- **Account deletion**, and what it means for a collection's owner or a
+  collaborator.
 - **Trash and restore UI.** The columns and the restore route exist; nothing
   surfaces them, and nothing purges long-dead rows.
 - **Delete a collection.** The model does not delete collections at all.

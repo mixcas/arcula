@@ -15,19 +15,42 @@ rather than a gallery or an institution that trades in them.
 _Avoid_: User, customer
 
 **Account**:
-A collector's identity in Arcula — the email and password they sign in with,
-and the owner of a collection. An account owns one or more collections.
+A collector's identity in Arcula — the email and password they sign in with.
+An account owns collections and may collaborate on others.
 _Avoid_: User, profile, tenant
 
 **Owner**:
-The account a collection or an artwork belongs to, and the only party who may
-change it.
-_Avoid_: Admin, author
+The account a collection belongs to. The only party who may invite, remove or
+transfer, and the account the tier cap counts. An artwork's owner is its
+collection's owner.
+_Avoid_: Admin, author, member
+
+**Collaborator**:
+The account a collection has been shared with. A collaborator records and edits
+artworks and changes the collection's settings, including whether it is public,
+but may not invite, remove or transfer.
+_Avoid_: Member, editor, guest
+
+**Invitation**:
+A pending offer to become a collaborator, addressed to an email, carried by a
+single-use token, and expiring after seven days. Accepting one is how an invited
+account becomes a collaborator.
+_Avoid_: Invite, request, share link
+
+**Ownership transfer**:
+Moving a collection's owner to one of its collaborators. The previous owner
+stays as a collaborator; only the owner may begin one.
+_Avoid_: Handover, handoff, reassignment
 
 **Collection**:
-One owner's set of artworks, recorded together and named by them. The unit that
-is shared or kept private, tiered, and given a public page.
+A set of artworks recorded together and named by their owner. The unit that is
+shared with collaborators, tiered, and given a public page.
 _Avoid_: Catalogue, gallery, album, library
+
+**Shared**:
+A collection whose owner has added collaborators. Distinct from **Public**,
+which is readable by visitors; neither implies the other.
+_Avoid_: Collaborative, team, group
 
 **Artwork**:
 One work in a collection: the thing a collector owns, with its title, artist
@@ -36,7 +59,7 @@ _Avoid_: Piece, item, object, painting, entry
 
 **Visitor**:
 Anyone reading a collection or an artwork without an account, or without being
-its owner. A visitor sees only what is public.
+its owner or a collaborator. A visitor sees only what is public.
 _Avoid_: Guest, reader, viewer
 
 ### The record
@@ -89,23 +112,26 @@ everything inside it. A work is never public on its own account.
 _Avoid_: Published, shared, live
 
 **Private**:
-Readable by its owner alone. To a visitor a private collection is
-indistinguishable from one that does not exist.
+Readable by its owner and collaborators alone. To a visitor a private collection
+is indistinguishable from one that does not exist.
 _Avoid_: Hidden, unpublished, draft
 
 **Published**:
-An artwork the owner has put in front of the collection's gate. A published
-work is visible to a visitor exactly when its collection is public.
+An artwork the owner or a collaborator has put in front of the collection's
+gate. A published work is visible to a visitor exactly when its collection is
+public.
 
 **Draft**:
-An artwork the owner keeps inside the collection but has not put in front of
-the gate. The owner sees it everywhere; a visitor never does, whatever the
-collection's own visibility. A draft counts as part of the collection.
+An artwork the owner or a collaborator keeps inside the collection but has not
+put in front of the gate. The owner and collaborators see it everywhere; a
+visitor never does, whatever the collection's own visibility. A draft counts as
+part of the collection.
 _Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
-Taken out of the collection as far as its owner is concerned: it leaves every
-list, and it can be brought back. The record and its media are not destroyed.
+Taken out of the collection as far as its owner and collaborators are
+concerned: it leaves every list, and it can be brought back. The record and its
+media are not destroyed.
 _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:
@@ -119,7 +145,7 @@ chrome.
 _Avoid_: Theme, template, layout, design
 
 **Skin options**:
-An owner's choices within their skin — the settings the skin itself defines.
+A collection's choices within its skin — the settings the skin itself defines.
 _Avoid_: Theme settings, preferences
 
 ### Media
@@ -143,9 +169,10 @@ _Avoid_: Thumbnail, rendition, size
 
 **Tier**:
 The allowance an account is on — what it may create — and the unit the
-collection cap is counted against.
+collection cap is counted against. The cap counts the collections an account
+owns, not those shared with it.
 _Avoid_: Plan, subscription, level
 
 **Free tier**:
-The tier every account starts on: the one that allows a single collection.
+The tier every account starts on: the one that allows a single owned collection.
 _Avoid_: Basic plan, default plan
