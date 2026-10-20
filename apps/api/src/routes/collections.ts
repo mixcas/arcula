@@ -50,24 +50,13 @@ import {
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
+import { mintId } from "../ids";
 import { parseMediaKey, stagedCollectionPrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
-import { serializeCollection } from "../serialize";
+import { displayName, serializeCollection } from "../serialize";
 
 export const collectionRoutes = new Hono();
-
-/**
- * A fresh row id: a UUID with its hyphens removed.
- *
- * The hyphen-free shape is load-bearing, not cosmetic. Routes carry the id in
- * a `{urlizedName}-{id}` segment, and the client recovers it by cutting at the
- * LAST hyphen (`parseId` in `packages/shared`) — a hyphenated id would put that
- * cut inside the id itself and the recovered "id" would be its last segment.
- * The client mints the same shape for the artwork ids it supplies, so both
- * sides of a route segment obey one rule.
- */
-const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
 
 // GET /collections — signed in: the collections the caller owns *and* those
 // shared with them, together, name-ordered, each row carrying its `role`
@@ -126,10 +115,9 @@ collectionRoutes.get("/collections", async (c) => {
       }
       // The glossary's "the owner's display name, falling back to email": an
       // account with no usable name is named by its address.
-      const name = ownerName?.trim();
       return serializeCollection(collection, {
         role: "collaborator",
-        ownerName: name ? name : ownerEmail,
+        ownerName: displayName(ownerName, ownerEmail),
       });
     }),
   );

@@ -54,14 +54,26 @@ export async function json<T = unknown>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** The error envelope: the code, plus the failed fields. */
-export async function err(
-  res: Response,
-): Promise<{ code: string; fields?: Record<string, string> }> {
+/** The error envelope: the code, the failed fields and the structured
+ *  details. `details` is `error.details` when the route nested it (the
+ *  wrong-account invited email) and the flat extra keys otherwise. */
+export async function err(res: Response): Promise<{
+  code: string;
+  message: string;
+  fields?: Record<string, string>;
+  details: Record<string, unknown>;
+}> {
   const body = await json<{
-    error: { code: string; fields?: Record<string, string> };
+    error: {
+      code: string;
+      message: string;
+      fields?: Record<string, string>;
+      details?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
   }>(res);
-  return body.error;
+  const { code, message, fields, details, ...flat } = body.error;
+  return { code, message, fields, details: details ?? flat };
 }
 
 /**

@@ -49,11 +49,13 @@ S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
 
-## Sharing (partly built)
+## Sharing (invitations built)
 
-The read and write sides of this are built; the access-administration routes
-are not. [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md)
-is the accepted design for all of it.
+The read and write sides of sharing are built, and so is the invitation loop —
+create, mail, preview, accept and decline. The rest of access administration
+(access card, resend, revoke, remove, leave, transfer) is not.
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
+accepted design for all of it.
 
 Access is membership. `access.ts` answers the visitor and access questions as
 pure functions over the collection, the viewer's membership and the row:
@@ -75,9 +77,13 @@ Final media keys use the collection's fixed `mediaNamespaceId`, staging is per
 uploader, and the proxy's staging branch admits the uploader whose prefix holds
 the object while they are still a member of the collection.
 
-Not built yet: invitations (`collection_invitations` rows with a hashed
-single-use token), the access/invitation/collaborator/transfer routes below,
-and the mails.
+The invitation loop is built: `POST /collections/:id/invitations` writes a
+pending row and mails `CLIENT_ORIGIN/invite/:token`; the public
+`GET /invitations/:token` previews it, and the invited account accepts or
+declines with that token. The raw token is never stored — only its SHA-256
+hash — and acceptance needs both the token and a session whose email matches.
+Still not built: resend, revoke, the access card, collaborator removal,
+leaving, ownership transfer and `GET /me/invitations`.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |

@@ -14,6 +14,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "forbidden"
   | "not-found"
+  | "conflict"
   | "limit-reached"
   | "field-not-writable"
   | "internal";
@@ -26,6 +27,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   unauthorized: 401,
   forbidden: 403,
   "not-found": 404,
+  conflict: 409,
   "limit-reached": 409,
   "field-not-writable": 409,
   internal: 500,

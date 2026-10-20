@@ -16,8 +16,8 @@ name, never a subpath:
   `Collection`, `CollectionRole`, `ArtworkPhoto`, `ArtworkDocument`,
   `ImageVariant`. `Collection` carries `role`/`ownerName` — the dashboard
   list's per-row extras, absent on every other read.
-- `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`
-  (including the access and invitation payloads), `document`, `user`.
+- `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`,
+  `invitation` (create, summary, preview), `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.
 - `limits.ts` — `COLLECTION_LIMITS` and `collectionLimitForTier`, the per-tier
   collection quota the API enforces on create. The quota counts owned
@@ -26,8 +26,9 @@ name, never a subpath:
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
 - `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
 
-The read side of sharing — `role`/`ownerName` on the dashboard rows — is in the
-code; the access and invitation types arrive with the write side, designed in
+The read side of sharing — `role`/`ownerName` on the dashboard rows — and the
+invitation loop's payloads are in the code. The access-card, resend, revoke and
+transfer payloads arrive with the rest of access administration, designed in
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md).
 
 Tests live in `tests/` and run with the repo's standard vitest setup

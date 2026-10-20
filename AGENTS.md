@@ -11,11 +11,13 @@
 > **`docs/adr/`**.
 >
 > **Sharing is partly built.** Access as membership — the shared dashboard
-> list, documents for members, and every write path a collaborator needs — has
-> landed. Invitations, the access/collaborator/transfer routes and leaving are
-> still the target. The model is accepted in
+> list, documents for members, every write path a collaborator needs, and the
+> invitation loop (create, preview, accept, decline) — has landed. Resend,
+> revoke, the access card, collaborator removal, leaving and transfer are still
+> the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
-> below that describe access administration are the target until it lands.
+> below that describe the rest of access administration are the target until it
+> lands.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -168,19 +170,22 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
-- `routes/` — `collections` (with the access, invitation, collaborator and
-  transfer routes to come — the only owner-only surface left), `artworks`,
-  `me` (with the invitation list to come), `media` (the object proxy),
-  `artworkMedia` (stage/process, under the caller's own staging prefix).
+- `invitations.ts` — the pure token algebra (`mintInvitationToken`,
+  `hashInvitationToken`, `normalizeEmail`) and the one validity question
+  (`isInvitationUsable`: pending and not past `expiresAt`).
+- `routes/` — `collections` (with the access, collaborator and transfer routes
+  to come — the only owner-only surface left), `invitations` (create, public
+  preview, accept, decline), `artworks`, `me` (with the invitation list to
+  come), `media` (the object proxy), `artworkMedia` (stage/process, under the
+  caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
-collection, document, user; the collection schemas carry the access and
-invitation payloads), `artworkPhotos.ts` (the `order` invariant,
-`sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file caps +
-accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
+collection, invitation, document, user), `artworkPhotos.ts` (the `order`
+invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file
+caps + accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
 `types.ts`.
 
 **`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
@@ -193,8 +198,9 @@ system.
 `collectionInvitations`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
 `artworkDocuments`) and the `schema` object the adapter consumes. The two
 sharing tables are in the schema and `collectionCollaborators` is read on every
-access question; the code that writes either table (invitations, removal,
-transfer) is not built yet.
+access question; the invitation routes write `collectionInvitations`, while the
+code that writes `collectionCollaborators` (acceptance, removal, transfer) is
+partly built — acceptance writes it, removal and transfer are not.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an

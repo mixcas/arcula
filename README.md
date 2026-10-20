@@ -57,27 +57,27 @@ is yours to argue with.
 
 Early, and honest about what is missing:
 
-| Area                                        | State                                         |
-| ------------------------------------------- | --------------------------------------------- |
-| Email/password auth, protected routes       | Working (Better Auth)                         |
-| Sign up                                     | Working                                       |
-| Sign in / sign out, password reset by email | Working                                       |
-| Account profile (name), change password     | Working                                       |
-| Create, list, view, rename collections      | Working                                       |
-| Share a collection with collaborators       | Membership works; inviting is not built       |
-| Collections per account                     | One owned collection; enforced by the API     |
-| Public/private flag per collection          | Working                                       |
-| List a collection's artworks                | Working                                       |
-| Add and edit an artwork                     | Working                                       |
-| Published/draft status per artwork          | Working; the collection is the gate           |
-| Public collection and single-artwork pages  | Working (the "skins")                         |
-| Photo uploads                               | Working — server-side variants (5 + original) |
-| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy  |
-| Soft delete of artworks (in bulk)           | Working                                       |
-| Restore a soft-deleted artwork              | API route present; no trash UI yet            |
-| CSV import of artworks                      | Working                                       |
-| Private-collection password protection      | Not implemented                               |
-| Delete a collection, export, search         | Not implemented (see the roadmap)             |
+| Area                                        | State                                           |
+| ------------------------------------------- | ----------------------------------------------- |
+| Email/password auth, protected routes       | Working (Better Auth)                           |
+| Sign up                                     | Working                                         |
+| Sign in / sign out, password reset by email | Working                                         |
+| Account profile (name), change password     | Working                                         |
+| Create, list, view, rename collections      | Working                                         |
+| Share a collection with collaborators       | Invitation loop works; access card is not built |
+| Collections per account                     | One owned collection; enforced by the API       |
+| Public/private flag per collection          | Working                                         |
+| List a collection's artworks                | Working                                         |
+| Add and edit an artwork                     | Working                                         |
+| Published/draft status per artwork          | Working; the collection is the gate             |
+| Public collection and single-artwork pages  | Working (the "skins")                           |
+| Photo uploads                               | Working — server-side variants (5 + original)   |
+| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy    |
+| Soft delete of artworks (in bulk)           | Working                                         |
+| Restore a soft-deleted artwork              | API route present; no trash UI yet              |
+| CSV import of artworks                      | Working                                         |
+| Private-collection password protection      | Not implemented                                 |
+| Delete a collection, export, search         | Not implemented (see the roadmap)               |
 
 ### How access control works
 
@@ -93,8 +93,9 @@ members only.
 Collaboration is partly built: an account with a `collection_collaborators`
 row reads the whole collection — drafts and deleted works included — and edits
 it exactly as the owner does ([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
-Invitations, the access card and ownership transfer are not built yet, so a
-collaborator row is written outside the product.
+The owner can invite an address by email; the link carries a single-use token,
+and the invited account accepts or declines it. The access card, resend, revoke
+and ownership transfer are not built yet.
 
 The collection is the only gate: a visitor sees a published, live work exactly
 when its collection is public, and a draft, a deleted work and a private

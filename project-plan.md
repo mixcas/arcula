@@ -283,16 +283,13 @@ own handler. The full route table is in `apps/api/README.md`. The shape of a
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
 
-Sharing's read and write sides are built: `GET /collections` answers owned and
-shared collections together, each row with `role` and a shared row with
-`ownerName`, every read honours membership, and every write route answers to
-it — a non-member gets `403`, a missing collection `404`. Still to come: the
-access read (`GET /collections/:id/access`), the invitation and collaborator
-routes under `/collections/:id`, the transfer route, the token
-preview/accept/decline routes under `/invitations`, and `GET /me/invitations`
-for the dashboard. The error envelope gains `conflict` (409) for state
-conflicts; an invalid, expired, revoked or consumed invitation token answers
-`not-found` like an unknown one.
+Sharing's read and write sides are built, and so is the invitation loop: the
+owner creates an invitation, the mail carries its single-use hashed token, and
+the invited account previews, accepts or declines it. Still to come: the access
+read (`GET /collections/:id/access`), resend, revoke, collaborator removal,
+leaving, the transfer route, and `GET /me/invitations` for the dashboard. The
+error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
+revoked or consumed invitation token answers `not-found` like an unknown one.
 
 ## The frontend
 
