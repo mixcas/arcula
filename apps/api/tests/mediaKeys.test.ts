@@ -14,6 +14,8 @@ import {
   finalPhotoKey,
   mediaNamespaceOf,
   parseMediaKey,
+  stagedArtworkPrefix,
+  stagedCollectionPrefix,
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
@@ -124,6 +126,33 @@ describe("staging keys", () => {
   it("names the second segment the uploader", () => {
     const key = stagingOriginalKey(UPLOADER, CID, AID, ENTRY, "jpg");
     expect(key).toBe(`staging/${UPLOADER}/${CID}/${AID}/${ENTRY}.jpg`);
+  });
+
+  it("sits under its own uploader's prefixes, and no one else's", () => {
+    // The per-uploader fact is what makes a sweep and a discard safe: a prefix
+    // built from the collection alone (or from `staging/`) would let one
+    // member's cleanup reach another member's unsaved upload. Both the
+    // collection-wide and the artwork-wide prefix are checked, because those
+    // are the two the routes list against.
+    expect(stagedArtworkPrefix(UPLOADER, CID, AID)).toBe(
+      `staging/${UPLOADER}/${CID}/${AID}/`,
+    );
+    expect(stagedCollectionPrefix(UPLOADER, CID)).toBe(
+      `staging/${UPLOADER}/${CID}/`,
+    );
+
+    const key = stagingOriginalKey(UPLOADER, CID, AID, ENTRY, "jpg");
+    const OTHER_UPLOADER = "uploader-2";
+
+    expect(key.startsWith(stagedCollectionPrefix(UPLOADER, CID))).toBe(true);
+    expect(key.startsWith(stagedCollectionPrefix(OTHER_UPLOADER, CID))).toBe(
+      false,
+    );
+
+    expect(key.startsWith(stagedArtworkPrefix(UPLOADER, CID, AID))).toBe(true);
+    expect(key.startsWith(stagedArtworkPrefix(UPLOADER, CID, "art-2"))).toBe(
+      false,
+    );
   });
 });
 

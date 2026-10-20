@@ -167,23 +167,3 @@ describe("the single read of a shared collection", () => {
     }
   });
 });
-
-describe("a collaborator's write", () => {
-  it("is refused until the write side lands", async () => {
-    // This ticket is the read side. The write routes stay owner-only, so the
-    // capability the next ticket adds is not half-shipped here.
-    const res = await req("POST", `/api/v1/collections/${cid}/artworks`, {
-      cookies: collaborator.cookies,
-      body: JSON.stringify({
-        artworkId: uuid(),
-        title: "By The Collaborator",
-        artistName: "C. Cas",
-        status: "draft",
-        photos: [],
-        documents: [],
-      }),
-    });
-    expect(res.status).toBe(403);
-    expect((await err(res)).code).toBe("forbidden");
-  });
-});

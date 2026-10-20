@@ -83,6 +83,26 @@ export const finalDocumentKey = (
 ): string =>
   `${finalBase("documents", namespaceId, collectionId, artworkId, entryId)}_${key}.${ext}`;
 
+/**
+ * The two prefixes the staging routes list against — one artwork's staged
+ * space, and the caller's whole staged space in a collection (the sweep's).
+ *
+ * Both carry the uploader's id, never the collection's alone: staging is per
+ * uploader (ADR-0004), so listing either reaches the caller's own unsaved
+ * uploads and nobody else's. A builder rather than a template at the call
+ * site, because that property is the sweep's whole safety.
+ */
+export const stagedArtworkPrefix = (
+  uploaderId: string,
+  collectionId: string,
+  artworkId: string,
+): string => `staging/${uploaderId}/${collectionId}/${artworkId}/`;
+
+export const stagedCollectionPrefix = (
+  uploaderId: string,
+  collectionId: string,
+): string => `staging/${uploaderId}/${collectionId}/`;
+
 export const stagingOriginalKey = (
   uploaderId: string,
   collectionId: string,
@@ -90,7 +110,7 @@ export const stagingOriginalKey = (
   entryId: string,
   ext: string,
 ): string =>
-  `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}.${ext}`;
+  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}.${ext}`;
 
 export const stagingVariantKey = (
   uploaderId: string,
@@ -100,7 +120,7 @@ export const stagingVariantKey = (
   key: string,
   ext: string,
 ): string =>
-  `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
+  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}_${key}.${ext}`;
 
 /**
  * The final prefixes that address one entry's objects. Deleting a removed
@@ -140,14 +160,16 @@ export const stagedOriginalPrefix = (
   collectionId: string,
   artworkId: string,
   entryId: string,
-): string => `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}.`;
+): string =>
+  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}.`;
 
 export const stagedVariantPrefix = (
   uploaderId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
-): string => `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}_`;
+): string =>
+  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}_`;
 
 /** The unmodified source: no key suffix, so a staged entry is at most
  *  one original plus its generated variants. */

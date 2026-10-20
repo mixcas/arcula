@@ -477,9 +477,9 @@ describe("GET /api/v1/media — staged objects", () => {
     // …and the uploader must still be a member: a staged object under the
     // member's own prefix reads for them, and the same key is refused once
     // their membership row is gone. The uploader's prefix alone is not
-    // enough. The object is written directly: staging is owner-only until
-    // the write ticket, and the proxy's verdict is about the key and the
-    // row, not about how the bytes got there.
+    // enough. The object is written directly rather than staged: the proxy's
+    // verdict is about the key and the row, not about how the bytes got
+    // there.
     await shareWith(cid, stranger.userId);
     const stagedByThem = stagingOriginalKey(
       stranger.userId,
