@@ -4,12 +4,12 @@
 // construction) and authz is checked per request, then the object
 // streams:
 //
-//   final photo    — the owner, or a visitor iff
-//                    `artwork.isPublic && collection.isPublic &&
-//                    deletedAt == null`. A private or deleted work 404s
-//                    for a visitor, uniformly: saying which was refused
-//                    would be a disclosure (the same call as the
-//                    single-artwork read).
+//   final photo    — owner, or a visitor when access.ts's verdict admits
+//                    the work (published, live, in a public collection). A
+//                    draft, a deleted work and a work inside a private
+//                    collection 404 for a visitor, uniformly: saying which
+//                    was refused would be a disclosure (the same call as
+//                    the single-artwork read).
 //   final document — the owner ONLY. Documents are never public; the
 //                    proxy 403s everyone else so a future UI that forgot
 //                    to hide them renders a 403 rather than a leak.
@@ -28,6 +28,7 @@ import {
   artworkPhotoVariants as artworkPhotoVariantsTable,
 } from "@arcula/db";
 import { Hono } from "hono";
+import { canReadArtworkDocuments, canSeeArtwork, isOwner } from "../access";
 import { loadArtworkInCollection, loadCollection } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
@@ -59,17 +60,18 @@ mediaRoutes.get("/media", async (c) => {
   }
 
   const session = await resolveSession(c);
+  const viewer = session?.user.id ?? null;
 
   if (parsed.kind === "staging") {
     // No row yet: access is the collection's ownership, plain.
-    if (!session) {
+    if (session === null) {
       throw new ApiError("unauthorized", "A session is required");
     }
     const collection = await loadCollection(parsed.collectionId);
     if (!collection) {
       throw new ApiError("not-found", "The collection does not exist");
     }
-    if (collection.userId !== session.user.id) {
+    if (!isOwner(viewer, collection)) {
       throw new ApiError(
         "forbidden",
         "You do not have access to this collection",
@@ -101,23 +103,16 @@ mediaRoutes.get("/media", async (c) => {
     // Never public, owner only — and the refusal is a 403, not a 404:
     // the key names a row, and the point of the split is that a
     // forgotten-to-hide UI fails closed.
-    if (session === null || artwork.userId !== session.user.id) {
+    if (!canReadArtworkDocuments(viewer, artwork)) {
       throw new ApiError("forbidden", "Documents are private to their owner");
     }
   } else {
-    const isOwner = session !== null && artwork.userId === session.user.id;
-    if (!isOwner) {
-      const collection = await loadCollection(parsed.collectionId);
-      if (
-        artwork.deletedAt !== null ||
-        !artwork.isPublic ||
-        collection?.isPublic !== true
-      ) {
-        throw new ApiError(
-          "not-found",
-          "The object key does not name a stored object",
-        );
-      }
+    const collection = await loadCollection(parsed.collectionId);
+    if (!collection || !canSeeArtwork(viewer, collection, artwork)) {
+      throw new ApiError(
+        "not-found",
+        "The object key does not name a stored object",
+      );
     }
   }
 

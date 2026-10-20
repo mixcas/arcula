@@ -6,6 +6,9 @@ per environment, selected by the required `ENV` context value: `prod` (the
 `Arcula` stack) or `dev` (the `ArculaDev` stack). That is the entire footprint
 of either environment: no VPC, no ALB, no ECS, no RDS. Postgres lives in
 Supabase, created out of band and reached over its public connection string.
+Both environments share one AWS account and one bootstrap; see
+[ADR-0002](../../docs/adr/0002-one-account-one-bootstrap.md) for why, and for
+the isolation that buys and does not.
 
 Only what must differ by environment does: the stack's name and description,
 the API's display name, the Lambda artifact, and — on dev only — two function
@@ -78,7 +81,8 @@ apex's.
 ## First run
 
 The order is forced: a host's routing target (a `d-…` endpoint) does not
-exist until the stack has been deployed once.
+exist until the stack has been deployed once, and both environments share one
+account and one bootstrap ([ADR-0002](../../docs/adr/0002-one-account-one-bootstrap.md)).
 
 1. **Bootstrap the account once**, with an identity that has administrator
    access:
@@ -91,30 +95,49 @@ exist until the stack has been deployed once.
    `CDKToolkit` stack and the `cdk-*` roles, going straight at CloudFormation,
    SSM, S3 and ECR, while the deploy identity may only _assume_ those roles
    (`scripts/provision-oidc.mjs`). Running it from a laptop with admin
-   credentials once is the whole of it.
+   credentials once is the whole of it. It is idempotent, and the second
+   environment needs nothing from it.
 
-2. The environment's Postgres project exists out of band, and
-   `infra/cdk/.env.<env>` holds its `DATABASE_URL`, `AUTH_SECRET`,
+2. **Create the environment's Postgres project** out of band, and fill
+   `infra/cdk/.env.<env>` with its `DATABASE_URL`, `AUTH_SECRET`,
    `RESEND_API_KEY`, `EMAIL_FROM`, `DOMAIN` and the `SEED_*` owner account.
-3. `node scripts/provision-cert.mjs <host>`: publish the validation record it
-   prints, wait for it to be issued, and put the ARN in the file as
-   `CERT_ARN`.
-4. `sh scripts/build-lambda.sh <env>`, then `sh scripts/deploy-<env>.sh`. While
-   the host does not resolve, the deploy prints the routing records it waits
-   on and finishes successfully instead of failing. Dev has finished its
-   migrate and seed by then; production stops before touching the database.
-5. Publish those records against the stack's own regional endpoint (the apex
-   and www targets are printed), then run the deploy again: it continues,
-   re-deploys with the real `PUBLIC_URL`, and verifies.
+   The file is gitignored and never committed.
 
-The GitHub side — the two Environments, their configuration, and the two
-deploy roles `scripts/provision-oidc.mjs` creates — belongs to the pipeline.
+3. **Provision the certificate**: `node scripts/provision-cert.mjs <host>`.
+   Publish the validation record it prints, wait for it to be issued, and put
+   the ARN it prints in the file as `CERT_ARN`. The certificate must be in
+   `us-east-1`, the one region an HTTP-API custom domain accepts.
 
-For dev, `sh scripts/setup-dev.sh` walks that sequence interactively: it opens
-each console, captures every value into `infra/cdk/.env.dev` (gitignored) and
-the `dev` GitHub Environment, dispatches the two pipeline deploys that the
-first run needs, and ends on the release. The list above is the shape it
-follows, so run it rather than repeating the steps by hand.
+4. **Push `dev` and apply the repository settings** — branch protection on
+   `dev` and `main`, the `dev` and `production` GitHub Environments each
+   restricted to its own branch, and the two deploy roles from
+   `scripts/provision-oidc.mjs`. This comes before the first deploy, because
+   the deploy a workflow runs is where an environment's values are read.
+
+5. **Deploy once**: `sh scripts/build-lambda.sh <env>`, then
+   `sh scripts/deploy-<env>.sh` — or dispatch the deploy workflow, which runs
+   the same scripts. While the host does not resolve, the deploy prints the
+   routing records it waits on and finishes successfully instead of failing.
+   Dev has finished its migrate and seed by then; production stops before
+   touching the database.
+
+6. **Publish the routing record** against the stack's own regional endpoint
+   (the deploy prints the apex and www targets — they are different `d-…`
+   values, so never point one at the other), then run the deploy again: it
+   continues, re-deploys with the real `PUBLIC_URL`, and verifies.
+
+The GitHub side stays in step 4: the Environments, their configuration, and the
+two deploy roles `scripts/provision-oidc.mjs` creates.
+
+For dev, `sh scripts/setup-dev.sh` walks that sequence interactively and is the
+way to do it: it opens each console, captures every value into
+`infra/cdk/.env.dev` (gitignored) and the `dev` GitHub Environment, dispatches
+the two pipeline deploys the first run needs, and ends on the release. It also
+checks each Environment admits only its branch, and sets production's
+Environment before the release. The list above is the shape it follows; where
+the two disagree, the wizard is right because it is the one that runs. The dev stack is
+given a `DOMAIN` like any other, so it derives a www pair too — dev publishes
+only the apex, because a `www` host on the dev domain has nothing to alias to.
 
 ## Commands
 

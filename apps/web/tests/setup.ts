@@ -46,3 +46,18 @@ if (
     if (typeof options.top === "number") this.scrollTop = options.top;
   };
 }
+
+// jsdom implements no ResizeObserver, and two things observe on mount:
+// mantine-datatable measures its scroll viewport, and Mantine's
+// SegmentedControl (the artwork form's Status control) wires its floating
+// indicator to its root through one. The stub satisfies the observation and
+// reports nothing back — jsdom does no layout, so there is no size to report.
+// Node-environment files have no reason to see this, but the class itself is
+// inert there.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}

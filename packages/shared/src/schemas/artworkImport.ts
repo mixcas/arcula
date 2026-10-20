@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
 /**
@@ -23,15 +24,23 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  * validates each row against this same `artworkSchema`, so an imported work
  * lands byte-identical to one created by hand.
  *
- * `isPublic` is intentionally NOT a mappable column: imported works inherit the
- * app-wide public-by-default posture and can be flipped per-work afterwards.
+ * `status` is not a mappable column either, and is pinned to `published`: an
+ * import is the owner adding works to a collection, not a way to declare one a
+ * draft. A work can be turned into a draft afterwards, by id.
  */
 
 // ---------------------------------------------------------------------------
 // Field metadata
 // ---------------------------------------------------------------------------
 
-/** Every writable artwork field an import may populate, minus `isPublic`. */
+/**
+ * The status every imported work lands with. An import adds works to a
+ * collection; it does not declare any of them drafts. One constant, because
+ * the review's per-row check and the route's write must agree.
+ */
+export const IMPORTED_WORK_STATUS: ArtworkStatus = "published";
+
+/** Every writable artwork field an import may populate. */
 const IMPORTABLE_KEYS = [
   "title",
   "artistName",
@@ -504,12 +513,15 @@ export const attachIssues = (rows: ImportRow[]): ReviewRow[] =>
 /**
  * Validate one row against the same schema as the Add/Edit forms. The schema's
  * messages are reused verbatim so the fix instructions match everywhere, and
- * `isPublic` is pinned to the app-wide default.
+ * `status` is pinned to the app-wide default.
  */
 export const validateImportRow = (
   values: ImportRowValues,
 ): ImportRowIssue[] => {
-  const parsed = artworkSchema.safeParse({ ...values, isPublic: true });
+  const parsed = artworkSchema.safeParse({
+    ...values,
+    status: IMPORTED_WORK_STATUS,
+  });
   if (parsed.success) {
     return [];
   }

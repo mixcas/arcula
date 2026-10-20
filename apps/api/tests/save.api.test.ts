@@ -10,6 +10,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { artworks as artworksTable } from "@arcula/db";
 import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import { canSeeArtwork } from "../src/access";
+import { loadArtworkInCollection, loadCollection } from "../src/authorize";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -101,7 +103,7 @@ interface WireArtwork {
   title: string;
   artistName: string;
   collectionId: string;
-  isPublic: boolean;
+  status: string;
   deletedAt: WireTimestamp | null;
   createdAt: WireTimestamp;
   updatedAt: WireTimestamp;
@@ -119,11 +121,13 @@ interface WireError {
 // ---------------------------------------------------------------------------
 
 let owner: Awaited<ReturnType<typeof freshUser>>;
+let visitor: Awaited<ReturnType<typeof freshUser>>;
 let cid: string;
 let privateCid: string;
 
 beforeAll(async () => {
   owner = await freshUser("Save");
+  visitor = await freshUser("SaveVisitor");
   cid = await makeCollection(owner.userId, { isPublic: true });
   privateCid = await makeCollection(owner.userId, { isPublic: false });
 });
@@ -243,7 +247,7 @@ async function makeTwoPhotoArtwork(): Promise<{
 /** A bare artwork row, inserted directly (the route's job is tested elsewhere). */
 async function insertRow(
   collectionId: string,
-  opts: { isPublic?: boolean; deleted?: boolean } = {},
+  opts: { status?: "draft" | "published"; deleted?: boolean } = {},
 ): Promise<string> {
   const id = uuid();
   const now = new Date();
@@ -253,7 +257,7 @@ async function insertRow(
     collectionId,
     title: "Direct Row",
     artistName: "C. Cas",
-    isPublic: opts.isPublic ?? true,
+    status: opts.status ?? "published",
     deletedAt: opts.deleted ? now : null,
     createdAt: now,
     updatedAt: now,
@@ -273,7 +277,7 @@ describe("POST …/artworks", () => {
       artworkId: aid,
       title: "Study in Red",
       artistName: "C. Cas",
-      isPublic: true,
+      status: "published",
       photos: [{ entryId: pOne, name: "scan.jpg" }],
     });
     expect(res.status).toBe(201);
@@ -310,7 +314,7 @@ describe("POST …/artworks", () => {
       title: "Study in Red",
       artistName: "C. Cas",
       serie: "Early works",
-      isPublic: true,
+      status: "published",
       photos: [{ entryId: pShape, name: "scan.jpg" }],
     });
     expect(res.status).toBe(201);
@@ -325,16 +329,16 @@ describe("POST …/artworks", () => {
       "deletedAt",
       "documents",
       "id",
-      "isPublic",
       "photos",
       "serie",
+      "status",
       "title",
       "updatedAt",
       "userId",
     ]);
     expect(body.userId).toBe(owner.userId);
     expect(body.collectionId).toBe(cid);
-    expect(body.isPublic).toBe(true);
+    expect(body.status).toBe("published");
     expect(body.deletedAt).toBe(null);
     expect(body.serie).toBe("Early works");
     for (const ts of [body.createdAt, body.updatedAt]) {
@@ -409,6 +413,25 @@ describe("POST …/artworks", () => {
     }
 
     expect(body.documents).toEqual([]);
+  });
+
+  it("writes the status the owner chose, and published when they say nothing", async () => {
+    const draft = await createArtwork({
+      artworkId: uuid(),
+      title: "Work in Progress",
+      artistName: "C. Cas",
+      status: "draft",
+    });
+    expect(draft.status).toBe(201);
+    expect((await json<WireArtwork>(draft)).status).toBe("draft");
+
+    const silent = await createArtwork({
+      artworkId: uuid(),
+      title: "Unstated",
+      artistName: "C. Cas",
+    });
+    expect(silent.status).toBe(201);
+    expect((await json<WireArtwork>(silent)).status).toBe("published");
   });
 
   it("promotes a staged PDF document as a file with no variants", async () => {
@@ -689,6 +712,37 @@ describe("PATCH …/artworks/{aid}", () => {
     ]);
   });
 
+  it("sets the status a PATCH names and leaves it alone when omitted", async () => {
+    const aid = uuid();
+    expect(
+      (
+        await createArtwork({
+          artworkId: aid,
+          title: "Work in Progress",
+          artistName: "C. Cas",
+          status: "draft",
+        })
+      ).status,
+    ).toBe(201);
+
+    // Omitted: the draft stays a draft — an edit form that never touched the
+    // choice cannot publish the work by saving it.
+    const kept = await patchArtwork(aid, {
+      title: "Work in Progress",
+      artistName: "C. Cas",
+    });
+    expect(kept.status).toBe(200);
+    expect((await json<WireArtwork>(kept)).status).toBe("draft");
+
+    const published = await patchArtwork(aid, {
+      title: "Work in Progress",
+      artistName: "C. Cas",
+      status: "published",
+    });
+    expect(published.status).toBe(200);
+    expect((await json<WireArtwork>(published)).status).toBe("published");
+  });
+
   it("answers an omitted document sequence in id order, whatever the rows sit in", async () => {
     // The client-visible contract: a PATCH that omits `documents` answers with
     // the kept set in id order, not in whatever order the rows physically sit
@@ -793,9 +847,9 @@ describe("PATCH …/artworks/{aid}", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET reads", () => {
-  it("lists the owner's live works only; a visitor sees the public ones", async () => {
-    const pub = await insertRow(cid, { isPublic: true });
-    const priv = await insertRow(cid, { isPublic: false });
+  it("lists the owner's live works only; a visitor sees the published ones", async () => {
+    const pub = await insertRow(cid, { status: "published" });
+    const draft = await insertRow(cid, { status: "draft" });
     const del = await insertRow(cid, { deleted: true });
 
     const asOwner = await json<WireArtwork[]>(
@@ -803,57 +857,79 @@ describe("GET reads", () => {
     );
     const ownerIds = asOwner.map((a) => a.id);
     expect(ownerIds).toContain(pub);
-    expect(ownerIds).toContain(priv);
+    expect(ownerIds).toContain(draft);
     expect(ownerIds).not.toContain(del);
 
     const asVisitor = await json<WireArtwork[]>(await listArtworks(undefined));
     const visitorIds = asVisitor.map((a) => a.id);
     expect(visitorIds).toContain(pub);
-    expect(visitorIds).not.toContain(priv);
+    expect(visitorIds).not.toContain(draft);
     expect(visitorIds).not.toContain(del);
   });
 
+  it("answers the visitor list, the single read and the verdict the same way for one fixture", async () => {
+    // The two declarations meet here: the list is a SQL filter over `status`
+    // and `deletedAt`, the single read is the pure verdict in access.ts over
+    // the loaded rows. A draft or a deleted work of a public collection is in
+    // none of the three answers; a published, live one is in all of them.
+    const pub = await insertRow(cid, { status: "published" });
+    const draft = await insertRow(cid, { status: "draft" });
+    const del = await insertRow(cid, { status: "published", deleted: true });
+
+    const collection = await loadCollection(cid);
+    if (!collection) throw new Error("the fixture collection is missing");
+
+    const visitorList = await json<WireArtwork[]>(
+      await listArtworks(undefined),
+    );
+    const visitorIds = visitorList.map((a) => a.id);
+
+    for (const [id, listed] of [
+      [pub, true],
+      [draft, false],
+      [del, false],
+    ] as const) {
+      const row = await loadArtworkInCollection(cid, id);
+      if (!row) throw new Error("the fixture row is missing");
+      const verdict = canSeeArtwork(null, collection, row);
+      expect(verdict).toBe(listed);
+      expect(visitorIds.includes(id)).toBe(verdict);
+      expect((await getArtwork(id)).status).toBe(verdict ? 200 : 404);
+    }
+  });
+
   it("403s a visitor's list on a private collection", async () => {
-    await insertRow(privateCid, { isPublic: true });
+    await insertRow(privateCid, { status: "published" });
     const res = await req("GET", `/api/v1/collections/${privateCid}/artworks`);
     expect(res.status).toBe(403);
     const err = await json<WireError>(res);
     expect(err.error.code).toBe("forbidden");
   });
 
-  it("lets a visitor read a public work by id even inside a private collection", async () => {
-    const aid = uuid();
-    const created = await req(
-      "POST",
-      `/api/v1/collections/${privateCid}/artworks`,
-      {
-        cookies: owner.cookies,
-        body: JSON.stringify({
-          artworkId: aid,
-          title: "Visible",
-          artistName: "C. Cas",
-          isPublic: true,
-        }),
-      },
-    );
-    expect(created.status).toBe(201);
-    const asVisitor = await req(
-      "GET",
-      `/api/v1/collections/${privateCid}/artworks/${aid}`,
-    );
-    expect(asVisitor.status).toBe(200);
-    const body = await json<WireArtwork>(asVisitor);
-    expect(body.id).toBe(aid);
-    expect(body.isPublic).toBe(true);
+  it("hides a published work inside a private collection from a stranger and an anonymous reader", async () => {
+    // The case ADR-0003 removes: the collection is the whole gate, so a
+    // direct id read no longer reaches a work hidden behind it.
+    const aid = await insertRow(privateCid, { status: "published" });
+    const path = `/api/v1/collections/${privateCid}/artworks/${aid}`;
+
+    const anon = await req("GET", path);
+    expect(anon.status).toBe(404);
+
+    const asVisitor = await req("GET", path, { cookies: visitor.cookies });
+    expect(asVisitor.status).toBe(404);
+
+    const asOwner = await req("GET", path, { cookies: owner.cookies });
+    expect(asOwner.status).toBe(200);
+    expect((await json<WireArtwork>(asOwner)).id).toBe(aid);
   });
 
-  it("404s a visitor on a private or deleted work; the owner still reads the deleted one", async () => {
-    const priv = await insertRow(cid, { isPublic: false });
-    const privRes = await req(
+  it("404s a visitor on a draft or deleted work; the owner still reads the deleted one", async () => {
+    const draft = await insertRow(cid, { status: "draft" });
+    const draftRes = await req(
       "GET",
-      `/api/v1/collections/${cid}/artworks/${priv}`,
+      `/api/v1/collections/${cid}/artworks/${draft}`,
     );
-    expect(privRes.status).toBe(404);
+    expect(draftRes.status).toBe(404);
 
     const del = await insertRow(cid, { deleted: true });
     expect(

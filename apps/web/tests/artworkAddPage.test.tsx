@@ -114,7 +114,7 @@ const created = (overrides: Partial<Artwork> = {}): Artwork => ({
   collectionId: COLLECTION_ID,
   title: "Estudio en rojo",
   artistName: "María López",
-  isPublic: true,
+  status: "published",
   photos: [],
   documents: [],
   ...overrides,
@@ -219,11 +219,25 @@ describe("the Add page — the single write", () => {
     expect(body.artworkId).toMatch(/^[0-9a-f]{32}$/);
     expect(body.title).toBe("Estudio en rojo");
     expect(body.artistName).toBe("María López");
-    expect(body.isPublic).toBe(true);
+    // A work the owner did not say otherwise about goes in front of the
+    // collection's gate.
+    expect(body.status).toBe("published");
     // The staged entries pass through the hook's answer untouched: the page
     // neither reorders nor re-names them.
     expect(body.photos).toEqual(commits.photos);
     expect(body.documents).toEqual(commits.documents);
+  });
+
+  it("lets the owner send a new work as a draft", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("radio", { name: "Draft" }));
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    // The chosen status, not the default: a click on the control is what
+    // makes this a choice rather than a constant.
+    expect(createArtwork.mock.calls[0][1].status).toBe("draft");
   });
 
   it("sends empty sequences when nothing was staged", async () => {

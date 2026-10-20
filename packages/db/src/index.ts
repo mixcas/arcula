@@ -151,8 +151,10 @@ export const artworks = pgTable(
     notes: text("notes"),
     condition: text("condition"),
     currentValue: text("currentValue"),
-    // Per-artwork, independent of the collection's flag.
-    isPublic: boolean("isPublic").notNull().default(true),
+    // The owner's choice, and the only per-work field a visitor is gated on:
+    // `published` or `draft`. The collection is the whole gate; there is no
+    // per-work visibility flag.
+    status: text("status").notNull().default("published"),
     // NULL = live. Soft delete: the column is the sole record of deletion.
     deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
@@ -165,14 +167,15 @@ export const artworks = pgTable(
       table.userId,
       table.deletedAt,
     ),
-    // The visitor list.
-    index("artworks_collection_public_deleted_idx").on(
+    // The visitor list: a public collection's published, live works.
+    index("artworks_collection_status_deleted_idx").on(
       table.collectionId,
-      table.isPublic,
+      table.status,
       table.deletedAt,
     ),
     // The artwork-by-id-in-collection check (create authorization).
     index("artworks_collection_id_idx").on(table.collectionId),
+    check("artworks_status_check", sql`"status" in ('draft', 'published')`),
   ],
 );
 

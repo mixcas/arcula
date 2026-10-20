@@ -24,7 +24,7 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   collectionId: COLLECTION_ID,
   title: "Estudio en rojo",
   artistName: "María López",
-  isPublic: true,
+  status: "published",
   photos: [],
   documents: [],
   ...overrides,
@@ -128,12 +128,10 @@ describe("publicArtworkState", () => {
     ).toEqual({ status: "private" });
   });
 
-  it("is `notFound` for a public artwork from a *different* collection", () => {
-    // Not redundant with the API. The API serves a public, un-deleted artwork
-    // by its own id whatever collection it is in — deliberate, so an owner
-    // can keep one work public inside a private collection. Nothing
-    // server-side stops a work rendering on another collection's URL, so this
-    // comparison is the whole check.
+  it("is `notFound` for a published artwork from a *different* collection", () => {
+    // Not redundant with the API. The single read serves a work by its own id,
+    // and nothing server-side stops one rendering on another collection's URL
+    // — so this comparison is the whole check.
     expect(
       publicArtworkState(
         collection(),
@@ -143,14 +141,14 @@ describe("publicArtworkState", () => {
     ).toEqual({ status: "notFound" });
   });
 
-  it("does not require the artwork to be public itself", () => {
-    // The API already refuses a private or soft-deleted work, so by the time a
-    // document arrives here it passed that gate. Asserted because it looks like
-    // a gap: re-checking `isPublic` here would be defence in depth with no
-    // reachable failure, and the flag is the owner's per-work switch.
+  it("does not re-check the artwork's own status", () => {
+    // The API already refuses a draft or soft-deleted work with the same 404,
+    // so by the time a document arrives here it passed that gate. Asserted
+    // because it looks like a gap: re-checking `status` here would be defence
+    // in depth with no reachable failure.
     const state = publicArtworkState(
       collection(),
-      artwork({ isPublic: false }),
+      artwork({ status: "draft" }),
       COLLECTION_ID,
     );
     expect(state.status).toBe("ready");

@@ -250,7 +250,7 @@ export function serializeArtwork(
       ),
     ),
     collectionId: artwork.collectionId,
-    isPublic: artwork.isPublic,
+    status: artwork.status,
     deletedAt: wireTimestamp(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),

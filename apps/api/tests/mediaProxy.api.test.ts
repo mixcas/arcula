@@ -38,6 +38,7 @@ const pE = entry("media-e");
 const pOrph = entry("media-orph");
 const pKept = entry("media-kept");
 const dA = entry("media-doc");
+const dB = entry("media-doc-draft");
 
 const makePdf = (): Uint8Array<ArrayBuffer> =>
   Uint8Array.from(new TextEncoder().encode("%PDF-1.4 (test) %%EOF"));
@@ -76,7 +77,7 @@ async function createWork(
   aid: string,
   photos: { entryId: string; name: string }[],
   opts: {
-    isPublic?: boolean;
+    status?: "draft" | "published";
     documents?: { entryId: string; name: string }[];
   } = {},
 ): Promise<void> {
@@ -86,7 +87,7 @@ async function createWork(
       artworkId: aid,
       title: "Media Work",
       artistName: "C. Cas",
-      isPublic: opts.isPublic ?? true,
+      status: opts.status ?? "published",
       photos,
       documents: opts.documents ?? [],
     }),
@@ -97,7 +98,7 @@ async function createWork(
 const sourceJpeg = (async () => makeJpeg())();
 
 let pubWorkId = "";
-let privWorkId = "";
+let draftWorkId = "";
 let delWorkId = "";
 let privCollWorkId = "";
 
@@ -125,16 +126,24 @@ beforeAll(async () => {
     documents: [{ entryId: dA, name: "report.pdf" }],
   });
 
-  // privWork: private + live, one photo.
-  privWorkId = uuid();
+  // draftWork: a draft, live, one photo and one PDF document — so the
+  // documents verdict is proved at a status the work itself hides.
+  draftWorkId = uuid();
   await stage(
     "photos",
-    privWorkId,
+    draftWorkId,
     pB,
     new File([await sourceJpeg], "b.jpg", { type: "image/jpeg" }),
   );
-  await createWork(privWorkId, [{ entryId: pB, name: "b.jpg" }], {
-    isPublic: false,
+  await stage(
+    "documents",
+    draftWorkId,
+    dB,
+    new File([makePdf()], "draft.pdf", { type: "application/pdf" }),
+  );
+  await createWork(draftWorkId, [{ entryId: pB, name: "b.jpg" }], {
+    status: "draft",
+    documents: [{ entryId: dB, name: "draft.pdf" }],
   });
 
   // delWork: public but tombstoned, one photo.
@@ -259,11 +268,11 @@ describe("GET /api/v1/media — final photos", () => {
     );
   });
 
-  it("404s a visitor on a private work; the owner still reads it", async () => {
+  it("404s a visitor on a draft; the owner still reads it", async () => {
     const key = finalPhotoKey(
       owner.userId,
       cid,
-      privWorkId,
+      draftWorkId,
       pB,
       "original",
       "jpg",
@@ -291,7 +300,11 @@ describe("GET /api/v1/media — final photos", () => {
     expect(own.status).toBe(200);
   });
 
-  it("404s a visitor on a public work inside a private collection", async () => {
+  it("is the collection's gate on the bytes: a public work inside a private collection 404s", async () => {
+    // ADR-0003's case, from the bytes side: the work's own `published`
+    // status does not open a key its collection keeps closed. Before this
+    // change the proxy already refused these bytes while the single-work
+    // read admitted the row — the divergence the ADR removes.
     const key = finalPhotoKey(
       owner.userId,
       privCid,
@@ -304,6 +317,7 @@ describe("GET /api/v1/media — final photos", () => {
     expect(anon.status).toBe(404);
     const visitor = await get(key, stranger.cookies);
     expect(visitor.status).toBe(404);
+    expect((await err(visitor)).code).toBe("not-found");
     const own = await get(key, owner.cookies);
     expect(own.status).toBe(200);
   });
@@ -333,6 +347,22 @@ describe("GET /api/v1/media — final documents", () => {
       Array.from(pdf),
     );
     expect(own.headers.get("Content-Length")).toBe(String(pdf.byteLength));
+  });
+
+  it("refuses a draft's document exactly as it refuses a published one's", async () => {
+    // The documents verdict ignores status and the collection's flag: a
+    // draft hides its bytes no further than a published work does.
+    const key = finalDocumentKey(
+      owner.userId,
+      cid,
+      draftWorkId,
+      dB,
+      "original",
+      "pdf",
+    );
+    expect((await get(key)).status).toBe(403);
+    expect((await get(key, stranger.cookies)).status).toBe(403);
+    expect((await get(key, owner.cookies)).status).toBe(200);
   });
 });
 

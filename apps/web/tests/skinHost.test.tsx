@@ -33,7 +33,7 @@ const artwork: Artwork = {
   collectionId: collection.id,
   title: "Estudio en rojo",
   artistName: "María López",
-  isPublic: true,
+  status: "published",
   documents: [],
   photos: [],
 };

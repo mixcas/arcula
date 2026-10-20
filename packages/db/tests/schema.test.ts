@@ -5,13 +5,14 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the variant composite PK, the two CHECKs, the
+// position is the truth", the variant composite PK, the three CHECKs, the
 // composite indexes behind the owner/visitor lists) missing from either source
 // fails here.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -54,6 +55,31 @@ const extraConfigs = (table: PgTable): Array<Record<string, unknown>> => {
   return [];
 };
 
+// A CHECK's predicate as SQL text, off the SQL object drizzle stores: the
+// literal chunks are where the predicate lives.
+const predicateOf = (value: unknown): string => {
+  const chunks =
+    (value as { queryChunks?: Array<{ value?: unknown }> }).queryChunks ?? [];
+  return chunks
+    .map((chunk) => (Array.isArray(chunk.value) ? chunk.value.join("") : ""))
+    .join("");
+};
+
+const checksOf = (table: PgTable): Array<{ name?: string; sql: string }> =>
+  getTableConfig(table).checks.map((c) => ({
+    name: c.name,
+    sql: predicateOf(c.value),
+  }));
+
+// The table's indexes, by name, as their ordered column names.
+const indexesOf = (table: PgTable): Record<string, string[]> =>
+  Object.fromEntries(
+    getTableConfig(table).indexes.map((i) => [
+      i.config.name ?? "",
+      i.config.columns.map((c) => (c as { name: string }).name),
+    ]),
+  );
+
 const TABLE_NAMES = [
   "user",
   "session",
@@ -66,11 +92,21 @@ const TABLE_NAMES = [
   "artworkDocuments",
 ];
 
-// The committed init migration: the DDL as it will actually be applied.
-const INIT_SQL = (() => {
-  const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
-  return readFileSync(pkgRoot + "migrations/0000_init.sql", "utf8");
-})();
+// A committed migration, read off disk: the DDL as it will actually be applied.
+const readMigration = (tag: string): string =>
+  readFileSync(
+    fileURLToPath(new URL("..", import.meta.url)) + `migrations/${tag}.sql`,
+    "utf8",
+  );
+
+// The committed init migration.
+const INIT_SQL = readMigration("0000_init");
+
+// The committed migration that adds `status`.
+const STATUS_SQL = readMigration("0001_artwork_status");
+
+// The committed migration that retires the old per-work visibility column.
+const DROP_SQL = readMigration("0002_drop_artwork_ispublic");
 
 describe("the nine-table schema", () => {
   it("declares exactly the nine tables, and `user` is singular", () => {
@@ -112,7 +148,7 @@ describe("the nine-table schema", () => {
     expect(v.expiresAt.notNull).toBe(true);
   });
 
-  it("artworks is field-for-field with the shared Artwork type, and has no array columns", () => {
+  it("artworks carries the descriptive fields and its status, and no array columns", () => {
     const c = cols(artworks);
     expect(Object.keys(c)).toEqual([
       "id",
@@ -132,7 +168,7 @@ describe("the nine-table schema", () => {
       "notes",
       "condition",
       "currentValue",
-      "isPublic",
+      "status",
       "deletedAt",
       "createdAt",
       "updatedAt",
@@ -141,10 +177,28 @@ describe("the nine-table schema", () => {
     expect(c.artistName.notNull).toBe(true);
     // Money stays text.
     expect(c.currentValue.dataType).toBe("string");
-    expect(c.isPublic.notNull).toBe(true);
-    expect(c.isPublic.default).toBe(true);
+    // The owner's gate, required and defaulting to published.
+    expect(c.status.notNull).toBe(true);
+    expect(c.status.default).toBe("published");
     // NULL = live.
     expect(c.deletedAt.notNull).toBe(false);
+  });
+
+  it("artworks restricts `status` to draft or published in the Drizzle object", () => {
+    expect(checksOf(artworks)).toContainEqual({
+      name: "artworks_status_check",
+      sql: "\"status\" in ('draft', 'published')",
+    });
+  });
+
+  it("artworks carries the visitor index over the collection, the status and the deletion stamp", () => {
+    expect(indexesOf(artworks)).toMatchObject({
+      artworks_collection_status_deleted_idx: [
+        "collectionId",
+        "status",
+        "deletedAt",
+      ],
+    });
   });
 
   it("artwork_photos keeps `order`; the uniqueness on (artworkId, order) is the order invariant", () => {
@@ -226,12 +280,9 @@ describe("the committed migration (as it will actually be applied)", () => {
     expect(INIT_SQL).toContain('PRIMARY KEY("parentId","key")');
   });
 
-  it("carries the composite indexes behind the owner/visitor lists", () => {
+  it("carries the owner-list, by-id and lookup indexes the init migration creates", () => {
     expect(INIT_SQL).toContain(
       'USING btree ("collectionId","userId","deletedAt")',
-    );
-    expect(INIT_SQL).toContain(
-      'USING btree ("collectionId","isPublic","deletedAt")',
     );
     expect(INIT_SQL).toMatch(
       /CREATE INDEX "artworks_collection_id_idx" ON "artworks" USING btree \("collectionId"\)/,
@@ -252,5 +303,38 @@ describe("the committed migration (as it will actually be applied)", () => {
     expect(INIT_SQL).toContain("DEFAULT 'free'");
     expect(INIT_SQL.match(/DEFAULT true NOT NULL/g)).toHaveLength(2);
     expect(INIT_SQL).toContain("DEFAULT false NOT NULL");
+  });
+});
+
+describe("the committed status migration (as it will actually be applied)", () => {
+  it("adds a required `status` defaulting to published, checked to draft or published", () => {
+    expect(STATUS_SQL).toContain(
+      `ALTER TABLE "artworks" ADD COLUMN "status" text DEFAULT 'published' NOT NULL`,
+    );
+    expect(STATUS_SQL).toContain(
+      `CONSTRAINT "artworks_status_check" CHECK ("status" in ('draft', 'published'))`,
+    );
+  });
+
+  it("backfills the status only after the column exists", () => {
+    const adds = STATUS_SQL.indexOf(`ADD COLUMN "status"`);
+    const backfill = STATUS_SQL.indexOf(`UPDATE "artworks" SET "status"`);
+    expect(adds).toBeGreaterThan(-1);
+    expect(backfill).toBeGreaterThan(adds);
+  });
+});
+
+describe("the committed drop migration (as it will actually be applied)", () => {
+  it("retires the old visibility column and the index built on it", () => {
+    expect(DROP_SQL).toContain('ALTER TABLE "artworks" DROP COLUMN "isPublic"');
+    expect(DROP_SQL).toContain(
+      'DROP INDEX "artworks_collection_public_deleted_idx"',
+    );
+  });
+
+  it("builds the visitor index over the collection, the status and the deletion stamp", () => {
+    expect(DROP_SQL).toMatch(
+      /CREATE INDEX "artworks_collection_status_deleted_idx" ON "artworks" USING btree \("collectionId","status","deletedAt"\)/,
+    );
   });
 });

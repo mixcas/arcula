@@ -26,6 +26,7 @@ import {
   collectionUpdateSchema,
   collectionLimitForTier,
   artworkSchema,
+  IMPORTED_WORK_STATUS,
   type ArtworkBulkDeletePayload,
   type ArtworkImportPayload,
   type CollectionCreatePayload,
@@ -63,6 +64,9 @@ const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
 // GET /collections — signed in: the owner's own list, name-ordered;
 // anonymous: the public list. A signed-in visitor never sees other
 // people's collections through this route.
+//
+// The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
+// access.ts; collections.api.test.ts asserts the two agree.
 collectionRoutes.get("/collections", async (c) => {
   const session = await resolveSession(c);
   const rows =
@@ -202,7 +206,17 @@ collectionRoutes.post(
     const rejected: { row: number; errors: Record<string, string> }[] = [];
     const accepted: (typeof artworksTable.$inferInsert)[] = [];
     payload.rows.forEach((row, index) => {
-      const parsed = artworkSchema.safeParse(row);
+      // The import's own status wins over anything a row says: every
+      // imported work is published (see IMPORTED_WORK_STATUS). A row that is
+      // not an object fails the schema as a missing title.
+      const fields =
+        row !== null && typeof row === "object"
+          ? (row as Record<string, unknown>)
+          : {};
+      const parsed = artworkSchema.safeParse({
+        ...fields,
+        status: IMPORTED_WORK_STATUS,
+      });
       if (!parsed.success) {
         const errors: Record<string, string> = {};
         for (const issue of parsed.error.issues) {
@@ -218,7 +232,7 @@ collectionRoutes.post(
         collectionId: collection.id,
         title: values.title,
         artistName: values.artistName,
-        isPublic: values.isPublic,
+        status: values.status,
         // Always written, as null: the list filters on it, and a missing
         // field is not a null (the write-path doctrine).
         deletedAt: null,

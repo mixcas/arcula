@@ -1,6 +1,6 @@
 /**
- * The field body both artwork forms render: the grid of inputs, the public
- * switch, and the two uploaders.
+ * The field body both artwork forms render: the grid of inputs, the
+ * status control, and the two uploaders.
  *
  * The two pages differ in what they do with the values, not in what they
  * collect, and this block used to be written out in both of them — kept in step
@@ -8,7 +8,14 @@
  * hooks and the save; this owns the fields.
  */
 import React from "react";
-import { Box, Grid, Switch, Text, Textarea, TextInput } from "@mantine/core";
+import {
+  Box,
+  Grid,
+  SegmentedControl,
+  Text,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import type { UseFormReturnType } from "@mantine/form";
 import PhotoUploader from "./PhotoUploader";
@@ -147,13 +154,31 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       />
     </Grid.Col>
     <Grid.Col span={4}>
-      <Switch
-        key={form.key("isPublic")}
-        label="Public"
-        description="On by default — anyone with the collection link can see this artwork. Independent of the collection's own public setting: a public collection may keep individual works private."
-        mb="md"
-        {...form.getInputProps("isPublic", { type: "checkbox" })}
+      <Text size="sm" fw={500} mb={4}>
+        Status
+      </Text>
+      {/*
+        `getInputProps` without a `type`: SegmentedControl takes a string value
+        and calls `onChange(value)` with the chosen segment, so the plain input
+        props are the shape it wants. In the form's uncontrolled mode that is
+        `defaultValue` plus `form.key`, which is how this block's every field
+        gets a value loaded into it — here the Edit page's stored status. (The
+        fields are not mounted until that load finishes, so the key is the
+        reset() case rather than the load's.)
+      */}
+      <SegmentedControl
+        key={form.key("status")}
+        data={[
+          { label: "Published", value: "published" },
+          { label: "Draft", value: "draft" },
+        ]}
+        fullWidth
+        {...form.getInputProps("status")}
       />
+      <Text size="xs" c="dimmed" mt={6} mb="md">
+        Published if the collection is public. A draft stays in the collection
+        and is visible only to you.
+      </Text>
 
       <Box mb="md">
         <Text size="sm" fw={500} mb={4}>

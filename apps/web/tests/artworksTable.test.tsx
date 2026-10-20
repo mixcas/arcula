@@ -37,15 +37,9 @@ vi.mock("@/services/artworkService", () => ({
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 // mantine-datatable measures its scroll viewport on mount to drive column
-// widths, and jsdom implements no ResizeObserver. The stub satisfies the
-// observation and reports a zero-size viewport, which is all the layout needs
-// for these assertions.
-class ResizeObserverStub {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
-globalThis.ResizeObserver = ResizeObserverStub;
+// widths, and jsdom implements no ResizeObserver. Stubbed in tests/setup.ts,
+// which runs before this file's module graph, so both the table and Mantine's
+// own SegmentedControl indicator find one.
 
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const softDeleteMock = vi.mocked(artworkService.softDeleteArtworks);
@@ -57,7 +51,7 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   documents: [],
   photos: [],
   collectionId: "collection1",
-  isPublic: true,
+  status: "published",
   deletedAt: null,
   ...overrides,
 });
@@ -208,11 +202,18 @@ describe("ArtworksTable", () => {
     // label; together they fail if the array is reordered or 10 is re-added.
   });
 
-  it("marks a private artwork in its title cell", () => {
+  it("marks a draft artwork in its title cell, and leaves a published one unmarked", () => {
     renderTable({
-      artworks: [artwork({ id: "a", title: "Art 1", isPublic: false })],
+      artworks: [
+        artwork({ id: "a", title: "Art 1", status: "draft" }),
+        artwork({ id: "b", title: "Art 2", status: "published" }),
+      ],
     });
-    expect(screen.getByText("Private")).toBeTruthy();
+    const rows = screen.getAllByRole("row").slice(1);
+    // One badge for the one draft, next to its own title rather than the
+    // other row's — the mark is an attribute of a work, not a table legend.
+    expect(within(rows[0]).getByText("Draft")).toBeTruthy();
+    expect(within(rows[1]).queryByText("Draft")).toBeNull();
   });
 
   it("soft-deletes one artwork after confirmation and refetches", async () => {

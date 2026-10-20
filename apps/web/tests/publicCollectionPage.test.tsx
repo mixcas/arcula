@@ -76,13 +76,17 @@ const collection = (overrides: Partial<Collection> = {}): Collection => ({
   ...overrides,
 });
 
-const artwork = (id: string, title: string): Artwork => ({
+const artwork = (
+  id: string,
+  title: string,
+  status: Artwork["status"] = "published",
+): Artwork => ({
   id,
   userId: "owner-1",
   collectionId: COLLECTION_ID,
   title,
   artistName: "María López",
-  isPublic: true,
+  status,
   documents: [],
   photos: [],
 });
@@ -178,15 +182,22 @@ describe("PublicCollectionPage — the reachable states", () => {
     expect(await screen.findByText(/Failed to load/)).toBeVisible();
   });
 
-  it("says so plainly when there are no public artworks", async () => {
+  it("says so plainly when the collection has no artworks", async () => {
     getCollection.mockResolvedValue(collection());
+    // The shape of "every work in it is a draft": the visitor's list is
+    // filtered server-side (a draft is absent from it), so the page is handed
+    // nothing and must speak about the collection's contents rather than about
+    // a visibility the works no longer carry.
     getCollectionArtworks.mockResolvedValue([]);
     renderPage();
     // Deliberately *not* the skin: a skin with an empty stage and a title in the
     // nav reads as a loading failure rather than as an empty collection.
     expect(
-      await screen.findByText("No public artworks in this collection yet."),
+      await screen.findByText("This collection has no artworks yet."),
     ).toBeVisible();
+    expect(
+      screen.queryByText(/No public artworks in this collection/),
+    ).toBeNull();
     expect(screen.queryByRole("navigation")).toBeNull();
   });
 

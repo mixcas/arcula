@@ -39,6 +39,11 @@ export interface Collection {
   updatedAt?: Timestamp;
 }
 
+// The owner's choice for a work: `published` puts it in front of the
+// collection's gate, `draft` keeps it inside. Absent on a document written
+// before the field existed, and absent reads as `published`.
+export type ArtworkStatus = "draft" | "published";
+
 // Artwork type
 //
 // Only `title` and `artistName` are required; every other descriptive field is
@@ -72,13 +77,9 @@ export interface Artwork {
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
   collectionId: string; // Reference to parent collection
-  // Public visibility, owned by the artwork — independent of its collection's
-  // isPublic. A public collection may keep individual works private (and, by
-  // symmetry, a work flagged public stays readable by direct id even inside a
-  // private collection; the collection gate hides it from the page). Public
-  // by default in every write path — see packages/shared/src/schemas/artwork.ts.
-  // Always written by the creating paths.
-  isPublic: boolean;
+  // The owner's choice, and the only per-work field a visitor is gated on.
+  // Absent on a document written before it existed, and read as `published`.
+  status?: ArtworkStatus;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
   // Add/Edit form has no such field, so editing a deleted work leaves it

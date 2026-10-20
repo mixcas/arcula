@@ -1,5 +1,24 @@
 import { z } from "zod";
-import type { Artwork } from "../types";
+import type { Artwork, ArtworkStatus } from "../types";
+
+/**
+ * The two words the contract speaks for an artwork's own state: `draft` or
+ * `published`. Declared once, so the form, the save payloads and the wire read
+ * cannot drift apart.
+ */
+export const artworkStatusSchema = z.enum(["draft", "published"]);
+
+// The enum's members and the client type are the same two words. The first
+// catches a member added to one and not the other; the second catches a word
+// the type knows and the schema refuses.
+type StatusEnumIsStatus =
+  z.output<typeof artworkStatusSchema> extends ArtworkStatus
+    ? ArtworkStatus extends z.output<typeof artworkStatusSchema>
+      ? true
+      : never
+    : never;
+const statusEnumIsStatus: StatusEnumIsStatus = true;
+void statusEnumIsStatus;
 
 /**
  * Validation and payload shaping for the artwork form, shared by
@@ -62,10 +81,10 @@ export const artworkSchema = z.object({
   notes: optionalText,
   condition: optionalText,
   currentValue: optionalText,
-  // Per-artwork public visibility, independent of the collection's own flag.
-  // Public by default — a work is visible to visitors unless the owner
-  // explicitly turns it off in the Add/Edit form.
-  isPublic: z.boolean().default(true),
+  // Published by default, so a save that says nothing about it puts the work
+  // in front of the collection's gate. The collection is the only gate on a
+  // visitor (ADR-0003); this is the owner's own choice within it.
+  status: artworkStatusSchema.default("published"),
 });
 
 /**
@@ -94,7 +113,7 @@ export interface ArtworkFormValues {
   notes: string;
   condition: string;
   currentValue: string;
-  isPublic: boolean;
+  status: ArtworkStatus;
 }
 
 /** The trimmed, validated, API-ready subset of an artwork. */
@@ -127,7 +146,7 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   notes: "",
   condition: "",
   currentValue: "",
-  isPublic: true,
+  status: "published",
 };
 
 // `EDITABLE_FIELDS` — the fields the edit form owns, the only ones that may
@@ -169,9 +188,9 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   notes: artwork.notes ?? "",
   condition: artwork.condition ?? "",
   currentValue: artwork.currentValue ?? "",
-  // A stored work without the field predates the public default; treat it as
-  // public, consistent with how new works are written.
-  isPublic: artwork.isPublic ?? true,
+  // An absent status is a document written before the field, and reads as
+  // published.
+  status: artwork.status ?? "published",
 });
 
 // `toArtworkUpdate` — the PATCH-payload seam — lives in
@@ -230,9 +249,9 @@ export type ArtworkCreatePayload = z.infer<typeof artworkCreateSchema>;
  * the form hands to its submit handler (`transformValues: toArtworkPayload`),
  * and a caller holding raw form values runs them through the schema first:
  * one parse, in one place. The cast is safe: the schema guarantees
- * `title`, `artistName` and `isPublic` on a valid submit, and the three
- * added keys are exactly what `artworkCreateSchema.extend` requires on top
- * of the payload.
+ * `title`, `artistName` and `status` on a valid submit, and the three added
+ * keys are exactly what `artworkCreateSchema.extend` requires on
+ * top of the payload.
  */
 export const toArtworkCreatePayload = (
   payload: ArtworkPayload,
@@ -291,7 +310,9 @@ export const artworkUpdateSchema = z.object({
   notes: updatableText,
   condition: updatableText,
   currentValue: updatableText,
-  isPublic: z.boolean().optional(),
+  // Carried, not obeyed: a PATCH that names it says what the owner chose, and
+  // one that omits it leaves the stored value alone.
+  status: artworkStatusSchema.optional(),
   photos: z.array(stagedEntrySchema).optional(),
   documents: z.array(stagedEntrySchema).optional(),
 });
