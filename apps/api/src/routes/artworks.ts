@@ -16,14 +16,15 @@
 // Reader access: the owner always; a visitor on the collection's live
 // PUBLISHED works in the list, and a single work of a PUBLIC collection
 // when the work itself is published and live — the collection is the whole
-// gate (docs/adr/0003). The list keeps its SQL filter; the single read calls
-// the pure verdict in access.ts, and a test pins the two together.
+// gate (docs/adr/0003). The single read, and the read-back after a save,
+// go through artworkRead.ts; the list keeps its SQL filter and its rows are
+// read through the same module, with a test pinning the filter and the
+// verdict together.
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   artworks as artworksTable,
   artworkDocuments as artworkDocumentsTable,
-  artworkPhotoVariants as artworkPhotoVariantsTable,
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import {
@@ -38,10 +39,10 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
-import { canSeeArtwork, canSeeCollection, isOwner } from "../access";
+import { canSeeCollection, isOwner, type Viewer } from "../access";
+import { readArtwork } from "../artworkRead";
 import {
   loadArtworkById,
-  loadArtworkInCollection,
   loadCollection,
   requireOwnedArtwork,
   requireOwnedCollection,
@@ -50,7 +51,6 @@ import { db } from "../db";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
 import { deleteObject } from "../storage";
-import { serializeArtwork, type ArtworkJoined } from "../serialize";
 import { resolveSession, requireSession } from "../session";
 import {
   assertEntriesFree,
@@ -65,44 +65,18 @@ import {
 // Reads
 // ---------------------------------------------------------------------------
 
-/** The joined rows the serializer wants; 404 is the caller's, not this one's. */
-async function loadJoinedOrNull(
+/** The work a save must read back; absence after a successful save is a
+ *  server bug, not a half-shaped response. */
+async function readSavedArtwork(
   collectionId: string,
   artworkId: string,
-): Promise<ArtworkJoined | null> {
-  const artwork = await loadArtworkInCollection(collectionId, artworkId);
-  if (!artwork) return null;
-  const photos = await db
-    .select()
-    .from(artworkPhotosTable)
-    .where(eq(artworkPhotosTable.artworkId, artworkId))
-    .orderBy(asc(artworkPhotosTable.order));
-  const documents = await db
-    .select()
-    .from(artworkDocumentsTable)
-    .where(eq(artworkDocumentsTable.artworkId, artworkId))
-    .orderBy(asc(artworkDocumentsTable.id));
-  const parentIds = [...photos.map((p) => p.id), ...documents.map((d) => d.id)];
-  const variants =
-    parentIds.length > 0
-      ? await db
-          .select()
-          .from(artworkPhotoVariantsTable)
-          .where(inArray(artworkPhotoVariantsTable.parentId, parentIds))
-      : [];
-  return { artwork, photos, documents, variants };
-}
-
-/** Read back after a save; the save just wrote it, so absence is a server bug. */
-async function loadJoined(
-  collectionId: string,
-  artworkId: string,
-): Promise<ArtworkJoined> {
-  const joined = await loadJoinedOrNull(collectionId, artworkId);
-  if (!joined) {
+  viewer: Viewer,
+): Promise<ArtworkRead> {
+  const read = await readArtwork(collectionId, artworkId, viewer);
+  if (read.status !== "ok") {
     throw new ApiError("internal", "The saved artwork could not be read back");
   }
-  return joined;
+  return read.artwork;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,25 +89,19 @@ export const artworkRoutes = new Hono();
 artworkRoutes.get(
   "/collections/:collectionId/artworks/:artworkId",
   async (c) => {
-    const collectionId = param(c, "collectionId");
-    const artworkId = param(c, "artworkId");
-    const collection = await loadCollection(collectionId);
-    if (!collection) {
-      throw new ApiError("not-found", "The collection does not exist");
-    }
-    const artwork = await loadArtworkInCollection(collectionId, artworkId);
-    if (!artwork) {
-      throw new ApiError("not-found", "The artwork does not exist");
-    }
     const session = await resolveSession(c);
+    const read = await readArtwork(
+      param(c, "collectionId"),
+      param(c, "artworkId"),
+      session?.user.id ?? null,
+    );
     // A draft work, a deleted work and a public work inside a private
     // collection are one uniform 404 for a visitor: saying which was
     // refused would be a disclosure.
-    if (!canSeeArtwork(session?.user.id ?? null, collection, artwork)) {
+    if (read.status !== "ok") {
       throw new ApiError("not-found", "The artwork does not exist");
     }
-    const joined = await loadJoined(collectionId, artworkId);
-    return c.json(serializeArtwork(joined));
+    return c.json(read.artwork);
   },
 );
 
@@ -180,8 +148,14 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
 
   const out: ArtworkRead[] = [];
   for (const row of rows) {
-    const joined = await loadJoined(collectionId, row.id);
-    out.push(serializeArtwork(joined));
+    // The SQL filter above and the read's verdict are proved to agree on a
+    // fixture. If they ever disagree — a work unpublished between the two
+    // queries — the row is not visible, so it simply does not appear: the
+    // list fails closed rather than answering a work the read refuses.
+    // The list read batches this loop; until then every row reads through
+    // the one artwork module, so there is no second child loader.
+    const read = await readArtwork(collectionId, row.id, viewer);
+    if (read.status === "ok") out.push(read.artwork);
   }
   return c.json(out);
 });
@@ -275,8 +249,12 @@ artworkRoutes.post(
       await deleteObject(key);
     }
 
-    const joined = await loadJoined(collection.id, payload.artworkId);
-    return c.json(serializeArtwork(joined), 201);
+    const artworkRead = await readSavedArtwork(
+      collection.id,
+      payload.artworkId,
+      user.id,
+    );
+    return c.json(artworkRead, 201);
   },
 );
 
@@ -414,7 +392,11 @@ artworkRoutes.patch(
       result.removedDocuments,
     );
 
-    const joined = await loadJoined(collection.id, artwork.id);
-    return c.json(serializeArtwork(joined));
+    const artworkRead = await readSavedArtwork(
+      collection.id,
+      artwork.id,
+      user.id,
+    );
+    return c.json(artworkRead);
   },
 );

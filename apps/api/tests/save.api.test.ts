@@ -344,6 +344,30 @@ describe("POST …/artworks", () => {
     expect((await json<ArtworkRead>(silent)).status).toBe("published");
   });
 
+  it("answers a save with exactly the document a read returns", async () => {
+    // The save reads its own work back through the single read: if the two
+    // answers ever come from different loaders, this equality goes red.
+    const aid = uuid();
+    const photo = entry(`same-p-${uuid().slice(0, 8)}`);
+    const doc = entry(`same-d-${uuid().slice(0, 8)}`);
+    await stageAndProcessPhoto(aid, photo);
+    await stageAndProcessDocument(aid, doc);
+
+    const saved = await createArtwork({
+      artworkId: aid,
+      title: "Same",
+      artistName: "C. Cas",
+      photos: [{ entryId: photo, name: "same.jpg" }],
+      documents: [{ entryId: doc, name: "same.jpg" }],
+    });
+    expect(saved.status).toBe(201);
+    const savedDoc = await json<ArtworkRead>(saved);
+
+    const read = await getArtwork(aid, owner.cookies);
+    expect(read.status).toBe(200);
+    expect(await json<ArtworkRead>(read)).toEqual(savedDoc);
+  });
+
   it("promotes a staged PDF document as a file with no variants", async () => {
     const aid = uuid();
     // The magic header is enough: stage checks type + size only, and
@@ -552,6 +576,22 @@ describe("PATCH …/artworks/{aid}", () => {
     expect(
       await listObjects(finalPhotoPrefix(owner.userId, cid, aid, twoC)),
     ).toHaveLength(6);
+  });
+
+  it("answers an edit with exactly the document a read returns", async () => {
+    // PATCH reads its own work back through the single read, like POST.
+    const { aid } = await makeTwoPhotoArtwork();
+    const res = await patchArtwork(aid, {
+      title: "Edited",
+      artistName: "C. Cas",
+      status: "draft",
+    });
+    expect(res.status).toBe(200);
+    const patched = await json<ArtworkRead>(res);
+
+    const read = await getArtwork(aid, owner.cookies);
+    expect(read.status).toBe(200);
+    expect(await json<ArtworkRead>(read)).toEqual(patched);
   });
 
   it("drops a removed photo: its row and its final objects go", async () => {

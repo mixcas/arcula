@@ -138,6 +138,11 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `access.ts` — the visitor verdicts, pure over loaded rows (the collection is
   the only gate); `authorize.ts` loads and ownership-checks rows for the write
   paths.
+- `artworkRead.ts` — the single read path for one Artwork: the Collection, the
+  work, its photos, documents and Variants (at most five queries), returning
+  ok or not-found. The verdict is `access.ts`'s; the module carries no Hono
+  type and the route owns the 404. The save routes read their work back
+  through it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
