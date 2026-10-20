@@ -11,10 +11,11 @@
 > **`docs/adr/`**.
 >
 > **Sharing is partly built.** Access as membership — the shared dashboard
-> list, documents for members, every write path a collaborator needs, and the
-> invitation loop (create, preview, accept, decline) — has landed. Resend,
-> revoke, the access card, collaborator removal, leaving and transfer are still
-> the target. The model is accepted in
+> list, documents for members, every write path a collaborator needs, the
+> invitation loop (create, preview, accept, decline), the owner's access read
+> and offer administration (resend, revoke), and the invitee's in-app list and
+> decline — has landed. The access and invitation cards, collaborator removal,
+> leaving and transfer are still the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
 > below that describe the rest of access administration are the target until it
 > lands.
@@ -171,13 +172,15 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
 - `invitations.ts` — the pure token algebra (`mintInvitationToken`,
-  `hashInvitationToken`, `normalizeEmail`) and the one validity question
-  (`isInvitationUsable`: pending and not past `expiresAt`).
-- `routes/` — `collections` (with the access, collaborator and transfer routes
-  to come — the only owner-only surface left), `invitations` (create, public
-  preview, accept, decline), `artworks`, `me` (with the invitation list to
-  come), `media` (the object proxy), `artworkMedia` (stage/process, under the
-  caller's own staging prefix).
+  `hashInvitationToken`, `normalizeEmail`) and the two questions the routes ask
+  of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
+  `isInvitationResendable` (pending, and the last issue older than the
+  60-second cooldown — expiry is deliberately not part of it).
+- `routes/` — `collections`, `access` (the access read; removal, leaving and
+  transfer to come — the only owner-only surface left), `invitations` (create,
+  resend, revoke, public preview, accept, decline, the invitee's inbox and
+  in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
+  (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).

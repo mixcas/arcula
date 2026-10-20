@@ -8,6 +8,7 @@ export * from "./caps";
 export * from "./limits";
 export * from "./artworkPhotos";
 export * from "./slug";
+export * from "./schemas/access";
 export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
 export * from "./schemas/collection";

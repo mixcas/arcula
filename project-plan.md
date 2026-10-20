@@ -285,11 +285,16 @@ timestamp and the media-proxy `url` fields).
 
 Sharing's read and write sides are built, and so is the invitation loop: the
 owner creates an invitation, the mail carries its single-use hashed token, and
-the invited account previews, accepts or declines it. Still to come: the access
-read (`GET /collections/:id/access`), resend, revoke, collaborator removal,
-leaving, the transfer route, and `GET /me/invitations` for the dashboard. The
+the invited account previews, accepts or declines it. The owner administers the
+offers from `GET /collections/:id/access` (the caller's role, the owner and the
+collaborators, plus the pending invitations to the owner alone), resends (a
+fresh token, expiry and issue time on the same row, once every 60 seconds) and
+revokes; the invitee's `GET /me/invitations` lists their pending, unexpired
+offers and declines one in app. Still to come: collaborator removal, leaving,
+the transfer route, and the access and invitation cards in the SPA. The
 error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
-revoked or consumed invitation token answers `not-found` like an unknown one.
+revoked or consumed invitation token answers `not-found` like an unknown one, as
+does an in-app decline of anything but the caller's own live offer.
 
 ## The frontend
 

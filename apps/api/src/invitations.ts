@@ -12,6 +12,9 @@ import type { collectionInvitations as collectionInvitationsTable } from "@arcul
 /** An invitation is valid for seven days from its current issue. */
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** A resend may not follow the previous send sooner than this. */
+export const INVITATION_RESEND_COOLDOWN_MS = 60 * 1000;
+
 /** URL-safe, unguessable: 32 random bytes, base64url-encoded. */
 export const mintInvitationToken = (): string =>
   randomBytes(32).toString("base64url");
@@ -40,3 +43,26 @@ export const isInvitationUsable = (
 ): boolean =>
   invitation.status === "pending" &&
   invitation.expiresAt.getTime() > now.getTime();
+
+type ResendFacts = Pick<
+  typeof collectionInvitationsTable.$inferSelect,
+  "status" | "createdAt"
+>;
+
+/** The earliest issue time a resend at `now` may replace. */
+export const resendCutoff = (now: Date): Date =>
+  new Date(now.getTime() - INVITATION_RESEND_COOLDOWN_MS);
+
+/**
+ * Whether the owner may send this invitation again: a pending row whose last
+ * issue is older than the cooldown. Expiry is deliberately not part of it — a
+ * lapsed offer is exactly the one the owner most needs to revive, and
+ * resending replaces its issue time, so the link it mails is fresh. The
+ * cooldown clock is `createdAt`, which every issue refreshes.
+ */
+export const isInvitationResendable = (
+  invitation: ResendFacts,
+  now: Date = new Date(),
+): boolean =>
+  invitation.status === "pending" &&
+  invitation.createdAt.getTime() <= resendCutoff(now).getTime();

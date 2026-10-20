@@ -8,10 +8,16 @@
 import sharp from "sharp";
 import {
   artworks as artworksTable,
+  collectionInvitations as invitationsTable,
   collections as collectionsTable,
 } from "@arcula/db";
 import { app } from "../../src/app";
 import { db } from "../../src/db";
+import {
+  INVITATION_TTL_MS,
+  hashInvitationToken,
+  mintInvitationToken,
+} from "../../src/invitations";
 import { API, ORIGIN, req, uuid } from "./api";
 
 export async function makeCollection(
@@ -146,4 +152,43 @@ export async function discardEntry(
       cookies,
     },
   );
+}
+
+/**
+ * An invitation row written straight through drizzle, for the states the
+ * create route cannot produce on demand (expired, revoked, backdated) and for
+ * an address no account owns yet.
+ */
+export async function makeInvitation(opts: {
+  collectionId: string;
+  invitedByUserId: string;
+  email: string;
+  status?: "pending" | "accepted" | "declined" | "revoked";
+  token?: string;
+  createdAt?: Date;
+  expiresAt?: Date;
+  /** Store the address exactly as given instead of normalized: the row a
+   *  hand-written seed or a pre-normalization import could hold, for the
+   *  case-insensitive checks. */
+  storeEmailAsGiven?: boolean;
+}): Promise<{ id: string; token: string }> {
+  const id = uuid();
+  const token = opts.token ?? mintInvitationToken();
+  const createdAt = opts.createdAt ?? new Date();
+  const status = opts.status ?? "pending";
+  await db.insert(invitationsTable).values({
+    id,
+    collectionId: opts.collectionId,
+    email: opts.storeEmailAsGiven
+      ? opts.email
+      : opts.email.trim().toLowerCase(),
+    invitedByUserId: opts.invitedByUserId,
+    tokenHash: hashInvitationToken(token),
+    status,
+    createdAt,
+    expiresAt:
+      opts.expiresAt ?? new Date(createdAt.getTime() + INVITATION_TTL_MS),
+    resolvedAt: status === "pending" ? null : createdAt,
+  });
+  return { id, token };
 }

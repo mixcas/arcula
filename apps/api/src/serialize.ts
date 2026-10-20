@@ -39,6 +39,7 @@ import {
   type ArtworkStatus,
   type CollectionRead,
   type CollectionRole,
+  type CollectionMember,
   type ImageVariantKey,
   type InvitationSummary,
   type Timestamp,
@@ -395,6 +396,19 @@ export const displayName = (name: string | null, email: string): string => {
   const trimmed = name?.trim();
   return trimmed ? trimmed : email;
 };
+
+/** One account with access, as the access read names it. */
+export function serializeMember(row: {
+  id: string;
+  name: string | null;
+  email: string;
+}): CollectionMember {
+  return {
+    userId: row.id,
+    name: displayName(row.name, row.email),
+    email: row.email,
+  };
+}
 
 /** The invitation summary: the owner's access view and the create response's
  *  offer. The token is absent by construction — the row only holds its hash. */

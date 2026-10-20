@@ -69,3 +69,19 @@ export const invitationPreviewSchema = z.object({
 });
 
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
+
+/**
+ * One row of the invitee's in-app list (`GET /me/invitations`): the offer plus
+ * the one name the card needs to render it. The collection's contents are not
+ * reachable from a pending offer — the invitee is not a member yet — so the
+ * name travels with the list rather than in a second read that would have to
+ * be granted its own visibility rule.
+ *
+ * Never a token: the link that accepts an offer exists only in the mail
+ * (ADR-0004 — only the invited inbox can accept).
+ */
+export const invitationInboxEntrySchema = invitationSummarySchema.extend({
+  collectionName: z.string(),
+});
+
+export type InvitationInboxEntry = z.infer<typeof invitationInboxEntrySchema>;
