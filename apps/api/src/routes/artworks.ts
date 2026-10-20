@@ -33,6 +33,7 @@ import {
   artworkCreateSchema,
   artworkUpdateSchema,
   type ArtworkCreatePayload,
+  type ArtworkRead,
   type ArtworkUpdatePayload,
   type StagedEntry,
 } from "@arcula/shared";
@@ -177,7 +178,7 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
     );
   }
 
-  const out: Record<string, unknown>[] = [];
+  const out: ArtworkRead[] = [];
   for (const row of rows) {
     const joined = await loadJoined(collectionId, row.id);
     out.push(serializeArtwork(joined));
