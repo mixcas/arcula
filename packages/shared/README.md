@@ -13,9 +13,9 @@ The surface — `src/index.ts`, re-exported whole; importers use the bare packag
 name, never a subpath:
 
 - `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkStatus`,
-  `ArtworkPhoto`, `ArtworkDocument`, `Collection`, `ImageVariant`. With sharing,
-  `Collection` gains `role` and `ownerName`, and the access and invitation types
-  join the surface.
+  `Collection`, `CollectionRole`, `ArtworkPhoto`, `ArtworkDocument`,
+  `ImageVariant`. `Collection` carries `role`/`ownerName` — the dashboard
+  list's per-row extras, absent on every other read.
 - `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`
   (including the access and invitation payloads), `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.
@@ -26,9 +26,9 @@ name, never a subpath:
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
 - `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
 
-The sharing additions are designed in
-[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) and are
-not in the code yet.
+The read side of sharing — `role`/`ownerName` on the dashboard rows — is in the
+code; the access and invitation types arrive with the write side, designed in
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md).
 
 Tests live in `tests/` and run with the repo's standard vitest setup
 (`bun run test:shared` from the root). The suite is pure-logic by construction:

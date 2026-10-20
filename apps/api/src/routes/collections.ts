@@ -11,12 +11,14 @@
 // Collections are never deleted (there is no trash for them in this model),
 // so the cap check counts every collection the owner has.
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
+  collectionCollaborators as collectionCollaboratorsTable,
   collections as collectionsTable,
+  user as userTable,
 } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
@@ -61,27 +63,70 @@ export const collectionRoutes = new Hono();
  */
 const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
 
-// GET /collections — signed in: the owner's own list, name-ordered;
-// anonymous: the public list. A signed-in visitor never sees other
-// people's collections through this route.
+// GET /collections — signed in: the collections the caller owns *and* those
+// shared with them, together, name-ordered, each row carrying its `role`
+// (and, on a shared row, the owner's display name); anonymous: the public
+// list, unchanged. A signed-in visitor never sees other people's collections
+// through this route.
 //
-// The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
-// access.ts; collections.api.test.ts asserts the two agree.
+// The two are one list on purpose (ADR-0004): a separate `/shared` endpoint
+// would split one list into two client paths and make the dashboard merge
+// them.
+//
+// The anonymous filter is the SQL form of `canSeeCollection` with no
+// membership in access.ts; collections.api.test.ts asserts the two agree.
 collectionRoutes.get("/collections", async (c) => {
   const session = await resolveSession(c);
-  const rows =
-    session !== null
-      ? await db
-          .select()
-          .from(collectionsTable)
-          .where(eq(collectionsTable.userId, session.user.id))
-          .orderBy(asc(collectionsTable.name))
-      : await db
-          .select()
-          .from(collectionsTable)
-          .where(eq(collectionsTable.isPublic, true))
-          .orderBy(asc(collectionsTable.name));
-  return c.json(rows.map(serializeCollection));
+  if (session === null) {
+    const rows = await db
+      .select()
+      .from(collectionsTable)
+      .where(eq(collectionsTable.isPublic, true))
+      .orderBy(asc(collectionsTable.name));
+    return c.json(rows.map((row) => serializeCollection(row)));
+  }
+
+  const userId = session.user.id;
+  // One query, so the two halves share one collation and a stray membership
+  // row for the owner cannot list the collection twice: the owner column
+  // decides the role, and the join only says "shared with this account".
+  const rows = await db
+    .select({
+      collection: collectionsTable,
+      ownerName: userTable.name,
+      ownerEmail: userTable.email,
+    })
+    .from(collectionsTable)
+    .innerJoin(userTable, eq(userTable.id, collectionsTable.userId))
+    .leftJoin(
+      collectionCollaboratorsTable,
+      and(
+        eq(collectionCollaboratorsTable.collectionId, collectionsTable.id),
+        eq(collectionCollaboratorsTable.userId, userId),
+      ),
+    )
+    .where(
+      or(
+        eq(collectionsTable.userId, userId),
+        eq(collectionCollaboratorsTable.userId, userId),
+      ),
+    )
+    .orderBy(asc(collectionsTable.name));
+
+  return c.json(
+    rows.map(({ collection, ownerName, ownerEmail }) => {
+      if (collection.userId === userId) {
+        return serializeCollection(collection, { role: "owner" });
+      }
+      // The glossary's "the owner's display name, falling back to email": an
+      // account with no usable name is named by its address.
+      const name = ownerName?.trim();
+      return serializeCollection(collection, {
+        role: "collaborator",
+        ownerName: name ? name : ownerEmail,
+      });
+    }),
+  );
 });
 
 // POST /collections — the cap check comes FIRST: the count is over the
@@ -131,7 +176,7 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
   return c.json(serializeCollection(row), 201);
 });
 
-// GET one — owner always; a visitor when the collection is public.
+// GET one — a member always; a visitor when the collection is public.
 collectionRoutes.get("/collections/:collectionId", async (c) => {
   const collection = await requireReadableCollection(
     c,

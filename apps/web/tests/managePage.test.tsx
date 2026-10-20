@@ -88,6 +88,19 @@ const collection: Collection = {
   name: "Flores Solares",
   userId: "u1",
   isPublic: true,
+  role: "owner",
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+};
+
+/** A collection somebody else owns and shared with this account. */
+const sharedCollection: Collection = {
+  id: "dddddddddddddddddddd",
+  name: "Estudio Compartido",
+  userId: "u2",
+  isPublic: false,
+  role: "collaborator",
+  ownerName: "Sofía Lara",
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
 };
@@ -187,5 +200,45 @@ describe("the dashboard's cap reflection", () => {
       "href",
       "/manage/collection/new",
     );
+  });
+
+  it("counts owned collections only, so a shared row does not cap the account", async () => {
+    // The failure this test exists for: one shared collection beside no owned
+    // one counting as "1 of 1" and disabling a create the API would allow.
+    renderPage([sharedCollection]);
+
+    await waitFor(() =>
+      expect(screen.getByText(/0 of 1 collection/i)).toBeInTheDocument(),
+    );
+    expect(newCollectionLink()).toHaveAttribute(
+      "href",
+      "/manage/collection/new",
+    );
+  });
+
+  it("caps on the owned count even when shared rows are present", async () => {
+    renderPage([collection, sharedCollection]);
+
+    await waitFor(() =>
+      expect(screen.getByText(/1 of 1 collection/i)).toBeInTheDocument(),
+    );
+    expect(newCollectionButton()).toBeDisabled();
+  });
+});
+
+describe("a shared row on the dashboard", () => {
+  it("names the role and the owner on the shared row, and the owner alone", async () => {
+    renderPage([collection, sharedCollection]);
+
+    await waitFor(() =>
+      expect(screen.getByText("Estudio Compartido")).toBeInTheDocument(),
+    );
+    // Two rows, two roles: the shared one carries the collaborator badge and
+    // the owner's display name, the owned one carries the owner badge and no
+    // name — you are the owner of it. `getAllByText` counts the name so a
+    // second `by …` line appearing anywhere is a failure, not a style.
+    expect(screen.getByText("Collaborator")).toBeInTheDocument();
+    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getAllByText("by Sofía Lara")).toHaveLength(1);
   });
 });
