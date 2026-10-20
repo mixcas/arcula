@@ -64,6 +64,9 @@ const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
 // GET /collections — signed in: the owner's own list, name-ordered;
 // anonymous: the public list. A signed-in visitor never sees other
 // people's collections through this route.
+//
+// The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
+// access.ts; collections.api.test.ts asserts the two agree.
 collectionRoutes.get("/collections", async (c) => {
   const session = await resolveSession(c);
   const rows =

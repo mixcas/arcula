@@ -172,7 +172,7 @@ literal prefixes, so one rule expires every staged object everywhere.
 Reads never touch S3 directly. `GET /api/v1/media?key=…` parses the key back into
 its segments, re-checks visibility against the row, and streams the object:
 
-- **final photo** — the owner, or a visitor when the artwork is public **and**
+- **final photo** — the owner, or a visitor when the work is published **and**
   live **and** its collection is public;
 - **final document** — the owner only (a `403`, so a forgotten-to-hide UI fails
   closed);
@@ -182,16 +182,22 @@ its segments, re-checks visibility against the row, and streams the object:
 
 There is no rules language to audit: **the API is the only path to the data.**
 `requireSession` / `resolveSession` establish the caller, and
-`apps/api/src/authorize.ts` holds the ownership and visibility checks every route
-shares.
+`apps/api/src/authorize.ts` loads and ownership-checks the rows every write
+route shares.
 
-Two visibility flags are independent. A collection may be public while individual
-works stay private; a work flagged public is readable by direct id even inside a
-private collection (the collection gate hides it from the page, not from its own
-URL). For a visitor, a private work and a deleted work are both a uniform `404` —
-saying which was refused would be a disclosure. Soft delete is a `deletedAt`
-stamp: the work leaves every list, the bytes stay, and a restore route flips it
-back (there is no trash UI yet).
+The visitor rule is one pure module, `apps/api/src/access.ts`, over rows a
+caller has already loaded: no database, no session, no framework. **The
+collection is the only gate.** A visitor sees a published, live work exactly
+when its collection is public; a draft, a deleted work and a private collection
+are one answer to them, and a blocked work answers a uniform `404` — saying
+which was refused would be a disclosure. (A private _collection_ answers `403`,
+which the web client maps to its "private" state.) Documents are owner-only at
+every status, in every collection. The list route keeps its SQL filter, and a
+test pins the filter and the verdict to the same answer
+([ADR-0003](docs/adr/0003-the-collection-gates.md)).
+
+Soft delete is a `deletedAt` stamp: the work leaves every list, the bytes stay,
+and a restore route flips it back (there is no trash UI yet).
 
 ## The API
 

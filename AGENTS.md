@@ -135,9 +135,12 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
   the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
   holds the pure decisions derived from it.
+- `access.ts` — the visitor verdicts, pure over loaded rows (the collection is
+  the only gate); `authorize.ts` loads and ownership-checks rows for the write
+  paths.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
-  the caller; `authorize.ts` is the ownership/visibility check.
+  the caller.
 - `routes/` — `collections`, `artworks`, `me`, `media` (the object proxy),
   `artworkMedia` (stage/process).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),

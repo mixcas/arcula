@@ -14,8 +14,10 @@
 // exist to remove.
 //
 // Reader access: the owner always; a visitor on the collection's live
-// PUBLISHED works in the list, and a single work by id when the work itself
-// is published — the collection's flag does not hide a direct id read.
+// PUBLISHED works in the list, and a single work of a PUBLIC collection
+// when the work itself is published and live — the collection is the whole
+// gate (docs/adr/0003). The list keeps its SQL filter; the single read calls
+// the pure verdict in access.ts, and a test pins the two together.
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -35,6 +37,7 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
+import { canSeeArtwork, canSeeCollection, isOwner } from "../access";
 import {
   loadArtworkById,
   loadArtworkInCollection,
@@ -107,7 +110,7 @@ async function loadJoined(
 
 export const artworkRoutes = new Hono();
 
-// GET one — owner always; a visitor when the work is public and live.
+// GET one — owner always; a visitor when collection and work both admit it.
 artworkRoutes.get(
   "/collections/:collectionId/artworks/:artworkId",
   async (c) => {
@@ -122,13 +125,11 @@ artworkRoutes.get(
       throw new ApiError("not-found", "The artwork does not exist");
     }
     const session = await resolveSession(c);
-    const isOwner = session !== null && artwork.userId === session.user.id;
-    if (!isOwner) {
-      // A draft work and a deleted work are both a uniform 404 for a
-      // visitor: saying which was refused would be a disclosure.
-      if (artwork.deletedAt !== null || artwork.status !== "published") {
-        throw new ApiError("not-found", "The artwork does not exist");
-      }
+    // A draft work, a deleted work and a public work inside a private
+    // collection are one uniform 404 for a visitor: saying which was
+    // refused would be a disclosure.
+    if (!canSeeArtwork(session?.user.id ?? null, collection, artwork)) {
+      throw new ApiError("not-found", "The artwork does not exist");
     }
     const joined = await loadJoined(collectionId, artworkId);
     return c.json(serializeArtwork(joined));
@@ -144,10 +145,10 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
     throw new ApiError("not-found", "The collection does not exist");
   }
   const session = await resolveSession(c);
-  const isOwner = session !== null && collection.userId === session.user.id;
+  const viewer = session?.user.id ?? null;
 
   let rows: (typeof artworksTable.$inferSelect)[];
-  if (isOwner) {
+  if (session !== null && isOwner(session.user.id, collection)) {
     rows = await db
       .select()
       .from(artworksTable)
@@ -158,7 +159,7 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
           isNull(artworksTable.deletedAt),
         ),
       );
-  } else if (collection.isPublic) {
+  } else if (canSeeCollection(viewer, collection)) {
     rows = await db
       .select()
       .from(artworksTable)
