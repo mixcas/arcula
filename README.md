@@ -64,7 +64,8 @@ Early, and honest about what is missing:
 | Sign in / sign out, password reset by email | Working                                          |
 | Account profile (name), change password     | Working                                          |
 | Create, list, view, rename collections      | Working                                          |
-| Collections per account                     | One on the free tier, enforced by the API        |
+| Share a collection with collaborators       | Designed (ADR-0004); not implemented yet         |
+| Collections per account                     | One owned collection; enforced by the API        |
 | Public/private flag per collection          | Working                                          |
 | List a collection's artworks                | Working                                          |
 | Add and edit an artwork                     | Working                                          |
@@ -87,6 +88,10 @@ same — nothing is served straight from object storage. `GET /api/v1/media?key=
 proxies each object and re-checks visibility per request, so one authorization
 rule covers both the database row and the bytes. A photo is never more readable
 than the artwork it belongs to, and a document is owner-only.
+
+Collaboration is designed but not built yet: today the owner is the only account
+with access
+([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
 
 The collection is the only gate: a visitor sees a published, live work exactly
 when its collection is public, and a draft, a deleted work and a private
@@ -316,7 +321,7 @@ apps/
       app.ts                 # the Hono app: envelope, www redirect, mounts
       main.ts / lambda.ts    # the two entry points
       spa.ts                 # serves the built SPA in production
-      auth.ts session.ts authorize.ts
+      access.ts artworkRead.ts auth.ts session.ts authorize.ts
       routes/                # me, media, collections, artworkMedia, artworks
       media/                 # keys, pipeline, variants, promote
       db.ts storage.ts serialize.ts errors.ts env.ts
@@ -349,7 +354,9 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 Roughly in order of how much they matter:
 
-- Real password protection for shared collections, with a server-side
+- Collaborators: invite by email, co-edit, and transfer ownership — designed in
+  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)
+- Real password protection for public collections, with a server-side
   verification path
 - Trash and restore for soft-deleted artworks, and a purge for long-dead ones
 - Delete for collections

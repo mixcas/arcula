@@ -5,9 +5,9 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the variant composite PK, the three CHECKs, the
-// composite indexes behind the owner/visitor lists) missing from either source
-// fails here.
+// position is the truth", the two composite PKs, the four CHECKs, the
+// composite indexes behind the artwork lists, the partial unique pending-
+// invitation index) missing from either source fails here.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,8 @@ import {
   artworkPhotoVariants,
   artworkPhotos,
   artworks,
+  collectionCollaborators,
+  collectionInvitations,
   collections,
   schema,
   session,
@@ -33,6 +35,7 @@ type Col = {
   notNull: boolean;
   primary: boolean;
   isUnique: boolean;
+  hasDefault: boolean;
   default?: unknown;
   dataType: string;
 };
@@ -86,6 +89,8 @@ const TABLE_NAMES = [
   "account",
   "verification",
   "collections",
+  "collectionCollaborators",
+  "collectionInvitations",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -108,8 +113,11 @@ const STATUS_SQL = readMigration("0001_artwork_status");
 // The committed migration that retires the old per-work visibility column.
 const DROP_SQL = readMigration("0002_drop_artwork_ispublic");
 
-describe("the nine-table schema", () => {
-  it("declares exactly the nine tables, and `user` is singular", () => {
+// The committed schema-first migration for sharing.
+const SHARED_SQL = readMigration("0003_shared_collections");
+
+describe("the eleven-table schema", () => {
+  it("declares exactly the eleven tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -242,6 +250,100 @@ describe("the nine-table schema", () => {
     expect(c.isPublic.default).toBe(true);
     expect(c.skin.notNull).toBe(false);
     expect(c.skinOptions.dataType).toBe("json");
+    // Fixed at creation from the migration onward; null only in the gap the
+    // old code leaves before it writes one.
+    expect(c.mediaNamespaceId.dataType).toBe("string");
+    expect(c.mediaNamespaceId.notNull).toBe(false);
+  });
+
+  it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
+    const c = cols(collectionCollaborators);
+    // The owner is `collections.userId`; this table holds everyone else.
+    expect(Object.keys(c)).toEqual(["collectionId", "userId", "createdAt"]);
+    expect(c.collectionId.notNull).toBe(true);
+    expect(c.userId.notNull).toBe(true);
+    expect(c.createdAt.dataType).toBe("date");
+    expect(c.createdAt.notNull).toBe(true);
+    expect(c.createdAt.hasDefault).toBe(true);
+    const pk = getTableConfig(collectionCollaborators).primaryKeys[0];
+    expect(pk.getName()).toBe(
+      "collection_collaborators_collectionId_userId_pk",
+    );
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "collectionId",
+      "userId",
+    ]);
+    expect(indexesOf(collectionCollaborators)).toMatchObject({
+      collection_collaborators_user_id_idx: ["userId"],
+    });
+  });
+
+  it("collection_invitations carries the offer, its status and its unique token hash", () => {
+    const c = cols(collectionInvitations);
+    expect(Object.keys(c)).toEqual([
+      "id",
+      "collectionId",
+      "email",
+      "invitedByUserId",
+      "tokenHash",
+      "status",
+      "createdAt",
+      "expiresAt",
+      "resolvedAt",
+    ]);
+    expect(c.id.primary).toBe(true);
+    expect(c.collectionId.notNull).toBe(true);
+    expect(c.email.notNull).toBe(true);
+    expect(c.invitedByUserId.notNull).toBe(true);
+    // The raw token lives only in the mail.
+    expect(c.tokenHash.isUnique).toBe(true);
+    expect(c.status.notNull).toBe(true);
+    expect(c.status.default).toBe("pending");
+    expect(c.createdAt.dataType).toBe("date");
+    expect(c.createdAt.notNull).toBe(true);
+    expect(c.createdAt.hasDefault).toBe(true);
+    expect(c.expiresAt.dataType).toBe("date");
+    expect(c.expiresAt.notNull).toBe(true);
+    // NULL until the invitation is accepted, declined or revoked.
+    expect(c.resolvedAt.dataType).toBe("date");
+    expect(c.resolvedAt.notNull).toBe(false);
+  });
+
+  it("collection_invitations limits status to the four lifecycle values", () => {
+    expect(checksOf(collectionInvitations)).toContainEqual({
+      name: "collection_invitations_status_check",
+      sql: "\"status\" in ('pending', 'accepted', 'declined', 'revoked')",
+    });
+  });
+
+  it("collection_invitations allows one pending invitation per collection and address", () => {
+    const pending = getTableConfig(collectionInvitations).indexes.find(
+      (i) =>
+        i.config.name === "collection_invitations_pending_collection_email_idx",
+    );
+    expect(pending?.config.unique).toBe(true);
+    // The address half is `lower(email)`, so case cannot buy a second row.
+    expect(
+      (pending?.config.columns ?? []).map(predicateOf).join(", "),
+    ).toContain("lower(");
+    // Only pending rows are constrained; resolved rows are history.
+    expect(predicateOf(pending?.config.where)).toContain("'pending'");
+  });
+
+  it("artworks' owner list is indexed by collection and deletion, not by user", () => {
+    const idx = indexesOf(artworks);
+    expect(idx.artworks_collection_deleted_idx).toEqual([
+      "collectionId",
+      "deletedAt",
+    ]);
+    expect(idx.artworks_collection_user_deleted_idx).toBeUndefined();
+    // The visitor index and the by-id index are untouched.
+    expect(idx.artworks_collection_status_deleted_idx).toEqual([
+      "collectionId",
+      "status",
+      "deletedAt",
+    ]);
+    expect(idx.artworks_collection_id_idx).toEqual(["collectionId"]);
   });
 });
 
@@ -336,5 +438,81 @@ describe("the committed drop migration (as it will actually be applied)", () => 
     expect(DROP_SQL).toMatch(
       /CREATE INDEX "artworks_collection_status_deleted_idx" ON "artworks" USING btree \("collectionId","status","deletedAt"\)/,
     );
+  });
+});
+
+describe("the committed sharing migration (as it will actually be applied)", () => {
+  it("creates both sharing tables with no foreign keys", () => {
+    expect(SHARED_SQL).toMatch(
+      /CREATE TABLE "collection_collaborators" \([\s\S]*CONSTRAINT "collection_collaborators_collectionId_userId_pk" PRIMARY KEY\("collectionId","userId"\)/,
+    );
+    expect(SHARED_SQL).toMatch(
+      /CREATE TABLE "collection_invitations" \([\s\S]*CONSTRAINT "collection_invitations_tokenHash_unique" UNIQUE\("tokenHash"\)/,
+    );
+    // Domain tables stay reference-free, like the ones before them.
+    expect(SHARED_SQL).not.toContain("FOREIGN KEY");
+    // Both timestamps are timestamptz defaulting to now(), in the DDL too.
+    expect(
+      SHARED_SQL.match(
+        /"createdAt" timestamp with time zone DEFAULT now\(\) NOT NULL/g,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("adds the media namespace nullable, then backfills it from the owner", () => {
+    expect(SHARED_SQL).toContain(
+      'ALTER TABLE "collections" ADD COLUMN "mediaNamespaceId" text;',
+    );
+    // Nullable is load-bearing: the old code inserts collections without it.
+    expect(SHARED_SQL).not.toMatch(
+      /ADD COLUMN "mediaNamespaceId" text NOT NULL/,
+    );
+    const adds = SHARED_SQL.indexOf('ADD COLUMN "mediaNamespaceId"');
+    const backfill = SHARED_SQL.indexOf(
+      'UPDATE "collections" SET "mediaNamespaceId" = "userId"',
+    );
+    expect(adds).toBeGreaterThan(-1);
+    expect(backfill).toBeGreaterThan(adds);
+  });
+
+  it("touches no row beyond the collections backfill", () => {
+    // The migration is DDL plus one data write: no insert, delete or truncate
+    // can ride along under a title that only checked UPDATE.
+    const writes = [
+      ...SHARED_SQL.matchAll(/\b(UPDATE|INSERT|DELETE|TRUNCATE)\b/g),
+    ].map((m) => m[1]);
+    expect(writes).toEqual(["UPDATE"]);
+    expect(SHARED_SQL).toContain(
+      'UPDATE "collections" SET "mediaNamespaceId" = "userId"',
+    );
+  });
+
+  it("carries the collaborator index and the partial unique pending-invitation index", () => {
+    expect(SHARED_SQL).toMatch(
+      /CREATE INDEX "collection_collaborators_user_id_idx" ON "collection_collaborators" USING btree \("userId"\)/,
+    );
+    expect(SHARED_SQL).toMatch(
+      /CREATE UNIQUE INDEX "collection_invitations_pending_collection_email_idx" ON "collection_invitations" USING btree \("collectionId",lower\("email"\)\) WHERE "collection_invitations"\."status" = 'pending'/,
+    );
+  });
+
+  it("limits invitation status to the four lifecycle values", () => {
+    expect(SHARED_SQL).toContain(
+      `CONSTRAINT "collection_invitations_status_check" CHECK ("status" in ('pending', 'accepted', 'declined', 'revoked'))`,
+    );
+  });
+
+  it("replaces the owner-list index and leaves the visitor and collection indexes alone", () => {
+    expect(SHARED_SQL).toContain(
+      'DROP INDEX "artworks_collection_user_deleted_idx"',
+    );
+    expect(SHARED_SQL).toMatch(
+      /CREATE INDEX "artworks_collection_deleted_idx" ON "artworks" USING btree \("collectionId","deletedAt"\)/,
+    );
+    expect(SHARED_SQL).not.toContain(
+      'DROP INDEX "artworks_collection_status_deleted_idx"',
+    );
+    expect(SHARED_SQL).not.toContain('DROP INDEX "artworks_collection_id_idx"');
+    expect(SHARED_SQL).not.toContain('DROP INDEX "collections_user_id_idx"');
   });
 });

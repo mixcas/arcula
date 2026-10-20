@@ -9,6 +9,11 @@
 > and the identifiers all say `arcula` too. The product's own vocabulary is in
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**.
+>
+> **Sharing is designed, not built.** The collaborator, invitation and transfer
+> model is accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
+> below that describe it are the target until it lands.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -93,6 +98,15 @@ of a destructive migration (a dropped column or table, a tightened constraint)
 leaves the old code running against a schema that no longer matches it, and
 needs a compensating migration written by hand.
 
+**A schema change ships alone.** `scripts/deploy.sh` deploys the Lambda before
+it migrates, so a release carrying both a new table and the code that reads it
+would serve requests against a schema that is not there yet. Ship the migration
+in its own release, then the code. When the change is additive — a new nullable
+column, a new table, a new index — the intermediate release is safe because the
+old code ignores it. A column that must end up `NOT NULL` is added nullable in
+that release and tightened in the release that writes it; one migration that
+sets `NOT NULL` would break the old code's inserts.
+
 ## Key commands
 
 All from the repo root (`bun run <script>`):
@@ -135,20 +149,29 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
   the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
   holds the pure decisions derived from it.
-- `access.ts` — the visitor verdicts, pure over loaded rows (the collection is
-  the only gate); `authorize.ts` loads and ownership-checks rows for the write
-  paths.
+- `access.ts` — the access verdicts, pure over loaded rows: the visitor rule
+  (the collection is the only gate) and, with sharing, the
+  owner-or-collaborator rule; `authorize.ts` loads the collection, its
+  membership row and the rows for the write paths.
+- `artworkRead.ts` — the single read path for Artworks: one work (the
+  Collection, the work, its photos, documents and Variants) or a Collection's
+  list (the Collection, the works once, each child table once for the whole
+  page — at most five queries), returning ok, not-found, or forbidden for the
+  list. The verdict is `access.ts`'s; the module carries no Hono type and the
+  route owns the wire code. The save routes read their work back through it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
-- `routes/` — `collections`, `artworks`, `me`, `media` (the object proxy),
-  `artworkMedia` (stage/process).
+- `routes/` — `collections` (with the access, invitation, collaborator and
+  transfer routes once sharing lands), `artworks`, `me` (with the invitation
+  list), `media` (the object proxy), `artworkMedia` (stage/process).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
-collection, document, user), `artworkPhotos.ts` (the `order` invariant,
+collection, document, user; the collection schemas carry the access and
+invitation payloads), `artworkPhotos.ts` (the `order` invariant,
 `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file caps +
 accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
 `types.ts`.
@@ -159,11 +182,15 @@ accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
 system.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
-`account`, `verification`, `collections`, `artworks`, `artworkPhotos`,
-`artworkPhotoVariants`, `artworkDocuments`) and the `schema` object the adapter
-consumes. `packages/db/migrations/` is generated; the only hand-added
-statement is a data backfill appended to the generated file (see
-`packages/db/README.md`).
+`account`, `verification`, `collections`, `collectionCollaborators`,
+`collectionInvitations`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
+`artworkDocuments`) and the `schema` object the adapter consumes. The two
+sharing tables are in the schema; the feature code that reads and writes them
+is not built yet.
+`packages/db/migrations/` is generated; hand edits are the documented exception:
+a data backfill appended to the generated file, and the add-nullable → backfill
+→ set-not-null sequence for a column that cannot be added `NOT NULL` on an
+existing table (see `packages/db/README.md`).
 
 **`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
 the custom domain; the apex and `www` are **separate** `DomainName` pairs that
@@ -206,8 +233,9 @@ Three tiers, and the first is where nearly everything belongs:
    `collectionLimitForTier` (`packages/shared/src/limits.ts`),
    `publicCollectionState`
    (`apps/web/src/components/collection/usePublicCollection.ts`),
-   `resolveSkinOptions` (`apps/web/src/skins/registry.ts`). Ours end to end, and
-   where a real regression lives.
+   `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
+   verdict (`apps/api/src/access.ts`). Ours end to end, and where a real
+   regression lives.
 2. **Our value going into the library — only when the failure is invisible in
    review or in a screenshot.** `apps/web/tests/skinHost.test.tsx` reads the
    emitted style tags to prove `cssVariablesSelector` is not `:root`, because a
@@ -342,6 +370,7 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. Both exist
 now. The glossary holds the product's own vocabulary — the nouns in the data
 model and the design record — and **not** deployment, branch or process
 vocabulary, which belongs in this file. ADRs hold decisions with their rejected
-alternatives: two long-lived branches feeding two permanent environments, and
-both environments sharing one AWS account and CDK bootstrap. See
+alternatives: two long-lived branches feeding two permanent environments, both
+environments sharing one AWS account and CDK bootstrap, the collection as the
+only visitor gate, and collections shared by membership. See
 `docs/agents/domain.md`.

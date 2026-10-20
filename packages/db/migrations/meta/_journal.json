@@ -22,6 +22,13 @@
       "when": 1792462317611,
       "tag": "0002_drop_artwork_ispublic",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792524320715,
+      "tag": "0003_shared_collections",
+      "breakpoints": true
     }
   ]
 }

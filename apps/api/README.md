@@ -49,13 +49,52 @@ S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
 
+## Sharing (designed)
+
+This is the accepted design in
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md); it is
+not implemented yet.
+
+A collection is owned by `collections.userId` and shared through
+`collection_collaborators`. `access.ts` answers the visitor and access questions
+as pure functions; `authorize.ts` loads the membership row. Invitations are
+`collection_invitations` rows with a hashed single-use token; acceptance needs
+the token and a signed-in account with the invited email. Transfer updates the
+owner and mirrors `artworks.userId` in one transaction; media keys use the
+collection's fixed `mediaNamespaceId`, so no object moves. `GET /collections`
+returns owned and shared collections together, each row with `role` and, on a
+shared row, `ownerName`.
+
+| Method   | Path                                                          |
+| -------- | ------------------------------------------------------------- |
+| `GET`    | `/collections/:collectionId/access`                           |
+| `POST`   | `/collections/:collectionId/invitations`                      |
+| `POST`   | `/collections/:collectionId/invitations/:invitationId/resend` |
+| `DELETE` | `/collections/:collectionId/invitations/:invitationId`        |
+| `DELETE` | `/collections/:collectionId/collaborators/:userId`            |
+| `DELETE` | `/collections/:collectionId/collaborators/me`                 |
+| `POST`   | `/collections/:collectionId/transfer`                         |
+| `GET`    | `/invitations/:token`                                         |
+| `POST`   | `/invitations/:token/accept` · `/invitations/:token/decline`  |
+| `GET`    | `/me/invitations`                                             |
+| `POST`   | `/me/invitations/:invitationId/decline`                       |
+
+A malformed email is `validation` (400); a state conflict is `conflict` (409); a
+collaborator attempting an owner-only access change is `forbidden` (403); a
+wrong-account acceptance is `forbidden` with the invited email in `details`; an
+invalid, expired, revoked, consumed or unknown invitation token is one
+`not-found`. The SPA's landing page is `/invite/:token`; the API preview is
+`GET /invitations/:token`.
+
 ## Modules
 
-- `auth.ts` · `session.ts` · `authorize.ts` — the Better Auth instance (Drizzle
-  adapter), session resolution, and the ownership/visibility checks.
+- `auth.ts` · `session.ts` · `access.ts` · `authorize.ts` — the Better Auth
+  instance (Drizzle adapter), session resolution, the pure access verdicts, and
+  the row and membership checks the write paths share.
 - `media/keys.ts` — the object-key algebra (final and staging) and its parser;
   the parser is what makes the proxy's per-request authorization work from the
-  key alone.
+  key alone. With sharing, final keys use the collection's fixed
+  `mediaNamespaceId` and staging keys use the uploader's id.
 - `media/pipeline.ts` — Sharp: one decode, EXIF orientation, WebP variants.
 - `media/variants.ts` — the variant geometry; one table drives the encoder, the
   tests and the key algebra.
@@ -64,7 +103,8 @@ route exist to clean up.
   fall through to AWS's default); credentials come from `S3_ACCESS_KEY`/
   `S3_SECRET_KEY` in dev and the Lambda's IAM role in production.
 - `db.ts` — postgres.js + Drizzle over `@arcula/db`.
-- `email/provider.ts` — SMTP locally, Resend in production.
+- `email/provider.ts` — SMTP locally, Resend in production; the invitation and
+  transfer mails go through it, with `emailSent: false` on a provider failure.
 - `serialize.ts` — the exact wire shape of the `GET` responses.
 - `errors.ts` · `http.ts` · `env.ts` — the error envelope, body parsing +
   transactions, and the parsed environment.
