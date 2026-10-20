@@ -37,6 +37,7 @@ import {
   type ArtworkRead,
   type ArtworkStatus,
   type CollectionRead,
+  type CollectionRole,
   type ImageVariantKey,
   type Timestamp,
 } from "@arcula/shared";
@@ -54,6 +55,14 @@ export type ArtworkRow = typeof artworksTable.$inferSelect;
 export type PhotoRow = typeof artworkPhotosTable.$inferSelect;
 export type DocumentRow = typeof artworkDocumentsTable.$inferSelect;
 export type VariantRow = typeof artworkPhotoVariantsTable.$inferSelect;
+
+/** The dashboard list's per-row extras. Absent on every other read, which is
+ *  what keeps the otherwise-identical documents distinguishable: a shared row
+ *  carries `role` and `ownerName`, an owned one `role` alone. */
+export interface SerializeCollectionOptions {
+  role?: CollectionRole;
+  ownerName?: string;
+}
 
 /** The joined shape the read routes hand to the serializer. */
 export interface ArtworkJoined {
@@ -342,8 +351,17 @@ export function serializeArtwork(
   };
 }
 
-/** The exact wire collection document shape. */
-export function serializeCollection(row: CollectionRow): CollectionRead {
+/** The exact wire collection document shape.
+ *
+ *  `role`/`ownerName` are the dashboard list's additions: the signed-in list
+ *  passes the viewer's role on every row, and the owner's display name on a
+ *  shared one. Every other read — the public list, the single read — is
+ *  anonymous, so it emits the plain document, which is the shape the public
+ *  pages have always parsed. */
+export function serializeCollection(
+  row: CollectionRow,
+  opts: SerializeCollectionOptions = {},
+): CollectionRead {
   const out: CollectionRead = {
     id: row.id,
     name: row.name,
@@ -352,6 +370,8 @@ export function serializeCollection(row: CollectionRow): CollectionRead {
     createdAt: wireTimestamp(row.createdAt),
     updatedAt: wireTimestamp(row.updatedAt),
   };
+  if (opts.role !== undefined) out.role = opts.role;
+  if (opts.ownerName !== undefined) out.ownerName = opts.ownerName;
   if (row.description !== null) out.description = row.description;
   // `skin`/`skinOptions` are read-time defaulted on the client side
   // (resolveSkin), so an unset value is an absent key.

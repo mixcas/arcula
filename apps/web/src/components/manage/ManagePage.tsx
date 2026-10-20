@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Text, Button, Group, Card, Loader } from "@mantine/core";
+import { Text, Button, Group, Card, Loader, Badge } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
@@ -57,8 +57,14 @@ const ManagePage: React.FC = () => {
   // limit-reached); the UI only reflects it, and neither the counter nor
   // the disabled button is a security boundary — they must never be
   // described as one.
+  //
+  // The count is the collections this account OWNS, not the ones it can see:
+  // a shared collection is not the viewer's to create, and the cap gates
+  // creation (ADR-0004). Counting the rows would lock a collaborator out of
+  // their first own collection.
+  const owned = collections.filter((c) => c.role === "owner");
   const limit = collectionLimitForTier(me?.tier);
-  const atCap = collections.length >= limit;
+  const atCap = owned.length >= limit;
 
   return (
     <>
@@ -66,7 +72,7 @@ const ManagePage: React.FC = () => {
         <Text size="h1">My Collections</Text>
         <Group gap="sm">
           <Text size="sm" c="dim">
-            {collections.length} of {limit} collection
+            {owned.length} of {limit} collection
             {limit === 1 ? "" : "s"}
           </Text>
           {atCap ? (
@@ -98,6 +104,19 @@ const ManagePage: React.FC = () => {
             <Card key={collection.id} shadow="sm" p="lg" mb="md">
               <Group>
                 <Text size="h3">{collection.name}</Text>
+                {/* The role is named, not implied: a shared collection sits
+                    beside an owned one, and who owns it is the fact the row
+                    adds. The owner's name rides the shared row alone. */}
+                <Badge variant="light" color="gray">
+                  {collection.role === "collaborator"
+                    ? "Collaborator"
+                    : "Owner"}
+                </Badge>
+                {collection.ownerName && (
+                  <Text size="sm" c="dim">
+                    by {collection.ownerName}
+                  </Text>
+                )}
                 <Button
                   component={Link}
                   to={`/manage/collection/${collectionSlug(collection.name, collection.id)}`}

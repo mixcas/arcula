@@ -49,21 +49,30 @@ S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
 
-## Sharing (designed)
+## Sharing (partly built)
 
-This is the accepted design in
-[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md); it is
-not implemented yet.
+The read side of this is built; the write side is not.
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
+accepted design for both.
 
-A collection is owned by `collections.userId` and shared through
-`collection_collaborators`. `access.ts` answers the visitor and access questions
-as pure functions; `authorize.ts` loads the membership row. Invitations are
-`collection_invitations` rows with a hashed single-use token; acceptance needs
-the token and a signed-in account with the invited email. Transfer updates the
-owner and mirrors `artworks.userId` in one transaction; media keys use the
-collection's fixed `mediaNamespaceId`, so no object moves. `GET /collections`
-returns owned and shared collections together, each row with `role` and, on a
-shared row, `ownerName`.
+Access is membership. `access.ts` answers the visitor and access questions as
+pure functions over the collection, the viewer's membership and the row:
+the owner (`collections.userId`) and every row of `collection_collaborators`
+see the whole collection — drafts and soft-deleted works included — and its
+documents, at every status, never a visitor. `authorize.ts` loads the
+collection and the viewer's membership row for every read; the write paths
+still go through the owner-only `requireOwnedCollection` /
+`requireOwnedArtwork` until the write ticket lands. `artworks.userId` is not an
+authorization fact. `GET /collections` returns owned and shared collections
+together, name-ordered, each row with `role` and — on a shared row — the
+owner's display name as `ownerName`; the public list keeps its shape, and the
+dashboard's cap counter counts owned collections only. Final media keys use the
+collection's fixed `mediaNamespaceId`, and the proxy's staging branch admits the
+uploader whose prefix holds the object and a member of the collection.
+
+Not built yet: invitations (`collection_invitations` rows with a hashed
+single-use token), the access/invitation/collaborator/transfer routes below,
+and the mails.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |
@@ -90,7 +99,7 @@ invalid, expired, revoked, consumed or unknown invitation token is one
 
 - `auth.ts` · `session.ts` · `access.ts` · `authorize.ts` — the Better Auth
   instance (Drizzle adapter), session resolution, the pure access verdicts, and
-  the row and membership checks the write paths share.
+  the collection, membership and row checks the routes share.
 - `media/keys.ts` — the object-key algebra (final and staging) and its parser;
   the parser is what makes the proxy's per-request authorization work from the
   key alone. With sharing, final keys use the collection's fixed

@@ -4,9 +4,12 @@
 // staged: the owning session), and the sweep of staged entries that name
 // no row.
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { artworks as artworksTable } from "@arcula/db";
+import {
+  artworks as artworksTable,
+  collectionCollaborators as collaboratorsTable,
+} from "@arcula/db";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -17,7 +20,7 @@ import {
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
-import { listObjects } from "../src/storage";
+import { deleteObject, listObjects, putObject } from "../src/storage";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
   makeCollection,
@@ -35,6 +38,7 @@ const pB = entry("media-b");
 const pC = entry("media-c");
 const pD = entry("media-d");
 const pE = entry("media-e");
+const pF = entry("media-f");
 const pOrph = entry("media-orph");
 const pKept = entry("media-kept");
 const dA = entry("media-doc");
@@ -45,8 +49,14 @@ const makePdf = (): Uint8Array<ArrayBuffer> =>
 
 let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
+let mate: { cookies: string; userId: string };
 let cid = "";
 let privCid = "";
+
+/** Share `collection` with the mate: one membership row, no API for it yet. */
+async function shareWith(collectionId: string, userId: string) {
+  await db.insert(collaboratorsTable).values({ collectionId, userId });
+}
 
 async function stage(
   population: "photos" | "documents",
@@ -105,8 +115,11 @@ let privCollWorkId = "";
 beforeAll(async () => {
   owner = await freshUser("Media");
   stranger = await freshUser("Media");
+  mate = await freshUser("Media");
   cid = await makeCollection(owner.userId, { isPublic: true });
   privCid = await makeCollection(owner.userId, { isPublic: false });
+  await shareWith(cid, mate.userId);
+  await shareWith(privCid, mate.userId);
 
   // pubWork: public + live, one photo and one PDF document.
   pubWorkId = uuid();
@@ -321,6 +334,28 @@ describe("GET /api/v1/media — final photos", () => {
     const own = await get(key, owner.cookies);
     expect(own.status).toBe(200);
   });
+
+  it("admits a collaborator to a draft, a deleted work and a private collection", async () => {
+    // The membership matrix, on the bytes: a collaborator is inside the
+    // collection, so the visitor rule's three refusals do not apply to them.
+    const keys = [
+      finalPhotoKey(owner.userId, cid, draftWorkId, pB, "original", "jpg"),
+      finalPhotoKey(owner.userId, cid, delWorkId, pC, "original", "jpg"),
+      finalPhotoKey(
+        owner.userId,
+        privCid,
+        privCollWorkId,
+        pD,
+        "original",
+        "jpg",
+      ),
+    ];
+    for (const key of keys) {
+      const res = await get(key, mate.cookies);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("image/jpeg");
+    }
+  });
 });
 
 describe("GET /api/v1/media — final documents", () => {
@@ -364,6 +399,37 @@ describe("GET /api/v1/media — final documents", () => {
     expect((await get(key, stranger.cookies)).status).toBe(403);
     expect((await get(key, owner.cookies)).status).toBe(200);
   });
+
+  it("streams a document to a collaborator at every status", async () => {
+    // Documents stop being owner-only: membership is the verdict, so a
+    // draft's certificate reads for a collaborator exactly as a published
+    // one's does.
+    for (const key of [
+      finalDocumentKey(owner.userId, cid, pubWorkId, dA, "original", "pdf"),
+      finalDocumentKey(owner.userId, cid, draftWorkId, dB, "original", "pdf"),
+    ]) {
+      const res = await get(key, mate.cookies);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("application/pdf");
+    }
+
+    // …and a visitor still reads none of them.
+    expect(
+      (
+        await get(
+          finalDocumentKey(
+            owner.userId,
+            cid,
+            draftWorkId,
+            dB,
+            "original",
+            "pdf",
+          ),
+          stranger.cookies,
+        )
+      ).status,
+    ).toBe(403);
+  });
 });
 
 describe("GET /api/v1/media — staged objects", () => {
@@ -403,6 +469,37 @@ describe("GET /api/v1/media — staged objects", () => {
     // authorisation.
     expect((await get(originalKey, stranger.cookies)).status).toBe(403);
     expect((await get(originalKey)).status).toBe(401);
+
+    // A collaborator is inside the collection but not under this prefix: the
+    // key names the owner as its uploader, so the other member reads nothing.
+    expect((await get(originalKey, mate.cookies)).status).toBe(403);
+
+    // …and the uploader must still be a member: a staged object under the
+    // member's own prefix reads for them, and the same key is refused once
+    // their membership row is gone. The uploader's prefix alone is not
+    // enough. The object is written directly: staging is owner-only until
+    // the write ticket, and the proxy's verdict is about the key and the
+    // row, not about how the bytes got there.
+    await shareWith(cid, stranger.userId);
+    const stagedByThem = stagingOriginalKey(
+      stranger.userId,
+      cid,
+      pubWorkId,
+      pF,
+      "jpg",
+    );
+    await putObject(stagedByThem, await sourceJpeg, "image/jpeg");
+    expect((await get(stagedByThem, stranger.cookies)).status).toBe(200);
+    await db
+      .delete(collaboratorsTable)
+      .where(
+        and(
+          eq(collaboratorsTable.collectionId, cid),
+          eq(collaboratorsTable.userId, stranger.userId),
+        ),
+      );
+    expect((await get(stagedByThem, stranger.cookies)).status).toBe(403);
+    await deleteObject(stagedByThem);
 
     // Give the entry its row: the sweep test's expectation is about
     // entries that have no row, not about this one. The entry was staged

@@ -6,19 +6,20 @@
 // namespace, not an authorization fact: access is answered by the
 // collection, the work and the file's population:
 //
-//   final photo    — owner, or a visitor when access.ts's verdict admits
-//                    the work (published, live, in a public collection). A
-//                    draft, a deleted work and a work inside a private
-//                    collection 404 for a visitor, uniformly: saying which
-//                    was refused would be a disclosure (the same call as
-//                    the single-artwork read).
-//   final document — the owner ONLY. Documents are never public; the
-//                    proxy 403s everyone else so a future UI that forgot
-//                    to hide them renders a 403 rather than a leak.
-//   staged object  — the owner's in-progress work: a session, and the
-//                    ownership of the collection the entry was staged
-//                    under. No row exists yet, so there is no
-//                    artwork-level visibility to consult.
+//   final photo    — the collection's owner or a collaborator, or a visitor
+//                    when access.ts's verdict admits the work (published,
+//                    live, in a public collection). A draft, a deleted work
+//                    and a work inside a private collection 404 for a
+//                    non-member, uniformly: saying which was refused would be
+//                    a disclosure (the same call as the single-artwork read).
+//   final document — the owner and collaborators ONLY. Documents are never
+//                    public; the proxy 403s everyone else so a future UI that
+//                    forgot to hide them renders a 403 rather than a leak.
+//   staged object  — the uploader's in-progress work: a session, the key's
+//                    own uploader segment, and membership of the collection
+//                    the entry was staged under. No row exists yet, so there
+//                    is no artwork-level visibility to consult, and one
+//                    collaborator never reads another's unsaved upload.
 //
 // 404 for a key that does not parse, names no row, or names no object.
 // Headers come from the stored row (final objects) or the object's own
@@ -30,8 +31,12 @@ import {
   artworkPhotoVariants as artworkPhotoVariantsTable,
 } from "@arcula/db";
 import { Hono } from "hono";
-import { canReadArtworkDocuments, canSeeArtwork, isOwner } from "../access";
-import { loadArtworkInCollection, loadCollection } from "../authorize";
+import { canReadArtworkDocuments, canSeeArtwork } from "../access";
+import {
+  loadArtworkInCollection,
+  loadCollection,
+  loadMembership,
+} from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { parseMediaKey, type ParsedFinalKey } from "../media/keys";
@@ -65,7 +70,8 @@ mediaRoutes.get("/media", async (c) => {
   const viewer = session?.user.id ?? null;
 
   if (parsed.kind === "staging") {
-    // No row yet: access is the collection's ownership, plain.
+    // No row yet: access is the uploader's own prefix plus membership of the
+    // collection it was staged under.
     if (session === null) {
       throw new ApiError("unauthorized", "A session is required");
     }
@@ -73,7 +79,12 @@ mediaRoutes.get("/media", async (c) => {
     if (!collection) {
       throw new ApiError("not-found", "The collection does not exist");
     }
-    if (!isOwner(viewer, collection)) {
+    const membership = await loadMembership(
+      parsed.collectionId,
+      collection,
+      viewer,
+    );
+    if (parsed.uploaderId !== viewer || membership === null) {
       throw new ApiError(
         "forbidden",
         "You do not have access to this collection",
@@ -102,15 +113,33 @@ mediaRoutes.get("/media", async (c) => {
   }
 
   if (parsed.population === "documents") {
-    // Never public, owner only — and the refusal is a 403, not a 404:
+    // Never public, members only — and the refusal is a 403, not a 404:
     // the key names a row, and the point of the split is that a
     // forgotten-to-hide UI fails closed.
-    if (!canReadArtworkDocuments(viewer, artwork)) {
-      throw new ApiError("forbidden", "Documents are private to their owner");
+    const collection = await loadCollection(parsed.collectionId);
+    const membership = collection
+      ? await loadMembership(parsed.collectionId, collection, viewer)
+      : null;
+    if (!canReadArtworkDocuments(membership)) {
+      throw new ApiError(
+        "forbidden",
+        "Documents are private to the collection's owner and collaborators",
+      );
     }
   } else {
     const collection = await loadCollection(parsed.collectionId);
-    if (!collection || !canSeeArtwork(viewer, collection, artwork)) {
+    if (!collection) {
+      throw new ApiError(
+        "not-found",
+        "The object key does not name a stored object",
+      );
+    }
+    const membership = await loadMembership(
+      parsed.collectionId,
+      collection,
+      viewer,
+    );
+    if (!canSeeArtwork(membership, collection, artwork)) {
       throw new ApiError(
         "not-found",
         "The object key does not name a stored object",

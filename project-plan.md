@@ -3,10 +3,14 @@
 This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
-> **Sharing is designed, not built.** Collaborators, invitations and ownership
-> transfer are accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
-> passages that describe them are the target, not the current code.
+> **Sharing is partly built.** The read side has landed: access is membership
+> (the owner and every collaborator see the whole collection, documents
+> included), the dashboard list carries `role`/`ownerName` and counts owned
+> collections only, and final keys use the collection's `mediaNamespaceId`.
+> The invitation, collaborator and transfer routes — the write side — are still
+> the target: they are accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and are not
+> in the code yet. Passages describing them are marked as such.
 
 For the user-facing overview and setup, see [README.md](README.md). For the agent
 working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
@@ -220,36 +224,48 @@ literal prefixes, so one rule expires every staged object everywhere.
 Reads never touch S3 directly. `GET /api/v1/media?key=…` parses the key back into
 its segments, re-checks visibility against the row, and streams the object:
 
-- **final photo** — the owner or a collaborator, or a visitor when the work is
-  published **and** live **and** its collection is public;
-- **final document** — the owner and collaborators only (a visitor gets a `403`,
+- **final photo** — a member of the collection (the owner or a collaborator),
+  or a visitor when the work is published **and** live **and** its collection is
+  public;
+- **final document** — the collection's members only (a visitor gets a `403`,
   so a forgotten-to-hide UI fails closed);
-- **staged object** — the uploader whose staging prefix holds it.
+- **staged object** — the uploader whose staging prefix holds it, while they are
+  still a member of the collection the entry was staged under.
 
 ## Access control
 
 There is no rules language to audit: **the API is the only path to the data.**
 `requireSession` / `resolveSession` establish the caller; `authorize.ts` loads
-the collection, its membership row and the rows every write route shares, and
-`access.ts` answers the access questions as pure functions over those rows.
+the collection, the viewer's membership row and the rows every write route
+shares, and `access.ts` answers the access questions as pure functions over
+those rows.
 
-The visitor rule lives in `apps/api/src/access.ts`, pure over rows a caller has
-already loaded: no database, no session, no framework. **The collection is the
-only gate.** A visitor sees a published, live work exactly when its collection
-is public; a draft, a deleted work and a private collection are one answer to
-them, and a blocked work answers a uniform `404` — saying which was refused
-would be a disclosure. (A private _collection_ answers `403`, which the web
-client maps to its "private" state.) The list route keeps its SQL filter, and a
-test pins the filter and the verdict to the same answer
-([ADR-0003](docs/adr/0003-the-collection-gates.md)).
+Access is membership, and the membership fact (`membershipOf`) says which of
+two matrices applies. **Inside a collection** — the owner, and every account
+with a `collection_collaborators` row — see the whole collection: every work,
+drafts and soft-deleted works included, and its documents, at every status.
+`artworks.userId` is never consulted for authorization; it mirrors the owner for
+the wire document, nothing more. The read paths load the viewer's membership;
+the write paths stay owner-only until the next ticket.
 
-On the owner side, access is membership: the owner and every collaborator see
-the whole collection, drafts and deleted works included, and may edit every
-artwork and every setting; the owner alone manages access. A collaborator is a
-row in `collection_collaborators`, never a second `userId` on the collection,
-and the owner is not duplicated there. Documents are readable by the owner and
-collaborators at every status, never by a visitor
-([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
+**Outside it**, the visitor rule lives in `apps/api/src/access.ts`, pure over
+rows a caller has already loaded: no database, no session, no framework. **The
+collection is the only gate.** A visitor sees a published, live work exactly
+when its collection is public; a draft, a deleted work and a private collection
+are one answer to them, and a blocked work answers a uniform `404` — saying
+which was refused would be a disclosure. (A private _collection_ answers `403`,
+which the web client maps to its "private" state.) Signing in buys nothing here:
+a Visitor and an anonymous reader are one membership, `null`. The list route
+keeps its SQL filter, and a test pins the filter and the verdict to the same
+answer ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
+
+A collaborator is a row in `collection_collaborators`, never a second `userId`
+on the collection, and the owner is not duplicated there. Documents are readable
+by the owner and collaborators at every status, never by a visitor
+([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)). The
+dashboard reads `GET /collections` — owned and shared together, name-ordered,
+each row with `role` and a shared row with the owner's `ownerName` — and its
+cap counter counts owned collections only, because the tier cap gates creation.
 
 Soft delete is a `deletedAt` stamp: the work leaves every list, the bytes stay,
 and a restore route flips it back (there is no trash UI yet).
@@ -262,12 +278,14 @@ own handler. The full route table is in `apps/api/README.md`. The shape of a
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
 
-Sharing adds the access read (`GET /collections/:id/access`), the invitation and
-collaborator routes under `/collections/:id`, the transfer route, the token
-preview/accept/decline routes under `/invitations`, and `GET /me/invitations`
-for the dashboard. The error envelope gains `conflict` (409) for state
-conflicts; an invalid, expired, revoked or consumed invitation token answers
-`not-found` like an unknown one.
+Sharing's read side is built: `GET /collections` answers owned and shared
+collections together, each row with `role` and a shared row with `ownerName`,
+and every read honours membership. Still to come: the access read
+(`GET /collections/:id/access`), the invitation and collaborator routes under
+`/collections/:id`, the transfer route, the token preview/accept/decline routes
+under `/invitations`, and `GET /me/invitations` for the dashboard. The error
+envelope gains `conflict` (409) for state conflicts; an invalid, expired,
+revoked or consumed invitation token answers `not-found` like an unknown one.
 
 ## The frontend
 
@@ -289,11 +307,12 @@ scope. Skins are registered in `src/skins/registry.ts` (`basicx` is the default)
 and a collection's stored options are resolved against the skin's declared specs
 with an unknown key reported rather than silently dropped.
 
-The dashboard lists owned and shared collections together with a role badge, and
-an invitation card for pending invitations (decline only — acceptance is the
-emailed link). A collection's settings has an access card: the owner invites,
-resends, revokes, removes and transfers; a collaborator sees who else has access
-and can leave.
+The dashboard lists owned and shared collections together with a role badge and
+the owner's name on a shared row; its cap counter counts owned collections only.
+A shared collection is readable in this release, but every write is still
+owner-only server-side, so the manage page's write controls are refused until
+the write ticket lands. The invitation card for pending invitations (decline
+only — acceptance is the emailed link) is not built yet either.
 
 ## Tiers and quotas
 
@@ -309,10 +328,12 @@ without being refused. The free tier is one owned collection.
 
 Roughly in order of how much it matters:
 
-- **Sharing itself.** Collaborators, invitations and ownership transfer are
+- **The write side of sharing.** Invitations, the collaborator and access
+  routes, ownership transfer and the collaborate-on-a-collection UI are
   designed in
-  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and are not
-  in the code yet.
+  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md). The read
+  side — membership access, the shared dashboard list, documents for members —
+  is built; a collaborator can read a shared collection but not yet edit it.
 - **Password protection for public collections.** There is no `passwordHash`
   column and no verification path; the public page is public or it is not shown.
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would

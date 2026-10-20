@@ -122,6 +122,10 @@ export const artworkReadSchema = z.object({
  * omits `description`, `skin` and `skinOptions` when unset — the shape a
  * document written before the fields existed had — so all three are
  * optional, as they are on the client type.
+ *
+ * `role`/`ownerName` are the dashboard list's per-row extras: the signed-in
+ * list emits `role` on every row and `ownerName` on a shared one, while the
+ * public list and the single read emit neither. Hence optional.
  */
 export const collectionReadSchema = z.object({
   id: z.string(),
@@ -129,6 +133,8 @@ export const collectionReadSchema = z.object({
   userId: z.string(),
   description: z.string().optional(),
   isPublic: z.boolean(),
+  role: z.enum(["owner", "collaborator"]).optional(),
+  ownerName: z.string().optional(),
   skin: z.string().optional(),
   skinOptions: z
     .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))

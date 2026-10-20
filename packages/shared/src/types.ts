@@ -22,6 +22,13 @@ export interface Collection {
   description?: string;
   isPublic?: boolean;
   artworks?: string[]; // Array of artwork IDs
+  // What the viewer is to this collection, on the dashboard list only:
+  // `owner` or `collaborator`. Absent on every other read — the anonymous
+  // public list has no viewer to name, and the single read is not a list row.
+  role?: CollectionRole;
+  // The owner's display name (falling back to email), on a shared row of the
+  // dashboard list only. An owned row names nobody: you are the owner.
+  ownerName?: string;
   // Which skin renders this collection's public view. An unknown or absent id
   // falls back to DEFAULT_SKIN_ID — see apps/web/src/skins/registry.ts.
   //
@@ -43,6 +50,11 @@ export interface Collection {
 // collection's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
+
+// What an account is to a collection: the one whose `userId` it is, or one of
+// its collaborators. The owner alone invites, removes and transfers. Both read
+// everything inside; a collaborator's write side is the next ticket's.
+export type CollectionRole = "owner" | "collaborator";
 
 // Artwork type
 //
