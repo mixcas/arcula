@@ -52,8 +52,9 @@ export interface Collection {
 export type ArtworkStatus = "draft" | "published";
 
 // What an account is to a collection: the one whose `userId` it is, or one of
-// its collaborators. The owner alone invites, removes and transfers. Both read
-// everything inside; a collaborator's write side is the next ticket's.
+// its collaborators. Both read and write everything inside — a collaborator
+// changes every setting, public/private included, and every work. Only access
+// administration (invite, remove, transfer) is the owner's.
 export type CollectionRole = "owner" | "collaborator";
 
 // Artwork type

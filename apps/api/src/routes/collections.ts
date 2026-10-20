@@ -10,6 +10,12 @@
 //
 // Collections are never deleted (there is no trash for them in this model),
 // so the cap check counts every collection the owner has.
+//
+// Writer access: every route below that changes a collection or its works —
+// the settings, the import, the batch delete, the restore and the sweep — is
+// open to any member, the owner or a collaborator (ADR-0004). The cap still
+// counts OWNED collections: creating one is the caller's own, and a shared
+// collection does not consume their slot.
 
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
@@ -37,14 +43,14 @@ import {
 import { Hono } from "hono";
 import {
   loadCollection,
-  requireOwnedArtwork,
-  requireOwnedCollection,
+  requireMemberArtwork,
+  requireMemberCollection,
   requireReadableCollection,
 } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
-import { parseMediaKey } from "../media/keys";
+import { parseMediaKey, stagedCollectionPrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
 import { serializeCollection } from "../serialize";
@@ -185,14 +191,15 @@ collectionRoutes.get("/collections/:collectionId", async (c) => {
   return c.json(serializeCollection(collection));
 });
 
-// PATCH — owner only. Present sets (or, as null, clears); absent leaves
+// PATCH — any member: the owner or a collaborator, exactly as the settings
+// form shows it to both. Present sets (or, as null, clears); absent leaves
 // the column, which is what makes the settings form's "write only what
 // changed" payloads safe.
 collectionRoutes.patch(
   "/collections/:collectionId",
   requireSession,
   async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -241,8 +248,7 @@ collectionRoutes.post(
   "/collections/:collectionId/import/csv",
   requireSession,
   async (c) => {
-    const user = c.get("user");
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -277,7 +283,9 @@ collectionRoutes.post(
       const values = parsed.data;
       const inserted: typeof artworksTable.$inferInsert = {
         id: mintId(),
-        userId: user.id,
+        // The mirror of the collection's owner: an import adds the
+        // collection's works, whoever ran it (ADR-0004).
+        userId: collection.userId,
         collectionId: collection.id,
         title: values.title,
         artistName: values.artistName,
@@ -314,7 +322,7 @@ collectionRoutes.post(
   "/collections/:collectionId/artworks/bulk-delete",
   requireSession,
   async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -351,7 +359,7 @@ collectionRoutes.post(
   async (c) => {
     const collectionId = param(c, "collectionId");
     const artworkId = param(c, "artworkId");
-    const { collection, artwork } = await requireOwnedArtwork(
+    const { collection, artwork } = await requireMemberArtwork(
       c,
       collectionId,
       artworkId,
@@ -377,17 +385,18 @@ collectionRoutes.post(
   "/collections/:collectionId/maintenance/sweep",
   requireSession,
   async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
 
     // Every staged object under the caller's prefix. Staging names the
     // uploader, not the collection owner, so this is the caller's own
-    // space; the parser still does the entry-id recovery, never the
-    // character-wise prefix (sibling entry ids share prefixes).
+    // space — a collaborator's sweep cannot reach the owner's unsaved upload,
+    // nor the other way round; the parser still does the entry-id recovery,
+    // never the character-wise prefix (sibling entry ids share prefixes).
     const keys = await listObjects(
-      `staging/${c.get("user").id}/${collection.id}/`,
+      stagedCollectionPrefix(c.get("user").id, collection.id),
     );
     const byEntry = new Map<string, string[]>();
     for (const key of keys) {

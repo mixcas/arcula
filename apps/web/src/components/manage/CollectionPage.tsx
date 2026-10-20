@@ -27,9 +27,8 @@ const CollectionPage: React.FC = () => {
   const loadArtworks = useCallback(async () => {
     if (!collectionId) return;
     try {
-      // The session decides whose works these are: the owner sees every
-      // artwork, public or private, and never the soft-deleted ones (the
-      // server filters those out).
+      // Every member sees every artwork, public or private, and never the
+      // soft-deleted ones (the server filters those out).
       const fetchedArtworks =
         await artworkService.getCollectionArtworks(collectionId);
       setArtworks(fetchedArtworks);

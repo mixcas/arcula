@@ -5,16 +5,21 @@
 //   DELETE …/photos/{entryId}   — discard a staged entry
 //   … and the same three under /documents
 //
-// Staging needs only COLLECTION ownership, not an existing artwork row:
-// the Add flow mints the artwork id client-side, stages under it, and
+// Staging needs only MEMBERSHIP of the collection, not an existing artwork
+// row: the Add flow mints the artwork id client-side, stages under it, and
 // the save route creates the row and promotes the entries in one
 // transaction. The artwork id is validated as an id-shaped segment and
 // used as the staging key's segment; nothing else is asked of it here.
+//
+// The uploader segment is always the CALLER, never the collection's owner:
+// staging is per uploader (ADR-0004), so a collaborator's stage, process and
+// discard reach only their own staged objects and one member can neither
+// process nor discard another's unsaved upload.
 
 import { MINTED_ID_RE } from "@arcula/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { requireOwnedCollection } from "../authorize";
+import { requireMemberCollection } from "../authorize";
 import { errorResponse, ApiError } from "../errors";
 import { param } from "../http";
 import { requireSession } from "../session";
@@ -22,6 +27,7 @@ import {
   extensionFor,
   mediaUrl,
   parseMediaKey,
+  stagedArtworkPrefix,
   stagedOriginalPrefix,
   stagingOriginalKey,
   stagingVariantKey,
@@ -67,7 +73,7 @@ async function discardEntry(
   entryId: string,
 ): Promise<number> {
   const keys = await listObjects(
-    `staging/${userId}/${collectionId}/${artworkId}/`,
+    stagedArtworkPrefix(userId, collectionId, artworkId),
   );
   const doomed = keys.filter((key) => {
     const parsed = parseMediaKey(key);
@@ -104,7 +110,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Stage
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/stage`, requireSession, limit, async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -187,7 +193,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Process
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/process`, requireSession, async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -260,7 +266,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Discard
   // ------------------------------------------------------------------
   r.delete(`/${pop.population}/:entryId`, requireSession, async (c) => {
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );

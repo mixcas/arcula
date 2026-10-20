@@ -5,7 +5,7 @@
  * `stage` — and the server generates its display variants on demand —
  * `process` — so the form never decodes or resizes a byte. Neither call
  * touches the artwork's rows: the entries only become rows in the save
- * transaction, which is why staging needs only collection ownership, not an
+ * transaction, which is why staging needs only collection membership, not an
  * existing artwork. An entry the form drops is `discard`ed; a save that
  * fails after promoting its entries leaves the final objects in place, and
  * that residual is the sweep's job, not this module's.
