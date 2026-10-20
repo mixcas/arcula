@@ -49,30 +49,41 @@ S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
 
-## Sharing (partly built)
+## Sharing (invitations built)
 
-The read side of this is built; the write side is not.
+The read and write sides of sharing are built, and so is the invitation loop —
+create, mail, preview, accept and decline. The rest of access administration
+(access card, resend, revoke, remove, leave, transfer) is not.
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
-accepted design for both.
+accepted design for all of it.
 
 Access is membership. `access.ts` answers the visitor and access questions as
 pure functions over the collection, the viewer's membership and the row:
 the owner (`collections.userId`) and every row of `collection_collaborators`
 see the whole collection — drafts and soft-deleted works included — and its
 documents, at every status, never a visitor. `authorize.ts` loads the
-collection and the viewer's membership row for every read; the write paths
-still go through the owner-only `requireOwnedCollection` /
-`requireOwnedArtwork` until the write ticket lands. `artworks.userId` is not an
-authorization fact. `GET /collections` returns owned and shared collections
-together, name-ordered, each row with `role` and — on a shared row — the
-owner's display name as `ownerName`; the public list keeps its shape, and the
-dashboard's cap counter counts owned collections only. Final media keys use the
-collection's fixed `mediaNamespaceId`, and the proxy's staging branch admits the
-uploader whose prefix holds the object and a member of the collection.
+collection and the viewer's membership row for every read, and every write
+path asks the same membership question through `requireMemberCollection` /
+`requireMemberArtwork`: a collaborator changes every setting (public/private
+included), creates, edits, imports, bulk-deletes, restores and sweeps exactly
+as the owner does, while a non-member gets `403` and a missing collection
+`404`. Only the access-administration routes below stay owner-only. A save
+records `artworks.userId` as the collection's owner, never the session user:
+it is a mirror, not an authorization fact. `GET /collections` returns owned
+and shared collections together, name-ordered, each row with `role` and — on
+a shared row — the owner's display name as `ownerName`; the public list keeps
+its shape, and the dashboard's cap counter counts owned collections only.
+Final media keys use the collection's fixed `mediaNamespaceId`, staging is per
+uploader, and the proxy's staging branch admits the uploader whose prefix holds
+the object while they are still a member of the collection.
 
-Not built yet: invitations (`collection_invitations` rows with a hashed
-single-use token), the access/invitation/collaborator/transfer routes below,
-and the mails.
+The invitation loop is built: `POST /collections/:id/invitations` writes a
+pending row and mails `CLIENT_ORIGIN/invite/:token`; the public
+`GET /invitations/:token` previews it, and the invited account accepts or
+declines with that token. The raw token is never stored — only its SHA-256
+hash — and acceptance needs both the token and a session whose email matches.
+Still not built: resend, revoke, the access card, collaborator removal,
+leaving, ownership transfer and `GET /me/invitations`.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |

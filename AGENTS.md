@@ -10,12 +10,14 @@
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**.
 >
-> **Sharing is partly built.** The read side — access as membership, the shared
-> dashboard list, documents for members — has landed. Invitations, the
-> collaborator and transfer routes, and the write paths a collaborator needs are
-> still the target. The model is accepted in
+> **Sharing is partly built.** Access as membership — the shared dashboard
+> list, documents for members, every write path a collaborator needs, and the
+> invitation loop (create, preview, accept, decline) — has landed. Resend,
+> revoke, the access card, collaborator removal, leaving and transfer are still
+> the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
-> below that describe the write side are the target until it lands.
+> below that describe the rest of access administration are the target until it
+> lands.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -154,7 +156,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `access.ts` — the access verdicts, pure over loaded rows: the membership
   fact (owner, collaborator, nobody) and the visitor rule (the collection is
   the only gate); `authorize.ts` loads the collection, the viewer's membership
-  row and the row each route acts on.
+  row and the row each route acts on, and answers the one write question —
+  `requireMemberCollection` / `requireMemberArtwork`, owner or collaborator —
+  that every write path asks.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
   Collection, the work, its photos, documents and Variants) or a Collection's
   list (the Collection, the works once, each child table once for the whole
@@ -166,18 +170,22 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
-- `routes/` — `collections` (with the access, invitation, collaborator and
-  transfer routes to come), `artworks`, `me` (with the invitation list to
-  come), `media` (the object proxy), `artworkMedia` (stage/process).
+- `invitations.ts` — the pure token algebra (`mintInvitationToken`,
+  `hashInvitationToken`, `normalizeEmail`) and the one validity question
+  (`isInvitationUsable`: pending and not past `expiresAt`).
+- `routes/` — `collections` (with the access, collaborator and transfer routes
+  to come — the only owner-only surface left), `invitations` (create, public
+  preview, accept, decline), `artworks`, `me` (with the invitation list to
+  come), `media` (the object proxy), `artworkMedia` (stage/process, under the
+  caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
-collection, document, user; the collection schemas carry the access and
-invitation payloads), `artworkPhotos.ts` (the `order` invariant,
-`sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file caps +
-accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
+collection, invitation, document, user), `artworkPhotos.ts` (the `order`
+invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file
+caps + accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
 `types.ts`.
 
 **`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
@@ -189,9 +197,10 @@ system.
 `account`, `verification`, `collections`, `collectionCollaborators`,
 `collectionInvitations`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
 `artworkDocuments`) and the `schema` object the adapter consumes. The two
-sharing tables are in the schema; the read side reads `collectionCollaborators`,
-and the code that writes both tables (invitations, removal, transfer) is not
-built yet.
+sharing tables are in the schema and `collectionCollaborators` is read on every
+access question; the invitation routes write `collectionInvitations`, while the
+code that writes `collectionCollaborators` (acceptance, removal, transfer) is
+partly built — acceptance writes it, removal and transfer are not.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an

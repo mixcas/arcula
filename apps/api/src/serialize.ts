@@ -30,6 +30,7 @@ import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotoVariants as artworkPhotoVariantsTable,
   artworkPhotos as artworkPhotosTable,
+  collectionInvitations as collectionInvitationsTable,
   collections as collectionsTable,
 } from "@arcula/db";
 import {
@@ -39,6 +40,7 @@ import {
   type CollectionRead,
   type CollectionRole,
   type ImageVariantKey,
+  type InvitationSummary,
   type Timestamp,
 } from "@arcula/shared";
 import { ApiError } from "./errors";
@@ -55,6 +57,7 @@ export type ArtworkRow = typeof artworksTable.$inferSelect;
 export type PhotoRow = typeof artworkPhotosTable.$inferSelect;
 export type DocumentRow = typeof artworkDocumentsTable.$inferSelect;
 export type VariantRow = typeof artworkPhotoVariantsTable.$inferSelect;
+export type InvitationRow = typeof collectionInvitationsTable.$inferSelect;
 
 /** The dashboard list's per-row extras. Absent on every other read, which is
  *  what keeps the otherwise-identical documents distinguishable: a shared row
@@ -82,7 +85,7 @@ type PhotoRead = ArtworkRead["photos"][number];
 type DocumentRead = ArtworkRead["documents"][number];
 type VariantRead = PhotoRead["variants"][number];
 
-const wireTimestamp = (t: Date): Timestamp => {
+export const wireTimestamp = (t: Date): Timestamp => {
   const ms = t.getTime();
   return {
     seconds: Math.floor(ms / 1000),
@@ -383,4 +386,27 @@ export function serializeCollection(
     out.skinOptions = row.skinOptions;
   }
   return out;
+}
+
+/** A person's display name, falling back to their email — the rule the
+ *  dashboard uses for a shared collection's owner, and the offer previews use
+ *  for the inviter. */
+export const displayName = (name: string | null, email: string): string => {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : email;
+};
+
+/** The invitation summary: the owner's access view and the create response's
+ *  offer. The token is absent by construction — the row only holds its hash. */
+export function serializeInvitation(row: InvitationRow): InvitationSummary {
+  return {
+    id: row.id,
+    collectionId: row.collectionId,
+    email: row.email,
+    invitedByUserId: row.invitedByUserId,
+    status: row.status as InvitationSummary["status"],
+    createdAt: wireTimestamp(row.createdAt),
+    expiresAt: wireTimestamp(row.expiresAt),
+    resolvedAt: row.resolvedAt === null ? null : wireTimestamp(row.resolvedAt),
+  };
 }

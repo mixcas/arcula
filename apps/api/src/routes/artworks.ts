@@ -19,6 +19,11 @@
 // gate (docs/adr/0003). The single read, the list read and the read-back
 // after a save all go through artworkRead.ts, which now owns the list's SQL
 // filter too; a test pins that filter and the verdict together.
+//
+// Writer access: any member, the owner or a collaborator, for every route
+// here (ADR-0004). A save by a collaborator promotes THEIR staged entries
+// onto the collection's final keys, but records `artworks.userId` as the
+// collection's owner — the mirror, never the session user.
 
 import { asc, eq } from "drizzle-orm";
 import {
@@ -41,8 +46,8 @@ import { Hono } from "hono";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   loadArtworkById,
-  requireOwnedArtwork,
-  requireOwnedCollection,
+  requireMemberArtwork,
+  requireMemberCollection,
 } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
@@ -127,7 +132,7 @@ artworkRoutes.post(
   requireSession,
   async (c) => {
     const user = c.get("user");
-    const collection = await requireOwnedCollection(
+    const collection = await requireMemberCollection(
       c,
       param(c, "collectionId"),
     );
@@ -165,7 +170,9 @@ artworkRoutes.post(
     const stagedKeys = await safeTx(async (tx) => {
       await tx.insert(artworksTable).values({
         id: payload.artworkId,
-        userId: user.id,
+        // The mirror of the collection's owner, not the session user: a
+        // collaborator saves work into someone else's collection (ADR-0004).
+        userId: collection.userId,
         collectionId: collection.id,
         title: payload.title,
         artistName: payload.artistName,
@@ -227,7 +234,7 @@ artworkRoutes.patch(
     const collectionId = param(c, "collectionId");
     const artworkId = param(c, "artworkId");
     const user = c.get("user");
-    const { collection, artwork } = await requireOwnedArtwork(
+    const { collection, artwork } = await requireMemberArtwork(
       c,
       collectionId,
       artworkId,

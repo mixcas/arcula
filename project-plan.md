@@ -245,8 +245,13 @@ two matrices applies. **Inside a collection** — the owner, and every account
 with a `collection_collaborators` row — see the whole collection: every work,
 drafts and soft-deleted works included, and its documents, at every status.
 `artworks.userId` is never consulted for authorization; it mirrors the owner for
-the wire document, nothing more. The read paths load the viewer's membership;
-the write paths stay owner-only until the next ticket.
+the wire document, nothing more. The read paths load the viewer's membership,
+and every write path asks the same question through `requireMemberCollection`:
+a collaborator changes every setting (public/private included), creates, edits,
+imports, bulk-deletes, restores and sweeps exactly as the owner does. Only
+access administration stays owner-only. Staging is per uploader, so
+stage/process/discard and the sweep reach only the caller's own unsaved
+uploads (ADR-0004).
 
 **Outside it**, the visitor rule lives in `apps/api/src/access.ts`, pure over
 rows a caller has already loaded: no database, no session, no framework. **The
@@ -278,13 +283,12 @@ own handler. The full route table is in `apps/api/README.md`. The shape of a
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
 
-Sharing's read side is built: `GET /collections` answers owned and shared
-collections together, each row with `role` and a shared row with `ownerName`,
-and every read honours membership. Still to come: the access read
-(`GET /collections/:id/access`), the invitation and collaborator routes under
-`/collections/:id`, the transfer route, the token preview/accept/decline routes
-under `/invitations`, and `GET /me/invitations` for the dashboard. The error
-envelope gains `conflict` (409) for state conflicts; an invalid, expired,
+Sharing's read and write sides are built, and so is the invitation loop: the
+owner creates an invitation, the mail carries its single-use hashed token, and
+the invited account previews, accepts or declines it. Still to come: the access
+read (`GET /collections/:id/access`), resend, revoke, collaborator removal,
+leaving, the transfer route, and `GET /me/invitations` for the dashboard. The
+error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
 revoked or consumed invitation token answers `not-found` like an unknown one.
 
 ## The frontend
@@ -309,10 +313,10 @@ with an unknown key reported rather than silently dropped.
 
 The dashboard lists owned and shared collections together with a role badge and
 the owner's name on a shared row; its cap counter counts owned collections only.
-A shared collection is readable in this release, but every write is still
-owner-only server-side, so the manage page's write controls are refused until
-the write ticket lands. The invitation card for pending invitations (decline
-only — acceptance is the emailed link) is not built yet either.
+A shared collection is readable and editable: the manage page's write controls
+work for a collaborator exactly as for the owner, because the server answers
+them by membership. The invitation card for pending invitations (decline only —
+acceptance is the emailed link) is not built yet.
 
 ## Tiers and quotas
 
@@ -328,12 +332,14 @@ without being refused. The free tier is one owned collection.
 
 Roughly in order of how much it matters:
 
-- **The write side of sharing.** Invitations, the collaborator and access
-  routes, ownership transfer and the collaborate-on-a-collection UI are
-  designed in
-  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md). The read
-  side — membership access, the shared dashboard list, documents for members —
-  is built; a collaborator can read a shared collection but not yet edit it.
+- **Access administration.** Invitations, the access card (who has access, and
+  removing them), collaborator management, leaving a collection, ownership
+  transfer and the mails are designed in
+  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and not
+  built. Sharing itself is: a collection is shared by a
+  `collection_collaborators` row, and both members read and edit it in full.
+  There is no in-app way to add or remove a collaborator yet, so a membership
+  row is written by hand outside the product.
 - **Password protection for public collections.** There is no `passwordHash`
   column and no verification path; the public page is public or it is not shown.
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would

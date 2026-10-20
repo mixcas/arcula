@@ -12,4 +12,5 @@ export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
 export * from "./schemas/collection";
 export * from "./schemas/document";
+export * from "./schemas/invitation";
 export * from "./schemas/user";

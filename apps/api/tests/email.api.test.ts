@@ -30,10 +30,6 @@ async function mailpitMessages(): Promise<MailpitMessage[]> {
   return body.messages;
 }
 
-async function mailpitClear(): Promise<void> {
-  await fetch(`${MAILPIT}/api/v1/messages`, { method: "DELETE" });
-}
-
 async function mailpitText(id: string): Promise<string> {
   const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
   const body = (await res.json()) as { Text: string };
@@ -91,7 +87,6 @@ describe("provider selection (offline)", () => {
 
 describe("password reset — live (fully live in beta)", () => {
   it("mails a link on the CLIENT_ORIGIN that resets the password", async () => {
-    await mailpitClear();
     const { email } = await signUp("s4");
 
     const asked = await req("POST", "/api/auth/request-password-reset", {
@@ -131,18 +126,20 @@ describe("password reset — live (fully live in beta)", () => {
 
 describe("email verification — built but gated", () => {
   it("stays gated: the wired hook sends nothing at sign-up", async () => {
-    await mailpitClear();
-    await signUp("s4");
+    const { email } = await signUp("s4");
 
     // The hook is configured, so if the auto-send gate (sendOnSignUp ??
     // requireEmailVerification) were ever flipped, this would catch it:
-    // a background send lands within milliseconds.
+    // a background send lands within milliseconds. The assertion is per
+    // address, not the whole inbox — another suite is sending mail too.
     await new Promise((r) => setTimeout(r, 1000));
-    expect(await mailpitMessages(), "no mail at sign-up").toHaveLength(0);
+    const forThisAddress = (await mailpitMessages()).filter(
+      (m) => m.To[0]?.Address === email,
+    );
+    expect(forThisAddress, "no mail at sign-up").toHaveLength(0);
   }, 15000);
 
   it("the on-demand endpoint mails a CLIENT_ORIGIN link that verifies the account", async () => {
-    await mailpitClear();
     const { email, cookies } = await signUp("s4");
 
     const sent = await req("POST", "/api/auth/send-verification-email", {

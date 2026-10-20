@@ -1,10 +1,14 @@
 // Resource authorization for /api/v1: load a row, check the caller
 // against it, and hand the route a row it can trust.
 //
-//   owner — the session user owns the collection the row belongs to. Every
-//           write path (stage/process/discard/save/sweep) still goes through
-//           here: collaborator writes are the next ticket's, so this release
-//           admits no write it has not specified and tested.
+//   readable — the collection exists and the viewer is a member of it or is
+//              looking at something public (the visitor rule in access.ts).
+//   member   — the collection exists and the caller is its owner or one of
+//              its collaborators. Every write path — the collection's
+//              settings, artwork create/edit/restore/bulk-delete, CSV import,
+//              stage/process/discard/save/sweep — asks this one question, so a
+//              collaborator can do the job they were invited to do and a
+//              non-member cannot.
 //
 // The access verdicts themselves are not spelled out here: the read paths
 // call the pure functions in access.ts over rows they have already loaded,
@@ -14,6 +18,10 @@
 // The split between "does not exist" (404) and "you may not see it"
 // matters for visitors: a private collection 403s, never 404s — the web
 // client maps that refusal to its "private" state.
+//
+// `artworks.userId` is never compared with the caller: it mirrors the
+// collection's owner (ADR-0004), and a row's own id must not admit anyone the
+// membership does not.
 
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
@@ -24,6 +32,7 @@ import {
 } from "@arcula/db";
 import {
   canSeeCollection,
+  isMember,
   membershipOf,
   type CollaboratorRow,
   type CollectionFacts,
@@ -139,21 +148,32 @@ export async function requireReadableCollection(
 }
 
 /**
- * The write-side check: the collection exists and the session user owns it.
+ * The write-side check: the collection exists and the caller is a member of
+ * it — its owner, or an account with a `collection_collaborators` row.
  *
- * Collaborator writes are the next ticket's; the routes keep the owner check
- * until that lands.
+ * Membership is the whole verdict (ADR-0004): a collaborator may change every
+ * setting, public/private included, and every work, exactly as the owner does,
+ * because there is no narrower write role to hand out. Only access
+ * administration — invitations, removal, transfer — will stay owner-only when
+ * those routes land, and they will say so with a check of their own.
+ *
+ * A missing collection is `404`; a non-member is `403`, matching the read
+ * side's refusal for a private collection.
  */
-export async function requireOwnedCollection(
+export async function requireMemberCollection(
   c: Context,
   collectionId: string,
 ): Promise<CollectionRow> {
-  const user = c.get("user");
   const collection = await loadCollection(collectionId);
   if (!collection) {
     throw new ApiError("not-found", "The collection does not exist");
   }
-  if (collection.userId !== user.id) {
+  const membership = await loadMembership(
+    collectionId,
+    collection,
+    c.get("user").id,
+  );
+  if (!isMember(membership)) {
     throw new ApiError(
       "forbidden",
       "You do not have access to this collection",
@@ -162,13 +182,33 @@ export async function requireOwnedCollection(
   return collection;
 }
 
-/** Owner check plus the artwork existing inside that collection. */
-export async function requireOwnedArtwork(
+/**
+ * The owner-only check for access administration — invitations today, and
+ * collaborator removal, leaving and transfer when those routes land. A
+ * collaborator is a member (and may edit everything), but only the owner
+ * decides who else gets in (ADR-0004).
+ */
+export async function requireOwnerCollection(
+  c: Context,
+  collectionId: string,
+): Promise<CollectionRow> {
+  const collection = await requireMemberCollection(c, collectionId);
+  if (collection.userId !== c.get("user").id) {
+    throw new ApiError(
+      "forbidden",
+      "Only the collection's owner can manage access",
+    );
+  }
+  return collection;
+}
+
+/** The membership check plus the artwork existing inside that collection. */
+export async function requireMemberArtwork(
   c: Context,
   collectionId: string,
   artworkId: string,
 ): Promise<{ collection: CollectionRow; artwork: ArtworkRow }> {
-  const collection = await requireOwnedCollection(c, collectionId);
+  const collection = await requireMemberCollection(c, collectionId);
   const artwork = await loadArtworkInCollection(collectionId, artworkId);
   if (!artwork) {
     throw new ApiError("not-found", "The artwork does not exist");
