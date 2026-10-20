@@ -2,7 +2,9 @@
 //
 // The key parses back into its segments (the name is self-describing by
 // construction) and authz is checked per request, then the object
-// streams:
+// streams. The final key's second segment is the collection's media
+// namespace, not an authorization fact: access is answered by the
+// collection, the work and the file's population:
 //
 //   final photo    — owner, or a visitor when access.ts's verdict admits
 //                    the work (published, live, in a public collection). A

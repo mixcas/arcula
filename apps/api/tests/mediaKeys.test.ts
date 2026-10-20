@@ -1,4 +1,5 @@
-// The key algebra: build → parse round-trips and `extensionFor`.
+// The key algebra: build → parse round-trips, the namespace resolver and
+// `extensionFor`.
 //
 // Pure — no stack needed. The round-trip is the load-bearing case: the
 // proxy's per-request authz and the sweep both work from `parseMediaKey`
@@ -11,12 +12,18 @@ import {
   extensionFor,
   finalDocumentKey,
   finalPhotoKey,
+  mediaNamespaceOf,
   parseMediaKey,
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
 
-const USER = "user-1";
+// The final key names the collection's namespace; the staging key names the
+// account that uploaded. These start as different strings on purpose: a key
+// builder that swapped them would still round-trip, and only the segment
+// assertions below would notice.
+const NAMESPACE = "namespace-1";
+const UPLOADER = "uploader-1";
 const CID = "col-1";
 const AID = "art-1";
 const ENTRY = "photo-abc";
@@ -36,12 +43,12 @@ describe("final keys", () => {
   it("round-trips every object key under both populations", () => {
     for (const key of ALL_OBJECT_KEYS) {
       const photo = parseMediaKey(
-        finalPhotoKey(USER, CID, AID, ENTRY, key, "webp"),
+        finalPhotoKey(NAMESPACE, CID, AID, ENTRY, key, "webp"),
       );
       expect(photo).toMatchObject({
         kind: "final",
         population: "photos",
-        userId: USER,
+        namespaceId: NAMESPACE,
         collectionId: CID,
         artworkId: AID,
         entryId: ENTRY,
@@ -50,12 +57,12 @@ describe("final keys", () => {
       expect(photo?.ext).toBe("webp");
 
       const document = parseMediaKey(
-        finalDocumentKey(USER, CID, AID, ENTRY, key, "pdf"),
+        finalDocumentKey(NAMESPACE, CID, AID, ENTRY, key, "pdf"),
       );
       expect(document).toMatchObject({
         kind: "final",
         population: "documents",
-        userId: USER,
+        namespaceId: NAMESPACE,
         collectionId: CID,
         artworkId: AID,
         entryId: ENTRY,
@@ -65,13 +72,20 @@ describe("final keys", () => {
     }
   });
 
+  it("names the second segment the namespace", () => {
+    const key = finalPhotoKey(NAMESPACE, CID, AID, ENTRY, "original", "jpg");
+    expect(key).toBe(
+      `artworks/${NAMESPACE}/${CID}/${AID}/photos/${ENTRY}_original.jpg`,
+    );
+  });
+
   it("round-trips an entry id that contains underscores", () => {
     // The client mints ids that may carry `-` and `_`; the parser must
     // still recover the entry id whole, whichever variant key follows.
     const tricky = "ab_c-de_f";
     for (const key of ALL_OBJECT_KEYS) {
       const parsed = parseMediaKey(
-        finalPhotoKey(USER, CID, AID, tricky, key, "jpg"),
+        finalPhotoKey(NAMESPACE, CID, AID, tricky, key, "jpg"),
       );
       expect(parsed, key).toMatchObject({ entryId: tricky, key });
     }
@@ -81,11 +95,11 @@ describe("final keys", () => {
 describe("staging keys", () => {
   it("round-trips the original (no key suffix)", () => {
     const parsed = parseMediaKey(
-      stagingOriginalKey(USER, CID, AID, ENTRY, "png"),
+      stagingOriginalKey(UPLOADER, CID, AID, ENTRY, "png"),
     );
     expect(parsed).toMatchObject({
       kind: "staging",
-      userId: USER,
+      uploaderId: UPLOADER,
       collectionId: CID,
       artworkId: AID,
       entryId: ENTRY,
@@ -96,14 +110,37 @@ describe("staging keys", () => {
 
   it("round-trips a variant (the key suffix recovers the variant)", () => {
     const parsed = parseMediaKey(
-      stagingVariantKey(USER, CID, AID, ENTRY, "square_lg", "webp"),
+      stagingVariantKey(UPLOADER, CID, AID, ENTRY, "square_lg", "webp"),
     );
     expect(parsed).toMatchObject({
       kind: "staging",
+      uploaderId: UPLOADER,
       entryId: ENTRY,
       key: "square_lg",
     });
     expect(parsed?.ext).toBe("webp");
+  });
+
+  it("names the second segment the uploader", () => {
+    const key = stagingOriginalKey(UPLOADER, CID, AID, ENTRY, "jpg");
+    expect(key).toBe(`staging/${UPLOADER}/${CID}/${AID}/${ENTRY}.jpg`);
+  });
+});
+
+describe("mediaNamespaceOf", () => {
+  it("answers the fixed namespace when the collection has one", () => {
+    expect(
+      mediaNamespaceOf({ mediaNamespaceId: NAMESPACE, userId: UPLOADER }),
+    ).toBe(NAMESPACE);
+  });
+
+  it("falls back to the owner for a collection created before 0004", () => {
+    // The deploy puts the Lambda before the migrations, so a collection
+    // written by the old code in the gap has no namespace yet. Its existing
+    // keys were built from the owner, and that is what resolves them.
+    expect(mediaNamespaceOf({ mediaNamespaceId: null, userId: UPLOADER })).toBe(
+      UPLOADER,
+    );
   });
 });
 

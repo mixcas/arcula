@@ -4,9 +4,15 @@
 // Two prefixes, both self-describing — every segment is an id or a
 // variant key, and no user-supplied filename ever reaches a path:
 //
-//   final:    artworks/{userId}/{collectionId}/{artworkId}/photos/{entryId}_{key}.{ext}
-//             artworks/{userId}/{collectionId}/{artworkId}/documents/{entryId}_{key}.{ext}
-//   staging:  staging/{userId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+//   final:    artworks/{namespaceId}/{collectionId}/{artworkId}/photos/{entryId}_{key}.{ext}
+//             artworks/{namespaceId}/{collectionId}/{artworkId}/documents/{entryId}_{key}.{ext}
+//   staging:  staging/{uploaderId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+//
+// The second segment is not the same fact in the two shapes. A final object
+// belongs to the collection, so it is named by the collection's fixed
+// `mediaNamespaceId`: a transfer changes the owner and moves no byte. A
+// staged object belongs to whoever uploaded it, so it is named by their
+// account id and one collaborator never lists another's uploads.
 //
 // `staging/` leads the staged key on purpose: lifecycle rules match
 // literal prefixes, so one `staging/` rule covers every staged object in
@@ -30,56 +36,71 @@ export const OBJECT_KEYS = [
 export type MediaPopulation = "photos" | "documents";
 
 /**
+ * The collection's fixed media namespace.
+ *
+ * `mediaNamespaceId` is set when a collection is created and never moves. It
+ * is nullable until `0004_media_namespace_not_null` has run: the deploy puts
+ * the Lambda before the migrations, so a collection created by the old code
+ * in the gap still resolves — to its owner, which is the segment the old
+ * code used for every key.
+ */
+export const mediaNamespaceOf = (collection: {
+  mediaNamespaceId: string | null;
+  userId: string;
+}): string => collection.mediaNamespaceId ?? collection.userId;
+
+/**
  * The final entry's base. The two populations differ by this one segment —
  * which is why the four builders below (and the table in `populations.ts`)
  * name the population rather than their own copy of the shape.
  */
 const finalBase = (
   population: MediaPopulation,
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `artworks/${userId}/${collectionId}/${artworkId}/${population}/${entryId}`;
+  `artworks/${namespaceId}/${collectionId}/${artworkId}/${population}/${entryId}`;
 
 export const finalPhotoKey = (
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `${finalBase("photos", userId, collectionId, artworkId, entryId)}_${key}.${ext}`;
+  `${finalBase("photos", namespaceId, collectionId, artworkId, entryId)}_${key}.${ext}`;
 
 export const finalDocumentKey = (
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `${finalBase("documents", userId, collectionId, artworkId, entryId)}_${key}.${ext}`;
+  `${finalBase("documents", namespaceId, collectionId, artworkId, entryId)}_${key}.${ext}`;
 
 export const stagingOriginalKey = (
-  userId: string,
+  uploaderId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
   ext: string,
-): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}.${ext}`;
+): string =>
+  `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}.${ext}`;
 
 export const stagingVariantKey = (
-  userId: string,
+  uploaderId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `staging/${userId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
+  `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}_${key}.${ext}`;
 
 /**
  * The final prefixes that address one entry's objects. Deleting a removed
@@ -89,20 +110,20 @@ export const stagingVariantKey = (
  * recovers the true entry id.
  */
 export const finalPhotoPrefix = (
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${finalBase("photos", userId, collectionId, artworkId, entryId)}_`;
+  `${finalBase("photos", namespaceId, collectionId, artworkId, entryId)}_`;
 
 export const finalDocumentPrefix = (
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${finalBase("documents", userId, collectionId, artworkId, entryId)}_`;
+  `${finalBase("documents", namespaceId, collectionId, artworkId, entryId)}_`;
 
 /**
  * The prefixes that address one staged entry without its siblings.
@@ -115,24 +136,24 @@ export const finalDocumentPrefix = (
  * list against.
  */
 export const stagedOriginalPrefix = (
-  userId: string,
+  uploaderId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
-): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}.`;
+): string => `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}.`;
 
 export const stagedVariantPrefix = (
-  userId: string,
+  uploaderId: string,
   collectionId: string,
   artworkId: string,
   entryId: string,
-): string => `staging/${userId}/${collectionId}/${artworkId}/${entryId}_`;
+): string => `staging/${uploaderId}/${collectionId}/${artworkId}/${entryId}_`;
 
 /** The unmodified source: no key suffix, so a staged entry is at most
  *  one original plus its generated variants. */
 export type ParsedStagingKey = {
   kind: "staging";
-  userId: string;
+  uploaderId: string;
   collectionId: string;
   artworkId: string;
   entryId: string;
@@ -144,7 +165,7 @@ export type ParsedStagingKey = {
 export type ParsedFinalKey = {
   kind: "final";
   population: MediaPopulation;
-  userId: string;
+  namespaceId: string;
   collectionId: string;
   artworkId: string;
   entryId: string;
@@ -211,7 +232,7 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
     return {
       kind: "final",
       population: segments[4],
-      userId: segments[1],
+      namespaceId: segments[1],
       collectionId: segments[2],
       artworkId: segments[3],
       entryId,
@@ -227,7 +248,7 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
     if (entryId.length === 0) return null;
     return {
       kind: "staging",
-      userId: segments[1],
+      uploaderId: segments[1],
       collectionId: segments[2],
       artworkId: segments[3],
       entryId,
