@@ -3,6 +3,12 @@
 // is what keeps the client's types (`Artwork`, `Collection` in
 // @arcula/shared) working against the API unmodified.
 //
+// The return types ARE the contract: this file constructs the shared read
+// types (`ArtworkRead`, `CollectionRead`), so `bun run check` refuses a field
+// the read schema does not have, or a required one this file forgets. There
+// is no parse here — the compiler is the whole check, and the server does not
+// re-validate what it just constructed.
+//
 // Three transforms, row → document:
 //
 //   - timestamps: a Postgres `Date` (millisecond precision, which is how
@@ -15,9 +21,9 @@
 //     the only thing that reads them back.
 //
 // A row the write paths could not have produced (a photo with no original
-// variant row, a null where a number is required) throws `internal`: a
-// malformed row is a server bug and deserves a 500, not a half-shaped
-// document on the wire.
+// variant row, a null where a number is required, an unknown status or
+// document kind) throws `internal`: a malformed row is a server bug and
+// deserves a 500, not a half-shaped document on the wire.
 
 import {
   artworks as artworksTable,
@@ -26,7 +32,14 @@ import {
   artworkPhotos as artworkPhotosTable,
   collections as collectionsTable,
 } from "@arcula/db";
-import { UPDATABLE_TEXT_FIELDS } from "@arcula/shared";
+import {
+  UPDATABLE_TEXT_FIELDS,
+  type ArtworkRead,
+  type ArtworkStatus,
+  type CollectionRead,
+  type ImageVariantKey,
+  type Timestamp,
+} from "@arcula/shared";
 import { ApiError } from "./errors";
 import {
   extensionFor,
@@ -52,16 +65,24 @@ export interface ArtworkJoined {
   variants: VariantRow[];
 }
 
-type WireTimestamp = { seconds: number; nanoseconds: number };
+/** A text field the write paths may leave null; the document omits it then. */
+type UpdatableTextField = (typeof UPDATABLE_TEXT_FIELDS)[number];
 
-const wireTimestamp = (t: Date | null): WireTimestamp | null => {
-  if (t === null) return null;
+/** The nested contract shapes, taken from the read type itself. */
+type PhotoRead = ArtworkRead["photos"][number];
+type DocumentRead = ArtworkRead["documents"][number];
+type VariantRead = PhotoRead["variants"][number];
+
+const wireTimestamp = (t: Date): Timestamp => {
   const ms = t.getTime();
   return {
     seconds: Math.floor(ms / 1000),
     nanoseconds: (ms % 1000) * 1e6,
   };
 };
+
+const wireTimestampOrNull = (t: Date | null): Timestamp | null =>
+  t === null ? null : wireTimestamp(t);
 
 /** A stored value the write paths guarantee; null is a server bug. */
 const present = <T>(value: T | null, what: string): T => {
@@ -81,23 +102,76 @@ const extOf = (contentType: string | null, what: string): string => {
   return ext;
 };
 
+/** The status the schema's check constraint permits. */
+const statusOf = (status: string): ArtworkStatus => {
+  if (status !== "draft" && status !== "published") {
+    throw new ApiError("internal", `Unrecognized artwork status ${status}`);
+  }
+  return status;
+};
+
+/** The document kind the schema's check constraint permits. */
+const kindOf = (kind: string): DocumentRead["kind"] => {
+  if (kind !== "file" && kind !== "image") {
+    throw new ApiError("internal", `Unrecognized document kind ${kind}`);
+  }
+  return kind;
+};
+
+/** The skin-option value vocabulary `collectionUpdateSchema` admits. */
+const isSkinOptions = (
+  value: unknown,
+): value is NonNullable<CollectionRead["skinOptions"]> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(
+    (option) =>
+      typeof option === "boolean" ||
+      typeof option === "number" ||
+      typeof option === "string",
+  );
+};
+
+/**
+ * The optional text fields that are set, as a partial document.
+ *
+ * A blank field is an ABSENT key, not a key holding `undefined`: the object
+ * spread below must not name it at all.
+ */
+const presentTextFields = (
+  artwork: ArtworkRow,
+): Pick<ArtworkRead, UpdatableTextField> => {
+  const fields: Partial<Pick<ArtworkRead, UpdatableTextField>> = {};
+  for (const field of UPDATABLE_TEXT_FIELDS) {
+    const value = artwork[field];
+    if (value !== null) fields[field] = value;
+  }
+  return fields;
+};
+
 /** The variant rows in the spec-table order the write paths record them in. */
 const orderedBy = (
-  specs: readonly { key: string }[],
+  specs: readonly { key: ImageVariantKey }[],
   variants: VariantRow[],
-): VariantRow[] =>
-  specs
-    .map((spec) => variants.find((v) => v.key === spec.key))
-    .filter((v): v is VariantRow => v !== undefined);
+): { key: ImageVariantKey; row: VariantRow }[] =>
+  specs.flatMap((spec) => {
+    const row = variants.find((variant) => variant.key === spec.key);
+    return row === undefined ? [] : [{ key: spec.key, row }];
+  });
 
 /** A variant row, rendered as the document's `ImageVariant` entry. */
-const variantEntry = (v: VariantRow, url: string): Record<string, unknown> => ({
-  key: v.key,
+const variantEntry = (
+  key: ImageVariantKey,
+  v: VariantRow,
+  url: string,
+): VariantRead => ({
+  key,
   url,
-  width: present(v.width, `variant ${v.key} width`),
-  height: present(v.height, `variant ${v.key} height`),
-  size: present(v.size, `variant ${v.key} size`),
-  contentType: present(v.contentType, `variant ${v.key} content type`),
+  width: present(v.width, `variant ${key} width`),
+  height: present(v.height, `variant ${key} height`),
+  size: present(v.size, `variant ${key} size`),
+  contentType: present(v.contentType, `variant ${key} content type`),
 });
 
 function serializePhoto(
@@ -106,7 +180,7 @@ function serializePhoto(
   userId: string,
   collectionId: string,
   artworkId: string,
-): Record<string, unknown> {
+): PhotoRead {
   // The photo row carries no metadata: the `original` variant row is where
   // the source's size/type/dimensions live.
   const original = variants.find((v) => v.key === "original");
@@ -143,8 +217,9 @@ function serializePhoto(
     width: present(original.width, `photo ${row.id} width`),
     height: present(original.height, `photo ${row.id} height`),
     original: { url: originalUrl, size, contentType: originalType },
-    variants: orderedBy(IMAGE_VARIANTS, variants).map((v) =>
+    variants: orderedBy(IMAGE_VARIANTS, variants).map(({ key, row: v }) =>
       variantEntry(
+        key,
         v,
         mediaUrl(
           finalPhotoKey(
@@ -152,8 +227,8 @@ function serializePhoto(
             collectionId,
             artworkId,
             row.id,
-            v.key,
-            extOf(v.contentType, `photo ${row.id} variant ${v.key}`),
+            key,
+            extOf(v.contentType, `photo ${row.id} variant ${key}`),
           ),
         ),
       ),
@@ -167,8 +242,9 @@ function serializeDocument(
   userId: string,
   collectionId: string,
   artworkId: string,
-): Record<string, unknown> {
-  const base: Record<string, unknown> = {
+): DocumentRead {
+  const kind = kindOf(row.kind);
+  const base = {
     id: row.id,
     name: row.name,
     size: row.size,
@@ -188,36 +264,36 @@ function serializeDocument(
       contentType: row.contentType,
     },
   };
-  if (row.kind === "image") {
+  if (kind === "image") {
     return {
       ...base,
-      kind: "image",
+      kind,
       width: present(row.width, `document ${row.id} width`),
       height: present(row.height, `document ${row.id} height`),
-      variants: orderedBy(DOCUMENT_VARIANT_SPECS, variants).map((v) =>
-        variantEntry(
-          v,
-          mediaUrl(
-            finalDocumentKey(
-              userId,
-              collectionId,
-              artworkId,
-              row.id,
-              v.key,
-              extOf(v.contentType, `document ${row.id} variant ${v.key}`),
+      variants: orderedBy(DOCUMENT_VARIANT_SPECS, variants).map(
+        ({ key, row: v }) =>
+          variantEntry(
+            key,
+            v,
+            mediaUrl(
+              finalDocumentKey(
+                userId,
+                collectionId,
+                artworkId,
+                row.id,
+                key,
+                extOf(v.contentType, `document ${row.id} variant ${key}`),
+              ),
             ),
           ),
-        ),
       ),
     };
   }
-  return { ...base, kind: "file" };
+  return { ...base, kind };
 }
 
 /** The exact wire document shape, urls filled with proxy paths. */
-export function serializeArtwork(
-  joined: ArtworkJoined,
-): Record<string, unknown> {
+export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
   for (const v of variants) {
@@ -226,7 +302,7 @@ export function serializeArtwork(
     else byParent.set(v.parentId, [v]);
   }
 
-  const out: Record<string, unknown> = {
+  return {
     id: artwork.id,
     userId: artwork.userId,
     title: artwork.title,
@@ -250,23 +326,18 @@ export function serializeArtwork(
       ),
     ),
     collectionId: artwork.collectionId,
-    status: artwork.status,
-    deletedAt: wireTimestamp(artwork.deletedAt),
+    status: statusOf(artwork.status),
+    deletedAt: wireTimestampOrNull(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),
+    // A blank field is an ABSENT key, not a null value — the document shape.
+    ...presentTextFields(artwork),
   };
-  // A blank field is an ABSENT key, not a null value — the document shape.
-  for (const field of UPDATABLE_TEXT_FIELDS) {
-    if (artwork[field] !== null) out[field] = artwork[field];
-  }
-  return out;
 }
 
 /** The exact wire collection document shape. */
-export function serializeCollection(
-  row: CollectionRow,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {
+export function serializeCollection(row: CollectionRow): CollectionRead {
+  const out: CollectionRead = {
     id: row.id,
     name: row.name,
     userId: row.userId,
@@ -278,6 +349,11 @@ export function serializeCollection(
   // `skin`/`skinOptions` are read-time defaulted on the client side
   // (resolveSkin), so an unset value is an absent key.
   if (row.skin !== null) out.skin = row.skin;
-  if (row.skinOptions !== null) out.skinOptions = row.skinOptions;
+  if (row.skinOptions !== null) {
+    if (!isSkinOptions(row.skinOptions)) {
+      throw new ApiError("internal", "Malformed collection skin options");
+    }
+    out.skinOptions = row.skinOptions;
+  }
   return out;
 }
