@@ -10,7 +10,9 @@ Four **Better Auth core tables** — `user`, `session`, `account`, `verification
 tables** with sharing: `collections`, `collection_collaborators`,
 `collection_invitations`, `artworks`, `artwork_photos`,
 `artwork_photo_variants`, `artwork_documents`. The sharing tables are in the
-schema; the feature code that reads and writes them is not built yet.
+schema, and the feature code reads them on every access question and writes
+them through the invitation, removal and leaving routes (transfer is still to
+come).
 
 Layout:
 
