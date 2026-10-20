@@ -192,16 +192,16 @@ artworkRoutes.post(
       });
       const photos = await writePhotoSequence(
         tx,
+        collection,
         user.id,
-        collection.id,
         payload.artworkId,
         payload.photos,
         [],
       );
       const documents = await writeDocumentSequence(
         tx,
+        collection,
         user.id,
-        collection.id,
         payload.artworkId,
         payload.documents,
         new Set(),
@@ -312,8 +312,8 @@ artworkRoutes.patch(
         payload.photos !== undefined
           ? await writePhotoSequence(
               tx,
+              collection,
               user.id,
-              collection.id,
               artwork.id,
               nextPhotos,
               currentPhotos,
@@ -323,8 +323,8 @@ artworkRoutes.patch(
         payload.documents !== undefined
           ? await writeDocumentSequence(
               tx,
+              collection,
               user.id,
-              collection.id,
               artwork.id,
               nextDocs,
               storedDocIds,
@@ -341,15 +341,13 @@ artworkRoutes.patch(
       await deleteObject(key);
     }
     await deleteFinalEntryObjects(
-      user.id,
-      collection.id,
+      collection,
       artwork.id,
       "photo",
       result.removedPhotos,
     );
     await deleteFinalEntryObjects(
-      user.id,
-      collection.id,
+      collection,
       artwork.id,
       "document",
       result.removedDocuments,

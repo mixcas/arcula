@@ -39,6 +39,7 @@ import {
 } from "./access";
 import { loadArtworkInCollection, loadCollection } from "./authorize";
 import { db } from "./db";
+import { mediaNamespaceOf } from "./media/keys";
 import { serializeArtwork, type ArtworkJoined } from "./serialize";
 
 /** What a single read answers: the document, or one uniform refusal. */
@@ -156,7 +157,10 @@ export async function readArtwork(
   const children = await loadChildren([artworkId]);
   return {
     status: "ok",
-    artwork: serializeArtwork({ artwork, ...children }),
+    artwork: serializeArtwork(
+      { artwork, ...children },
+      mediaNamespaceOf(collection),
+    ),
   };
 }
 
@@ -206,10 +210,13 @@ export async function readArtworkList(
   return {
     status: "ok",
     artworks: works.map((work) =>
-      serializeArtwork({
-        artwork: work,
-        ...(grouped.get(work.id) ?? noChildren()),
-      }),
+      serializeArtwork(
+        {
+          artwork: work,
+          ...(grouped.get(work.id) ?? noChildren()),
+        },
+        mediaNamespaceOf(collection),
+      ),
     ),
   };
 }

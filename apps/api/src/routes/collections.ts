@@ -110,6 +110,10 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
   await db.insert(collectionsTable).values({
     id,
     userId: user.id,
+    // Fixed at creation: the second segment of every final media key, so a
+    // later transfer of the collection moves no object. A fresh opaque id,
+    // not the owner's — the owner may change, the namespace may not.
+    mediaNamespaceId: mintId(),
     name: payload.name,
     description: payload.description ?? null,
     isPublic: payload.isPublic,
@@ -333,12 +337,12 @@ collectionRoutes.post(
       param(c, "collectionId"),
     );
 
-    // Every staged object under this collection. The prefix addresses
-    // this collection's own staging space; the parser still does the
-    // entry-id recovery, never the character-wise prefix (sibling
-    // entry ids share prefixes).
+    // Every staged object under the caller's prefix. Staging names the
+    // uploader, not the collection owner, so this is the caller's own
+    // space; the parser still does the entry-id recovery, never the
+    // character-wise prefix (sibling entry ids share prefixes).
     const keys = await listObjects(
-      `staging/${collection.userId}/${collection.id}/`,
+      `staging/${c.get("user").id}/${collection.id}/`,
     );
     const byEntry = new Map<string, string[]>();
     for (const key of keys) {

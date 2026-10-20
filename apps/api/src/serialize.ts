@@ -177,7 +177,7 @@ const variantEntry = (
 function serializePhoto(
   row: PhotoRow,
   variants: VariantRow[],
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
 ): PhotoRead {
@@ -199,7 +199,7 @@ function serializePhoto(
   }
   const originalUrl = mediaUrl(
     finalPhotoKey(
-      userId,
+      namespaceId,
       collectionId,
       artworkId,
       row.id,
@@ -223,7 +223,7 @@ function serializePhoto(
         v,
         mediaUrl(
           finalPhotoKey(
-            userId,
+            namespaceId,
             collectionId,
             artworkId,
             row.id,
@@ -239,7 +239,7 @@ function serializePhoto(
 function serializeDocument(
   row: DocumentRow,
   variants: VariantRow[],
-  userId: string,
+  namespaceId: string,
   collectionId: string,
   artworkId: string,
 ): DocumentRead {
@@ -252,7 +252,7 @@ function serializeDocument(
     original: {
       url: mediaUrl(
         finalDocumentKey(
-          userId,
+          namespaceId,
           collectionId,
           artworkId,
           row.id,
@@ -277,7 +277,7 @@ function serializeDocument(
             v,
             mediaUrl(
               finalDocumentKey(
-                userId,
+                namespaceId,
                 collectionId,
                 artworkId,
                 row.id,
@@ -292,8 +292,15 @@ function serializeDocument(
   return { ...base, kind };
 }
 
-/** The exact wire document shape, urls filled with proxy paths. */
-export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
+/** The exact wire document shape, urls filled with proxy paths.
+ *
+ *  `namespaceId` is the collection's fixed media namespace
+ *  (`mediaNamespaceOf`), not the artwork's `userId`: a transfer changes the
+ *  owner and must leave every URL pointing at the same object. */
+export function serializeArtwork(
+  joined: ArtworkJoined,
+  namespaceId: string,
+): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
   for (const v of variants) {
@@ -311,7 +318,7 @@ export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
       serializeDocument(
         d,
         byParent.get(d.id) ?? [],
-        artwork.userId,
+        namespaceId,
         artwork.collectionId,
         artwork.id,
       ),
@@ -320,7 +327,7 @@ export function serializeArtwork(joined: ArtworkJoined): ArtworkRead {
       serializePhoto(
         p,
         byParent.get(p.id) ?? [],
-        artwork.userId,
+        namespaceId,
         artwork.collectionId,
         artwork.id,
       ),
