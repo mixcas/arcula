@@ -7,10 +7,13 @@ const MAILPIT = "http://127.0.0.1:8025";
 
 // Mailpit's REST API is PascalCase; the list gives snippets, the
 // single-message endpoint gives the full plain-text body.
+export type MailpitAddress = { Name: string; Address: string };
+
 export type MailpitMessage = {
   ID: string;
-  From: { Name: string; Address: string };
-  To: Array<{ Name: string; Address: string }>;
+  From: MailpitAddress;
+  To: MailpitAddress[];
+  ReplyTo: MailpitAddress[];
   Subject: string;
 };
 
@@ -20,10 +23,48 @@ export async function mailpitMessages(): Promise<MailpitMessage[]> {
   return body.messages;
 }
 
-export async function mailpitText(id: string): Promise<string> {
+/** The delivered message in full: both parts. The list endpoint carries
+ *  snippets only, so a test that reads a part asks here. */
+export type MailpitFullMessage = MailpitMessage & {
+  Text: string;
+  HTML: string;
+};
+
+export async function mailpitMessage(id: string): Promise<MailpitFullMessage> {
   const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
-  const body = (await res.json()) as { Text: string };
-  return body.Text;
+  return (await res.json()) as MailpitFullMessage;
+}
+
+export async function mailpitText(id: string): Promise<string> {
+  return (await mailpitMessage(id)).Text;
+}
+
+/** The HTML twin Mailpit received — what a client with images and styles on
+ *  would render. */
+export async function mailpitHtml(id: string): Promise<string> {
+  return (await mailpitMessage(id)).HTML;
+}
+
+/** The message's headers as Mailpit received them. This is a second endpoint:
+ *  the message body carries neither the raw headers nor Mailpit's own
+ *  canonicalised names. */
+export async function mailpitHeaders(
+  id: string,
+): Promise<Record<string, string[]>> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}/headers`);
+  return (await res.json()) as Record<string, string[]>;
+}
+
+/** Headers arrive with Mailpit's own capitalisation, so look them up without
+ *  caring about case. */
+export function headerValue(
+  headers: Record<string, string[]>,
+  name: string,
+): string[] | undefined {
+  const key = Object.keys(headers).find(
+    (header) => header.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? headers[key] : undefined;
 }
 
 /** Poll until a message for `to` appears (Mailpit delivers in ms locally). */

@@ -111,6 +111,30 @@ collection are one answer to them. A work is published or draft; it carries no
 visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
 deleted work disappears from every list without its bytes going anywhere.
 
+## Mail
+
+Every mail Arcula sends is composed in one place, so the four that exist —
+password reset, address verification, an invitation and an ownership-transfer
+notice — arrive with one identity:
+
+- **Sender.** `Arcula <noreply@arcula.art>`, read from `EMAIL_FROM`. A bare
+  address is normalised to that form, so a configuration slip cannot send an
+  anonymous-looking message.
+- **Reply-To.** `Arcula <hello@arcula.art>` in production, read from
+  `EMAIL_REPLY_TO`. The variable is optional; when it is unset, no Reply-To
+  header is sent.
+- **Body.** The hosted black wordmark on a white header, one call-to-action
+  button with the same URL written out beneath it, a short line saying why the
+  recipient got the message, and a plain-text twin built from the same facts. No
+  tracking pixel, no remote fonts, and every URL — the logo's included — on the
+  web app's origin.
+
+`EMAIL_PROVIDER` is `mailpit` locally or `resend` in production; anything else
+is a configuration error rather than a silent fallback. The work that is
+deliberately not built yet — DMARC reporting and enforcement, and one-click
+opt-out — is recorded with its exact records in [docs/mail.md](docs/mail.md),
+which points back to [#75](https://github.com/mixcas/arcula/issues/75).
+
 ## Architecture
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
@@ -218,10 +242,13 @@ S3_REGION=us-east-1
 S3_FORCE_PATH_STYLE=true
 
 # Mail (Mailpit locally)
-EMAIL_PROVIDER=smtp
+EMAIL_PROVIDER=mailpit
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 EMAIL_FROM=Arcula <noreply@arcula.test>
+# Optional: the monitored inbox a recipient can answer. Unset sends no
+# Reply-To header, and the code never invents an address.
+# EMAIL_REPLY_TO=Arcula <hello@arcula.test>
 
 # The seed account (`bun run db:seed`)
 SEED_EMAIL=owner@example.test
@@ -348,6 +375,7 @@ infra/
   Dockerfile                 # the scale-up container (documented, not deployed)
 scripts/                     # stack, build, provision, reset, deploy
 docs/adr/                    # decision records, with rejected alternatives
+docs/mail.md                 # mail identity, and the deferred DMARC/opt-out work
 GLOSSARY.md                  # the product's own vocabulary
 ```
 

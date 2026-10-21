@@ -9,6 +9,7 @@
 // repository or a log.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { controlChars } from "./helpers/html";
 import {
   collectionCollaborators as collaboratorsTable,
   collectionInvitations as invitationsTable,
@@ -20,11 +21,17 @@ import type {
 } from "@arcula/shared";
 import { and, eq } from "drizzle-orm";
 import { closeDb, db } from "../src/db";
+import { replyToConfigured } from "../src/env";
 import { emailProvider } from "../src/email/provider";
 import { hashInvitationToken, mintInvitationToken } from "../src/invitations";
 import { err, freshUser, json, req, sessionCookies, uuid } from "./helpers/api";
 import { makeCollection } from "./helpers/fixtures";
-import { linkIn, mailpitText, waitForMail } from "./helpers/mailpit";
+import {
+  linkIn,
+  mailpitMessage,
+  mailpitText,
+  waitForMail,
+} from "./helpers/mailpit";
 
 type CreateResponse = InvitationCreateResponse;
 type PreviewResponse = InvitationPreview;
@@ -155,6 +162,57 @@ describe("POST /collections/{cid}/invitations", () => {
     expect(row.tokenHash).toBe(hashInvitationToken(token));
     expect(row.tokenHash).not.toBe(token);
     expect(row.email).toBe(invited.toLowerCase());
+  });
+
+  it("delivers both parts under Arcula's identity, with the branded links", async () => {
+    const email = uniqueEmail("Wire");
+    const body = await json<CreateResponse>(await invite(owner.cookies, email));
+    const token = await tokenFromMail(body.invitation.email);
+    const message = await mailpitMessage(
+      (await waitForMail(body.invitation.email)).ID,
+    );
+
+    // What the wire owns: the identity the provider stamped, the real token in
+    // both delivered parts, and copy that follows the configured reply path.
+    // The layout's own rules (wordmark, expiry, escaping) are the composer
+    // suite's job, not this one's.
+    expect(message.From.Name).toBe("Arcula");
+    expect(message.Subject).toBe(
+      "InviteOwner Test invited you to Invitation Wall on Arcula",
+    );
+    expect(message.Text).toContain(
+      `Accept invitation: http://localhost:3000/invite/${token}`,
+    );
+    expect(message.HTML).toContain(
+      `href="http://localhost:3000/invite/${token}"`,
+    );
+    expect(message.Text.includes("reply to this email")).toBe(
+      replyToConfigured,
+    );
+  });
+
+  it("mails a header-safe, truncated subject and a safely escaped body for a hostile collection name", async () => {
+    const hostileName = `Hostile\r\nBcc: evil@example.test <script>alert(1)</script> ${"Z".repeat(50)}`;
+    const hostileCid = await makeCollection(owner.userId, {
+      name: hostileName,
+      isPublic: false,
+    });
+    const email = uniqueEmail("HostileName");
+    const res = await req(
+      "POST",
+      `/api/v1/collections/${hostileCid}/invitations`,
+      { cookies: owner.cookies, body: { email } },
+    );
+    expect(res.status).toBe(201);
+
+    const message = await mailpitMessage((await waitForMail(email)).ID);
+    // The wire's fact: the header the transport built is still one line and
+    // still carries the (flattened, shortened) name. The composer suite owns
+    // what the body does with the same value.
+    expect(message.Subject).toBe(
+      "InviteOwner Test invited you to Hostile Bcc: evil@example.test <script>… on Arcula",
+    );
+    expect(controlChars(message.Subject)).toEqual([]);
   });
 
   it("is owner-only", async () => {
