@@ -41,6 +41,7 @@ import {
 } from "./helpers/fixtures";
 import {
   linkIn,
+  mailpitHtml,
   mailpitText,
   mailsFor,
   waitForNewMail,
@@ -337,9 +338,16 @@ describe("POST /collections/{cid}/transfer", () => {
 
     const mail = await waitForNewMail(mate.email, seenIds);
     expect(mail.Subject).toContain("Transfer Wall");
-    const url = linkIn(await mailpitText(mail.ID));
+    expect(mail.From.Name).toBe("Arcula");
+    const text = await mailpitText(mail.ID);
+    const url = linkIn(text);
     expect(url.origin).toBe("http://localhost:3000");
     expect(url.pathname).toBe(`/manage/collection/transfer-wall-${cid}`);
+
+    // The wire's fact: the delivered HTML twin points at the same manage page.
+    // The layout's wordmark and footer copy are the composer suite's job.
+    const html = await mailpitHtml(mail.ID);
+    expect(html).toContain(`href="${url.href}"`);
   });
 
   it("never checks the recipient's tier, and creation stays blocked over the cap", async () => {
