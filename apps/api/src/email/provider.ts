@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 import { normalizeSender } from "./compose/text";
+import { replyToFor, resendPayload, sendHeaders } from "./payload";
 
 // The links the mails carry live in their own module so the composer can use
 // them without building a provider; re-exported here because every call site
@@ -34,9 +35,12 @@ export interface EmailMessage {
    *  here only so a transport-level caller cannot be forced through the
    *  composer. */
   html?: string;
-  /** Overrides the configured EMAIL_REPLY_TO for this message. */
+  /** This message's Reply-To, overriding the configured EMAIL_REPLY_TO. The
+   *  type is `string | null`: `undefined` means "use the configured one", an
+   *  explicit `null` means "send none". */
   replyTo?: string | null;
-  /** Extra headers; the two every send carries are added by the provider. */
+  /** Extra headers. The two every send carries are added by the provider and
+   *  win over a value here. */
   headers?: Record<string, string>;
   /** Resend tags — the composer sets the `type` tag. */
   tags?: EmailTag[];
@@ -51,57 +55,7 @@ export interface EmailProvider {
  *  the layout emits them together. The provider's message type keeps `html`
  *  optional so transport-level callers are not forced through the composer. */
 export interface ComposedMail extends EmailMessage {
-  text: string;
   html: string;
-}
-
-/**
- * The headers every send carries. `X-Entity-Ref-ID` is per send so a mailbox
- * does not collapse unrelated transactional messages into one conversation;
- * `Auto-Submitted` keeps vacation responders from replying to a robot.
- */
-function sendHeaders(
-  message: EmailMessage,
-  refId: string,
-): Record<string, string> {
-  return {
-    "Auto-Submitted": "auto-generated",
-    ...message.headers,
-    "X-Entity-Ref-ID": refId,
-  };
-}
-
-/** The Reply-To this message goes out with: its own, else the configured
- *  one, else none at all — an empty variable never invents an address. */
-function replyToFor(
-  message: EmailMessage,
-  fallback: string | null,
-): string | null {
-  return message.replyTo ?? fallback;
-}
-
-/**
- * Resend's request body, built without a network call so a wrong field name
- * (`reply_to`, `headers`, `tags`) is visible in a unit test. Recipients are a
- * one-element array in Resend's API and a string in ours.
- */
-export function resendPayload(
-  message: EmailMessage,
-  from: string,
-  replyTo: string | null,
-  refId: string = randomUUID(),
-): Record<string, unknown> {
-  const to = replyToFor(message, replyTo);
-  return {
-    from,
-    to: [message.to],
-    subject: message.subject,
-    text: message.text,
-    html: message.html,
-    ...(to ? { reply_to: to } : {}),
-    headers: sendHeaders(message, refId),
-    ...(message.tags?.length ? { tags: message.tags } : {}),
-  };
 }
 
 class MailpitEmail implements EmailProvider {

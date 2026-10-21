@@ -8,9 +8,14 @@
 // name is cut to the subject budget while the body keeps it whole. The
 // greeting is the anonymous `Hi,` because only the invitee's address is known.
 
+import { INVITATION_TTL_MS } from "@arcula/shared";
 import type { ComposedMail } from "../provider";
 import { renderMail } from "./layout";
 import { flattenSubject, greeting, truncateSubjectPart } from "./text";
+
+/** The offer's life in days, read from the one duration the route enforces so
+ *  the copy cannot outlive a change to the TTL. */
+const INVITATION_DAYS = Math.round(INVITATION_TTL_MS / (24 * 60 * 60 * 1000));
 
 export interface InvitationMailFacts {
   to: string;
@@ -35,7 +40,7 @@ export function invitationMail(facts: InvitationMailFacts): ComposedMail {
     lines: [
       greeting(),
       `You have been invited to collaborate on the collection "${facts.collectionName}" on Arcula.`,
-      "This invitation expires in seven days and can be used once.",
+      `This invitation expires in ${INVITATION_DAYS} days and can be used once.`,
     ],
     cta: { label: "Accept invitation", url: facts.url },
     reason: `${facts.inviterName} asked Arcula to send this invitation. If you were not expecting it, reply to this email to reach a person.`,

@@ -31,7 +31,7 @@ export function ownershipTransferMail(facts: TransferMailFacts): ComposedMail {
     ],
     cta: { label: "Open collection", url: facts.url },
     reason:
-      "The previous owner stays on as a collaborator. You can remove them, or transfer the collection again, from its access settings.",
+      "The previous owner stays on as a collaborator. You can remove them, or transfer the collection again, from its access settings. If you were not expecting this, contact the previous owner.",
   });
   return {
     to: facts.to,

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { ownershipTransferMail } from "../src/email/compose";
+import { urlsIn } from "./helpers/html";
 
 const ORIGIN = "http://localhost:3000";
 const MANAGE = `${ORIGIN}/manage/collection/summer-in-lisbon-abc123`;
@@ -88,9 +89,9 @@ describe("ownership transfer mail", () => {
   it("carries no tracking pixel and no off-domain asset", () => {
     const { html } = ownershipTransferMail(facts);
     expect(html.match(/<img/g)).toHaveLength(1);
-    const offDomain = [...html.matchAll(/(?:href|src)="([^"]+)"/g)]
-      .map((m) => m[1])
-      .filter((url) => !url.startsWith(`${ORIGIN}/`));
+    const offDomain = urlsIn(html).filter(
+      (url) => !url.startsWith(`${ORIGIN}/`),
+    );
     expect(offDomain).toEqual([]);
   });
 });

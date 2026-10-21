@@ -9,14 +9,16 @@
 // repository or a log.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { controlChars } from "./helpers/html";
 import {
   collectionCollaborators as collaboratorsTable,
   collectionInvitations as invitationsTable,
 } from "@arcula/db";
-import type {
-  InvitationCreateResponse,
-  InvitationPreview,
-  InvitationSummary,
+import {
+  INVITATION_TTL_MS,
+  type InvitationCreateResponse,
+  type InvitationPreview,
+  type InvitationSummary,
 } from "@arcula/shared";
 import { and, eq } from "drizzle-orm";
 import { closeDb, db } from "../src/db";
@@ -31,6 +33,9 @@ import {
   waitForMail,
 } from "./helpers/mailpit";
 
+/** The offer's life as the mail states it — the route's own TTL. */
+const INVITATION_DAYS = Math.round(INVITATION_TTL_MS / (24 * 60 * 60 * 1000));
+
 type CreateResponse = InvitationCreateResponse;
 type PreviewResponse = InvitationPreview;
 
@@ -43,14 +48,6 @@ const TEST_PASSWORD = "a-long-test-password";
 
 const uniqueEmail = (label: string) =>
   `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
-
-/** CR, LF, NUL and the rest of the control range, plus DEL. */
-function controlChars(value: string): string[] {
-  return [...value].filter((char) => {
-    const code = char.charCodeAt(0);
-    return code < 0x20 || code === 0x7f;
-  });
-}
 
 async function signUpAs(
   email: string,
@@ -194,7 +191,7 @@ describe("POST /collections/{cid}/invitations", () => {
       `href="http://localhost:3000/invite/${token}"`,
     );
     expect(message.HTML).toContain("Accept invitation");
-    expect(message.HTML).toContain("seven days");
+    expect(message.HTML).toContain(`${INVITATION_DAYS} days`);
   });
 
   it("mails a header-safe, truncated subject and a safely escaped body for a hostile collection name", async () => {

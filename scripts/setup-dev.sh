@@ -516,7 +516,10 @@ if confirm "Set production's secrets and public values now?"; then
     fi
   done
   PROD_EMAIL_FROM=$(prod_value EMAIL_FROM)
-  set_env_var production EMAIL_FROM "${PROD_EMAIL_FROM:-noreply@arcula.art}"
+  # Explicit, display name and all: the normaliser makes a bare address safe,
+  # but an honest configuration says who is sending.
+  set_env_var production EMAIL_FROM \
+    "${PROD_EMAIL_FROM:-Arcula <noreply@arcula.art>}"
   # The monitored inbox a recipient can answer. Set explicitly, display name
   # and all; the normaliser is the backstop, not the plan.
   PROD_EMAIL_REPLY_TO=$(prod_value EMAIL_REPLY_TO)

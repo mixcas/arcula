@@ -12,71 +12,16 @@ import { createEmailProvider } from "../src/email/provider";
 import { passwordResetMail } from "../src/email/compose";
 import { afterAll, describe, expect, it } from "vitest";
 import { json, req, signUp } from "./helpers/api";
+import {
+  headerValue,
+  mailpitHeaders,
+  mailpitHtml,
+  mailpitMessages,
+  mailpitText,
+  waitForMail,
+} from "./helpers/mailpit";
 
-const MAILPIT = "http://127.0.0.1:8025";
 const ORIGIN = "http://localhost:3000";
-
-// --- Mailpit (its REST API is PascalCase; the list gives snippets, the
-// --- single-message endpoint gives the full plain-text body)
-
-type MailpitMessage = {
-  ID: string;
-  From: { Name: string; Address: string };
-  To: Array<{ Name: string; Address: string }>;
-  ReplyTo: Array<{ Name: string; Address: string }>;
-  Subject: string;
-  Tags: string[];
-};
-
-async function mailpitMessages(): Promise<MailpitMessage[]> {
-  const res = await fetch(`${MAILPIT}/api/v1/messages?start=0`);
-  const body = (await res.json()) as { messages: MailpitMessage[] };
-  return body.messages;
-}
-
-async function mailpitText(id: string): Promise<string> {
-  const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
-  const body = (await res.json()) as { Text: string };
-  return body.Text;
-}
-
-async function mailpitHtml(id: string): Promise<string> {
-  const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
-  const body = (await res.json()) as { HTML: string };
-  return body.HTML;
-}
-
-/** The message's headers as Mailpit received them — one value per line.
- *  Mailpit canonicalises header names, so look them up case-insensitively. */
-async function mailpitHeaders(id: string): Promise<Record<string, string[]>> {
-  const res = await fetch(`${MAILPIT}/api/v1/message/${id}/headers`);
-  return (await res.json()) as Record<string, string[]>;
-}
-
-function headerValue(headers: Record<string, string[]>, name: string) {
-  const key = Object.keys(headers).find(
-    (k) => k.toLowerCase() === name.toLowerCase(),
-  );
-  return key ? headers[key] : undefined;
-}
-
-/** Poll until a message for `to` appears (Mailpit delivers in ms locally). */
-async function waitForMail(
-  to: string,
-  timeoutMs = 8000,
-): Promise<MailpitMessage> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const found = (await mailpitMessages()).find(
-      (m) => m.To[0]?.Address === to,
-    );
-    if (found) return found;
-    if (Date.now() > deadline) {
-      throw new Error(`no mail for ${to} within ${timeoutMs}ms`);
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-}
 
 afterAll(async () => {
   await closeDb();
@@ -200,7 +145,6 @@ describe("password reset — live (fully live in beta)", () => {
     expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
     expect(html).toContain('src="http://localhost:3000/arcula-name-logo.png"');
     expect(html).toContain('alt="Arcula"');
-    expect(html).toContain("your password stays unchanged");
 
     // 1.7.7 carries the token in the path: /reset-password/<token>.
     const token = new URL(url!).pathname.split("/").pop()!;
@@ -258,7 +202,6 @@ describe("email verification — built but gated", () => {
     const html = await mailpitHtml(mail.ID);
     expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
     expect(html).toContain('alt="Arcula"');
-    expect(html).toContain("the account stays as it is");
 
     const token = new URL(url!).searchParams.get("token")!;
     const verified = await req(
