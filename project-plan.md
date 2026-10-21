@@ -3,14 +3,15 @@
 This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
-> **Sharing is built.** The read side has landed: access is membership
-> (the owner and every collaborator see the whole collection, documents
-> included), the dashboard list carries `role`/`ownerName` and counts owned
-> collections only, and final keys use the collection's `mediaNamespaceId`.
-> The invitation loop, access administration (invite, resend, revoke, remove,
-> leave, transfer) and the settings page's access card are built. The model is
-> accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md).
+> **Sharing is built.** Access is membership: `collections.userId` is the owner
+> fact, a `collection_collaborators` row is everyone else, and the owner and
+> every collaborator read and edit the whole collection, documents included.
+> Inviting, resending, revoking, removing and transferring stay owner-only. The
+> invitation loop, the invitee's in-app list, ownership transfer and the
+> settings page's access card are built; the two mails are the invitation and
+> the transfer notice. The model is accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md), and the
+> two-migration release order below is what shipped.
 
 For the user-facing overview and setup, see [README.md](README.md). For the agent
 working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
@@ -110,10 +111,11 @@ a config flip rather than a schema change.
 `skinOptions` (jsonb), `isPublic` (default `true`), `createdAt`, `updatedAt`.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
-namespace every final media key uses. The schema-first release adds it nullable
-and backfills existing rows from `userId`; the following release backfills any
-row the old code wrote in between (scoped to nulls, so a namespace the new code
-minted survives) and makes the column `NOT NULL`. The feature code keeps the
+namespace every final media key uses. The schema shipped in two releases:
+`0003_shared_collections` adds it nullable and backfills existing rows from
+`userId`; `0004_media_namespace_not_null` backfills any row the old code wrote
+in between (scoped to nulls, so a namespace the new code minted survives) and
+makes the column `NOT NULL`. The feature code keeps the
 `mediaNamespaceId ?? userId` fallback because the Lambda still deploys before
 the migration. A transfer changes the owner but not the namespace, so no object
 moves and existing URLs keep working.
@@ -138,9 +140,12 @@ authorization fact for everything inside the collection.
 `tokenHash`, `status` (`pending` | `accepted` | `declined` | `revoked`),
 `createdAt`, `expiresAt`, `resolvedAt?`, with a unique `tokenHash`. There is at
 most one pending invitation per collection and email (stored trimmed and
-lowercased); resending rotates the token and expiry on that row. Accepted,
-declined and revoked rows are kept as history. Expiry is computed from
-`expiresAt`, not a status. The raw token exists only in the mail.
+lowercased), enforced by a partial unique index on
+`(collectionId, lower(email)) WHERE status = 'pending'`. Resending rotates the
+token, the expiry and the issue time on that row, which is also the 60-second
+cooldown's clock. Accepted, declined and revoked rows are kept as history.
+Expiry is computed from `expiresAt`, not a status. The raw token exists only in
+the mail.
 
 ### `artworks`
 
@@ -245,8 +250,8 @@ those rows.
 
 Access is membership, and the membership fact (`membershipOf`) says which of
 two matrices applies. **Inside a collection** — the owner, and every account
-with a `collection_collaborators` row — see the whole collection: every work,
-drafts and soft-deleted works included, and its documents, at every status.
+with a `collection_collaborators` row — see the collection: every live work,
+drafts included, and a deleted work by id; and its documents, at every status.
 `artworks.userId` is never consulted for authorization; it mirrors the owner for
 the wire document, nothing more. The read paths load the viewer's membership,
 and every write path asks the same question through `requireMemberCollection`:
@@ -286,26 +291,29 @@ own handler. The full route table is in `apps/api/README.md`. The shape of a
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
 
-Sharing's read and write sides are built, and so is the invitation loop: the
-owner creates an invitation, the mail carries its single-use hashed token, and
-the invited account previews, accepts or declines it. The owner administers the
-offers from `GET /collections/:id/access` (the caller's role, the owner and the
-collaborators, plus the pending invitations to the owner alone), resends (a
-fresh token, expiry and issue time on the same row, once every 60 seconds) and
-revokes; the invitee's `GET /me/invitations` lists their pending, unexpired
-offers — each with its collection and inviter — and declines one in app. Access can end: the owner removes a collaborator
-(`DELETE /collections/:id/collaborators/:userId`) and a collaborator leaves
+Sharing is built. The owner creates an invitation; the mail is the only place
+the raw token exists, and the invited account previews, accepts or declines it.
+The owner administers the offers from `GET /collections/:id/access` (the
+caller's role, the owner and the collaborators, plus the pending invitations to
+the owner alone), resends (a fresh token, expiry and issue time on the same
+row, once every 60 seconds) and revokes. The invitee's `GET /me/invitations`
+lists their pending, unexpired offers — each with its collection and inviter —
+and can decline one in app; acceptance is the mailed link's job. Access ends
+when the owner removes a collaborator
+(`DELETE /collections/:id/collaborators/:userId`) or a collaborator leaves
 (`DELETE /collections/:id/collaborators/me`), both immediately and both
 discarding only the departing account's staging prefix for that collection,
 best effort. Ownership moves to an existing collaborator through
-`POST /collections/:id/transfer`: one transaction updates the owner, mirrors the
-artwork rows, persists the media namespace and swaps the two membership rows;
-the media namespace never moves, so every URL keeps working, and the new owner
-is mailed a link to the manage page (a failed notice answers `emailSent: false`
-without undoing the transfer). The
-error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
-revoked or consumed invitation token answers `not-found` like an unknown one, as
-does an in-app decline of anything but the caller's own live offer.
+`POST /collections/:id/transfer`: one transaction updates the owner, mirrors
+the artwork rows, persists the media namespace and swaps the two membership
+rows; the namespace never moves, so every URL keeps working. The new owner is
+mailed a link to the manage page (a failed notice answers `emailSent: false`
+without undoing the transfer). These two mails — the invitation and the
+transfer notice — are the only ones sharing sends, and both are best effort.
+The error envelope gains `conflict` (409) for state conflicts; an invalid,
+expired, revoked or consumed invitation token answers `not-found` like an
+unknown one, as does an in-app decline of anything but the caller's own live
+offer.
 
 ## The frontend
 
