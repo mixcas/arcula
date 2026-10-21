@@ -13,9 +13,9 @@
 > **Sharing is partly built.** Access as membership — the shared dashboard
 > list, documents for members, every write path a collaborator needs, the
 > invitation loop (create, preview, accept, decline), the owner's access read
-> and offer administration (resend, revoke), removal and leaving, and the
-> invitee's in-app list and decline — has landed. The access and invitation
-> cards and ownership transfer are still the target. The model is accepted in
+> and offer administration (resend, revoke), removal and leaving, the invitee's
+> in-app list and decline, and the settings page's access card — has landed.
+> Ownership transfer is still the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
 > below that describe the rest of access administration are the target until it
 > lands.

@@ -16,10 +16,12 @@
 import { z } from "zod";
 import {
   collectionReadSchema,
+  invitationCreateResponseSchema,
   invitationInboxEntrySchema,
   invitationPreviewSchema,
   invitationSummarySchema,
   type Collection,
+  type InvitationCreateResponse,
   type InvitationInboxEntry,
   type InvitationPreview,
   type InvitationSummary,
@@ -29,6 +31,9 @@ import { ApiRequestError, apiRequest } from "./api";
 const BASE = "/api/v1/invitations";
 /** The invitee's own offers: listed and declined by id, never accepted here. */
 const INBOX = "/api/v1/me/invitations";
+/** The owner's administration of a collection's offers. */
+const offersPath = (collectionId: string): string =>
+  `/api/v1/collections/${encodeURIComponent(collectionId)}/invitations`;
 
 /** The forbidden envelope's detail on a wrong-account acceptance. */
 const wrongAccountDetailSchema = z.object({ email: z.string() });
@@ -114,6 +119,57 @@ export const invitationService = {
     const row = await apiRequest<unknown>(
       `${INBOX}/${encodeURIComponent(id)}/decline`,
       { method: "POST" },
+    );
+    return invitationSummarySchema.parse(row);
+  },
+
+  /**
+   * Owner-only: invite an address. The answer carries the row and whether the
+   * mail went out — a provider failure is not an invitation failure, so the
+   * caller keeps the row and offers a resend. A malformed address is the API's
+   * `400` with `fields.email`; a conflict (owner, existing collaborator, live
+   * offer) is its `409` prose, for the card to show as written.
+   */
+  async createInvitation(
+    collectionId: string,
+    email: string,
+  ): Promise<InvitationCreateResponse> {
+    const row = await apiRequest<unknown>(offersPath(collectionId), {
+      method: "POST",
+      body: { email },
+    });
+    return invitationCreateResponseSchema.parse(row);
+  },
+
+  /**
+   * Owner-only: reissue a pending offer. The route rotates the token, the
+   * expiry and the issue time, and answers the same pair as a create. The
+   * cooldown refusal is its `409`; the card disables the control for the same
+   * window rather than discovering it here.
+   */
+  async resendInvitation(
+    collectionId: string,
+    invitationId: string,
+  ): Promise<InvitationCreateResponse> {
+    const row = await apiRequest<unknown>(
+      `${offersPath(collectionId)}/${encodeURIComponent(invitationId)}/resend`,
+      { method: "POST" },
+    );
+    return invitationCreateResponseSchema.parse(row);
+  },
+
+  /**
+   * Owner-only: revoke a pending offer. The row stays as history; the answer
+   * is its resolved form, so the card can confirm the status before dropping
+   * it from the list.
+   */
+  async revokeInvitation(
+    collectionId: string,
+    invitationId: string,
+  ): Promise<InvitationSummary> {
+    const row = await apiRequest<unknown>(
+      `${offersPath(collectionId)}/${encodeURIComponent(invitationId)}`,
+      { method: "DELETE" },
     );
     return invitationSummarySchema.parse(row);
   },
