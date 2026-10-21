@@ -16,15 +16,19 @@
 import { z } from "zod";
 import {
   collectionReadSchema,
+  invitationInboxEntrySchema,
   invitationPreviewSchema,
   invitationSummarySchema,
   type Collection,
+  type InvitationInboxEntry,
   type InvitationPreview,
   type InvitationSummary,
 } from "@arcula/shared";
 import { ApiRequestError, apiRequest } from "./api";
 
 const BASE = "/api/v1/invitations";
+/** The invitee's own offers: listed and declined by id, never accepted here. */
+const INBOX = "/api/v1/me/invitations";
 
 /** The forbidden envelope's detail on a wrong-account acceptance. */
 const wrongAccountDetailSchema = z.object({ email: z.string() });
@@ -88,6 +92,29 @@ export const invitationService = {
     const row = await apiRequest<unknown>(path(token, "/decline"), {
       method: "POST",
     });
+    return invitationSummarySchema.parse(row);
+  },
+
+  /**
+   * The offers addressed to the signed-in account: pending and unexpired, for
+   * the dashboard. The server narrows by the session's own address, so nothing
+   * about whose list this is travels from here.
+   */
+  async getPendingInvitations(): Promise<InvitationInboxEntry[]> {
+    const rows = await apiRequest<unknown[]>(INBOX);
+    return rows.map((row) => invitationInboxEntrySchema.parse(row));
+  },
+
+  /**
+   * Decline an offer by id, in app. Acceptance is deliberately absent: it
+   * needs the mail's token (ADR-0004). The answer is the resolved row, so the
+   * caller can confirm it really is `declined` before dropping the card.
+   */
+  async declinePendingInvitation(id: string): Promise<InvitationSummary> {
+    const row = await apiRequest<unknown>(
+      `${INBOX}/${encodeURIComponent(id)}/decline`,
+      { method: "POST" },
+    );
     return invitationSummarySchema.parse(row);
   },
 };

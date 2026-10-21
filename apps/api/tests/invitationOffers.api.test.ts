@@ -13,7 +13,10 @@
 // offers, and the link that accepts one only exists in the mail.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { collectionInvitations as invitationsTable } from "@arcula/db";
+import {
+  collectionInvitations as invitationsTable,
+  user as userTable,
+} from "@arcula/db";
 import type {
   InvitationCreateResponse,
   InvitationInboxEntry,
@@ -342,13 +345,47 @@ describe("GET /me/invitations", () => {
     // one, and the one addressed to somebody else are all absent.
     expect(body.map((entry) => entry.id)).toEqual([live.id]);
 
-    // Enough to render the card without a second read…
+    // Enough to render the card without a second read: the collection and
+    // the account that sent the offer, never the inviter's own address.
     const [entry] = body;
     expect(entry.collectionName).toBe("Offer Wall");
+    expect(entry.inviterName).toBe("OfferOwner Test");
     expect(entry.status).toBe("pending");
+    expect(JSON.stringify(body)).not.toContain(owner.email);
     // …and no secret: neither the hash nor a raw token.
     expect(JSON.stringify(body)).not.toContain(live.token);
     expect(JSON.stringify(body)).not.toContain(hashInvitationToken(live.token));
+  });
+
+  it("names a nameless inviter neutrally, never by address", async () => {
+    const invitee = await freshUser("OfferNameless");
+    await makeInvitation({
+      collectionId: cid,
+      invitedByUserId: owner.userId,
+      email: invitee.email,
+    });
+
+    // The inviter's display name is the only thing the card may show, and an
+    // account without one must not fall back to the address.
+    await db
+      .update(userTable)
+      .set({ name: null })
+      .where(eq(userTable.id, owner.userId));
+    try {
+      const body = await json<InvitationInboxEntry[]>(
+        await req("GET", "/api/v1/me/invitations", {
+          cookies: invitee.cookies,
+        }),
+      );
+      expect(body).toHaveLength(1);
+      expect(body[0].inviterName).toBe("An Arcula member");
+      expect(JSON.stringify(body)).not.toContain(owner.email);
+    } finally {
+      await db
+        .update(userTable)
+        .set({ name: "OfferOwner Test" })
+        .where(eq(userTable.id, owner.userId));
+    }
   });
 
   it("requires a session", async () => {
@@ -376,6 +413,15 @@ describe("POST /me/invitations/{id}/decline", () => {
     const row = await invitationRow(made.id);
     expect(row.status).toBe("declined");
     expect(row.resolvedAt).not.toBeNull();
+
+    // The owner's pending view reflects it: a declined offer is no longer
+    // theirs to resend or revoke.
+    const access = await json<{ invitations: InvitationSummary[] }>(
+      await req("GET", `/api/v1/collections/${cid}/access`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(access.invitations.map((i) => i.id)).not.toContain(made.id);
 
     // Declined is history: it is off the invitee's list, and the address can
     // be invited again as a fresh row.

@@ -107,3 +107,11 @@ async function toRequestError(res: Response): Promise<ApiRequestError> {
 function isDetailRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+/**
+ * The API's uniform `not-found`. A missing resource and one it deliberately
+ * hides are the same answer, so the screens that fold it into a "gone" state
+ * ask this rather than re-test the status.
+ */
+export const isNotFound = (err: unknown): err is ApiRequestError =>
+  err instanceof ApiRequestError && err.status === 404;

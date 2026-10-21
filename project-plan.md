@@ -290,12 +290,12 @@ offers from `GET /collections/:id/access` (the caller's role, the owner and the
 collaborators, plus the pending invitations to the owner alone), resends (a
 fresh token, expiry and issue time on the same row, once every 60 seconds) and
 revokes; the invitee's `GET /me/invitations` lists their pending, unexpired
-offers and declines one in app. Access can end: the owner removes a collaborator
+offers — each with its collection and inviter — and declines one in app. Access can end: the owner removes a collaborator
 (`DELETE /collections/:id/collaborators/:userId`) and a collaborator leaves
 (`DELETE /collections/:id/collaborators/me`), both immediately and both
 discarding only the departing account's staging prefix for that collection,
-best effort. Still to come: the transfer route, and the access and invitation
-cards in the SPA. The
+best effort. Still to come: the transfer route, and the access and owner's
+invitation cards in the SPA. The
 error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
 revoked or consumed invitation token answers `not-found` like an unknown one, as
 does an in-app decline of anything but the caller's own live offer.
@@ -324,8 +324,10 @@ The dashboard lists owned and shared collections together with a role badge and
 the owner's name on a shared row; its cap counter counts owned collections only.
 A shared collection is readable and editable: the manage page's write controls
 work for a collaborator exactly as for the owner, because the server answers
-them by membership. The invitation card for pending invitations (decline only —
-acceptance is the emailed link) is not built yet.
+them by membership. Above that list sit the pending invitations addressed to
+the signed-in account, each naming its collection and inviter and offering
+decline only — acceptance is the mailed link, and the card says so. The owner's
+invitation administration card is not built yet.
 
 ## Tiers and quotas
 

@@ -89,8 +89,9 @@ and the collaborators to every member, plus the pending invitations (expired
 ones included) to the owner alone. Resend rotates the token, the expiry and the
 issue time on the same pending row, once every 60 seconds; revoke records the
 resolution. The invitee's `GET /me/invitations` lists the pending, unexpired
-offers for their own address — never a token — and the in-app decline answers
-`not-found` for anything that is not their own live offer. Access ends in two
+offers for their own address, each with the collection's name and the inviter's
+display name — never a token and never the inviter's address — and the in-app
+decline answers `not-found` for anything that is not their own live offer. Access ends in two
 places: the owner's `DELETE /collections/:id/collaborators/:userId` (removal,
 `409` when the target is not a collaborator or is the owner) and the
 collaborator's `DELETE /collections/:id/collaborators/me` (leaving, `409` for
