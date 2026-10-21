@@ -24,7 +24,12 @@ import { emailProvider } from "../src/email/provider";
 import { hashInvitationToken, mintInvitationToken } from "../src/invitations";
 import { err, freshUser, json, req, sessionCookies, uuid } from "./helpers/api";
 import { makeCollection } from "./helpers/fixtures";
-import { linkIn, mailpitText, waitForMail } from "./helpers/mailpit";
+import {
+  linkIn,
+  mailpitMessage,
+  mailpitText,
+  waitForMail,
+} from "./helpers/mailpit";
 
 type CreateResponse = InvitationCreateResponse;
 type PreviewResponse = InvitationPreview;
@@ -38,6 +43,14 @@ const TEST_PASSWORD = "a-long-test-password";
 
 const uniqueEmail = (label: string) =>
   `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
+
+/** CR, LF, NUL and the rest of the control range, plus DEL. */
+function controlChars(value: string): string[] {
+  return [...value].filter((char) => {
+    const code = char.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
+}
 
 async function signUpAs(
   email: string,
@@ -155,6 +168,59 @@ describe("POST /collections/{cid}/invitations", () => {
     expect(row.tokenHash).toBe(hashInvitationToken(token));
     expect(row.tokenHash).not.toBe(token);
     expect(row.email).toBe(invited.toLowerCase());
+  });
+
+  it("delivers both parts under Arcula's identity, with the branded links", async () => {
+    const email = uniqueEmail("Wire");
+    const body = await json<CreateResponse>(await invite(owner.cookies, email));
+    const token = await tokenFromMail(body.invitation.email);
+    const message = await mailpitMessage(
+      (await waitForMail(body.invitation.email)).ID,
+    );
+
+    expect(message.From.Name).toBe("Arcula");
+    expect(message.Subject).toBe(
+      "InviteOwner Test invited you to Invitation Wall on Arcula",
+    );
+    // Both parts, from the same facts: the text twin carries the visible URL.
+    expect(message.Text).toContain("Invitation Wall");
+    expect(message.Text).toContain(
+      `Accept invitation: http://localhost:3000/invite/${token}`,
+    );
+    expect(message.HTML).toContain(
+      'src="http://localhost:3000/arcula-name-logo.png"',
+    );
+    expect(message.HTML).toContain(
+      `href="http://localhost:3000/invite/${token}"`,
+    );
+    expect(message.HTML).toContain("Accept invitation");
+    expect(message.HTML).toContain("seven days");
+  });
+
+  it("mails a header-safe, truncated subject and a safely escaped body for a hostile collection name", async () => {
+    const hostileName = `Hostile\r\nBcc: evil@example.test <script>alert(1)</script> ${"Z".repeat(50)}`;
+    const hostileCid = await makeCollection(owner.userId, {
+      name: hostileName,
+      isPublic: false,
+    });
+    const email = uniqueEmail("HostileName");
+    const res = await req(
+      "POST",
+      `/api/v1/collections/${hostileCid}/invitations`,
+      { cookies: owner.cookies, body: { email } },
+    );
+    expect(res.status).toBe(201);
+
+    const message = await mailpitMessage((await waitForMail(email)).ID);
+    // Flattened of CR/LF, truncated at 40 including the ellipsis.
+    expect(message.Subject).toBe(
+      "InviteOwner Test invited you to Hostile Bcc: evil@example.test <script>… on Arcula",
+    );
+    expect(controlChars(message.Subject)).toEqual([]);
+    // The body still carries the whole name, but never as markup.
+    expect(message.Text).toContain(hostileName);
+    expect(message.HTML).not.toContain("<script>alert(1)</script>");
+    expect(message.HTML).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   });
 
   it("is owner-only", async () => {

@@ -45,8 +45,8 @@ Nothing secret is committed; the deploy passes `-c KEY=value`:
 | `DATABASE_URL`        | the Supabase Postgres connection string                     |
 | `AUTH_SECRET`         | the Better Auth signing secret                              |
 | `RESEND_API_KEY`      | transactional mail                                          |
-| `EMAIL_FROM`          | the sender; defaults to `Arcula <noreply@arcula.art>`       |
-| `EMAIL_REPLY_TO`      | optional Reply-To; when unset, no Reply-To header is sent   |
+| `EMAIL_FROM`          | the sender; a bare address is normalised to `Arcula <…>`    |
+| `EMAIL_REPLY_TO`      | optional monitored inbox; empty sends no Reply-To header    |
 | `PUBLIC_URL`          | the one public origin (API + SPA + mail links)              |
 | `DOMAIN` / `CERT_ARN` | the optional custom domain and its us-east-1 ACM cert       |
 | `DEPLOYED_COMMIT`     | dev only: the commit `/api/health` reports                  |

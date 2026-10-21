@@ -243,6 +243,11 @@ DEV_ZONE="arcula.art"
 # the Lambda's EMAIL_FROM as written.
 EMAIL_FROM="Arcula dev <noreply@dev.arcula.art>"
 
+# Dev has no monitored inbox of its own, so it sends no Reply-To header:
+# empty is a legal value, and the code never invents an address. The
+# production environment does set one; see the release stage.
+EMAIL_REPLY_TO=""
+
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
 [[ -n "$REPO" ]] || REPO="<owner>/<repo>"
 
@@ -348,6 +353,7 @@ ask_secret RESEND_API_KEY "Paste the dev API key:"
 note "Sender: $EMAIL_FROM"
 write_env RESEND_API_KEY "$RESEND_API_KEY"
 write_env EMAIL_FROM "$EMAIL_FROM"
+write_env EMAIL_REPLY_TO "$EMAIL_REPLY_TO"
 set_env_secret dev RESEND_API_KEY "$RESEND_API_KEY"
 set_env_var dev EMAIL_FROM "$EMAIL_FROM"
 
@@ -511,6 +517,11 @@ if confirm "Set production's secrets and public values now?"; then
   done
   PROD_EMAIL_FROM=$(prod_value EMAIL_FROM)
   set_env_var production EMAIL_FROM "${PROD_EMAIL_FROM:-noreply@arcula.art}"
+  # The monitored inbox a recipient can answer. Set explicitly, display name
+  # and all; the normaliser is the backstop, not the plan.
+  PROD_EMAIL_REPLY_TO=$(prod_value EMAIL_REPLY_TO)
+  set_env_var production EMAIL_REPLY_TO \
+    "${PROD_EMAIL_REPLY_TO:-Arcula <hello@arcula.art>}"
   ask PROD_SEED_EMAIL "Production owner email:" "$(prod_value SEED_EMAIL)"
   set_env_var production SEED_EMAIL "$PROD_SEED_EMAIL"
   ask PROD_SEED_NAME "Production owner display name:" "$(prod_value SEED_NAME)"

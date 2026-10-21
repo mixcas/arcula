@@ -123,6 +123,10 @@ export class ArculaStack extends cdk.Stack {
         EMAIL_PROVIDER: "resend",
         RESEND_API_KEY: contextValue("RESEND_API_KEY", ""),
         EMAIL_FROM: contextValue("EMAIL_FROM", "Arcula <noreply@arcula.art>"),
+        // The human path back: an invitation a recipient can answer. Empty is
+        // deliberate and legal — an unset value sends no Reply-To header,
+        // rather than an address nobody reads.
+        EMAIL_REPLY_TO: contextValue("EMAIL_REPLY_TO", ""),
         // S3: the SDK gets the endpoint explicitly (storage.ts refuses to
         // fall through to a default) and the credentials from its own IAM
         // role (storage.ts's default-chain branch) — no long-lived keys.
