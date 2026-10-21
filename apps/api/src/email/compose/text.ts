@@ -38,8 +38,11 @@ export function escapeHtml(value: string): string {
 export function flattenSubject(value: string): string {
   return (
     value
+      // C0, DEL and C1: everything a header may not carry. U+2028/U+2029 are
+      // line separators rather than controls, and the whitespace collapse
+      // below turns them into spaces like any other break.
       // eslint-disable-next-line no-control-regex
-      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
       .replace(/\s+/g, " ")
       .trim()
   );
@@ -50,15 +53,12 @@ export function flattenSubject(value: string): string {
  * points, not UTF-16 units: an emoji is one character to a reader, and slicing
  * units could cut a surrogate pair in half and emit an invalid subject.
  */
-export function truncateSubjectPart(
-  value: string,
-  max = SUBJECT_NAME_MAX,
-): string {
+export function truncateSubjectPart(value: string): string {
   const flat = flattenSubject(value);
   const characters = [...flat];
-  if (characters.length <= max) return flat;
+  if (characters.length <= SUBJECT_NAME_MAX) return flat;
   return `${characters
-    .slice(0, max - 1)
+    .slice(0, SUBJECT_NAME_MAX - 1)
     .join("")
     .trimEnd()}…`;
 }
@@ -80,6 +80,17 @@ export function normalizeSender(value: string): string {
   // `<` is the display-name form's tell; the name itself is the operator's.
   if (trimmed.includes("<")) return trimmed;
   return `${SENDER_NAME} <${trimmed}>`;
+}
+
+/**
+ * `EMAIL_REPLY_TO` as the header value it would become, or `null` when the
+ * variable is unset. The provider sends this value and the invitation copy
+ * only offers a reply when one reaches a person, so both read the one rule:
+ * the footer cannot promise a header the transport omits.
+ */
+export function configuredReplyTo(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? normalizeSender(trimmed) : null;
 }
 
 /** The opening line: the account's first name when one is stored, else a

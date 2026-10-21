@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
-import { normalizeSender } from "./compose/text";
+import { configuredReplyTo, normalizeSender } from "./compose/text";
 import { resendPayload, sendHeaders } from "./payload";
 
 /** A Resend tag: what the dashboard's insights group by. */
@@ -26,10 +26,9 @@ export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
-  /** The HTML twin. Every composed Arcula mail has one; it stays optional
-   *  here only so a transport-level caller cannot be forced through the
-   *  composer. */
-  html?: string;
+  /** The HTML twin. Both parts are required: a text-only message is the
+   *  shape filters distrust, and the layout emits the two together. */
+  html: string;
   /** Extra headers. The two every send carries are added by the provider and
    *  win over a value here. */
   headers?: Record<string, string>;
@@ -43,11 +42,8 @@ export interface EmailProvider {
 }
 
 /** What a composer builder returns: both parts are always present, because
- *  the layout emits them together. The provider's message type keeps `html`
- *  optional so transport-level callers are not forced through the composer. */
-export interface ComposedMail extends EmailMessage {
-  html: string;
-}
+ *  the layout emits them together. */
+export type ComposedMail = EmailMessage;
 
 class MailpitEmail implements EmailProvider {
   readonly id = "mailpit" as const;
@@ -115,9 +111,7 @@ export function createEmailProvider(
   // would reach a recipient as an anonymous relay, which is the shape this
   // work exists to remove.
   const from = normalizeSender(env.EMAIL_FROM);
-  const replyTo = env.EMAIL_REPLY_TO?.trim()
-    ? normalizeSender(env.EMAIL_REPLY_TO)
-    : null;
+  const replyTo = configuredReplyTo(env.EMAIL_REPLY_TO);
   switch (key) {
     case "mailpit":
       return new MailpitEmail(

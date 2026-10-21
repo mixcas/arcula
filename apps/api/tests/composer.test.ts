@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  configuredReplyTo,
   escapeHtml,
   flattenSubject,
   normalizeSender,
@@ -35,6 +36,8 @@ describe("flattenSubject", () => {
       "Carlos Bcc: evil@example.test",
     );
     expect(flattenSubject("a\u0000b")).toBe("a b");
+    // C1 controls are invisible too, and a header may not carry them.
+    expect(flattenSubject("a\u0085b\u009fc")).toBe("a b c");
   });
 
   it("collapses runs of whitespace and trims the ends", () => {
@@ -94,6 +97,22 @@ describe("normalizeSender", () => {
 
   it("refuses an empty sender instead of inventing one", () => {
     expect(() => normalizeSender("   ")).toThrow();
+  });
+});
+
+describe("configuredReplyTo", () => {
+  it("normalises a configured inbox the same way as the sender", () => {
+    expect(configuredReplyTo("hello@arcula.art")).toBe(
+      "Arcula <hello@arcula.art>",
+    );
+    expect(configuredReplyTo("Arcula <hello@arcula.art>")).toBe(
+      "Arcula <hello@arcula.art>",
+    );
+  });
+
+  it("treats unset and blank as no reply path, never an invented address", () => {
+    expect(configuredReplyTo(undefined)).toBeNull();
+    expect(configuredReplyTo("   ")).toBeNull();
   });
 });
 

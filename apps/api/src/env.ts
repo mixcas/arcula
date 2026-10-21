@@ -3,6 +3,8 @@
 // The root .env is the single source; scripts source it before
 // running. Values here are read once at import time.
 
+import { configuredReplyTo } from "./email/compose/text";
+
 // The browser origins the API admits cross-origin requests from (the
 // web client, locally Vite on 3000). The same set doubles as
 // Better Auth's trustedOrigins: a cookie-based state-changing request
@@ -27,10 +29,10 @@ export const clientOrigin = (process.env.CLIENT_ORIGIN ?? "")
 // Whether a reply to a mail reaches a person: EMAIL_REPLY_TO is the monitored
 // inbox the invitation footer offers. Empty is a supported configuration (dev
 // has no such inbox), and the copy follows it rather than promising a path that
-// does not exist.
-export const replyToConfigured = Boolean(
-  (process.env.EMAIL_REPLY_TO ?? "").trim(),
-);
+// does not exist. The rule itself is shared with the provider, which is what
+// actually decides whether a Reply-To header is sent.
+export const replyToConfigured =
+  configuredReplyTo(process.env.EMAIL_REPLY_TO) !== null;
 
 // The commit this deployment was built from, when one is configured. The
 // dev environment sets it so `/api/health` answers "is my change live?" in

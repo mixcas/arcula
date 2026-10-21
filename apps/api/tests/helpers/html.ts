@@ -9,11 +9,11 @@ export function urlsIn(html: string): string[] {
   return [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((match) => match[1]);
 }
 
-/** Every character in the control range, plus DEL — what a subject may never
- *  carry, because CR/LF is header injection. */
+/** Every C0, DEL or C1 character — what a subject may never carry, because
+ *  CR/LF is header injection and the rest are invisible on the wire. */
 export function controlChars(value: string): string[] {
   return [...value].filter((char) => {
     const code = char.charCodeAt(0);
-    return code < 0x20 || code === 0x7f;
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
   });
 }
