@@ -16,7 +16,16 @@ import { schema } from "@arcula/db";
 import { db } from "./db";
 import { corsOrigins } from "./env";
 import { passwordResetMail, verificationMail } from "./email/compose";
-import { clientUrl, emailProvider } from "./email/provider";
+import { clientUrl } from "./email/links";
+import { emailProvider } from "./email/provider";
+
+/** The hook's user is Better Auth's core shape; the custom columns (firstName
+ *  among them) are on the row, declared above and typed for sessions in
+ *  session.ts. One widening, used by both hooks. */
+const firstNameOf = (user: unknown): string | null => {
+  const name = (user as { firstName?: string | null }).firstName;
+  return typeof name === "string" ? name : null;
+};
 
 // The four custom user columns, declared: an undeclared custom column
 // fails sign-up with no useful error. The declaration and the schema's
@@ -47,14 +56,10 @@ export const auth = betterAuth({
     // the API origin; the mail has to point at the web app, so it is
     // rewritten to CLIENT_ORIGIN before it is sent.
     sendResetPassword: async ({ user, url }) => {
-      // The hook's user type is Better Auth's core shape; the custom columns
-      // (firstName among them) are on the row, declared in this file and
-      // typed for sessions in session.ts.
-      const firstName = (user as { firstName?: string | null }).firstName;
       await emailProvider.send(
         passwordResetMail({
           to: user.email,
-          firstName,
+          firstName: firstNameOf(user),
           url: clientUrl(url),
         }),
       );
@@ -66,11 +71,10 @@ export const auth = betterAuth({
     // on-demand POST /api/auth/send-verification-email is what fires it.
     // Enabling verification later is the config flip, not a hook change.
     sendVerificationEmail: async ({ user, url }) => {
-      const firstName = (user as { firstName?: string | null }).firstName;
       await emailProvider.send(
         verificationMail({
           to: user.email,
-          firstName,
+          firstName: firstNameOf(user),
           url: clientUrl(url),
         }),
       );

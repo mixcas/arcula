@@ -15,9 +15,8 @@ import { json, req, signUp } from "./helpers/api";
 import {
   headerValue,
   mailpitHeaders,
-  mailpitHtml,
+  mailpitMessage,
   mailpitMessages,
-  mailpitText,
   waitForMail,
 } from "./helpers/mailpit";
 
@@ -79,13 +78,12 @@ describe("the envelope every send wears", () => {
       Address: "hello@arcula.test",
     });
 
-    const parts = await mailpitText(mail.ID);
-    expect(parts).toContain("Hi Ada,");
-    expect(parts).toContain(`${ORIGIN}/reset-password/token`);
-    const html = await mailpitHtml(mail.ID);
-    expect(html).toContain(`src="${ORIGIN}/arcula-name-logo.png"`);
-    expect(html).toContain('alt="Arcula"');
-    expect(html).toContain(`href="${ORIGIN}/reset-password/token"`);
+    const parts = await mailpitMessage(mail.ID);
+    expect(parts.Text).toContain("Hi Ada,");
+    expect(parts.Text).toContain(`${ORIGIN}/reset-password/token`);
+    expect(parts.HTML).toContain(`src="${ORIGIN}/arcula-name-logo.png"`);
+    expect(parts.HTML).toContain('alt="Arcula"');
+    expect(parts.HTML).toContain(`href="${ORIGIN}/reset-password/token"`);
 
     const headers = await mailpitHeaders(mail.ID);
     expect(headerValue(headers, "X-Entity-Ref-ID")).toHaveLength(1);
@@ -132,19 +130,20 @@ describe("password reset — live (fully live in beta)", () => {
     expect(mail.From.Name).toBe("Arcula");
     expect(mail.Subject).toContain("Reset your Arcula password");
 
+    const message = await mailpitMessage(mail.ID);
     // The link lands on the web app (CLIENT_ORIGIN), not the API — the
     // web app is what renders the reset form.
-    const text = await mailpitText(mail.ID);
-    const url = text.match(/http:\/\/\S+/)?.[0];
+    const url = message.Text.match(/http:\/\/\S+/)?.[0];
     expect(url, "the mail carries a link").toBeDefined();
     expect(new URL(url!).origin).toBe("http://localhost:3000");
 
     // The HTML twin carries the same URL behind the button, and the
     // wordmark from our own origin — no off-domain asset, no pixel.
-    const html = await mailpitHtml(mail.ID);
-    expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
-    expect(html).toContain('src="http://localhost:3000/arcula-name-logo.png"');
-    expect(html).toContain('alt="Arcula"');
+    expect(message.HTML).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
+    expect(message.HTML).toContain(
+      'src="http://localhost:3000/arcula-name-logo.png"',
+    );
+    expect(message.HTML).toContain('alt="Arcula"');
 
     // 1.7.7 carries the token in the path: /reset-password/<token>.
     const token = new URL(url!).pathname.split("/").pop()!;
@@ -162,6 +161,28 @@ describe("password reset — live (fully live in beta)", () => {
       body: { email, password: "test-pass-12345" },
     });
     expect(oldIn.status).toBe(401);
+  }, 30000);
+
+  it("greets by the first name stored on the account", async () => {
+    const { email, cookies } = await signUp("greet");
+
+    const saved = await req("PATCH", "/api/v1/me", {
+      cookies,
+      body: { firstName: "Ada" },
+    });
+    expect(saved.status).toBe(200);
+
+    const asked = await req("POST", "/api/auth/request-password-reset", {
+      body: { email },
+    });
+    expect(asked.status).toBe(200);
+
+    // The hook, not the composer, is what puts the stored name in front of the
+    // greeting. A composer test cannot see that wiring.
+    const mail = await waitForMail(email);
+    const message = await mailpitMessage(mail.ID);
+    expect(message.Text).toContain("Hi Ada,");
+    expect(message.HTML).toContain("Hi Ada,");
   }, 30000);
 });
 
@@ -194,14 +215,13 @@ describe("email verification — built but gated", () => {
     expect(mail.Subject).toContain("Verify your Arcula email");
     expect(mail.From.Name).toBe("Arcula");
 
-    const text = await mailpitText(mail.ID);
-    const url = text.match(/http:\/\/\S+/)?.[0];
+    const message = await mailpitMessage(mail.ID);
+    const url = message.Text.match(/http:\/\/\S+/)?.[0];
     expect(url, "the mail carries a link").toBeDefined();
     expect(new URL(url!).origin).toBe("http://localhost:3000");
 
-    const html = await mailpitHtml(mail.ID);
-    expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
-    expect(html).toContain('alt="Arcula"');
+    expect(message.HTML).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
+    expect(message.HTML).toContain('alt="Arcula"');
 
     const token = new URL(url!).searchParams.get("token")!;
     const verified = await req(

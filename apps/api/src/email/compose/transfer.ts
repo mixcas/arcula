@@ -1,4 +1,4 @@
-// The ownership-transfer notice: the one mail that tells a collaborator the
+// The ownership-transfer notice: the mail that tells a collaborator the
 // collection is theirs now. It is relationship mail — sent because an existing
 // relationship changed, not because the account asked — and, like the
 // invitation, it carries no opt-out.
@@ -8,7 +8,8 @@
 
 import type { ComposedMail } from "../provider";
 import { renderMail } from "./layout";
-import { greeting, truncateSubjectPart } from "./text";
+import { mailTag } from "./tag";
+import { collectionOnArcula, greeting } from "./text";
 
 export interface TransferMailFacts {
   to: string;
@@ -35,9 +36,9 @@ export function ownershipTransferMail(facts: TransferMailFacts): ComposedMail {
   });
   return {
     to: facts.to,
-    subject: `You now own ${truncateSubjectPart(facts.collectionName)} on Arcula`,
+    subject: `You now own ${collectionOnArcula(facts.collectionName)}`,
     text: parts.text,
     html: parts.html,
-    tags: [{ name: "type", value: "transfer" }],
+    tags: [mailTag("transfer")],
   };
 }

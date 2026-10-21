@@ -23,12 +23,11 @@ export async function mailpitMessages(): Promise<MailpitMessage[]> {
   return body.messages;
 }
 
-/** The delivered message in full: headers and both parts. The list endpoint
- *  carries snippets only, so a test that reads a part asks here. */
+/** The delivered message in full: both parts. The list endpoint carries
+ *  snippets only, so a test that reads a part asks here. */
 export type MailpitFullMessage = MailpitMessage & {
   Text: string;
   HTML: string;
-  Headers: Record<string, string[]>;
 };
 
 export async function mailpitMessage(id: string): Promise<MailpitFullMessage> {
@@ -46,8 +45,9 @@ export async function mailpitHtml(id: string): Promise<string> {
   return (await mailpitMessage(id)).HTML;
 }
 
-/** The message's headers as Mailpit received them. Fetched from the message
- *  itself, which is the one call a test already makes. */
+/** The message's headers as Mailpit received them. This is a second endpoint:
+ *  the message body carries neither the raw headers nor Mailpit's own
+ *  canonicalised names. */
 export async function mailpitHeaders(
   id: string,
 ): Promise<Record<string, string[]>> {

@@ -19,6 +19,7 @@ describe("invitation mail", () => {
       inviterName: "Carlos",
       collectionName: "Summer in Lisbon",
       url: INVITE_URL,
+      hasReplyPath: true,
     });
 
     expect(mail.subject).toBe(
@@ -46,6 +47,7 @@ describe("invitation mail", () => {
       inviterName,
       collectionName,
       url: INVITE_URL,
+      hasReplyPath: true,
     });
 
     // No user markup reaches the HTML: every angle bracket and quote is an
@@ -74,6 +76,7 @@ describe("invitation mail", () => {
       inviterName: "Carlos\r\nBcc: evil@example.test",
       collectionName,
       url: INVITE_URL,
+      hasReplyPath: true,
     });
 
     expect(mail.subject).toBe(
@@ -91,6 +94,7 @@ describe("invitation mail", () => {
       inviterName: "Carlos",
       collectionName: "Summer in Lisbon",
       url: INVITE_URL,
+      hasReplyPath: true,
     });
 
     expect(html).toContain(
@@ -104,17 +108,27 @@ describe("invitation mail", () => {
     );
   });
 
-  it("explains why the mail arrived and offers a reply, without an opt-out it cannot keep", () => {
-    const { html, text } = invitationMail({
+  it("offers a reply only when a reply reaches a person", () => {
+    const facts = {
       to: "ada@example.test",
       inviterName: "Carlos",
       collectionName: "Summer in Lisbon",
       url: INVITE_URL,
-    });
+      hasReplyPath: true,
+    };
+    const reachable = invitationMail(facts);
+    const unreachable = invitationMail({ ...facts, hasReplyPath: false });
 
-    for (const part of [text, html]) {
+    for (const part of [reachable.text, reachable.html]) {
       expect(part).toContain("asked Arcula to send");
       expect(part).toContain("reply to this email");
+      expect(part).not.toMatch(/unsubscribe|opt[\s-]?out|email preferences/i);
+    }
+    // The kill-switch case: no Reply-To, so no promise of a human on the other
+    // end. The reason line is still there.
+    for (const part of [unreachable.text, unreachable.html]) {
+      expect(part).toContain("asked Arcula to send");
+      expect(part).not.toContain("reply to this email");
       expect(part).not.toMatch(/unsubscribe|opt[\s-]?out|email preferences/i);
     }
   });

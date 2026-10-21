@@ -45,13 +45,28 @@ export function flattenSubject(value: string): string {
   );
 }
 
-/** A flattened name cut to `max` characters, ellipsis included. */ export function truncateSubjectPart(
+/**
+ * A flattened name cut to `max` characters, ellipsis included. Counted in code
+ * points, not UTF-16 units: an emoji is one character to a reader, and slicing
+ * units could cut a surrogate pair in half and emit an invalid subject.
+ */
+export function truncateSubjectPart(
   value: string,
   max = SUBJECT_NAME_MAX,
 ): string {
   const flat = flattenSubject(value);
-  if (flat.length <= max) return flat;
-  return `${flat.slice(0, max - 1).trimEnd()}…`;
+  const characters = [...flat];
+  if (characters.length <= max) return flat;
+  return `${characters
+    .slice(0, max - 1)
+    .join("")
+    .trimEnd()}…`;
+}
+
+/** The tail both relationship mails name the collection with: the shortened
+ *  title and the product, as a subject carries them. */
+export function collectionOnArcula(collectionName: string): string {
+  return `${truncateSubjectPart(collectionName)} on Arcula`;
 }
 
 /**

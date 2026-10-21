@@ -7,19 +7,12 @@
 // webfont, no tracking pixel: the only image is the wordmark, which is on our
 // own origin. `color-scheme: light` is a request, not a guarantee — some
 // clients invert, and the layout does not fight them.
+//
+// The wordmark's origin is the call to action's origin. Both are built by the
+// builder from CLIENT_ORIGIN, so the layout reads no configuration: composing a
+// message is a pure function of its facts.
 
-import { clientLink } from "../links";
 import { escapeHtml } from "./text";
-
-// The composer's helpers are re-exported here because this is the module
-// every mail builder and every test opens: one import path for "the mail
-// layout and the transforms it needs".
-export {
-  escapeHtml,
-  flattenSubject,
-  normalizeSender,
-  truncateSubjectPart,
-} from "./text";
 
 /** The wordmark shipped by the web app (`apps/web/public/`), 451×117 shown at
  *  160×42 on a white band. It is the only image in a mail and is not a
@@ -31,8 +24,8 @@ const WORDMARK_HEIGHT = 42;
 export interface MailCta {
   /** The button's words. */
   label: string;
-  /** An absolute URL on CLIENT_ORIGIN, built by the builder through
-   *  `clientLink` and printed in both parts. */
+  /** An absolute URL on the web app's origin — the builder builds it through
+   *  `clientLink`, and it is printed in both parts. */
   url: string;
 }
 
@@ -61,7 +54,10 @@ const FONT_STACK =
  * one of them.
  */
 export function renderMail(facts: MailLayoutFacts): RenderedMail {
-  const logo = clientLink(WORDMARK_PATH);
+  // The CTA is always a link on the web app, so its origin is also where the
+  // wordmark is served. Taking it from the fact keeps this function pure and
+  // makes the "every URL on our origin" rule structural.
+  const logo = `${new URL(facts.cta.url).origin}${WORDMARK_PATH}`;
   const text = [
     facts.heading,
     "",

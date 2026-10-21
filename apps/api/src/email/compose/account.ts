@@ -8,7 +8,9 @@
 // layout's escaping like any other value.
 
 import type { ComposedMail } from "../provider";
-import { renderMail, type MailCta } from "./layout";
+import type { MailCta } from "./layout";
+import { renderMail } from "./layout";
+import { mailTag, type MailType } from "./tag";
 import { greeting } from "./text";
 
 export interface AccountMailFacts {
@@ -27,7 +29,7 @@ interface AccountMailCopy {
   line: string;
   cta: MailCta;
   reason: string;
-  tag: "reset" | "verify";
+  tag: Extract<MailType, "reset" | "verify">;
 }
 
 function accountMail(
@@ -46,7 +48,7 @@ function accountMail(
     subject: copy.subject,
     text: parts.text,
     html: parts.html,
-    tags: [{ name: "type", value: copy.tag }],
+    tags: [mailTag(copy.tag)],
   };
 }
 

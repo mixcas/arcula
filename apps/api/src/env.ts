@@ -24,6 +24,14 @@ export const clientOrigin = (process.env.CLIENT_ORIGIN ?? "")
   .trim()
   .replace(/\/$/, "");
 
+// Whether a reply to a mail reaches a person: EMAIL_REPLY_TO is the monitored
+// inbox the invitation footer offers. Empty is a supported configuration (dev
+// has no such inbox), and the copy follows it rather than promising a path that
+// does not exist.
+export const replyToConfigured = Boolean(
+  (process.env.EMAIL_REPLY_TO ?? "").trim(),
+);
+
 // The commit this deployment was built from, when one is configured. The
 // dev environment sets it so `/api/health` answers "is my change live?" in
 // one request; production leaves it unset and the health body carries no

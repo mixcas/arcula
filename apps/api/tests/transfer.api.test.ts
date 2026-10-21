@@ -344,15 +344,10 @@ describe("POST /collections/{cid}/transfer", () => {
     expect(url.origin).toBe("http://localhost:3000");
     expect(url.pathname).toBe(`/manage/collection/transfer-wall-${cid}`);
 
-    // The same facts in the other part: the manage link behind the button,
-    // the hosted wordmark, and the line saying what happens to the previous
-    // owner.
+    // The wire's fact: the delivered HTML twin points at the same manage page.
+    // The layout's wordmark and footer copy are the composer suite's job.
     const html = await mailpitHtml(mail.ID);
     expect(html).toContain(`href="${url.href}"`);
-    expect(html).toContain('src="http://localhost:3000/arcula-name-logo.png"');
-    expect(html).toContain('alt="Arcula"');
-    expect(text).toContain("previous owner stays on as a collaborator");
-    expect(html).toContain("previous owner stays on as a collaborator");
   });
 
   it("never checks the recipient's tier, and creation stays blocked over the cap", async () => {

@@ -14,8 +14,11 @@ serves, not a second copy. Vite serves it in dev and the Lambda that serves the
 SPA serves it in production; it is the only image a mail carries.
 
 Dev sets `EMAIL_REPLY_TO` empty on purpose: dev has no monitored inbox, and the
-code never invents an address. Production sets `Arcula <hello@arcula.art>` so
-the invitation's "reply to reach a person" line is true where it matters.
+code never invents an address. Production sets `Arcula <hello@arcula.art>`.
+The invitation footer follows the configuration: it offers a reply only when a
+Reply-To is configured, and otherwise tells the recipient they can ignore the
+mail — it never promises a person on the other end of an address that is not
+monitored.
 
 This page records the two things that are deliberately **not** built. Both come
 from #75, and both are deferred because a code change cannot safely make them
@@ -40,10 +43,10 @@ not a release — never bundle it with a deploy.
 
 ## Opt-out: only if complaints appear
 
-These four mails are account mail and a single relationship notice, and Resend's
-guidance treats transactional mail as exempt, so no opt-out ships today and no
-mail promises one. Revisit if Resend's deliverability insights show complaints.
-The shape when it is built:
+These four mails are two account mails and two relationship notices, and
+Resend's guidance treats this kind of mail as exempt, so no opt-out ships today
+and no mail promises one. Revisit if Resend's deliverability insights show
+complaints. The shape when it is built:
 
 - a local `email_opt_outs` table keyed by the normalised address;
 - an HMAC token over the address;
@@ -52,6 +55,7 @@ The shape when it is built:
 - `List-Unsubscribe` and `List-Unsubscribe-Post` on invitation mail only;
 - invitation create and resend refuse a suppressed address with a clear
   conflict;
-- account mail and transfer notices are never suppressed, so an account can
-  always recover;
+- account mail and the transfer notice are never suppressed — only the
+  invitation is, and it is the only one that would carry the header — so an
+  account can always recover;
 - the migration ships in its own release, before the code that reads it.

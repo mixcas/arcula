@@ -14,12 +14,7 @@
 import { randomUUID } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 import { normalizeSender } from "./compose/text";
-import { replyToFor, resendPayload, sendHeaders } from "./payload";
-
-// The links the mails carry live in their own module so the composer can use
-// them without building a provider; re-exported here because every call site
-// that has one also has this file open.
-export { clientLink, clientUrl } from "./links";
+import { resendPayload, sendHeaders } from "./payload";
 
 /** A Resend tag: what the dashboard's insights group by. */
 export interface EmailTag {
@@ -35,10 +30,6 @@ export interface EmailMessage {
    *  here only so a transport-level caller cannot be forced through the
    *  composer. */
   html?: string;
-  /** This message's Reply-To, overriding the configured EMAIL_REPLY_TO. The
-   *  type is `string | null`: `undefined` means "use the configured one", an
-   *  explicit `null` means "send none". */
-  replyTo?: string | null;
   /** Extra headers. The two every send carries are added by the provider and
    *  win over a value here. */
   headers?: Record<string, string>;
@@ -78,14 +69,13 @@ class MailpitEmail implements EmailProvider {
 
   async send(message: EmailMessage) {
     const headers = sendHeaders(message, randomUUID());
-    const replyTo = replyToFor(message, this.replyTo);
     await this.transporter.sendMail({
       from: this.from,
       to: message.to,
       subject: message.subject,
       text: message.text,
       html: message.html,
-      ...(replyTo ? { replyTo } : {}),
+      ...(this.replyTo ? { replyTo: this.replyTo } : {}),
       headers,
     });
   }

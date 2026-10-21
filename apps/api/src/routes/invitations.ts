@@ -53,7 +53,9 @@ import { Hono } from "hono";
 import { loadCollection, requireOwnerCollection } from "../authorize";
 import { db } from "../db";
 import { invitationMail } from "../email/compose";
-import { clientLink, emailProvider } from "../email/provider";
+import { replyToConfigured } from "../env";
+import { clientLink } from "../email/links";
+import { emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
 import { isUniqueViolation, param, parseBody, safeTx, type Tx } from "../http";
 import { mintId } from "../ids";
@@ -167,6 +169,8 @@ async function sendInvitationMail(mail: InvitationMail): Promise<void> {
       inviterName: mail.inviterName,
       collectionName: mail.collectionName,
       url,
+      // The footer only offers a reply when one lands on a person.
+      hasReplyPath: replyToConfigured,
     }),
   );
 }

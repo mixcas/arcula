@@ -8,7 +8,7 @@ import {
   flattenSubject,
   normalizeSender,
   truncateSubjectPart,
-} from "../src/email/compose/layout";
+} from "../src/email/compose/text";
 import { passwordResetMail, verificationMail } from "../src/email/compose";
 import { resendPayload } from "../src/email/payload";
 import type { EmailMessage } from "../src/email/provider";
@@ -58,6 +58,18 @@ describe("truncateSubjectPart", () => {
 
   it("flattens before it measures, so a newline cannot slip in", () => {
     expect(truncateSubjectPart("Short\nname")).toBe("Short name");
+  });
+
+  it("counts characters, not UTF-16 units, so an emoji is never cut in half", () => {
+    const name = `${"a".repeat(38)}😀${"b".repeat(5)}`;
+    const short = truncateSubjectPart(name);
+
+    expect([...short]).toHaveLength(40);
+    expect(short.endsWith("…")).toBe(true);
+    // A lone surrogate would make the subject invalid UTF-8 on the wire.
+    expect(short).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(short).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    expect(short).toContain("😀");
   });
 });
 
@@ -219,15 +231,6 @@ describe("resendPayload", () => {
     const body = resendPayload(message, "Arcula <noreply@arcula.art>", null);
     expect(body).not.toHaveProperty("reply_to");
     expect(body.headers).toHaveProperty("X-Entity-Ref-ID");
-  });
-
-  it("lets a message suppress the configured Reply-To with an explicit null", () => {
-    const body = resendPayload(
-      { ...message, replyTo: null },
-      "a@b.test",
-      "Arcula <hello@arcula.test>",
-    );
-    expect(body).not.toHaveProperty("reply_to");
   });
 
   it("cannot be talked out of the two headers every send carries", () => {

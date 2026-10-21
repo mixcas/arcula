@@ -14,14 +14,14 @@ import {
   collectionCollaborators as collaboratorsTable,
   collectionInvitations as invitationsTable,
 } from "@arcula/db";
-import {
-  INVITATION_TTL_MS,
-  type InvitationCreateResponse,
-  type InvitationPreview,
-  type InvitationSummary,
+import type {
+  InvitationCreateResponse,
+  InvitationPreview,
+  InvitationSummary,
 } from "@arcula/shared";
 import { and, eq } from "drizzle-orm";
 import { closeDb, db } from "../src/db";
+import { replyToConfigured } from "../src/env";
 import { emailProvider } from "../src/email/provider";
 import { hashInvitationToken, mintInvitationToken } from "../src/invitations";
 import { err, freshUser, json, req, sessionCookies, uuid } from "./helpers/api";
@@ -32,9 +32,6 @@ import {
   mailpitText,
   waitForMail,
 } from "./helpers/mailpit";
-
-/** The offer's life as the mail states it — the route's own TTL. */
-const INVITATION_DAYS = Math.round(INVITATION_TTL_MS / (24 * 60 * 60 * 1000));
 
 type CreateResponse = InvitationCreateResponse;
 type PreviewResponse = InvitationPreview;
@@ -175,23 +172,23 @@ describe("POST /collections/{cid}/invitations", () => {
       (await waitForMail(body.invitation.email)).ID,
     );
 
+    // What the wire owns: the identity the provider stamped, the real token in
+    // both delivered parts, and copy that follows the configured reply path.
+    // The layout's own rules (wordmark, expiry, escaping) are the composer
+    // suite's job, not this one's.
     expect(message.From.Name).toBe("Arcula");
     expect(message.Subject).toBe(
       "InviteOwner Test invited you to Invitation Wall on Arcula",
     );
-    // Both parts, from the same facts: the text twin carries the visible URL.
-    expect(message.Text).toContain("Invitation Wall");
     expect(message.Text).toContain(
       `Accept invitation: http://localhost:3000/invite/${token}`,
     );
     expect(message.HTML).toContain(
-      'src="http://localhost:3000/arcula-name-logo.png"',
-    );
-    expect(message.HTML).toContain(
       `href="http://localhost:3000/invite/${token}"`,
     );
-    expect(message.HTML).toContain("Accept invitation");
-    expect(message.HTML).toContain(`${INVITATION_DAYS} days`);
+    expect(message.Text.includes("reply to this email")).toBe(
+      replyToConfigured,
+    );
   });
 
   it("mails a header-safe, truncated subject and a safely escaped body for a hostile collection name", async () => {
@@ -209,15 +206,13 @@ describe("POST /collections/{cid}/invitations", () => {
     expect(res.status).toBe(201);
 
     const message = await mailpitMessage((await waitForMail(email)).ID);
-    // Flattened of CR/LF, truncated at 40 including the ellipsis.
+    // The wire's fact: the header the transport built is still one line and
+    // still carries the (flattened, shortened) name. The composer suite owns
+    // what the body does with the same value.
     expect(message.Subject).toBe(
       "InviteOwner Test invited you to Hostile Bcc: evil@example.test <script>… on Arcula",
     );
     expect(controlChars(message.Subject)).toEqual([]);
-    // The body still carries the whole name, but never as markup.
-    expect(message.Text).toContain(hostileName);
-    expect(message.HTML).not.toContain("<script>alert(1)</script>");
-    expect(message.HTML).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   });
 
   it("is owner-only", async () => {
