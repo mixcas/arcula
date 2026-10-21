@@ -22,11 +22,6 @@ export const mintInvitationToken = (): string =>
 export const hashInvitationToken = (token: string): string =>
   createHash("sha256").update(token).digest("hex");
 
-/** Stored and compared in this form, so "A@B.test" and "a@b.test" are one
- *  address. */
-export const normalizeEmail = (email: string): string =>
-  email.trim().toLowerCase();
-
 type InvitationFacts = Pick<
   typeof collectionInvitationsTable.$inferSelect,
   "status" | "expiresAt"

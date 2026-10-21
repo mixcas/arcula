@@ -5,6 +5,7 @@
 // star re-exports are the surface the web and the API both compile against.
 export * from "./types";
 export * from "./caps";
+export * from "./email";
 export * from "./limits";
 export * from "./artworkPhotos";
 export * from "./slug";
