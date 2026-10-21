@@ -22,3 +22,5 @@ export {
 } from "./text";
 export { passwordResetMail, verificationMail } from "./account";
 export type { AccountMailFacts } from "./account";
+export { ownershipTransferMail } from "./transfer";
+export type { TransferMailFacts } from "./transfer";
