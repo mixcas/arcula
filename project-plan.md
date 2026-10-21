@@ -290,8 +290,12 @@ offers from `GET /collections/:id/access` (the caller's role, the owner and the
 collaborators, plus the pending invitations to the owner alone), resends (a
 fresh token, expiry and issue time on the same row, once every 60 seconds) and
 revokes; the invitee's `GET /me/invitations` lists their pending, unexpired
-offers and declines one in app. Still to come: collaborator removal, leaving,
-the transfer route, and the access and invitation cards in the SPA. The
+offers and declines one in app. Access can end: the owner removes a collaborator
+(`DELETE /collections/:id/collaborators/:userId`) and a collaborator leaves
+(`DELETE /collections/:id/collaborators/me`), both immediately and both
+discarding only the departing account's staging prefix for that collection,
+best effort. Still to come: the transfer route, and the access and invitation
+cards in the SPA. The
 error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
 revoked or consumed invitation token answers `not-found` like an unknown one, as
 does an in-app decline of anything but the caller's own live offer.
@@ -337,14 +341,13 @@ without being refused. The free tier is one owned collection.
 
 Roughly in order of how much it matters:
 
-- **Access administration.** Invitations, the access card (who has access, and
-  removing them), collaborator management, leaving a collection, ownership
-  transfer and the mails are designed in
+- **Access administration's last pieces.** The invitation loop, the access read,
+  removal and leaving are built as routes; ownership transfer and the access
+  and invitation cards in the SPA are designed in
   [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and not
-  built. Sharing itself is: a collection is shared by a
-  `collection_collaborators` row, and both members read and edit it in full.
-  There is no in-app way to add or remove a collaborator yet, so a membership
-  row is written by hand outside the product.
+  built. There is no in-product way to make somebody a collaborator yet — the
+  invitation's accept route writes the membership, but no page drives it — so a
+  membership row is written by hand outside the product.
 - **Password protection for public collections.** There is no `passwordHash`
   column and no verification path; the public page is public or it is not shown.
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would
