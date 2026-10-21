@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { returnPathFrom, returnStateFor } from "@/utils/returnPath";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -23,9 +24,11 @@ const LoginPage: React.FC = () => {
   // Where a successful sign-in lands: the page that bounced the visitor here
   // (ProtectedRoute puts it in router state), or the manage dashboard when
   // they arrived from a public page's plain <Link>, which carries no state.
-  const fromState = location.state as
-    { from?: { pathname?: string } } | null | undefined;
-  const from = fromState?.from?.pathname ?? "/manage";
+  const from = returnPathFrom(location.state);
+  // The same return path rides the cross-link: a visitor who lands here from
+  // an invitation and decides to create an account must come back to it, not
+  // lose the link on the way through sign-up.
+  const crossLinkState = from ? returnStateFor(from) : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +40,7 @@ const LoginPage: React.FC = () => {
       await login(email, password);
 
       // Redirect to the intended destination after successful login
-      void navigate(from, { replace: true });
+      void navigate(from ?? "/manage", { replace: true });
     } catch (err: unknown) {
       console.error("Login error:", err);
       // AuthProvider rethrows the sign-in's error object: the response
@@ -99,7 +102,10 @@ const LoginPage: React.FC = () => {
       </form>
 
       <Text mt="xl">
-        Don't have an account? <Link to="/signup">Sign up</Link>
+        Don't have an account?{" "}
+        <Link to="/signup" state={crossLinkState}>
+          Sign up
+        </Link>
       </Text>
     </Container>
   );

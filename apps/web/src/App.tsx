@@ -4,6 +4,7 @@ import ProductPage from "./components/ProductPage";
 import LoginPage from "./components/auth/LoginPage";
 import SignUpPage from "./components/auth/SignUpPage";
 import ResetPasswordPage from "./components/auth/ResetPasswordPage";
+import InvitationPage from "./components/invitation/InvitationPage";
 import ManagePage from "./components/manage/ManagePage";
 import CollectionPage from "./components/manage/CollectionPage";
 import ArtworkAddPage from "./components/manage/ArtworkAddPage";
@@ -29,6 +30,9 @@ const App: React.FC = () => {
         {/* The token in the path is what the reset mail's link carries;
             an absent/expired token is the server's 400, not a route miss. */}
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        {/* The mail's invitation link. The token is the path segment the
+            preview, accept and decline calls all carry. */}
+        <Route path="/invite/:token" element={<InvitationPage />} />
 
         {/* Protected Routes */}
         <Route

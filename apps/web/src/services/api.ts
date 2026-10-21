@@ -26,6 +26,13 @@ export class ApiRequestError extends Error {
     message: string,
     /** The failed fields on a validation error; nothing else today. */
     public readonly fields?: Record<string, string>,
+    /**
+     * Structured extra payload — today the invited address on a wrong-account
+     * acceptance (`error.details.email`). Kept untyped here on purpose: the
+     * service that cares parses it through its own schema, so a reshaped
+     * detail is a loud parse failure rather than a silently absent value.
+     */
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -73,6 +80,7 @@ async function toRequestError(res: Response): Promise<ApiRequestError> {
           code?: unknown;
           message?: unknown;
           fields?: Record<string, string>;
+          details?: unknown;
         };
       }
     | undefined;
@@ -90,5 +98,12 @@ async function toRequestError(res: Response): Promise<ApiRequestError> {
       ? error.message
       : `Request failed with status ${res.status}`,
     error?.fields,
+    isDetailRecord(error?.details) ? error.details : undefined,
   );
+}
+
+/** The envelope's `details` is an object when present; anything else is not a
+ *  detail a service can parse. */
+function isDetailRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

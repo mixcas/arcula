@@ -62,10 +62,17 @@ const LocationProbe: React.FC = () => {
   return <div data-testid="location">{location.pathname}</div>;
 };
 
-const renderPage = () =>
+const renderPage = (from?: string) =>
   render(
     <MantineProvider>
-      <MemoryRouter initialEntries={["/signup"]}>
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/signup",
+            state: from ? { from: { pathname: from } } : null,
+          },
+        ]}
+      >
         {/* Outside the routes, so it reports wherever the page lands. */}
         <LocationProbe />
         <Routes>
@@ -186,6 +193,20 @@ describe("the sign-up page", () => {
     );
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe("/manage"),
+    );
+  });
+
+  it("returns to the invite path it came from instead of the dashboard", async () => {
+    // The invite page is the one arrival that must survive sign-up: the
+    // token lives in that path, and landing on /manage loses it for good.
+    const user = userEvent.setup();
+    renderPage("/invite/tok-from-the-mail");
+    await submitSignUp(user);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/invite/tok-from-the-mail",
+      ),
     );
   });
 
