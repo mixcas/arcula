@@ -90,13 +90,14 @@ rule covers both the database row and the bytes. A photo is never more readable
 than the artwork it belongs to, and a document is visible to the collection's
 members only.
 
-Collaboration is partly built: an account with a `collection_collaborators`
+Collaboration is built: an account with a `collection_collaborators`
 row reads the whole collection — drafts and deleted works included — and edits
 it exactly as the owner does ([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
 The owner can invite an address by email; the link carries a single-use token,
 and the invited account accepts or declines it. The collection settings page's
 access card lets the owner resend or revoke an offer, remove a collaborator, and
-lets a collaborator leave; ownership transfer is not built yet.
+transfer the collection to a collaborator; the previous owner stays as a
+collaborator and can leave.
 
 The collection is the only gate: a visitor sees a published, live work exactly
 when its collection is public, and a draft, a deleted work and a private
@@ -359,8 +360,6 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 Roughly in order of how much they matter:
 
-- Ownership transfer to an existing collaborator — designed in
-  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)
 - Real password protection for public collections, with a server-side
   verification path
 - Trash and restore for soft-deleted artworks, and a purge for long-dead ones

@@ -54,9 +54,9 @@ route exist to clean up.
 The read and write sides of sharing are built, and so is the invitation loop —
 create, mail, preview, accept and decline — with the owner's administration of
 the offers (the access read, resend, revoke), access ending (removal and
-leaving) and the invitee's in-app list. The settings page's access card drives
-inviting, resending, revoking, removing and leaving. Ownership transfer is not
-built.
+leaving), ownership transfer and the invitee's in-app list. The settings page's
+access card drives inviting, resending, revoking, removing, leaving and
+transferring.
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
 accepted design for all of it.
 
@@ -100,7 +100,13 @@ the owner — transfer first — and `403` for a non-member). Both delete the
 membership row, so the account is a visitor on its next request, and discard
 that account's staging prefix for the collection, best effort: a storage failure
 does not fail the action, and the staging lifecycle is the backstop. Saved works
-and their final objects are untouched. Still not built: ownership transfer.
+and their final objects are untouched. The owner hands the collection over with
+`POST /collections/:id/transfer`: the target must already be a collaborator
+(`409` otherwise), and one transaction moves `collections.userId`, mirrors
+`artworks.userId`, removes the recipient's membership row and inserts the
+previous owner's. The media namespace is fixed, so no object moves and every
+existing URL keeps serving its bytes; the new owner is mailed a manage-page link
+after the commit, and `emailSent: false` does not undo the transfer.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |

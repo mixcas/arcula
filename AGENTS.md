@@ -10,15 +10,13 @@
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**.
 >
-> **Sharing is partly built.** Access as membership — the shared dashboard
+> **Sharing is built.** Access as membership — the shared dashboard
 > list, documents for members, every write path a collaborator needs, the
 > invitation loop (create, preview, accept, decline), the owner's access read
-> and offer administration (resend, revoke), removal and leaving, the invitee's
-> in-app list and decline, and the settings page's access card — has landed.
-> Ownership transfer is still the target. The model is accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
-> below that describe the rest of access administration are the target until it
-> lands.
+> and offer administration (resend, revoke), removal and leaving, ownership
+> transfer, the invitee's in-app list and decline, and the settings page's
+> access card — has landed. The model is accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md).
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -176,8 +174,8 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `collections`, `access` (the access read, removal and leaving;
-  transfer to come — the only owner-only surface left), `invitations` (create,
+- `routes/` — `collections`, `access` (the access read, removal, leaving and
+  transfer), `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
   (stage/process, under the caller's own staging prefix).
@@ -202,8 +200,8 @@ system.
 `artworkDocuments`) and the `schema` object the adapter consumes. The two
 sharing tables are in the schema and `collectionCollaborators` is read on every
 access question; the invitation routes write `collectionInvitations`, while the
-code that writes `collectionCollaborators` covers acceptance, removal and
-leaving — `transfer`, which rewrites the row, does not exist yet.
+code that writes `collectionCollaborators` covers acceptance, removal, leaving
+and transfer, which swaps the two membership rows and rewrites the owner.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an
