@@ -3,14 +3,14 @@
 This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
-> **Sharing is partly built.** The read side has landed: access is membership
+> **Sharing is built.** The read side has landed: access is membership
 > (the owner and every collaborator see the whole collection, documents
 > included), the dashboard list carries `role`/`ownerName` and counts owned
 > collections only, and final keys use the collection's `mediaNamespaceId`.
-> The invitation, collaborator and transfer routes — the write side — are still
-> the target: they are accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and are not
-> in the code yet. Passages describing them are marked as such.
+> The invitation loop, access administration (invite, resend, revoke, remove,
+> leave, transfer) and the settings page's access card are built. The model is
+> accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md).
 
 For the user-facing overview and setup, see [README.md](README.md). For the agent
 working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
@@ -290,12 +290,16 @@ offers from `GET /collections/:id/access` (the caller's role, the owner and the
 collaborators, plus the pending invitations to the owner alone), resends (a
 fresh token, expiry and issue time on the same row, once every 60 seconds) and
 revokes; the invitee's `GET /me/invitations` lists their pending, unexpired
-offers and declines one in app. Access can end: the owner removes a collaborator
+offers — each with its collection and inviter — and declines one in app. Access can end: the owner removes a collaborator
 (`DELETE /collections/:id/collaborators/:userId`) and a collaborator leaves
 (`DELETE /collections/:id/collaborators/me`), both immediately and both
 discarding only the departing account's staging prefix for that collection,
-best effort. Still to come: the transfer route, and the access and invitation
-cards in the SPA. The
+best effort. Ownership moves to an existing collaborator through
+`POST /collections/:id/transfer`: one transaction updates the owner, mirrors the
+artwork rows, persists the media namespace and swaps the two membership rows;
+the media namespace never moves, so every URL keeps working, and the new owner
+is mailed a link to the manage page (a failed notice answers `emailSent: false`
+without undoing the transfer). The
 error envelope gains `conflict` (409) for state conflicts; an invalid, expired,
 revoked or consumed invitation token answers `not-found` like an unknown one, as
 does an in-app decline of anything but the caller's own live offer.
@@ -324,8 +328,16 @@ The dashboard lists owned and shared collections together with a role badge and
 the owner's name on a shared row; its cap counter counts owned collections only.
 A shared collection is readable and editable: the manage page's write controls
 work for a collaborator exactly as for the owner, because the server answers
-them by membership. The invitation card for pending invitations (decline only —
-acceptance is the emailed link) is not built yet.
+them by membership. Above that list sit the pending invitations addressed to
+the signed-in account, each naming its collection and inviter and offering
+decline only — acceptance is the mailed link, and the card says so. The
+collection settings page carries the access card: the owner sees the invite
+form, every pending offer (expired ones marked, with resend and revoke) and the
+collaborators with remove and transfer; a collaborator sees the owner and the
+collaborators and can leave. Both endings confirm first and warn that the
+departing account's unsaved uploads are discarded. Transfer also confirms, and
+warns that it is immediate and that the previous owner becomes a collaborator;
+after it the card re-reads itself as the collaborator's view.
 
 ## Tiers and quotas
 
@@ -341,13 +353,6 @@ without being refused. The free tier is one owned collection.
 
 Roughly in order of how much it matters:
 
-- **Access administration's last pieces.** The invitation loop, the access read,
-  removal and leaving are built as routes; ownership transfer and the access
-  and invitation cards in the SPA are designed in
-  [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and not
-  built. There is no in-product way to make somebody a collaborator yet — the
-  invitation's accept route writes the membership, but no page drives it — so a
-  membership row is written by hand outside the product.
 - **Password protection for public collections.** There is no `passwordHash`
   column and no verification path; the public page is public or it is not shown.
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would

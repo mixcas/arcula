@@ -27,8 +27,9 @@ name, never a subpath:
 - `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
 
 The read side of sharing — `role`/`ownerName` on the dashboard rows — and the
-invitation loop's payloads are in the code. The access-card, resend, revoke and
-transfer payloads arrive with the rest of access administration, designed in
+invitation loop's payloads are in the code, as are the access read, the
+resend, revoke and collaborator-removal answers, and the transfer payload and
+answer the settings card consumes. The design is in
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md).
 
 Tests live in `tests/` and run with the repo's standard vitest setup

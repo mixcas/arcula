@@ -3,6 +3,7 @@
 //   GET    /collections/{cid}/access                         a member's view of who has access
 //   DELETE /collections/{cid}/collaborators/{userId}         owner: remove somebody
 //   DELETE /collections/{cid}/collaborators/me               collaborator: leave
+//   POST   /collections/{cid}/transfer                       owner: transfer the collection
 //
 // The owner and every collaborator read the access view; nobody else does. It
 // answers the caller's role, the owner and the collaborators — and, for the
@@ -28,6 +29,17 @@
 // prefix, emptied best effort. A storage failure does not fail the action; the
 // seven-day staging lifecycle is the backstop.
 //
+// Transfer is the owner's, and it is immediate. The recipient must already be
+// a collaborator (never a fresh invitation): one transaction moves the owner
+// column, mirrors the new owner onto every artwork, removes the recipient's
+// membership row and inserts the previous owner's. `mediaNamespaceId` is fixed
+// at creation and is what every final object key is built with, so no object
+// moves and every saved URL keeps serving the same bytes. The previous owner
+// stays a collaborator, and the notice to the new owner is attempted only
+// after the commit: a provider failure answers `emailSent: false` and does not
+// undo the transfer. The recipient's tier is never checked — receiving a
+// collection may take an account over its cap.
+//
 // The two removal paths differ only in who may ask and in which account is
 // named — the deletion and the cleanup are one helper each. `/me` is
 // registered before `/:userId` so the literal segment is never read as an
@@ -35,19 +47,32 @@
 
 import { and, asc, eq, ne } from "drizzle-orm";
 import {
+  artworks as artworksTable,
   collectionCollaborators as collectionCollaboratorsTable,
   collectionInvitations as collectionInvitationsTable,
+  collections as collectionsTable,
   user as userTable,
 } from "@arcula/db";
-import type { CollectionAccess } from "@arcula/shared";
+import {
+  collectionSlug,
+  collectionTransferSchema,
+  type CollectionAccess,
+  type CollectionTransferPayload,
+  type CollectionTransferResponse,
+} from "@arcula/shared";
 import { Hono } from "hono";
 import { requireMemberCollection, requireOwnerCollection } from "../authorize";
 import { db } from "../db";
+import { clientLink, emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
-import { param } from "../http";
-import { stagedCollectionPrefix } from "../media/keys";
+import { param, parseBody, safeTx } from "../http";
+import { mediaNamespaceOf, stagedCollectionPrefix } from "../media/keys";
 import { requireSession } from "../session";
-import { serializeInvitation, serializeMember } from "../serialize";
+import {
+  displayName,
+  serializeInvitation,
+  serializeMember,
+} from "../serialize";
 import { deleteObject, listObjects } from "../storage";
 
 export const accessRoutes = new Hono();
@@ -239,5 +264,174 @@ accessRoutes.delete(
     // objects are reached: the cleanup is the residue, never the refusal.
     await discardStagedUploads(collection.id, targetId);
     return c.json({ removed: true });
+  },
+);
+
+interface TransferMail {
+  to: string;
+  collectionId: string;
+  collectionName: string;
+  previousOwnerName: string;
+}
+
+/** The notice to the account that now owns the collection. The link lands on
+ *  the manage page — the new owner's first job is there, not on the public
+ *  view. */
+async function sendTransferMail(mail: TransferMail): Promise<void> {
+  const link = clientLink(
+    `/manage/collection/${collectionSlug(mail.collectionName, mail.collectionId)}`,
+  );
+  await emailProvider.send({
+    to: mail.to,
+    subject: `You now own ${mail.collectionName} on Arcula`,
+    text: [
+      "Hi,",
+      "",
+      `${mail.previousOwnerName} transferred the collection "${mail.collectionName}" to you on Arcula.`,
+      "You are its owner now.",
+      "",
+      `Open the collection: ${link}`,
+      "",
+      "The previous owner stays on as a collaborator. You can remove them, or transfer the collection again, from its access settings.",
+      "If you were not expecting this, contact the previous owner.",
+    ].join("\n"),
+  });
+}
+
+// POST …/transfer — owner-only, and immediate. The recipient must already be a
+// collaborator: a transfer to an arbitrary account would create the membership
+// and the owner in one step, bypassing the invitation's consent. The tier is
+// deliberately not consulted — the cap gates creation, not ownership.
+accessRoutes.post(
+  "/collections/:collectionId/transfer",
+  requireSession,
+  async (c) => {
+    const collection = await requireOwnerCollection(
+      c,
+      param(c, "collectionId"),
+    );
+    const user = c.get("user");
+    const payload: CollectionTransferPayload = await parseBody(
+      c,
+      collectionTransferSchema,
+    );
+    const targetId = payload.userId;
+
+    if (targetId === collection.userId) {
+      throw new ApiError("conflict", "You already own this collection");
+    }
+
+    // The recipient's address is the mail's `to`; the membership row is the
+    // permission fact. One query answers both, and a missing row is the
+    // conflict a stale card needs to hear.
+    const [recipient] = await db
+      .select(memberColumns)
+      .from(collectionCollaboratorsTable)
+      .innerJoin(
+        userTable,
+        eq(userTable.id, collectionCollaboratorsTable.userId),
+      )
+      .where(
+        and(
+          eq(collectionCollaboratorsTable.collectionId, collection.id),
+          eq(collectionCollaboratorsTable.userId, targetId),
+        ),
+      );
+    if (!recipient) {
+      throw new ApiError(
+        "conflict",
+        "That account is not a collaborator of this collection",
+      );
+    }
+
+    const previousOwnerId = collection.userId;
+    // The namespace every existing key was built with. The column is nullable
+    // only in the migration gap; persisting the fallback before the owner
+    // changes keeps those keys resolving after it.
+    const namespaceId = mediaNamespaceOf(collection);
+    const now = new Date();
+    await safeTx(async (tx) => {
+      // The owner column moves first, guarded by the owner the check read: two
+      // transfers racing each other cannot both take the collection.
+      const [moved] = await tx
+        .update(collectionsTable)
+        .set({
+          userId: targetId,
+          updatedAt: now,
+          // A namespace that is already set is not rewritten.
+          ...(collection.mediaNamespaceId === null
+            ? { mediaNamespaceId: namespaceId }
+            : {}),
+        })
+        .where(
+          and(
+            eq(collectionsTable.id, collection.id),
+            eq(collectionsTable.userId, previousOwnerId),
+          ),
+        )
+        .returning({ id: collectionsTable.id });
+      if (!moved) {
+        throw new ApiError(
+          "conflict",
+          "The collection's owner changed while this transfer was in progress",
+        );
+      }
+
+      // `artworks.userId` is the owner mirror, not an authorization fact; the
+      // column and the rows agree after every transfer.
+      await tx
+        .update(artworksTable)
+        .set({ userId: targetId, updatedAt: now })
+        .where(eq(artworksTable.collectionId, collection.id));
+
+      // The two membership rows swap. The delete is the permission fact inside
+      // the transaction too: a recipient removed by a request that raced this
+      // one rolls the whole transfer back.
+      const removed = await tx
+        .delete(collectionCollaboratorsTable)
+        .where(
+          and(
+            eq(collectionCollaboratorsTable.collectionId, collection.id),
+            eq(collectionCollaboratorsTable.userId, targetId),
+          ),
+        )
+        .returning({ userId: collectionCollaboratorsTable.userId });
+      if (removed.length === 0) {
+        throw new ApiError(
+          "conflict",
+          "That account is not a collaborator of this collection",
+        );
+      }
+      // A stray row naming the previous owner (a hand-written seed) is not a
+      // reason to fail the transfer: they are the owner column either way.
+      await tx
+        .insert(collectionCollaboratorsTable)
+        .values({
+          collectionId: collection.id,
+          userId: previousOwnerId,
+          createdAt: now,
+        })
+        .onConflictDoNothing();
+    });
+
+    // After the commit: the transfer is the durable fact, and a provider
+    // outage is reported rather than undone.
+    let emailSent = true;
+    try {
+      await sendTransferMail({
+        to: recipient.email,
+        collectionId: collection.id,
+        collectionName: collection.name,
+        previousOwnerName: displayName(user.name, user.email),
+      });
+    } catch {
+      emailSent = false;
+    }
+
+    const response: CollectionTransferResponse = {
+      transferred: true,
+      emailSent,
+    };
+    return c.json(response);
   },
 );

@@ -54,8 +54,9 @@ route exist to clean up.
 The read and write sides of sharing are built, and so is the invitation loop —
 create, mail, preview, accept and decline — with the owner's administration of
 the offers (the access read, resend, revoke), access ending (removal and
-leaving) and the invitee's in-app list.
-Ownership transfer and the access card's UI are not.
+leaving), ownership transfer and the invitee's in-app list. The settings page's
+access card drives inviting, resending, revoking, removing, leaving and
+transferring.
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
 accepted design for all of it.
 
@@ -89,8 +90,9 @@ and the collaborators to every member, plus the pending invitations (expired
 ones included) to the owner alone. Resend rotates the token, the expiry and the
 issue time on the same pending row, once every 60 seconds; revoke records the
 resolution. The invitee's `GET /me/invitations` lists the pending, unexpired
-offers for their own address — never a token — and the in-app decline answers
-`not-found` for anything that is not their own live offer. Access ends in two
+offers for their own address, each with the collection's name and the inviter's
+display name — never a token and never the inviter's address — and the in-app
+decline answers `not-found` for anything that is not their own live offer. Access ends in two
 places: the owner's `DELETE /collections/:id/collaborators/:userId` (removal,
 `409` when the target is not a collaborator or is the owner) and the
 collaborator's `DELETE /collections/:id/collaborators/me` (leaving, `409` for
@@ -98,7 +100,13 @@ the owner — transfer first — and `403` for a non-member). Both delete the
 membership row, so the account is a visitor on its next request, and discard
 that account's staging prefix for the collection, best effort: a storage failure
 does not fail the action, and the staging lifecycle is the backstop. Saved works
-and their final objects are untouched. Still not built: ownership transfer.
+and their final objects are untouched. The owner hands the collection over with
+`POST /collections/:id/transfer`: the target must already be a collaborator
+(`409` otherwise), and one transaction moves `collections.userId`, mirrors
+`artworks.userId`, removes the recipient's membership row and inserts the
+previous owner's. The media namespace is fixed, so no object moves and every
+existing URL keeps serving its bytes; the new owner is mailed a manage-page link
+after the commit, and `emailSent: false` does not undo the transfer.
 
 | Method   | Path                                                          |
 | -------- | ------------------------------------------------------------- |

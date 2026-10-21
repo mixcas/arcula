@@ -44,3 +44,32 @@ export const collectionAccessSchema = z.object({
 });
 
 export type CollectionAccess = z.infer<typeof collectionAccessSchema>;
+
+/**
+ * The transfer payload: the collaborator who becomes the collection's owner.
+ *
+ * The recipient must already have access (ADR-0004), so the target is an
+ * account id — never an email. A transfer to an arbitrary address would create
+ * a collaborator and an owner in one step, bypassing the invitation's consent.
+ */
+export const collectionTransferSchema = z.object({
+  userId: z.string().min(1, "Choose a collaborator"),
+});
+
+export type CollectionTransferPayload = z.infer<
+  typeof collectionTransferSchema
+>;
+
+/**
+ * The transfer's answer. The transfer is committed before the notice is
+ * attempted, so the only thing `emailSent` tells the caller is whether a
+ * resend — or telling the new owner another way — is needed.
+ */
+export const collectionTransferResponseSchema = z.object({
+  transferred: z.literal(true),
+  emailSent: z.boolean(),
+});
+
+export type CollectionTransferResponse = z.infer<
+  typeof collectionTransferResponseSchema
+>;
