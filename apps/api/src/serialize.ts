@@ -397,6 +397,15 @@ export const displayName = (name: string | null, email: string): string => {
   return trimmed ? trimmed : email;
 };
 
+/** How an inviter is named to somebody who is not a member yet. The address is
+ *  deliberately NOT the fallback — `displayName`'s rule would hand the
+ *  inviter's email to the invited account, and to a visitor on the public
+ *  preview. */
+export const inviterDisplayName = (name: string | null): string => {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : "An Arcula member";
+};
+
 /** One account with access, as the access read names it. */
 export function serializeMember(row: {
   id: string;

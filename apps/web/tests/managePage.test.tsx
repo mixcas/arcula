@@ -28,6 +28,15 @@ vi.mock("@/services/collectionService", () => ({
   collectionService: { getUserCollections: vi.fn() },
 }));
 
+// The dashboard mounts the invitee's pending-offer list. Its own suite pins
+// that card; here it only has to stay out of the collections assertions.
+vi.mock("@/services/invitationService", () => ({
+  invitationService: {
+    getPendingInvitations: vi.fn(() => Promise.resolve([])),
+    declinePendingInvitation: vi.fn(),
+  },
+}));
+
 const authState = vi.hoisted(() => ({
   me: null as SessionUserRead | null,
 }));

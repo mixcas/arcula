@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { collectionService } from "@/services/collectionService";
 import { collectionLimitForTier, collectionSlug } from "@arcula/shared";
 import type { Collection } from "@arcula/shared";
+import PendingInvitations from "./PendingInvitations";
 
 const ManagePage: React.FC = () => {
   const { currentUser, me } = useAuth();
@@ -68,6 +69,10 @@ const ManagePage: React.FC = () => {
 
   return (
     <>
+      {/* Offers addressed to this account sit above the collection list: they
+          are the one thing on the dashboard that needs an answer. */}
+      <PendingInvitations />
+
       <Group mb="xl" justify="space-between" align="center">
         <Text size="h1">My Collections</Text>
         <Group gap="sm">

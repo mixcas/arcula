@@ -68,6 +68,15 @@ const declined = {
   resolvedAt: { seconds: 3, nanoseconds: 0 },
 };
 
+/** One dashboard card's row: the offer plus the two names it renders. */
+const inboxEntry = {
+  ...declined,
+  status: "pending",
+  resolvedAt: null,
+  collectionName: "Flores Solares",
+  inviterName: "Sofía Lara",
+};
+
 const wrongAccount = (details?: unknown, status = 403): Response =>
   answer(
     {
@@ -152,6 +161,35 @@ describe("declineInvitation", () => {
       declined,
     );
     expect(calls[0]?.url).toBe(`/api/v1/invitations/${TOKEN}/decline`);
+    expect(calls[0]?.init.method).toBe("POST");
+  });
+});
+
+describe("getPendingInvitations", () => {
+  it("reads the inbox and parses every entry the card renders", async () => {
+    const calls = stubFetch(answer([inboxEntry]));
+
+    await expect(invitationService.getPendingInvitations()).resolves.toEqual([
+      inboxEntry,
+    ]);
+    expect(calls[0]?.url).toBe("/api/v1/me/invitations");
+  });
+
+  it("fails on an entry with no inviter name", async () => {
+    stubFetch(answer([{ ...inboxEntry, inviterName: undefined }]));
+
+    await expect(invitationService.getPendingInvitations()).rejects.toThrow();
+  });
+});
+
+describe("declinePendingInvitation", () => {
+  it("posts the in-app decline by id and parses the resolved row", async () => {
+    const calls = stubFetch(answer(declined));
+
+    await expect(
+      invitationService.declinePendingInvitation("i1"),
+    ).resolves.toEqual(declined);
+    expect(calls[0]?.url).toBe("/api/v1/me/invitations/i1/decline");
     expect(calls[0]?.init.method).toBe("POST");
   });
 });

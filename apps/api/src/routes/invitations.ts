@@ -67,6 +67,7 @@ import {
 } from "../invitations";
 import {
   displayName,
+  inviterDisplayName,
   serializeCollection,
   serializeInvitation,
   wireTimestamp,
@@ -404,9 +405,7 @@ invitationRoutes.get("/invitations/:token", async (c) => {
 
   const preview: InvitationPreview = {
     collection: { id: collection.id, name: collection.name },
-    inviter: {
-      name: inviter.name?.trim() ? inviter.name.trim() : "An Arcula member",
-    },
+    inviter: { name: inviterDisplayName(inviter.name) },
     email: invitation.email,
     expiresAt: wireTimestamp(invitation.expiresAt),
   };
@@ -505,20 +504,29 @@ invitationRoutes.post(
 
 // GET — the invitee's offers. Pending and unexpired only, addressed to the
 // signed-in account's own address: a lapsed offer is not an offer, and a
-// declined one is history. The collection's name rides along so the card can
-// name it — an invitee is not a member yet, so there is no collection read to
-// make. No token, and no invitation hash, ever leaves here.
+// declined one is history. The collection's name and the inviter's display
+// name ride along so the card can name both — an invitee is not a member yet,
+// so there is no collection read to make, and the inviter's email stays out of
+// it. No token, and no invitation hash, ever leaves here.
 invitationRoutes.get("/me/invitations", requireSession, async (c) => {
   const user = c.get("user");
   const rows = await db
     .select({
       invitation: collectionInvitationsTable,
       collectionName: collectionsTable.name,
+      // The inviter is named, never addressed: the account may have no display
+      // name, and the invitee is not entitled to the inviter's email. A left
+      // join keeps a live offer visible even if its inviter's row is gone.
+      inviterName: userTable.name,
     })
     .from(collectionInvitationsTable)
     .innerJoin(
       collectionsTable,
       eq(collectionsTable.id, collectionInvitationsTable.collectionId),
+    )
+    .leftJoin(
+      userTable,
+      eq(userTable.id, collectionInvitationsTable.invitedByUserId),
     )
     .where(
       and(
@@ -530,9 +538,10 @@ invitationRoutes.get("/me/invitations", requireSession, async (c) => {
     .orderBy(desc(collectionInvitationsTable.createdAt));
 
   const inbox: InvitationInboxEntry[] = rows.map(
-    ({ invitation, collectionName }) => ({
+    ({ invitation, collectionName, inviterName }) => ({
       ...serializeInvitation(invitation),
       collectionName,
+      inviterName: inviterDisplayName(inviterName),
     }),
   );
   return c.json(inbox);

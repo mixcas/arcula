@@ -34,7 +34,7 @@ import { collectionSlug, type InvitationPreview } from "@arcula/shared";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
 import { useAuth } from "@/hooks/useAuth";
-import { ApiRequestError } from "@/services/api";
+import { ApiRequestError, isNotFound } from "@/services/api";
 import { invitationService } from "@/services/invitationService";
 import { invitationAudience } from "@/utils/invitation";
 import { returnStateFor } from "@/utils/returnPath";
@@ -47,10 +47,6 @@ type PageState =
   | { status: "declined"; preview: InvitationPreview };
 
 type Busy = "accept" | "decline" | "switch" | null;
-
-/** The API's one answer for a link that stopped working between reads. */
-const isGone = (err: unknown): err is ApiRequestError =>
-  err instanceof ApiRequestError && err.status === 404;
 
 const InvitationPage: React.FC = () => {
   const { token = "" } = useParams<{ token: string }>();
@@ -132,7 +128,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         { replace: true },
       );
     } catch (err) {
-      if (isGone(err)) {
+      if (isNotFound(err)) {
         setState({ status: "not-found" });
         return;
       }
@@ -158,7 +154,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
       }
       setState({ status: "declined", preview });
     } catch (err) {
-      if (isGone(err)) {
+      if (isNotFound(err)) {
         setState({ status: "not-found" });
         return;
       }
