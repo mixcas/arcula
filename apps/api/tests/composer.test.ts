@@ -9,6 +9,13 @@ import {
   normalizeSender,
   truncateSubjectPart,
 } from "../src/email/compose/layout";
+import { passwordResetMail, verificationMail } from "../src/email/compose";
+import { resendPayload } from "../src/email/payload";
+import type { EmailMessage } from "../src/email/provider";
+import { urlsIn } from "./helpers/html";
+
+const ORIGIN = "http://localhost:3000";
+const RESET_URL = `${ORIGIN}/reset-password/token-123`;
 
 describe("escapeHtml", () => {
   it("neutralises every character that can break out of text or an attribute", () => {
@@ -83,16 +90,6 @@ describe("normalizeSender", () => {
 // These read what a recipient receives: the parts, the call to action, the
 // identity in the HTML and the fields Resend would receive.
 
-import { passwordResetMail, verificationMail } from "../src/email/compose";
-import { resendPayload, type EmailMessage } from "../src/email/provider";
-
-const ORIGIN = "http://localhost:3000";
-const RESET_URL = `${ORIGIN}/reset-password/token-123`;
-
-function urlsIn(html: string): string[] {
-  return [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
-}
-
 describe("password reset mail", () => {
   it("carries the same facts in both parts", () => {
     const mail = passwordResetMail({
@@ -151,6 +148,13 @@ describe("password reset mail", () => {
     // The text part is not HTML, so it keeps the name as text — flattened to
     // one line, never as markup.
     expect(mail.text).toContain(hostile);
+  });
+
+  it("promises no opt-out, because there is none", () => {
+    const mail = passwordResetMail({ to: "a@b.test", url: RESET_URL });
+    for (const part of [mail.text, mail.html]) {
+      expect(part).not.toMatch(/unsubscribe|opt[\s-]?out|email preferences/i);
+    }
   });
 
   it("keeps the subject one line", () => {
@@ -215,6 +219,33 @@ describe("resendPayload", () => {
     const body = resendPayload(message, "Arcula <noreply@arcula.art>", null);
     expect(body).not.toHaveProperty("reply_to");
     expect(body.headers).toHaveProperty("X-Entity-Ref-ID");
+  });
+
+  it("lets a message suppress the configured Reply-To with an explicit null", () => {
+    const body = resendPayload(
+      { ...message, replyTo: null },
+      "a@b.test",
+      "Arcula <hello@arcula.test>",
+    );
+    expect(body).not.toHaveProperty("reply_to");
+  });
+
+  it("cannot be talked out of the two headers every send carries", () => {
+    const body = resendPayload(
+      {
+        ...message,
+        headers: {
+          "Auto-Submitted": "no",
+          "X-Entity-Ref-ID": "forged",
+        },
+      },
+      "a@b.test",
+      "Arcula <hello@arcula.test>",
+      "ref-1",
+    );
+    const headers = body.headers as Record<string, string>;
+    expect(headers["Auto-Submitted"]).toBe("auto-generated");
+    expect(headers["X-Entity-Ref-ID"]).toBe("ref-1");
   });
 
   it("gives each send its own X-Entity-Ref-ID", () => {

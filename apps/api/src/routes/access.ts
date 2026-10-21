@@ -78,7 +78,7 @@ import { deleteObject, listObjects } from "../storage";
 
 export const accessRoutes = new Hono();
 
-/** The columns a person is named by, in both queries below. */
+/** The columns a person is named by, in the queries below. */
 const memberColumns = {
   id: userTable.id,
   name: userTable.name,

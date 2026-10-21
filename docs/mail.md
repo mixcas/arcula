@@ -9,6 +9,14 @@ no tracking pixel. The configuration is in the root
 [README](../README.md#mail); the reasoning behind the identity and the message
 shape is in [#75](https://github.com/mixcas/arcula/issues/75).
 
+The wordmark is `apps/web/public/arcula-name-logo.png` — the one the SPA
+serves, not a second copy. Vite serves it in dev and the Lambda that serves the
+SPA serves it in production; it is the only image a mail carries.
+
+Dev sets `EMAIL_REPLY_TO` empty on purpose: dev has no monitored inbox, and the
+code never invents an address. Production sets `Arcula <hello@arcula.art>` so
+the invitation's "reply to reach a person" line is true where it matters.
+
 This page records the two things that are deliberately **not** built. Both come
 from #75, and both are deferred because a code change cannot safely make them
 true.

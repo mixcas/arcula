@@ -7,10 +7,13 @@ const MAILPIT = "http://127.0.0.1:8025";
 
 // Mailpit's REST API is PascalCase; the list gives snippets, the
 // single-message endpoint gives the full plain-text body.
+export type MailpitAddress = { Name: string; Address: string };
+
 export type MailpitMessage = {
   ID: string;
-  From: { Name: string; Address: string };
-  To: Array<{ Name: string; Address: string }>;
+  From: MailpitAddress;
+  To: MailpitAddress[];
+  ReplyTo: MailpitAddress[];
   Subject: string;
 };
 
@@ -25,6 +28,7 @@ export async function mailpitMessages(): Promise<MailpitMessage[]> {
 export type MailpitFullMessage = MailpitMessage & {
   Text: string;
   HTML: string;
+  Headers: Record<string, string[]>;
 };
 
 export async function mailpitMessage(id: string): Promise<MailpitFullMessage> {
@@ -40,6 +44,27 @@ export async function mailpitText(id: string): Promise<string> {
  *  would render. */
 export async function mailpitHtml(id: string): Promise<string> {
   return (await mailpitMessage(id)).HTML;
+}
+
+/** The message's headers as Mailpit received them. Fetched from the message
+ *  itself, which is the one call a test already makes. */
+export async function mailpitHeaders(
+  id: string,
+): Promise<Record<string, string[]>> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}/headers`);
+  return (await res.json()) as Record<string, string[]>;
+}
+
+/** Headers arrive with Mailpit's own capitalisation, so look them up without
+ *  caring about case. */
+export function headerValue(
+  headers: Record<string, string[]>,
+  name: string,
+): string[] | undefined {
+  const key = Object.keys(headers).find(
+    (header) => header.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? headers[key] : undefined;
 }
 
 /** Poll until a message for `to` appears (Mailpit delivers in ms locally). */

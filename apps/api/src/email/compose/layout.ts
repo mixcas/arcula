@@ -31,8 +31,8 @@ const WORDMARK_HEIGHT = 42;
 export interface MailCta {
   /** The button's words. */
   label: string;
-  /** An absolute URL on CLIENT_ORIGIN — the composer builds it, never the
-   *  caller's raw string, and the layout prints it in both parts. */
+  /** An absolute URL on CLIENT_ORIGIN, built by the builder through
+   *  `clientLink` and printed in both parts. */
   url: string;
 }
 

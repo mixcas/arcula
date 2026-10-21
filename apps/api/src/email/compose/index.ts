@@ -10,16 +10,6 @@
 
 export { renderMail } from "./layout";
 export type { MailCta, MailLayoutFacts, RenderedMail } from "./layout";
-export {
-  SENDER_NAME,
-  SUBJECT_NAME_MAX,
-  escapeHtml,
-  flattenSubject,
-  greeting,
-  normalizeSender,
-  oneLine,
-  truncateSubjectPart,
-} from "./text";
 export { passwordResetMail, verificationMail } from "./account";
 export type { AccountMailFacts } from "./account";
 export { invitationMail } from "./invitation";

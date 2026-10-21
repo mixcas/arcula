@@ -4,22 +4,13 @@
 // are. The composer is the seam: the route supplies facts, never copy.
 
 import { describe, expect, it } from "vitest";
+import { INVITATION_TTL_MS } from "@arcula/shared";
 import { invitationMail } from "../src/email/compose";
+import { controlChars, urlsIn } from "./helpers/html";
 
 const ORIGIN = "http://localhost:3000";
 const INVITE_URL = `${ORIGIN}/invite/token-123`;
-
-function urlsIn(html: string): string[] {
-  return [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
-}
-
-/** CR, LF, NUL and the rest of the control range, plus DEL. */
-function controlChars(value: string): string[] {
-  return [...value].filter((char) => {
-    const code = char.charCodeAt(0);
-    return code < 0x20 || code === 0x7f;
-  });
-}
+const DAYS = Math.round(INVITATION_TTL_MS / (24 * 60 * 60 * 1000));
 
 describe("invitation mail", () => {
   it("names the inviter and the collection and carries the expiry in both parts", () => {
@@ -36,7 +27,9 @@ describe("invitation mail", () => {
     for (const part of [mail.text, mail.html]) {
       expect(part).toContain("Carlos");
       expect(part).toContain("Summer in Lisbon");
-      expect(part).toContain("seven days");
+      // The stated life is the route's real TTL, not a word that can drift
+      // from it.
+      expect(part).toContain(`${DAYS} days`);
       expect(part).toContain("once");
     }
     expect(mail.text).toContain(`Accept invitation: ${INVITE_URL}`);

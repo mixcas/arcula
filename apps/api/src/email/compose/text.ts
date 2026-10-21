@@ -54,11 +54,6 @@ export function flattenSubject(value: string): string {
   return `${flat.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** A user name reduced to something one line of text can carry. */
-export function oneLine(value: string): string {
-  return flattenSubject(value);
-}
-
 /**
  * `EMAIL_FROM` / `EMAIL_REPLY_TO` as a header value. A bare address gets the
  * product's display name; an address that already has one is kept as written.
@@ -75,6 +70,6 @@ export function normalizeSender(value: string): string {
 /** The opening line: the account's first name when one is stored, else a
  *  neutral `Hi,`. The name is flattened here and escaped by the renderer. */
 export function greeting(firstName?: string | null): string {
-  const name = firstName ? oneLine(firstName) : "";
+  const name = firstName ? flattenSubject(firstName) : "";
   return name ? `Hi ${name},` : "Hi,";
 }
