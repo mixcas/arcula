@@ -26,26 +26,32 @@ Layout:
   `0003_shared_collections`'s
   `UPDATE … SET "mediaNamespaceId" = "userId"`), and the
   **add-nullable → backfill → set-not-null** sequence for a column that cannot
-  be added `NOT NULL` on an existing table. The sharing design splits it across
-  two migrations, one per release: `0003_shared_collections` adds
-  `mediaNamespaceId` nullable and backfills it, and
-  `0004_media_namespace_not_null` backfills only the rows the old code wrote in
-  between (`WHERE "mediaNamespaceId" IS NULL`, so a namespace the new code
-  minted survives) and then sets the column `NOT NULL`. Nothing else is edited
-  by hand.
+  be added `NOT NULL` on an existing table. The sharing schema splits it across
+  two migrations, one per release: `0003_shared_collections` creates the two
+  sharing tables, replaces the owner-list index and adds `mediaNamespaceId`
+  nullable, backfilled from `userId`; `0004_media_namespace_not_null`
+  backfills only the rows the old code wrote in between
+  (`WHERE "mediaNamespaceId" IS NULL`, so a namespace the new code minted
+  survives) and then sets the column `NOT NULL`. `0003` shipped alone, the
+  feature code followed, and `0004` tightened the column afterwards. Nothing
+  else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
-  the CHECKs, the indexes behind the artwork lists, timestamptz, the defaults).
+  the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
+  index and the partial unique pending-invitation index, the
+  nullable → backfill → `NOT NULL` order, timestamptz, the defaults).
 
 Decisions the schema encodes: timestamptz everywhere a timestamp is stored;
 money as `text` (the string that was typed — no float drift); `deletedAt` NULL
 means live; `photos`/`documents` are tables, not array columns;
 `artwork_photo_variants` keys on `(parentId, key)`, which is what makes a
 re-save an idempotent upsert; `collections.userId` is the one owner fact and a
-collaborator is a row in `collection_collaborators`; and
+collaborator is a row in `collection_collaborators`;
 `collections.mediaNamespaceId` is fixed at creation, so a transfer moves no
-object. `artworks.userId` is a mirror of the collection owner, not an
-authorization fact.
+object; and `collection_invitations` stores the token's hash, never the token,
+with one pending offer per collection and address as a partial unique index.
+`artworks.userId` is a mirror of the collection owner, not an authorization
+fact.
 
 The schema must stay **runtime-free**: no driver, no driver-specific types, no
 DOM. Node types are available to the package (its tests read the migration off

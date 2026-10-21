@@ -57,27 +57,27 @@ is yours to argue with.
 
 Early, and honest about what is missing:
 
-| Area                                        | State                                         |
-| ------------------------------------------- | --------------------------------------------- |
-| Email/password auth, protected routes       | Working (Better Auth)                         |
-| Sign up                                     | Working                                       |
-| Sign in / sign out, password reset by email | Working                                       |
-| Account profile (name), change password     | Working                                       |
-| Create, list, view, rename collections      | Working                                       |
-| Share a collection with collaborators       | Working (invite, administer, remove, leave)   |
-| Collections per account                     | One owned collection; enforced by the API     |
-| Public/private flag per collection          | Working                                       |
-| List a collection's artworks                | Working                                       |
-| Add and edit an artwork                     | Working                                       |
-| Published/draft status per artwork          | Working; the collection is the gate           |
-| Public collection and single-artwork pages  | Working (the "skins")                         |
-| Photo uploads                               | Working — server-side variants (5 + original) |
-| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy  |
-| Soft delete of artworks (in bulk)           | Working                                       |
-| Restore a soft-deleted artwork              | API route present; no trash UI yet            |
-| CSV import of artworks                      | Working                                       |
-| Private-collection password protection      | Not implemented                               |
-| Delete a collection, export, search         | Not implemented (see the roadmap)             |
+| Area                                        | State                                                 |
+| ------------------------------------------- | ----------------------------------------------------- |
+| Email/password auth, protected routes       | Working (Better Auth)                                 |
+| Sign up                                     | Working                                               |
+| Sign in / sign out, password reset by email | Working                                               |
+| Account profile (name), change password     | Working                                               |
+| Create, list, view, rename collections      | Working                                               |
+| Share a collection with collaborators       | Working (invite, administer, remove, leave, transfer) |
+| Collections per account                     | One owned collection; enforced by the API             |
+| Public/private flag per collection          | Working                                               |
+| List a collection's artworks                | Working                                               |
+| Add and edit an artwork                     | Working                                               |
+| Published/draft status per artwork          | Working; the collection is the gate                   |
+| Public collection and single-artwork pages  | Working (the "skins")                                 |
+| Photo uploads                               | Working — server-side variants (5 + original)         |
+| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy          |
+| Soft delete of artworks (in bulk)           | Working                                               |
+| Restore a soft-deleted artwork              | API route present; no trash UI yet                    |
+| CSV import of artworks                      | Working                                               |
+| Private-collection password protection      | Not implemented                                       |
+| Delete a collection, export, search         | Not implemented (see the roadmap)                     |
 
 ### How access control works
 
@@ -91,13 +91,19 @@ than the artwork it belongs to, and a document is visible to the collection's
 members only.
 
 Collaboration is built: an account with a `collection_collaborators`
-row reads the whole collection — drafts and deleted works included — and edits
-it exactly as the owner does ([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
+row reads every live work in the collection — drafts included — and a deleted
+work by id, and edits the collection exactly as the owner does
+([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
 The owner can invite an address by email; the link carries a single-use token,
-and the invited account accepts or declines it. The collection settings page's
-access card lets the owner resend or revoke an offer, remove a collaborator, and
-transfer the collection to a collaborator; the previous owner stays as a
-collaborator and can leave.
+and the invited account accepts or declines it. The invitation mail is the only
+place the raw token exists, and accepting needs both that link and a signed-in
+account whose address matches the invitation. The dashboard lists the offers
+addressed to you and can decline them; acceptance is the mail's job. The
+collection settings page's access card lets the owner resend or revoke an offer,
+remove a collaborator, and transfer the collection to a collaborator; the
+previous owner stays as a collaborator and can leave. A transfer mails the new
+owner a link to the collection; a failed mail answers `emailSent: false` and
+never undoes the invitation or the transfer.
 
 The collection is the only gate: a visitor sees a published, live work exactly
 when its collection is public, and a draft, a deleted work and a private
@@ -116,7 +122,7 @@ environments of the same deploy shape — one Lambda behind one HTTP API:
   Lambda runs it in production, and that same function serves the built SPA.
 - **`packages/shared`** — the client⇄server contract: wire types, Zod schemas,
   file caps, the tier quota, and the pure ordering/slug helpers.
-- **`packages/db`** — the Drizzle schema and the generated migration.
+- **`packages/db`** — the Drizzle schema and the generated migrations.
 - **`infra/cdk`** — the AWS CDK stack.
 - **`scripts`** — the local stack, the Lambda build, and both deploys.
 
@@ -327,13 +333,16 @@ apps/
       app.ts                 # the Hono app: envelope, www redirect, mounts
       main.ts / lambda.ts    # the two entry points
       spa.ts                 # serves the built SPA in production
-      access.ts artworkRead.ts auth.ts session.ts authorize.ts
-      routes/                # me, media, collections, artworkMedia, artworks
+      access.ts authorize.ts artworkRead.ts auth.ts invitations.ts
+      session.ts
+      routes/                # me, access, invitations, media, collections,
+                             # artworkMedia, artworks
       media/                 # keys, pipeline, variants, promote
+      email/                 # SMTP locally, Resend in production
       db.ts storage.ts serialize.ts errors.ts env.ts
 packages/
   shared/                    # the client⇄server contract
-  db/                        # the Drizzle schema + the generated migration
+  db/                        # the Drizzle schema + the generated migrations
 infra/
   cdk/                       # the AWS CDK stack
   Dockerfile                 # the scale-up container (documented, not deployed)
