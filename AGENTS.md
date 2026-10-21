@@ -11,10 +11,11 @@
 > **`docs/adr/`**.
 >
 > **Sharing is partly built.** Access as membership — the shared dashboard
-> list, documents for members, every write path a collaborator needs, and the
-> invitation loop (create, preview, accept, decline) — has landed. Resend,
-> revoke, the access card, collaborator removal, leaving and transfer are still
-> the target. The model is accepted in
+> list, documents for members, every write path a collaborator needs, the
+> invitation loop (create, preview, accept, decline), the owner's access read
+> and offer administration (resend, revoke), removal and leaving, and the
+> invitee's in-app list and decline — has landed. The access and invitation
+> cards and ownership transfer are still the target. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the entries
 > below that describe the rest of access administration are the target until it
 > lands.
@@ -171,13 +172,15 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
 - `invitations.ts` — the pure token algebra (`mintInvitationToken`,
-  `hashInvitationToken`, `normalizeEmail`) and the one validity question
-  (`isInvitationUsable`: pending and not past `expiresAt`).
-- `routes/` — `collections` (with the access, collaborator and transfer routes
-  to come — the only owner-only surface left), `invitations` (create, public
-  preview, accept, decline), `artworks`, `me` (with the invitation list to
-  come), `media` (the object proxy), `artworkMedia` (stage/process, under the
-  caller's own staging prefix).
+  `hashInvitationToken`, `normalizeEmail`) and the two questions the routes ask
+  of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
+  `isInvitationResendable` (pending, and the last issue older than the
+  60-second cooldown — expiry is deliberately not part of it).
+- `routes/` — `collections`, `access` (the access read, removal and leaving;
+  transfer to come — the only owner-only surface left), `invitations` (create,
+  resend, revoke, public preview, accept, decline, the invitee's inbox and
+  in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
+  (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
@@ -199,8 +202,8 @@ system.
 `artworkDocuments`) and the `schema` object the adapter consumes. The two
 sharing tables are in the schema and `collectionCollaborators` is read on every
 access question; the invitation routes write `collectionInvitations`, while the
-code that writes `collectionCollaborators` (acceptance, removal, transfer) is
-partly built — acceptance writes it, removal and transfer are not.
+code that writes `collectionCollaborators` covers acceptance, removal and
+leaving — `transfer`, which rewrites the row, does not exist yet.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an
