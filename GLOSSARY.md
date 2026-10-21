@@ -37,6 +37,11 @@ single-use token, and expiring after seven days. Accepting one is how an invited
 account becomes a collaborator.
 _Avoid_: Invite, request, share link
 
+**Invitee**:
+The account an invitation is addressed to. Only its address is known when the
+invitation is sent; accepting makes it a collaborator.
+_Avoid_: Recipient, guest, invited user
+
 **Ownership transfer**:
 Moving a collection's owner to one of its collaborators. The previous owner
 stays as a collaborator; only the owner may begin one.
@@ -61,6 +66,20 @@ _Avoid_: Piece, item, object, painting, entry
 Anyone reading a collection or an artwork without an account, or without being
 its owner or a collaborator. A visitor sees only what is public.
 _Avoid_: Guest, reader, viewer
+
+### Mail
+
+**Account mail**:
+Mail about an account's own security or identity — a password reset, an address
+verification — sent because the account asked for it or needs it, and never
+suppressed by an email preference.
+_Avoid_: Transactional mail, system mail, notification
+
+**Relationship mail**:
+A notice about an existing relationship between two parties rather than about
+the account itself: an invitation to a collection, or the notice that an
+ownership transfer has happened.
+_Avoid_: Marketing mail, transactional mail, notification
 
 ### The record
 
