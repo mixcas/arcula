@@ -22,3 +22,4 @@ export {
 } from "./text";
 export { passwordResetMail, verificationMail } from "./account";
 export type { AccountMailFacts } from "./account";
+export { invitationMail, type InvitationMailFacts } from "./invitation";

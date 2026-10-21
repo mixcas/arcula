@@ -26,6 +26,18 @@ export async function mailpitText(id: string): Promise<string> {
   return body.Text;
 }
 
+/** The delivered message in full: headers and both parts. The list endpoint
+ *  carries snippets only, so a test that reads the HTML twin asks here. */
+export type MailpitFullMessage = MailpitMessage & {
+  Text: string;
+  HTML: string;
+};
+
+export async function mailpitMessage(id: string): Promise<MailpitFullMessage> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
+  return (await res.json()) as MailpitFullMessage;
+}
+
 /** Poll until a message for `to` appears (Mailpit delivers in ms locally). */
 export async function waitForMail(
   to: string,
