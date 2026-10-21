@@ -193,3 +193,69 @@ describe("declinePendingInvitation", () => {
     expect(calls[0]?.init.method).toBe("POST");
   });
 });
+
+/** One owner-side offer, as the create and resend responses carry it. */
+const offer = {
+  id: "i1",
+  collectionId: "c1",
+  email: "invited@example.test",
+  invitedByUserId: "u-owner",
+  status: "pending",
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  expiresAt: { seconds: 2, nanoseconds: 0 },
+  resolvedAt: null,
+};
+
+describe("createInvitation", () => {
+  it("posts the address and parses the row plus the mail outcome", async () => {
+    const calls = stubFetch(
+      answer({ invitation: offer, emailSent: true }, 201),
+    );
+
+    await expect(
+      invitationService.createInvitation("c1", "invited@example.test"),
+    ).resolves.toEqual({ invitation: offer, emailSent: true });
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations");
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
+      email: "invited@example.test",
+    });
+  });
+
+  it("keeps an unsent mail distinguishable from an invitation failure", async () => {
+    stubFetch(answer({ invitation: offer, emailSent: false }, 201));
+
+    await expect(
+      invitationService.createInvitation("c1", "invited@example.test"),
+    ).resolves.toEqual({ invitation: offer, emailSent: false });
+  });
+});
+
+describe("resendInvitation", () => {
+  it("posts to the resend route and parses the rotated row", async () => {
+    const calls = stubFetch(answer({ invitation: offer, emailSent: true }));
+
+    await expect(
+      invitationService.resendInvitation("c1", "i1"),
+    ).resolves.toEqual({ invitation: offer, emailSent: true });
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations/i1/resend");
+    expect(calls[0]?.init.method).toBe("POST");
+  });
+});
+
+describe("revokeInvitation", () => {
+  it("deletes the pending row and parses the revoked one", async () => {
+    const revoked = {
+      ...offer,
+      status: "revoked",
+      resolvedAt: { seconds: 3, nanoseconds: 0 },
+    };
+    const calls = stubFetch(answer(revoked));
+
+    await expect(
+      invitationService.revokeInvitation("c1", "i1"),
+    ).resolves.toEqual(revoked);
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations/i1");
+    expect(calls[0]?.init.method).toBe("DELETE");
+  });
+});

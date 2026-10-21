@@ -54,8 +54,9 @@ route exist to clean up.
 The read and write sides of sharing are built, and so is the invitation loop —
 create, mail, preview, accept and decline — with the owner's administration of
 the offers (the access read, resend, revoke), access ending (removal and
-leaving) and the invitee's in-app list.
-Ownership transfer and the access card's UI are not.
+leaving) and the invitee's in-app list. The settings page's access card drives
+inviting, resending, revoking, removing and leaving. Ownership transfer is not
+built.
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) is the
 accepted design for all of it.
 

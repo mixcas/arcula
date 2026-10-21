@@ -8,12 +8,15 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import type { collectionInvitations as collectionInvitationsTable } from "@arcula/db";
+import { INVITATION_RESEND_COOLDOWN_MS } from "@arcula/shared";
 
-/** An invitation is valid for seven days from its current issue. */
-export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** A resend may not follow the previous send sooner than this. */
-export const INVITATION_RESEND_COOLDOWN_MS = 60 * 1000;
+// The two durations are product facts shared with the owner's access card —
+// one definition, so the UI's expired badge and disabled Resend button cannot
+// disagree with the route's refusal. Re-exported for this package's callers.
+export {
+  INVITATION_RESEND_COOLDOWN_MS,
+  INVITATION_TTL_MS,
+} from "@arcula/shared";
 
 /** URL-safe, unguessable: 32 random bytes, base64url-encoded. */
 export const mintInvitationToken = (): string =>

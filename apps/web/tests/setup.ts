@@ -61,3 +61,18 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect(): void {}
   };
 }
+
+// jsdom implements no FontFaceSet. Mantine's autosizing Textarea subscribes to
+// `document.fonts`' `loadingdone` on mount to re-measure when a webfont lands;
+// with no font API the subscription is the mount itself throwing. There is no
+// event to deliver, so the stub only has to accept and forget the listener.
+// Guarded for the Node-environment files, where `document` does not exist.
+if (typeof document !== "undefined" && !document.fonts) {
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: {
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    },
+  });
+}

@@ -28,6 +28,7 @@ import {
 } from "@/skins/registry";
 import type { SkinOptionValue } from "@/skins/types";
 import type { CollectionUpdatePayload } from "@arcula/shared";
+import AccessCard from "./collection/AccessCard";
 
 /** Shallow equality over the option bag. Order does not matter, values do. */
 const optionsChanged = (
@@ -405,6 +406,15 @@ const CollectionSettingsPage: React.FC = () => {
           </Group>
         </form>
       </Card>
+
+      <Divider my="xl" />
+
+      {/* The access card reads its role from the access document, not from
+          this page's collection read: a collaborator reaches this page too,
+          and whose view to render is an administrative question. Keyed by id
+          so another collection starts from a loading card rather than the
+          previous collection's members. */}
+      <AccessCard key={collectionId} collectionId={collectionId} />
 
       <Divider my="xl" />
 
