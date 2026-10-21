@@ -29,6 +29,13 @@
       "when": 1792524320715,
       "tag": "0003_shared_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792612800486,
+      "tag": "0004_media_namespace_not_null",
+      "breakpoints": true
     }
   ]
 }

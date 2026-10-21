@@ -163,7 +163,7 @@ describe("mediaNamespaceOf", () => {
     ).toBe(NAMESPACE);
   });
 
-  it("falls back to the owner for a collection created before 0004", () => {
+  it("falls back to the owner for a collection created between 0003 and 0004", () => {
     // The deploy puts the Lambda before the migrations, so a collection
     // written by the old code in the gap has no namespace yet. Its existing
     // keys were built from the owner, and that is what resolves them.

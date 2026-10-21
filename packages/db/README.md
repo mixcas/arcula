@@ -29,8 +29,10 @@ Layout:
   be added `NOT NULL` on an existing table. The sharing design splits it across
   two migrations, one per release: `0003_shared_collections` adds
   `mediaNamespaceId` nullable and backfills it, and
-  `0004_media_namespace_not_null` backfills the rows written in between and
-  sets it `NOT NULL`. Nothing else is edited by hand.
+  `0004_media_namespace_not_null` backfills only the rows the old code wrote in
+  between (`WHERE "mediaNamespaceId" IS NULL`, so a namespace the new code
+  minted survives) and then sets the column `NOT NULL`. Nothing else is edited
+  by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, timestamptz, the defaults).

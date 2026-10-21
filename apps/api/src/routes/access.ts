@@ -345,9 +345,10 @@ accessRoutes.post(
     }
 
     const previousOwnerId = collection.userId;
-    // The namespace every existing key was built with. The column is nullable
-    // only in the migration gap; persisting the fallback before the owner
-    // changes keeps those keys resolving after it.
+    // The namespace every existing key was built with. A collection the old
+    // code created in the migration gap has none, so the transfer writes the
+    // fallback before the owner changes and those keys keep resolving. One
+    // that already minted a namespace is written back unchanged.
     const namespaceId = mediaNamespaceOf(collection);
     const now = new Date();
     await safeTx(async (tx) => {
@@ -357,11 +358,8 @@ accessRoutes.post(
         .update(collectionsTable)
         .set({
           userId: targetId,
+          mediaNamespaceId: namespaceId,
           updatedAt: now,
-          // A namespace that is already set is not rewritten.
-          ...(collection.mediaNamespaceId === null
-            ? { mediaNamespaceId: namespaceId }
-            : {}),
         })
         .where(
           and(

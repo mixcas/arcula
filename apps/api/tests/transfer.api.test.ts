@@ -3,12 +3,13 @@
 //   POST /collections/{cid}/transfer   owner-only: transfer the collection
 //
 // The target must already be a collaborator. One transaction updates
-// `collections.userId` (persisting the media namespace it fell back to), mirrors
-// the new owner onto every artwork and swaps the two membership rows: the
-// recipient's goes, the previous owner's arrives. The media namespace is fixed,
-// so every saved object keeps its key and every URL keeps working. The notice
-// to the new owner is attempted after the commit; a provider failure answers
-// `emailSent: false` and does not undo the transfer.
+// `collections.userId`, writes the collection's fixed media namespace back
+// (a gap row's fallback is persisted here), mirrors the new owner onto every
+// artwork and swaps the two membership rows: the recipient's goes, the
+// previous owner's arrives. The media namespace is fixed, so every saved object
+// keeps its key and every URL keeps working. The notice to the new owner is
+// attempted after the commit; a provider failure answers `emailSent: false`
+// and does not undo the transfer.
 //
 // The recipient's tier is never checked: receiving a collection may take an
 // account over its cap, and creation stays blocked there afterwards.
@@ -64,14 +65,18 @@ const removePath = (cid: string, userId: string) =>
   `${collectionPath(cid)}/collaborators/${userId}`;
 const leavePath = (cid: string) => `${collectionPath(cid)}/collaborators/me`;
 
-/** A private collection shared with the accounts named. `namespace` is the
- *  media namespace the fixture's nullable column falls back to. */
+/** A private collection shared with the accounts named. Its namespace is its
+ *  owner's id — the shape 0004's backfill leaves on a pre-existing row. */
 async function sharedCollection(
   members: Account[],
 ): Promise<{ cid: string; namespace: string }> {
   const cid = await makeCollection(owner.userId, {
     name: "Transfer Wall",
     isPublic: false,
+    // The shape 0004's backfill leaves on a pre-existing row: its namespace
+    // is its owner's id, and every key already built with it must keep
+    // resolving after the owner moves.
+    mediaNamespaceId: owner.userId,
   });
   for (const account of members) {
     await db
@@ -82,7 +87,7 @@ async function sharedCollection(
     .select()
     .from(collectionsTable)
     .where(eq(collectionsTable.id, cid));
-  return { cid, namespace: row.mediaNamespaceId ?? row.userId };
+  return { cid, namespace: row.mediaNamespaceId };
 }
 
 /** A collection with the minted namespace `POST /collections` gives it — the
@@ -212,13 +217,13 @@ describe("POST /collections/{cid}/transfer", () => {
     const { aid, work } = await savedWork(mate, cid);
 
     // Before: the collection's owner wrote the mirror, and every saved object
-    // lives under the namespace the nullable column falls back to.
+    // lives under the namespace 0004's backfill gave the row (the owner's id).
     const [before] = await db
       .select()
       .from(collectionsTable)
       .where(eq(collectionsTable.id, cid));
     expect(before.userId).toBe(owner.userId);
-    expect(before.mediaNamespaceId).toBeNull();
+    expect(before.mediaNamespaceId).toBe(namespace);
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, entryOf(work))),
     ).toHaveLength(6);
@@ -230,8 +235,8 @@ describe("POST /collections/{cid}/transfer", () => {
       emailSent: true,
     });
 
-    // The owner fact, and the gap's fallback persisted before the owner moved:
-    // the namespace is the value every existing key was built with.
+    // The owner fact moved, and the namespace is the value every existing key
+    // was built with — the transfer reads it and writes that same value back.
     const [row] = await db
       .select()
       .from(collectionsTable)
