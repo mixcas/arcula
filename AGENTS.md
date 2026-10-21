@@ -2,21 +2,19 @@
 
 > The design record lives in **`project-plan.md`** — the as-built description
 > of the product, its data model and its architecture. This file is the working
-> guide: layout, commands, and the test doctrine. `README.md` is the
-> user-facing overview.
+> guide: layout, commands, the sharing rules, and the test doctrine.
+> `README.md` is the user-facing overview.
 >
 > The product is **Arcula** (`arcula.art`), and the packages, the repository
 > and the identifiers all say `arcula` too. The product's own vocabulary is in
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**.
 >
-> **Sharing is built.** Access as membership — the shared dashboard
-> list, documents for members, every write path a collaborator needs, the
-> invitation loop (create, preview, accept, decline), the owner's access read
-> and offer administration (resend, revoke), removal and leaving, ownership
-> transfer, the invitee's in-app list and decline, and the settings page's
-> access card — has landed. The model is accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md).
+> **Sharing is built.** Access is membership: the owner and every collaborator
+> read and edit one collection, invitations are mailed single-use tokens, and
+> ownership transfers without moving media. The model is accepted in
+> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
+> as-built detail is in **Sharing** below.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -27,7 +25,7 @@ environments of one deploy shape:
   prod. It also serves the built SPA.
 - **`packages/shared`** — the client⇄server contract: types, Zod schemas, the
   file caps, the photo-ordering helpers.
-- **`packages/db`** — the Drizzle schema and the generated migration.
+- **`packages/db`** — the Drizzle schema and the generated migrations.
 - **`infra/cdk`** — the CDK stack: one Lambda (API + SPA), an S3 media bucket,
   an HTTP API, and the optional custom domain. One class, instantiated once per
   environment.
@@ -181,6 +179,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `variants.ts` (the geometry), `promote.ts` (staged → final).
+- `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly
+  two mails, the invitation and the ownership-transfer notice; a provider
+  failure surfaces as `emailSent: false`, never as a failed write.
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
@@ -205,7 +206,8 @@ and transfer, which swaps the two membership rows and rewrites the owner.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an
-existing table (see `packages/db/README.md`).
+existing table. The sharing schema is the worked example: the two migrations
+are described under **Sharing** below and in `packages/db/README.md`.
 
 **`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
 the custom domain; the apex and `www` are **separate** `DomainName` pairs that
@@ -224,6 +226,59 @@ built `index.html` (deep links included), and `/api/*` runs the routes. Media
 never goes straight from S3 — `GET /api/v1/media?key=…` proxies the object and
 re-checks visibility per request, which is what lets one authorization layer
 cover both the row and the bytes.
+
+## Sharing
+
+Sharing is membership, and it is built. `collections.userId` is the one owner
+fact; `collection_collaborators` holds everyone else, the owner is not
+duplicated there, and a membership row is the authorization fact for everything
+inside the collection. `access.ts` answers the questions over loaded rows and
+`authorize.ts` loads the collection and the viewer's row, so the owner and every
+collaborator read every live work in the collection — drafts included — and a
+deleted work by id, and read its documents at every status. A deleted work is in
+no list; only its own read still returns it. Every write path asks the same
+membership question through `requireMemberCollection` / `requireMemberArtwork`.
+
+The boundary is access administration. A collaborator changes every setting
+(public/private included), creates, edits, imports, bulk-deletes, restores and
+sweeps exactly as the owner does, and may leave; the owner alone invites,
+resends, revokes, removes and transfers, and cannot leave without transferring.
+`GET /collections/:id/access` is member-readable: the owner and collaborators
+see who has access, while the pending offers are the owner's alone.
+`GET /collections` returns owned and shared rows together, each with `role` and
+a shared row with `ownerName`; the tier cap counts owned collections only. The
+visitor rule is unchanged: a collaborator is never a visitor, and the
+collection remains the visitor's only gate
+([ADR-0003](docs/adr/0003-the-collection-gates.md)).
+
+`collection_invitations` carries the offer: one pending row per collection and
+lowercased email, the SHA-256 hash of a single-use token, a seven-day expiry
+and a status. The raw token exists only in the mail. Acceptance needs the
+mailed token and a session whose email matches the invited address; the
+invitee's `GET /me/invitations` lists their live offers and can decline one,
+because acceptance is the mail's job.
+
+**Two mails, best effort.** Sharing adds exactly two: the invitation mail, which
+links to `CLIENT_ORIGIN/invite/:token`, and the ownership-transfer notice, which
+links the new owner to the manage page. Both go through `email/provider.ts`
+(SMTP locally, Resend in production). The invitation row is written before the
+mail is attempted, so a provider failure answers `emailSent: false` and the
+owner can resend once the 60-second cooldown has passed; a transfer commits
+before its notice, so a failed notice never undoes the transfer.
+
+**The media namespace and the two migrations.** Final object keys use the
+collection's `mediaNamespaceId`, fixed at creation, so a transfer changes the
+owner and the artwork mirror and moves no object: existing URLs keep working.
+Staging keys use the uploader's id, so one collaborator's unsaved upload is
+never under another's prefix. The schema shipped in two releases, one per step:
+`0003_shared_collections` created the two sharing tables and added
+`mediaNamespaceId` nullable, backfilled from `userId`; the feature code read
+`mediaNamespaceId ?? userId` through the gap; and
+`0004_media_namespace_not_null` backfilled only the rows the old code wrote in
+between (`WHERE "mediaNamespaceId" IS NULL`) and set the column `NOT NULL`.
+`0003` shipped alone, the code followed, and `0004` tightened afterwards — the
+worked example of the forward-only rule above. The full schema narrative is in
+`project-plan.md`; the migration detail is in `packages/db/README.md`.
 
 ## What to test
 

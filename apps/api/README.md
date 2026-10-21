@@ -49,11 +49,11 @@ S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
 
-## Sharing (access administration built)
+## Sharing
 
-The read and write sides of sharing are built, and so is the invitation loop —
-create, mail, preview, accept and decline — with the owner's administration of
-the offers (the access read, resend, revoke), access ending (removal and
+Sharing is built: the read and write sides, the member-readable access read,
+the invitation loop — create, mail, preview, accept and decline — the owner's
+administration of the offers (resend, revoke), access ending (removal and
 leaving), ownership transfer and the invitee's in-app list. The settings page's
 access card drives inviting, resending, revoking, removing, leaving and
 transferring.
@@ -63,8 +63,8 @@ accepted design for all of it.
 Access is membership. `access.ts` answers the visitor and access questions as
 pure functions over the collection, the viewer's membership and the row:
 the owner (`collections.userId`) and every row of `collection_collaborators`
-see the whole collection — drafts and soft-deleted works included — and its
-documents, at every status, never a visitor. `authorize.ts` loads the
+read every live work in the collection — drafts included — and a deleted work by
+id, and its documents, at every status, never a visitor. `authorize.ts` loads the
 collection and the viewer's membership row for every read, and every write
 path asks the same membership question through `requireMemberCollection` /
 `requireMemberArtwork`: a collaborator changes every setting (public/private
