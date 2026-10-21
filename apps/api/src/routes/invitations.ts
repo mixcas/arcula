@@ -52,9 +52,8 @@ import {
 import { Hono } from "hono";
 import { loadCollection, requireOwnerCollection } from "../authorize";
 import { db } from "../db";
-import { clientOrigin } from "../env";
+import { clientLink, emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
-import { emailProvider } from "../email/provider";
 import { isUniqueViolation, param, parseBody, safeTx, type Tx } from "../http";
 import { mintId } from "../ids";
 import {
@@ -159,12 +158,7 @@ interface InvitationMail {
 /** The only place the raw token leaves the process: it is embedded in the
  *  link and nowhere else. */
 async function sendInvitationMail(mail: InvitationMail): Promise<void> {
-  if (!clientOrigin) {
-    throw new Error(
-      "CLIENT_ORIGIN is not set; the invitation mail cannot point at the web app.",
-    );
-  }
-  const link = `${clientOrigin}/invite/${mail.token}`;
+  const link = clientLink(`/invite/${mail.token}`);
   await emailProvider.send({
     to: mail.to,
     subject: `${mail.inviterName} invited you to ${mail.collectionName} on Arcula`,

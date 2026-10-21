@@ -1,6 +1,6 @@
 /**
- * The access service: the read the settings card renders, and the two ways
- * access ends.
+ * The access service: the read the settings card renders, and the ways access
+ * changes — transfer, removal and leaving.
  *
  * `GET /collections/{cid}/access` is the one source of the caller's role on an
  * administrative screen — the dashboard row's `role` is a badge, not this. The
@@ -9,11 +9,18 @@
  *
  * Removal and leaving answer no document worth reading: the fact is the row
  * they deleted. The two literal answers are parsed all the same, so a route
- * that stops confirming the write cannot pass silently.
+ * that stops confirming the write cannot pass silently. Transfer answers the
+ * confirmation plus whether the notice reached the new owner — the transfer is
+ * committed either way.
  */
 
 import { z } from "zod";
-import { collectionAccessSchema, type CollectionAccess } from "@arcula/shared";
+import {
+  collectionAccessSchema,
+  collectionTransferResponseSchema,
+  type CollectionAccess,
+  type CollectionTransferResponse,
+} from "@arcula/shared";
 import { apiRequest } from "./api";
 
 const BASE = "/api/v1/collections";
@@ -59,5 +66,22 @@ export const accessService = {
       { method: "DELETE" },
     );
     leftSchema.parse(row);
+  },
+
+  /**
+   * Owner-only: transfer the collection to a collaborator. Immediate — the answer
+   * is the confirmation, not a pending offer — and `emailSent` only says
+   * whether the new owner was notified. A target who is not a collaborator (or
+   * is the owner) is the API's `409`, for the card to show with a refresh.
+   */
+  async transferCollection(
+    collectionId: string,
+    userId: string,
+  ): Promise<CollectionTransferResponse> {
+    const row = await apiRequest<unknown>(
+      `${collectionPath(collectionId)}/transfer`,
+      { method: "POST", body: { userId } },
+    );
+    return collectionTransferResponseSchema.parse(row);
   },
 };

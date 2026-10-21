@@ -33,6 +33,7 @@ vi.mock("@/services/accessService", () => ({
     getAccess: vi.fn(),
     removeCollaborator: vi.fn(),
     leaveCollection: vi.fn(),
+    transferCollection: vi.fn(),
   },
 }));
 

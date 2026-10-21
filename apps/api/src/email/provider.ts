@@ -31,15 +31,22 @@ export interface EmailProvider {
 // have to land on the web app that renders the reset/verification forms,
 // so the origin is rewritten to CLIENT_ORIGIN — path and query stay.
 export function clientUrl(apiUrl: string): string {
-  if (!clientOrigin) {
-    throw new Error(
-      "CLIENT_ORIGIN is not set; the reset/verification mails cannot point at the web app.",
-    );
-  }
   // url.origin is not assignable in every runtime (Bun's is a read-only
   // accessor), so rebuild from the parts instead.
   const url = new URL(apiUrl);
-  return `${clientOrigin}${url.pathname}${url.search}${url.hash}`;
+  return clientLink(`${url.pathname}${url.search}${url.hash}`);
+}
+
+/** An absolute link on the web app's origin — the mails point at the SPA, not
+ *  at the API. A missing origin is a config error, not a relative link nobody
+ *  can open. */
+export function clientLink(path: string): string {
+  if (!clientOrigin) {
+    throw new Error(
+      "CLIENT_ORIGIN is not set; a mail link cannot point at the web app.",
+    );
+  }
+  return `${clientOrigin}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 class MailpitEmail implements EmailProvider {

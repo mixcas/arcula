@@ -10,12 +10,15 @@
  *
  * Two warnings are not decoration: remove and leave empty the departing
  * account's staging prefix for this collection, so the confirmation says the
- * unsaved uploads are discarded. Saved works stay either way.
+ * unsaved uploads are discarded. Saved works stay either way. Transfer has its
+ * own warning: it is immediate, and the previous owner becomes a collaborator
+ * — the new owner can then remove them.
  *
  * A `409` is the API saying the card it rendered is stale — an offer resolved
- * elsewhere, a collaborator already removed. The message is shown as the API
- * words it, with a refresh that re-reads the access document; a generic
- * failure would leave the reader with a dead control and no next step.
+ * elsewhere, a collaborator already removed, a transfer target who is no
+ * longer one. The message is shown as the API words it, with a refresh that
+ * re-reads the access document; a generic failure would leave the reader with a
+ * dead control and no next step.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -74,6 +77,15 @@ const AccessCard: React.FC<AccessCardProps> = ({ collectionId }) => {
   const [inviteWarning, setInviteWarning] = useState<string | null>(null);
   const [resending, setResending] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState<string | null>(null);
+  // The transfer's own outcome: the role has changed, so the card will re-read
+  // as a collaborator's. Kept apart from `inviteWarning`, which a refresh
+  // clears — this one has to survive the re-read to be read at all, and it
+  // says whether the new owner was actually notified.
+  const [transferNotice, setTransferNotice] = useState<{
+    message: string;
+    warning: boolean;
+  } | null>(null);
 
   // The card's own clock, so an expired badge and the resend cooldown become
   // true while the card sits open. One second is the cooldown's own grain.
@@ -265,6 +277,57 @@ const AccessCard: React.FC<AccessCardProps> = ({ collectionId }) => {
     }
   };
 
+  const transfer = async (member: CollectionMember) => {
+    setActionError(null);
+    setRefreshable(false);
+    setInviteWarning(null);
+    setTransferNotice(null);
+    setTransferring(member.userId);
+    try {
+      const { emailSent } = await accessService.transferCollection(
+        collectionId,
+        member.userId,
+      );
+      // The transfer is the durable fact; a provider failure changes only
+      // what the card can promise about the new owner hearing of it.
+      setTransferNotice({
+        message: emailSent
+          ? `${member.name} is now the owner. You are a collaborator.`
+          : `${member.name} is now the owner. The notice could not be sent — tell them directly.`,
+        warning: !emailSent,
+      });
+      // The caller's role has changed, so the card's whole view is stale:
+      // re-read it rather than patching a role the server owns.
+      refresh();
+    } catch (err) {
+      reportActionError(
+        err,
+        "Could not transfer the collection. Please try again.",
+      );
+    } finally {
+      setTransferring(null);
+    }
+  };
+
+  const confirmTransfer = (member: CollectionMember) => {
+    modals.openConfirmModal({
+      title: `Transfer ownership to ${member.name}?`,
+      centered: true,
+      children: (
+        <Text size="sm">
+          This is immediate. {member.name} becomes the collection's owner and
+          you become a collaborator: they can remove you, or transfer the
+          collection again. Every saved work and file stays in the collection.
+        </Text>
+      ),
+      labels: { confirm: "Transfer ownership", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: () => {
+        void transfer(member);
+      },
+    });
+  };
+
   const confirmRemove = (member: CollectionMember) => {
     modals.openConfirmModal({
       title: `Remove ${member.name}?`,
@@ -365,6 +428,16 @@ const AccessCard: React.FC<AccessCardProps> = ({ collectionId }) => {
               Refresh access
             </Button>
           )}
+        </Alert>
+      )}
+
+      {transferNotice && (
+        <Alert
+          color={transferNotice.warning ? "yellow" : "green"}
+          mb="md"
+          data-testid="access-transfer-notice"
+        >
+          <Text size="sm">{transferNotice.message}</Text>
         </Alert>
       )}
 
@@ -498,14 +571,24 @@ const AccessCard: React.FC<AccessCardProps> = ({ collectionId }) => {
                 </Text>
               </div>
               {isOwner && (
-                <Button
-                  variant="subtle"
-                  color="red"
-                  size="compact-sm"
-                  onClick={() => confirmRemove(member)}
-                >
-                  Remove
-                </Button>
+                <Group gap="xs" wrap="nowrap">
+                  <Button
+                    variant="outline"
+                    size="compact-sm"
+                    loading={transferring === member.userId}
+                    onClick={() => confirmTransfer(member)}
+                  >
+                    Transfer ownership
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    color="red"
+                    size="compact-sm"
+                    onClick={() => confirmRemove(member)}
+                  >
+                    Remove
+                  </Button>
+                </Group>
               )}
             </Group>
           ))}

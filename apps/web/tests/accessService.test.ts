@@ -109,3 +109,24 @@ describe("leaveCollection", () => {
     expect(calls[0]?.init.method).toBe("DELETE");
   });
 });
+
+describe("transferCollection", () => {
+  it("names the recipient and reports whether the notice was sent", async () => {
+    const calls = stubFetch(answer({ transferred: true, emailSent: false }));
+
+    await expect(
+      accessService.transferCollection("c1", "u-mate"),
+    ).resolves.toEqual({ transferred: true, emailSent: false });
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/transfer");
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(calls[0]?.init.body).toBe(JSON.stringify({ userId: "u-mate" }));
+  });
+
+  it("fails on an answer that does not confirm the transfer", async () => {
+    stubFetch(answer({ emailSent: true }));
+
+    await expect(
+      accessService.transferCollection("c1", "u-mate"),
+    ).rejects.toThrow();
+  });
+});

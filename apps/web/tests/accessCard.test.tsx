@@ -45,6 +45,7 @@ vi.mock("@/services/accessService", () => ({
     getAccess: vi.fn(),
     removeCollaborator: vi.fn(),
     leaveCollection: vi.fn(),
+    transferCollection: vi.fn(),
   },
 }));
 
@@ -79,6 +80,7 @@ Object.defineProperty(window, "matchMedia", {
 const getAccess = vi.mocked(accessService.getAccess);
 const removeCollaborator = vi.mocked(accessService.removeCollaborator);
 const leaveCollection = vi.mocked(accessService.leaveCollection);
+const transferCollection = vi.mocked(accessService.transferCollection);
 const createInvitation = vi.mocked(invitationService.createInvitation);
 const resendInvitation = vi.mocked(invitationService.resendInvitation);
 const revokeInvitation = vi.mocked(invitationService.revokeInvitation);
@@ -356,6 +358,74 @@ describe("the owner's access card", () => {
     ).toHaveTextContent(/could not be sent/i);
     const row = screen.getByTestId("access-invitation-iiiiiiiiiiiiiiiiiiii");
     expect(within(row).getByRole("button", { name: /resend/i })).toBeEnabled();
+  });
+
+  it("warns before a transfer that it is immediate and that the owner becomes a collaborator, then re-reads the card", async () => {
+    transferCollection.mockResolvedValue({
+      transferred: true,
+      emailSent: true,
+    });
+    renderCard(ownerAccess());
+
+    const mateRow = await screen.findByTestId("access-collaborator-u-mate");
+    await userEvent
+      .setup()
+      .click(
+        within(mateRow).getByRole("button", { name: /transfer ownership/i }),
+      );
+
+    const scope = within(await dialogEl());
+    expect(transferCollection).not.toHaveBeenCalled();
+
+    // The read after the transfer is the caller's new role: they are a
+    // collaborator, so the owner controls give way to leave.
+    getAccess.mockResolvedValueOnce(collaboratorAccess());
+    await userEvent
+      .setup()
+      .click(scope.getByRole("button", { name: /transfer ownership/i }));
+
+    expect(transferCollection).toHaveBeenCalledWith(COLLECTION_ID, "u-mate");
+    expect(
+      await screen.findByRole("button", { name: /leave collection/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("access-card")).queryByRole("button", {
+        name: /transfer ownership/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByTestId("access-transfer-notice"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the transfer and says so when the notice could not be sent", async () => {
+    transferCollection.mockResolvedValue({
+      transferred: true,
+      emailSent: false,
+    });
+    renderCard(ownerAccess());
+
+    const mateRow = await screen.findByTestId("access-collaborator-u-mate");
+    await userEvent
+      .setup()
+      .click(
+        within(mateRow).getByRole("button", { name: /transfer ownership/i }),
+      );
+    getAccess.mockResolvedValueOnce(collaboratorAccess());
+    await userEvent.setup().click(
+      within(await dialogEl()).getByRole("button", {
+        name: /transfer ownership/i,
+      }),
+    );
+
+    // The transfer is the durable fact; only the notice failed.
+    expect(transferCollection).toHaveBeenCalledWith(COLLECTION_ID, "u-mate");
+    expect(
+      await screen.findByTestId("access-transfer-notice"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /leave collection/i }),
+    ).toBeInTheDocument();
   });
 
   it("asks before removing, warns that unsaved uploads go with it, then drops the row", async () => {
