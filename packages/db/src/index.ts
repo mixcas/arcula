@@ -118,10 +118,11 @@ export const collections = pgTable(
     id: text("id").primaryKey(),
     userId: text("userId").notNull(),
     // Fixed at creation and the second segment of every final object key, so
-    // an ownership transfer moves no object. Nullable until
-    // `0004_media_namespace_not_null`; the feature code reads
-    // `mediaNamespaceId ?? userId` in the gap.
-    mediaNamespaceId: text("mediaNamespaceId"),
+    // an ownership transfer moves no object. Required since
+    // `0004_media_namespace_not_null`, which backfilled every row the old code
+    // wrote in the gap; the reader keeps `mediaNamespaceId ?? userId` because
+    // the Lambda still deploys before that migration runs.
+    mediaNamespaceId: text("mediaNamespaceId").notNull(),
     name: text("name").notNull(),
     description: text("description"),
     // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
