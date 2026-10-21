@@ -9,10 +9,12 @@
 
 import { client, closeDb } from "../src/db";
 import { createEmailProvider } from "../src/email/provider";
+import { passwordResetMail } from "../src/email/compose";
 import { afterAll, describe, expect, it } from "vitest";
 import { json, req, signUp } from "./helpers/api";
 
 const MAILPIT = "http://127.0.0.1:8025";
+const ORIGIN = "http://localhost:3000";
 
 // --- Mailpit (its REST API is PascalCase; the list gives snippets, the
 // --- single-message endpoint gives the full plain-text body)
@@ -21,7 +23,9 @@ type MailpitMessage = {
   ID: string;
   From: { Name: string; Address: string };
   To: Array<{ Name: string; Address: string }>;
+  ReplyTo: Array<{ Name: string; Address: string }>;
   Subject: string;
+  Tags: string[];
 };
 
 async function mailpitMessages(): Promise<MailpitMessage[]> {
@@ -34,6 +38,26 @@ async function mailpitText(id: string): Promise<string> {
   const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
   const body = (await res.json()) as { Text: string };
   return body.Text;
+}
+
+async function mailpitHtml(id: string): Promise<string> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
+  const body = (await res.json()) as { HTML: string };
+  return body.HTML;
+}
+
+/** The message's headers as Mailpit received them — one value per line.
+ *  Mailpit canonicalises header names, so look them up case-insensitively. */
+async function mailpitHeaders(id: string): Promise<Record<string, string[]>> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}/headers`);
+  return (await res.json()) as Record<string, string[]>;
+}
+
+function headerValue(headers: Record<string, string[]>, name: string) {
+  const key = Object.keys(headers).find(
+    (k) => k.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? headers[key] : undefined;
 }
 
 /** Poll until a message for `to` appears (Mailpit delivers in ms locally). */
@@ -85,6 +109,66 @@ describe("provider selection (offline)", () => {
   });
 });
 
+describe("the envelope every send wears", () => {
+  it("normalises a bare sender and applies the configured Reply-To", async () => {
+    const to = `envelope-${Date.now()}@example.test`;
+    const provider = createEmailProvider("mailpit", {
+      EMAIL_FROM: "bare@arcula.test",
+      EMAIL_REPLY_TO: "Arcula <hello@arcula.test>",
+      SMTP_HOST: "127.0.0.1",
+      SMTP_PORT: "1025",
+    });
+    await provider.send(
+      passwordResetMail({
+        to,
+        firstName: "Ada",
+        url: `${ORIGIN}/reset-password/token`,
+      }),
+    );
+
+    const mail = await waitForMail(to);
+    // Configured bare, sent as Arcula — never an anonymous relay.
+    expect(mail.From).toEqual({ Name: "Arcula", Address: "bare@arcula.test" });
+    expect(mail.ReplyTo[0]).toEqual({
+      Name: "Arcula",
+      Address: "hello@arcula.test",
+    });
+
+    const parts = await mailpitText(mail.ID);
+    expect(parts).toContain("Hi Ada,");
+    expect(parts).toContain(`${ORIGIN}/reset-password/token`);
+    const html = await mailpitHtml(mail.ID);
+    expect(html).toContain(`src="${ORIGIN}/arcula-name-logo.png"`);
+    expect(html).toContain('alt="Arcula"');
+    expect(html).toContain(`href="${ORIGIN}/reset-password/token"`);
+
+    const headers = await mailpitHeaders(mail.ID);
+    expect(headerValue(headers, "X-Entity-Ref-ID")).toHaveLength(1);
+    expect(headerValue(headers, "Auto-Submitted")).toEqual(["auto-generated"]);
+    expect(headerValue(headers, "Reply-To")).toEqual([
+      "Arcula <hello@arcula.test>",
+    ]);
+  }, 15000);
+
+  it("sends no Reply-To header when EMAIL_REPLY_TO is unset", async () => {
+    const to = `noreply-${Date.now()}@example.test`;
+    const provider = createEmailProvider("mailpit", {
+      EMAIL_FROM: "bare@arcula.test",
+      SMTP_HOST: "127.0.0.1",
+      SMTP_PORT: "1025",
+    });
+    await provider.send(
+      passwordResetMail({ to, url: `${ORIGIN}/reset-password/token` }),
+    );
+
+    const mail = await waitForMail(to);
+    expect(mail.ReplyTo).toEqual([]);
+    expect(
+      headerValue(await mailpitHeaders(mail.ID), "Reply-To"),
+    ).toBeUndefined();
+  }, 15000);
+});
+
 describe("password reset — live (fully live in beta)", () => {
   it("mails a link on the CLIENT_ORIGIN that resets the password", async () => {
     const { email } = await signUp("s4");
@@ -95,7 +179,12 @@ describe("password reset — live (fully live in beta)", () => {
     expect(asked.status).toBe(200);
 
     const mail = await waitForMail(email);
-    expect(mail.From.Address).toBe(process.env.EMAIL_FROM);
+    // The configured sender, with the product's display name on it: a bare
+    // EMAIL_FROM is normalised, never sent as an anonymous address.
+    const configured = process.env.EMAIL_FROM ?? "";
+    const address = configured.match(/<([^>]+)>/)?.[1] ?? configured.trim();
+    expect(mail.From.Address).toBe(address);
+    expect(mail.From.Name).toBe("Arcula");
     expect(mail.Subject).toContain("Reset your Arcula password");
 
     // The link lands on the web app (CLIENT_ORIGIN), not the API — the
@@ -104,6 +193,14 @@ describe("password reset — live (fully live in beta)", () => {
     const url = text.match(/http:\/\/\S+/)?.[0];
     expect(url, "the mail carries a link").toBeDefined();
     expect(new URL(url!).origin).toBe("http://localhost:3000");
+
+    // The HTML twin carries the same URL behind the button, and the
+    // wordmark from our own origin — no off-domain asset, no pixel.
+    const html = await mailpitHtml(mail.ID);
+    expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
+    expect(html).toContain('src="http://localhost:3000/arcula-name-logo.png"');
+    expect(html).toContain('alt="Arcula"');
+    expect(html).toContain("your password stays unchanged");
 
     // 1.7.7 carries the token in the path: /reset-password/<token>.
     const token = new URL(url!).pathname.split("/").pop()!;
@@ -151,11 +248,17 @@ describe("email verification — built but gated", () => {
 
     const mail = await waitForMail(email);
     expect(mail.Subject).toContain("Verify your Arcula email");
+    expect(mail.From.Name).toBe("Arcula");
 
     const text = await mailpitText(mail.ID);
     const url = text.match(/http:\/\/\S+/)?.[0];
     expect(url, "the mail carries a link").toBeDefined();
     expect(new URL(url!).origin).toBe("http://localhost:3000");
+
+    const html = await mailpitHtml(mail.ID);
+    expect(html).toContain(`href="${url!.replace(/&/g, "&amp;")}"`);
+    expect(html).toContain('alt="Arcula"');
+    expect(html).toContain("the account stays as it is");
 
     const token = new URL(url!).searchParams.get("token")!;
     const verified = await req(

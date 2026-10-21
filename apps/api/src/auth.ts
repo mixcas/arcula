@@ -15,6 +15,7 @@ import { bearer } from "better-auth/plugins";
 import { schema } from "@arcula/db";
 import { db } from "./db";
 import { corsOrigins } from "./env";
+import { passwordResetMail, verificationMail } from "./email/compose";
 import { clientUrl, emailProvider } from "./email/provider";
 
 // The four custom user columns, declared: an undeclared custom column
@@ -46,17 +47,17 @@ export const auth = betterAuth({
     // the API origin; the mail has to point at the web app, so it is
     // rewritten to CLIENT_ORIGIN before it is sent.
     sendResetPassword: async ({ user, url }) => {
-      await emailProvider.send({
-        to: user.email,
-        subject: "Reset your Arcula password",
-        text: [
-          "Hi,",
-          "",
-          `Reset your Arcula password: ${clientUrl(url)}`,
-          "",
-          "If you did not ask for this, ignore this email — your password will not change.",
-        ].join("\n"),
-      });
+      // The hook's user type is Better Auth's core shape; the custom columns
+      // (firstName among them) are on the row, declared in this file and
+      // typed for sessions in session.ts.
+      const firstName = (user as { firstName?: string | null }).firstName;
+      await emailProvider.send(
+        passwordResetMail({
+          to: user.email,
+          firstName,
+          url: clientUrl(url),
+        }),
+      );
     },
   },
   emailVerification: {
@@ -65,17 +66,14 @@ export const auth = betterAuth({
     // on-demand POST /api/auth/send-verification-email is what fires it.
     // Enabling verification later is the config flip, not a hook change.
     sendVerificationEmail: async ({ user, url }) => {
-      await emailProvider.send({
-        to: user.email,
-        subject: "Verify your Arcula email",
-        text: [
-          "Hi,",
-          "",
-          `Verify your Arcula email: ${clientUrl(url)}`,
-          "",
-          "If you did not create this account, ignore this email.",
-        ].join("\n"),
-      });
+      const firstName = (user as { firstName?: string | null }).firstName;
+      await emailProvider.send(
+        verificationMail({
+          to: user.email,
+          firstName,
+          url: clientUrl(url),
+        }),
+      );
     },
   },
   advanced: {

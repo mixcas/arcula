@@ -72,6 +72,11 @@ set -- -c "ENV=$ENV" \
 if [ -n "${EMAIL_FROM:-}" ]; then
   set -- "$@" -c "EMAIL_FROM=$EMAIL_FROM"
 fi
+# Optional: unset (or empty) means no Reply-To header at all. The value is
+# carried as one argument like EMAIL_FROM, so a display name survives.
+if [ -n "${EMAIL_REPLY_TO:-}" ]; then
+  set -- "$@" -c "EMAIL_REPLY_TO=$EMAIL_REPLY_TO"
+fi
 # Custom domain: only carried when both are set, and CERT_ARN is required
 # when DOMAIN is — the stack hard-fails synth otherwise. They live in this
 # environment's file; the cert ARN is added there only after the ACM cert

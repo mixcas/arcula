@@ -45,6 +45,8 @@ Nothing secret is committed; the deploy passes `-c KEY=value`:
 | `DATABASE_URL`        | the Supabase Postgres connection string                     |
 | `AUTH_SECRET`         | the Better Auth signing secret                              |
 | `RESEND_API_KEY`      | transactional mail                                          |
+| `EMAIL_FROM`          | the sender; a bare address is normalised to `Arcula <…>`    |
+| `EMAIL_REPLY_TO`      | optional monitored inbox; empty sends no Reply-To header    |
 | `PUBLIC_URL`          | the one public origin (API + SPA + mail links)              |
 | `DOMAIN` / `CERT_ARN` | the optional custom domain and its us-east-1 ACM cert       |
 | `DEPLOYED_COMMIT`     | dev only: the commit `/api/health` reports                  |
@@ -100,7 +102,8 @@ account and one bootstrap ([ADR-0002](../../docs/adr/0002-one-account-one-bootst
 
 2. **Create the environment's Postgres project** out of band, and fill
    `infra/cdk/.env.<env>` with its `DATABASE_URL`, `AUTH_SECRET`,
-   `RESEND_API_KEY`, `EMAIL_FROM`, `DOMAIN` and the `SEED_*` owner account.
+   `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `DOMAIN` and the `SEED_*`
+   owner account.
    The file is gitignored and never committed.
 
 3. **Provision the certificate**: `node scripts/provision-cert.mjs <host>`.
