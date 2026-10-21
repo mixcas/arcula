@@ -42,6 +42,7 @@ import {
 } from "@arcula/db";
 import {
   invitationCreateSchema,
+  normalizeEmail,
   type CollectionRead,
   type InvitationCreatePayload,
   type InvitationCreateResponse,
@@ -62,7 +63,6 @@ import {
   isInvitationResendable,
   isInvitationUsable,
   mintInvitationToken,
-  normalizeEmail,
   resendCutoff,
 } from "../invitations";
 import {

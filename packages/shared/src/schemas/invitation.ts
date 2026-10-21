@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeEmail } from "../email";
 import { wireTimestamp } from "./document";
 
 /**
@@ -25,7 +26,7 @@ export const invitationCreateSchema = z.object({
     .string()
     .trim()
     .pipe(z.email("Enter a valid email address"))
-    .transform((value) => value.toLowerCase()),
+    .transform(normalizeEmail),
 });
 
 export type InvitationCreatePayload = z.infer<typeof invitationCreateSchema>;

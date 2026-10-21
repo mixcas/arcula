@@ -10,9 +10,10 @@ import {
   Anchor,
 } from "@mantine/core";
 import { schemaResolver, useForm } from "@mantine/form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
+import { returnPathFrom, returnStateFor } from "@/utils/returnPath";
 import {
   EMPTY_SIGN_UP_FORM,
   signUpSchema,
@@ -61,6 +62,14 @@ const SignUpPage: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Where a successful sign-up lands: whoever sent the visitor here (the
+  // invitation page puts its own path in router state) or the dashboard for a
+  // plain arrival. Same rule the login page follows — state is not
+  // user-addressable, so there is no open redirect to sanitise.
+  const from = returnPathFrom(location.state);
+  const crossLinkState = from ? returnStateFor(from) : undefined;
 
   // The sign-up form (the plan's `src/schemas/user.ts` pattern): a Zod
   // schema through `schemaResolver` against the hand-written values type,
@@ -84,9 +93,10 @@ const SignUpPage: React.FC = () => {
         return;
       }
       // The sign-up establishes the session (auto-sign-in is on), so the
-      // only work left is the move: the dashboard is where a fresh account
-      // meets its one-collection cap.
-      void navigate("/manage", { replace: true });
+      // only work left is the move: the invite page that sent the visitor
+      // here, or the dashboard, where a fresh account meets its
+      // one-collection cap.
+      void navigate(from ?? "/manage", { replace: true });
     } catch (err) {
       // A rejected fetch has no envelope to read: the server is not
       // answering at all, and that is not "the email exists".
@@ -180,7 +190,9 @@ const SignUpPage: React.FC = () => {
         ) : null}
 
         <Text mt="xl">
-          <Link to="/signup">Back to sign up</Link>
+          <Link to="/signup" state={crossLinkState}>
+            Back to sign up
+          </Link>
         </Text>
       </Container>
     );
@@ -245,7 +257,10 @@ const SignUpPage: React.FC = () => {
       </Text>
 
       <Text mt="xl">
-        Already have an account? <Link to="/login">Login</Link>
+        Already have an account?{" "}
+        <Link to="/login" state={crossLinkState}>
+          Login
+        </Link>
       </Text>
     </Container>
   );
