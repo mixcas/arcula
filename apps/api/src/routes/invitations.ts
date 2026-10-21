@@ -52,6 +52,7 @@ import {
 import { Hono } from "hono";
 import { loadCollection, requireOwnerCollection } from "../authorize";
 import { db } from "../db";
+import { invitationMail } from "../email/compose";
 import { clientLink, emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
 import { isUniqueViolation, param, parseBody, safeTx, type Tx } from "../http";
@@ -156,23 +157,18 @@ interface InvitationMail {
 }
 
 /** The only place the raw token leaves the process: it is embedded in the
- *  link and nowhere else. */
+ *  link and nowhere else. Create and resend both call this, so the mail's
+ *  identity and layout have one definition. */
 async function sendInvitationMail(mail: InvitationMail): Promise<void> {
-  const link = clientLink(`/invite/${mail.token}`);
-  await emailProvider.send({
-    to: mail.to,
-    subject: `${mail.inviterName} invited you to ${mail.collectionName} on Arcula`,
-    text: [
-      "Hi,",
-      "",
-      `${mail.inviterName} invited you to collaborate on the collection "${mail.collectionName}" on Arcula.`,
-      "",
-      `Accept the invitation: ${link}`,
-      "",
-      "The invitation expires in seven days and can be used once.",
-      "If you were not expecting this, ignore this email.",
-    ].join("\n"),
-  });
+  const url = clientLink(`/invite/${mail.token}`);
+  await emailProvider.send(
+    invitationMail({
+      to: mail.to,
+      inviterName: mail.inviterName,
+      collectionName: mail.collectionName,
+      url,
+    }),
+  );
 }
 
 // POST — owner-only. The conflicts are checked in this order: the owner's own

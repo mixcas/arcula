@@ -22,5 +22,7 @@ export {
 } from "./text";
 export { passwordResetMail, verificationMail } from "./account";
 export type { AccountMailFacts } from "./account";
+export { invitationMail } from "./invitation";
+export type { InvitationMailFacts } from "./invitation";
 export { ownershipTransferMail } from "./transfer";
 export type { TransferMailFacts } from "./transfer";
