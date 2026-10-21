@@ -26,6 +26,14 @@ export async function mailpitText(id: string): Promise<string> {
   return body.Text;
 }
 
+/** The HTML twin Mailpit received — what a client with images and styles on
+ *  would render. */
+export async function mailpitHtml(id: string): Promise<string> {
+  const res = await fetch(`${MAILPIT}/api/v1/message/${id}`);
+  const body = (await res.json()) as { HTML: string };
+  return body.HTML;
+}
+
 /** Poll until a message for `to` appears (Mailpit delivers in ms locally). */
 export async function waitForMail(
   to: string,

@@ -41,6 +41,7 @@ import {
 } from "./helpers/fixtures";
 import {
   linkIn,
+  mailpitHtml,
   mailpitText,
   mailsFor,
   waitForNewMail,
@@ -337,9 +338,21 @@ describe("POST /collections/{cid}/transfer", () => {
 
     const mail = await waitForNewMail(mate.email, seenIds);
     expect(mail.Subject).toContain("Transfer Wall");
-    const url = linkIn(await mailpitText(mail.ID));
+    expect(mail.From.Name).toBe("Arcula");
+    const text = await mailpitText(mail.ID);
+    const url = linkIn(text);
     expect(url.origin).toBe("http://localhost:3000");
     expect(url.pathname).toBe(`/manage/collection/transfer-wall-${cid}`);
+
+    // The same facts in the other part: the manage link behind the button,
+    // the hosted wordmark, and the line saying what happens to the previous
+    // owner.
+    const html = await mailpitHtml(mail.ID);
+    expect(html).toContain(`href="${url.href}"`);
+    expect(html).toContain('src="http://localhost:3000/arcula-name-logo.png"');
+    expect(html).toContain('alt="Arcula"');
+    expect(text).toContain("previous owner stays on as a collaborator");
+    expect(html).toContain("previous owner stays on as a collaborator");
   });
 
   it("never checks the recipient's tier, and creation stays blocked over the cap", async () => {

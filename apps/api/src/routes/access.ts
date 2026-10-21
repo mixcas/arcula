@@ -63,6 +63,7 @@ import {
 import { Hono } from "hono";
 import { requireMemberCollection, requireOwnerCollection } from "../authorize";
 import { db } from "../db";
+import { ownershipTransferMail } from "../email/compose";
 import { clientLink, emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
@@ -82,6 +83,9 @@ const memberColumns = {
   id: userTable.id,
   name: userTable.name,
   email: userTable.email,
+  // Read for the transfer notice's greeting; the access read does not
+  // serialize it.
+  firstName: userTable.firstName,
 };
 
 accessRoutes.get(
@@ -269,6 +273,7 @@ accessRoutes.delete(
 
 interface TransferMail {
   to: string;
+  firstName?: string | null;
   collectionId: string;
   collectionName: string;
   previousOwnerName: string;
@@ -276,26 +281,20 @@ interface TransferMail {
 
 /** The notice to the account that now owns the collection. The link lands on
  *  the manage page — the new owner's first job is there, not on the public
- *  view. */
+ *  view. The copy is the composer's; this function only builds the link. */
 async function sendTransferMail(mail: TransferMail): Promise<void> {
   const link = clientLink(
     `/manage/collection/${collectionSlug(mail.collectionName, mail.collectionId)}`,
   );
-  await emailProvider.send({
-    to: mail.to,
-    subject: `You now own ${mail.collectionName} on Arcula`,
-    text: [
-      "Hi,",
-      "",
-      `${mail.previousOwnerName} transferred the collection "${mail.collectionName}" to you on Arcula.`,
-      "You are its owner now.",
-      "",
-      `Open the collection: ${link}`,
-      "",
-      "The previous owner stays on as a collaborator. You can remove them, or transfer the collection again, from its access settings.",
-      "If you were not expecting this, contact the previous owner.",
-    ].join("\n"),
-  });
+  await emailProvider.send(
+    ownershipTransferMail({
+      to: mail.to,
+      firstName: mail.firstName,
+      collectionName: mail.collectionName,
+      previousOwnerName: mail.previousOwnerName,
+      url: link,
+    }),
+  );
 }
 
 // POST …/transfer — owner-only, and immediate. The recipient must already be a
@@ -418,6 +417,7 @@ accessRoutes.post(
     try {
       await sendTransferMail({
         to: recipient.email,
+        firstName: recipient.firstName,
         collectionId: collection.id,
         collectionName: collection.name,
         previousOwnerName: displayName(user.name, user.email),
