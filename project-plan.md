@@ -110,10 +110,13 @@ a config flip rather than a schema change.
 `skinOptions` (jsonb), `isPublic` (default `true`), `createdAt`, `updatedAt`.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
-namespace every final media key uses; the schema release backfills existing rows
-from `userId`, and the feature release makes the column `NOT NULL`. A transfer
-changes the owner but not the namespace, so no object moves and existing URLs
-keep working.
+namespace every final media key uses. The schema-first release adds it nullable
+and backfills existing rows from `userId`; the following release backfills any
+row the old code wrote in between (scoped to nulls, so a namespace the new code
+minted survives) and makes the column `NOT NULL`. The feature code keeps the
+`mediaNamespaceId ?? userId` fallback because the Lambda still deploys before
+the migration. A transfer changes the owner but not the namespace, so no object
+moves and existing URLs keep working.
 
 `skin` is read-time defaulted to the default skin and is never queried on, so it
 needs no backfill — the deliberate contrast with `deletedAt`. `skinOptions` is

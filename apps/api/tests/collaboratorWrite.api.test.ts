@@ -88,7 +88,7 @@ beforeAll(async () => {
     .select()
     .from(collectionsTable)
     .where(eq(collectionsTable.id, cid));
-  namespace = row.mediaNamespaceId ?? "";
+  namespace = row.mediaNamespaceId;
 
   mate = await share("WriteMate");
 });

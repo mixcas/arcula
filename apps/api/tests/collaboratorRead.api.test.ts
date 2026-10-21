@@ -62,6 +62,7 @@ beforeAll(async () => {
   await db.insert(collectionsTable).values({
     id: cid,
     userId: owner.userId,
+    mediaNamespaceId: uuid(),
     name: "Shared Wall",
     isPublic: false,
     createdAt: new Date(),

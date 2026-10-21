@@ -118,6 +118,7 @@ describe("GET /collections", () => {
     await db.insert(collectionsTable).values({
       id: uuid(),
       userId: owner.userId,
+      mediaNamespaceId: uuid(),
       name: "AAA Test Wall",
       isPublic: false,
     });
@@ -169,6 +170,7 @@ describe("GET /collections", () => {
     await db.insert(collectionsTable).values({
       id: sharedBoardId,
       userId: owner.userId,
+      mediaNamespaceId: uuid(),
       name: "Aaa Shared Board",
       isPublic: false,
     });

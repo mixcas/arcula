@@ -22,12 +22,20 @@ import { API, ORIGIN, req, uuid } from "./api";
 
 export async function makeCollection(
   userId: string,
-  opts: { isPublic?: boolean; name?: string } = {},
+  opts: {
+    isPublic?: boolean;
+    name?: string;
+    mediaNamespaceId?: string;
+  } = {},
 ): Promise<string> {
   const id = uuid();
   await db.insert(collectionsTable).values({
     id,
     userId,
+    // Required since 0004. The default is the owner's id — the shape 0004's
+    // backfill leaves on a pre-existing row, and the key segment the media
+    // fixtures build against. A suite that needs the minted shape passes one.
+    mediaNamespaceId: opts.mediaNamespaceId ?? userId,
     name: opts.name ?? "Test Collection",
     isPublic: opts.isPublic ?? true,
     createdAt: new Date(),

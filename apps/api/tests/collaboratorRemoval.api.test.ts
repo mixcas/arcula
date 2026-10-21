@@ -76,9 +76,7 @@ async function sharedCollection(
     .select()
     .from(collectionsTable)
     .where(eq(collectionsTable.id, cid));
-  // The fixture inserts no namespace, so the collection's media namespace is
-  // the owner's id — the same fallback `mediaNamespaceOf` reads.
-  return { cid, namespace: row.mediaNamespaceId ?? row.userId };
+  return { cid, namespace: row.mediaNamespaceId };
 }
 
 const membership = async (cid: string, userId: string) =>

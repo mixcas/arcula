@@ -104,6 +104,10 @@ const readMigration = (tag: string): string =>
     "utf8",
   );
 
+// The data statements a migration runs, in order: DDL is not a row write.
+const dataWrites = (sql: string): string[] =>
+  [...sql.matchAll(/\b(UPDATE|INSERT|DELETE|TRUNCATE)\b/g)].map((m) => m[1]);
+
 // The committed init migration.
 const INIT_SQL = readMigration("0000_init");
 
@@ -115,6 +119,9 @@ const DROP_SQL = readMigration("0002_drop_artwork_ispublic");
 
 // The committed schema-first migration for sharing.
 const SHARED_SQL = readMigration("0003_shared_collections");
+
+// The committed follow-up that tightens the media namespace.
+const NOT_NULL_SQL = readMigration("0004_media_namespace_not_null");
 
 describe("the eleven-table schema", () => {
   it("declares exactly the eleven tables, and `user` is singular", () => {
@@ -250,10 +257,10 @@ describe("the eleven-table schema", () => {
     expect(c.isPublic.default).toBe(true);
     expect(c.skin.notNull).toBe(false);
     expect(c.skinOptions.dataType).toBe("json");
-    // Fixed at creation from the migration onward; null only in the gap the
-    // old code leaves before it writes one.
+    // Fixed at creation and required once 0004 has run. The reader still
+    // tolerates null, because the Lambda deploys before the migration does.
     expect(c.mediaNamespaceId.dataType).toBe("string");
-    expect(c.mediaNamespaceId.notNull).toBe(false);
+    expect(c.mediaNamespaceId.notNull).toBe(true);
   });
 
   it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
@@ -478,10 +485,7 @@ describe("the committed sharing migration (as it will actually be applied)", () 
   it("touches no row beyond the collections backfill", () => {
     // The migration is DDL plus one data write: no insert, delete or truncate
     // can ride along under a title that only checked UPDATE.
-    const writes = [
-      ...SHARED_SQL.matchAll(/\b(UPDATE|INSERT|DELETE|TRUNCATE)\b/g),
-    ].map((m) => m[1]);
-    expect(writes).toEqual(["UPDATE"]);
+    expect(dataWrites(SHARED_SQL)).toEqual(["UPDATE"]);
     expect(SHARED_SQL).toContain(
       'UPDATE "collections" SET "mediaNamespaceId" = "userId"',
     );
@@ -514,5 +518,46 @@ describe("the committed sharing migration (as it will actually be applied)", () 
     );
     expect(SHARED_SQL).not.toContain('DROP INDEX "artworks_collection_id_idx"');
     expect(SHARED_SQL).not.toContain('DROP INDEX "collections_user_id_idx"');
+  });
+});
+
+describe("the committed namespace migration (as it will actually be applied)", () => {
+  it("backfills only the null rows from the owner, and writes nothing else", () => {
+    // Scoped to NULL: the new code mints a namespace at creation, and a
+    // backfill without the WHERE would overwrite it with the owner id and
+    // strand every key built from it. This is the column 0003 added, not a
+    // new one, and the update is the migration's only row write.
+    expect(NOT_NULL_SQL).toMatch(
+      /UPDATE "collections" SET "mediaNamespaceId" = "userId" WHERE "mediaNamespaceId" IS NULL/,
+    );
+    expect(NOT_NULL_SQL).not.toContain('ADD COLUMN "mediaNamespaceId"');
+    expect(NOT_NULL_SQL).not.toContain('DROP COLUMN "mediaNamespaceId"');
+    expect(dataWrites(NOT_NULL_SQL)).toEqual(["UPDATE"]);
+  });
+
+  it("sets NOT NULL only after both backfills, across 0003 and 0004", () => {
+    const sequence = `${SHARED_SQL}\n${NOT_NULL_SQL}`;
+    const adds = sequence.indexOf('ADD COLUMN "mediaNamespaceId" text;');
+    const firstBackfill = sequence.indexOf(
+      'UPDATE "collections" SET "mediaNamespaceId" = "userId"',
+    );
+    const finalBackfill = sequence.indexOf(
+      'UPDATE "collections" SET "mediaNamespaceId" = "userId" WHERE "mediaNamespaceId" IS NULL',
+    );
+    const tightens = sequence.indexOf(
+      'ALTER TABLE "collections" ALTER COLUMN "mediaNamespaceId" SET NOT NULL',
+    );
+    // add nullable (0003) → backfill (0003) → gap backfill (0004) → NOT NULL.
+    // A SET NOT NULL before the final backfill fails on the first row the old
+    // code inserted in the gap.
+    expect(adds).toBeGreaterThan(-1);
+    expect(firstBackfill).toBeGreaterThan(adds);
+    expect(finalBackfill).toBeGreaterThan(firstBackfill);
+    expect(tightens).toBeGreaterThan(finalBackfill);
+    // Neither half does the other's job: the schema-first release cannot
+    // tighten a column the old code still inserts without.
+    expect(SHARED_SQL).not.toContain(
+      'ALTER COLUMN "mediaNamespaceId" SET NOT NULL',
+    );
   });
 });

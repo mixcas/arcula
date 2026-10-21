@@ -81,7 +81,7 @@ beforeAll(async () => {
   const row = (
     await db.select().from(collectionsTable).where(eq(collectionsTable.id, cid))
   )[0];
-  namespace = row.mediaNamespaceId ?? "";
+  namespace = row.mediaNamespaceId;
 
   aid = uuid();
   stagedKeepUrl = await stageAndProcess(pKeep);
