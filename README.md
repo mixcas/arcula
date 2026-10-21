@@ -222,6 +222,9 @@ EMAIL_PROVIDER=smtp
 SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 EMAIL_FROM=Arcula <noreply@arcula.test>
+# Optional: the monitored inbox a recipient can answer. Unset sends no
+# Reply-To header at all; the code never invents an address.
+EMAIL_REPLY_TO=Arcula <hello@arcula.test>
 
 # The seed account (`bun run db:seed`)
 SEED_EMAIL=owner@example.test

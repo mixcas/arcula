@@ -53,6 +53,7 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
           CERT_ARN: ${{ vars.CERT_ARN }}
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          EMAIL_REPLY_TO: ${{ vars.EMAIL_REPLY_TO }}
           SEED_EMAIL: ${{ vars.SEED_EMAIL }}
           SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}
           SEED_NAME: ${{ vars.SEED_NAME }}
