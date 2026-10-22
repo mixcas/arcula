@@ -349,22 +349,26 @@ apps/
     src/
       App.tsx                # routes
       auth/                  # the Better Auth React client
-      components/            # ProductPage, auth/, manage/, collection/
-      hooks/                 # useAuth, useArtworkPhotos, useArtworkDocuments
+      components/            # ProductPage, auth/, manage/, collection/,
+                             # invitation/
+      hooks/                 # useAuth, useArtworkPhotos, useArtworkDocuments,
+                             # useUploadPool
       schemas/               # form schemas
       services/              # the API clients (api.ts is the transport)
       skins/                 # the public-view system
       theme.ts               # Mantine theme: fonts, sizes, spacing
+      utils/                 # artworkDocuments, csv, invitation, returnPath
   api/                       # Hono backend (Bun dev / Node 24 Lambda prod)
     src/
       app.ts                 # the Hono app: envelope, www redirect, mounts
       main.ts / lambda.ts    # the two entry points
       spa.ts                 # serves the built SPA in production
       access.ts authorize.ts artworkRead.ts auth.ts invitations.ts
-      session.ts
+      collectionPassword.ts collectionGrants.ts unlockThrottle.ts
+      session.ts clientAddress.ts
       routes/                # me, access, invitations, media, collections,
-                             # artworkMedia, artworks
-      media/                 # keys, pipeline, variants, promote
+                             # artworkMedia, artworkSave, artworks
+      media/                 # keys, pipeline, populations, variants, promote
       email/                 # SMTP locally, Resend in production
       db.ts storage.ts serialize.ts errors.ts env.ts
 packages/
