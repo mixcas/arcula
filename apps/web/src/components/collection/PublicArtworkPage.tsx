@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import CollectionLockScreen from "./CollectionLockScreen";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicArtwork } from "./usePublicCollection";
@@ -34,7 +35,7 @@ const PublicArtworkPage: React.FC = () => {
   const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
 
-  const state = usePublicArtwork(collectionId, artworkId);
+  const { state, reload } = usePublicArtwork(collectionId, artworkId);
   // See PublicCollectionPage: read once so the effect and the render share an
   // object, and so the identity is stable across re-renders.
   const ready = state.status === "ready" ? state.value : null;
@@ -57,6 +58,18 @@ const PublicArtworkPage: React.FC = () => {
       { replace: true },
     );
   }, [ready, collectionParam, artworkParam, navigate]);
+
+  if (state.status === "locked") {
+    // The same challenge as the collection page, because a work's own link is
+    // not a way around the collection's lock (ADR-0005).
+    return (
+      <CollectionLockScreen
+        collectionId={collectionId}
+        collectionName={state.collectionName}
+        onUnlocked={reload}
+      />
+    );
+  }
 
   if (state.status !== "ready") {
     return (

@@ -8,8 +8,11 @@
 //
 //   final photo    — the collection's owner or a collaborator, or a visitor
 //                    when access.ts's verdict admits the work (published,
-//                    live, in a public collection). A draft, a deleted work
-//                    and a work inside a private collection 404 for a
+//                    live, in a public collection, and — if that collection is
+//                    Protected — with a valid Access grant, which is why the
+//                    proxy reads the grant cookie too). A draft, a deleted
+//                    work, a work inside a private collection and a work
+//                    behind a password the reader has not entered 404 for a
 //                    non-member, uniformly: saying which was refused would be
 //                    a disclosure (the same call as the single-artwork read).
 //   final document — the owner and collaborators ONLY. Documents are never
@@ -33,6 +36,7 @@ import {
 import { Hono } from "hono";
 import { canReadArtworkDocuments, canSeeArtwork } from "../access";
 import {
+  grantHeld,
   loadArtworkInCollection,
   loadCollection,
   loadMembership,
@@ -50,7 +54,14 @@ export const mediaRoutes = new Hono();
 // re-saves the same entry, which the client does not do (a re-upload mints
 // a new entry id): one hour of edge caching is the stale window, at most.
 // Staged objects are per-session previews: no cache at all.
+//
+// `public` is only honest where the same URL answers the same bytes to any
+// reader. Two populations do not: a Protected collection's photo was admitted
+// by the reader's Access grant, and a document is a member's at every status.
+// Those go to the reader's own cache for the same hour, so a shared cache can
+// never hand the bytes to someone the verdict would refuse.
 const FINAL_CACHE = "public, max-age=3600";
+const PRIVATE_CACHE = "private, max-age=3600";
 const STAGED_CACHE = "no-store";
 
 mediaRoutes.get("/media", async (c) => {
@@ -112,10 +123,16 @@ mediaRoutes.get("/media", async (c) => {
     );
   }
 
+  // Which cache may keep these bytes: a document is a member's at every
+  // status, and a Protected collection's photo was admitted by the reader's
+  // grant, so neither is the same answer to every reader.
+  let cacheControl = FINAL_CACHE;
+
   if (parsed.population === "documents") {
     // Never public, members only — and the refusal is a 403, not a 404:
     // the key names a row, and the point of the split is that a
     // forgotten-to-hide UI fails closed.
+    cacheControl = PRIVATE_CACHE;
     const collection = await loadCollection(parsed.collectionId);
     const membership = collection
       ? await loadMembership(parsed.collectionId, collection, viewer)
@@ -139,11 +156,18 @@ mediaRoutes.get("/media", async (c) => {
       collection,
       viewer,
     );
-    if (!canSeeArtwork(membership, collection, artwork)) {
+    // The same verdict as the row, which is the whole point of the proxy: a
+    // Protected collection's bytes are behind the same challenge as its page,
+    // so the grant the reader holds (if any) is a fact this asks for too.
+    const hasValidGrant = await grantHeld(c, parsed.collectionId);
+    if (!canSeeArtwork(membership, collection, artwork, hasValidGrant)) {
       throw new ApiError(
         "not-found",
         "The object key does not name a stored object",
       );
+    }
+    if (collection.isPublic && collection.passwordHash !== null) {
+      cacheControl = PRIVATE_CACHE;
     }
   }
 
@@ -152,7 +176,7 @@ mediaRoutes.get("/media", async (c) => {
   return c.newResponse(bodyOf(res), 200, {
     "Content-Type": meta.contentType,
     "Content-Length": String(meta.size),
-    "Cache-Control": FINAL_CACHE,
+    "Cache-Control": cacheControl,
   });
 });
 

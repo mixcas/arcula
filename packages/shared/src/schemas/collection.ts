@@ -70,6 +70,21 @@ export const collectionUpdateSchema = z.object({
 export type CollectionUpdatePayload = z.infer<typeof collectionUpdateSchema>;
 
 /**
+ * POST /collections/{cid}/unlock. An attempt at a Protected collection's
+ * password, from the lock screen.
+ *
+ * Deliberately NOT `passwordSchema`: any non-blank string is a fair guess, and
+ * a short one is a wrong password rather than a malformed request — the route
+ * answers `invalid-password` for both, so a guess that cannot be right is not
+ * singled out from one that merely is not.
+ */
+export const collectionUnlockSchema = z.object({
+  password: z.string().min(1, "Enter the collection's password"),
+});
+
+export type CollectionUnlockPayload = z.infer<typeof collectionUnlockSchema>;
+
+/**
  * POST /collections/{cid}/import/csv. The envelope is deliberately loose
  * (`rows` is an array of unknowns): a row that fails the shared
  * `artworkSchema` belongs in the 200 response's `rejected`, not in a 400

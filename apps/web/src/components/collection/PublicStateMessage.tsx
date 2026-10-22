@@ -14,8 +14,10 @@ import { Alert, Container, Group, Loader, Text } from "@mantine/core";
 
 import type { PublicStatus } from "./usePublicCollection";
 
-/** The statuses that are not `ready` — what this component can be given. */
-export type UnreadyStatus = Exclude<PublicStatus, "ready">;
+/** The statuses that are not `ready` — what this component can be given.
+ *  `locked` is not among them: it is a prompt with a form, rendered by the
+ *  pages as chrome of its own (`CollectionLockScreen`). */
+export type UnreadyStatus = Exclude<PublicStatus, "ready" | "locked">;
 
 /** The statuses that get a sentence rather than a spinner. */
 type MessagedStatus = Exclude<UnreadyStatus, "loading">;

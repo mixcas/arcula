@@ -126,8 +126,26 @@ validated at read time against the selected skin's declared options; an unknown
 key is dropped and a wrong type falls back to the default, so a stale or
 hand-edited value cannot corrupt a collection.
 
-Collections are never deleted in this model. There is no `passwordHash` column:
-collection password protection is not built.
+Collections are never deleted in this model. `passwordHash` is nullable text —
+a one-way scrypt hash with its salt and cost parameters encoded in the string —
+so a collection with no password is the normal state rather than a gap to
+backfill. The plaintext is never stored and never reaches a client under any
+read, for any viewer, the owner included.
+
+### `collection_access_grants` and `collection_unlock_attempts`
+
+`collection_access_grants`: `collectionId`, `tokenHash` (unique), `createdAt`,
+`expiresAt`, with an index on `collectionId` so a password change revokes a
+collection's grants in one statement. It holds the SHA-256 hash of a 32-byte
+token, never the token: a database leak is a set of unguessable hashes, not a
+set of working grants. Expiry is computed from `expiresAt`, never stored as a
+status.
+
+`collection_unlock_attempts`: `(ip, collectionId, windowStart)` as the primary
+key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
+collection's throttle cannot lock visitors out of another's through a shared
+address. The window length is the route's policy, not the schema's. Nothing
+writes it yet (see _What is not built_).
 
 ### `collection_collaborators` and `collection_invitations`
 
@@ -272,6 +290,27 @@ a Visitor and an anonymous reader are one membership, `null`. The list route
 keeps its SQL filter, and a test pins the filter and the verdict to the same
 answer ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
 
+**Protected** is that gate with a second condition in front of it, not a third
+visibility state: a public collection whose `passwordHash` is set is readable by
+a non-member only when the request carries a valid **Access grant**
+([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
+Membership bypasses the challenge entirely, the grant admits exactly what a
+visitor sees — published, live works, and never a draft or a document — and a
+private collection stays closed to a grant holder. `canSeeCollection` and
+`canSeeArtwork` take the grant as a fact beside membership; `authorize.ts`'s
+`grantHeld` reads it off the cookie named for the collection (`arcula_grant_{id}`,
+`Path=/api/v1`, because the media proxy is one route for every collection's
+bytes, so the name rather than the path is the scope) and looks the row up by
+the collection id and the token's hash. The collection read, the artwork list,
+the single-artwork read and the media proxy all ask that one verdict, so the
+password covers the row and the bytes alike. The anonymous list filters on
+public **and not protected**, exactly as it excludes a private collection: a
+protected collection is shared as a link, not found in an index. A refused
+collection read answers `403 password-required` with the collection's name —
+a challenge the lock screen answers, and the deliberate contrast with the
+invitation token's uniform `not-found`, because here the artefact is not the
+secret.
+
 A collaborator is a row in `collection_collaborators`, never a second `userId`
 on the collection, and the owner is not duplicated there. Documents are readable
 by the owner and collaborators at every status, never by a visitor
@@ -315,6 +354,18 @@ expired, revoked or consumed invitation token answers `not-found` like an
 unknown one, as does an in-app decline of anything but the caller's own live
 offer.
 
+Collection passwords are built too. `PATCH /collections/:id` carries the
+password write (a string sets or overwrites it, `null` removes it, an absent key
+leaves it alone) and revokes the collection's grants in the same transaction;
+the member read carries `isPasswordProtected`, derived from the hash's presence,
+and the hash itself never leaves the server. `POST /collections/:id/unlock`
+takes a password and answers `201` with the grant cookie or `403
+invalid-password`; a collection with no password (or a private one) answers
+`409`, because there is nothing to get past. Both new codes are `403`
+(`password-required` for the challenge, `invalid-password` for a failed
+attempt), and the envelope's fixed set gained them rather than overloading
+`forbidden`.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
@@ -334,6 +385,18 @@ skin must not use a portaled Mantine component, which would render outside that
 scope. Skins are registered in `src/skins/registry.ts` (`basicx` is the default),
 and a collection's stored options are resolved against the skin's declared specs
 with an unknown key reported rather than silently dropped.
+
+A Protected collection's lock screen is app chrome, not a skin: the public page
+renders it beside the canonical-URL rewrite, outside the skin's scope, because
+the lock is about the collection rather than how it is presented, and because a
+prompt is the portaled component a skin may not use. It is reached as a state,
+not an error: the collection read's `403 password-required` folds to `locked`,
+the screen names the collection the refusal named, and a wrong password is the
+one attempt failure with its own sentence. On success it calls the hook's
+`reload`, which re-runs the ordinary load — collection first, artworks second —
+with the grant cookie now set, so there is one path to ready. An expired grant
+re-enters the same way: the next read is refused again and the reader lands back
+on the lock screen rather than on an error page.
 
 The dashboard lists owned and shared collections together with a role badge and
 the owner's name on a shared row; its cap counter counts owned collections only.
@@ -364,16 +427,16 @@ without being refused. The free tier is one owned collection.
 
 Roughly in order of how much it matters:
 
-- **Password protection for public collections.** There is no `passwordHash`
-  column and no verification path; the public page is public or it is not shown.
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would
   need a second permission matrix on the server and in every management screen.
 - **Per-work attribution or an audit trail.** `artworks.userId` mirrors the
   collection owner, so the record does not say who added or edited a work.
 - **Accepting or declining an ownership transfer.** A transfer is immediate and
   sends a notice; reversing it is another transfer.
-- **Invitation rate limiting.** The password-reset mail is unthrottled too; both
-  need one limiter.
+- **Rate limiting.** Neither the invitation create route, the password-reset mail
+  nor the unlock route is throttled: `collection_unlock_attempts` is in the
+  schema and nothing writes it, so a human-chosen collection password can be
+  guessed at server speed.
 - **A collaborator cap.** A collection may invite any number of collaborators.
 - **Account deletion**, and what it means for a collection's owner or a
   collaborator.

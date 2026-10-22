@@ -3,7 +3,7 @@
 The Drizzle schema for the Arcula backend: thirteen tables, including the two
 sharing tables from
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) and the
-two a protected collection will need from
+two password tables from
 [ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
@@ -15,8 +15,8 @@ tables**: `collections`, `collection_collaborators`,
 `artwork_photo_variants`, `artwork_documents`. The sharing tables are in the
 schema, and the feature code reads them on every access question and writes
 them through the invitation, removal, leaving and transfer routes. The two
-password tables and `collections.passwordHash` are in the schema too, shipped
-one release before the code that reads them, by the forward-only rule.
+password tables and `collections.passwordHash` are read and written by the
+password routes.
 
 Layout:
 

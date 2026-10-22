@@ -15,6 +15,13 @@
 > ownership transfers without moving media. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
 > as-built detail is in **Sharing** below.
+>
+> **Collection passwords are built too.** A password is a second condition on a
+> public collection, answered by an Access grant in a per-collection cookie; the
+> design record is
+> [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)
+> and the as-built detail is under **Protected collections**. The unlock
+> throttle is **not** built (issue #90).
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -152,18 +159,28 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   holds the pure decisions derived from it.
 - `access.ts` — the access verdicts, pure over loaded rows: the membership
   fact (owner, collaborator, nobody) and the visitor rule (the collection is
-  the only gate); `authorize.ts` loads the collection, the viewer's membership
-  row and the row each route acts on, and answers the one write question —
-  `requireMemberCollection` / `requireMemberArtwork`, owner or collaborator —
-  that every write path asks.
+  the only gate, with an Access grant as the second condition on a Protected
+  one); `authorize.ts` loads the collection, the viewer's membership row and
+  the row each route acts on, reads the grant (`grantHeld`, from the cookie
+  named for that collection) where a visitor needs one, and answers the one
+  write question — `requireMemberCollection` / `requireMemberArtwork`, owner or
+  collaborator — that every write path asks.
+- `collectionGrants.ts` — the Access grant's pure facts: `mintGrantToken`,
+  `hashGrantToken`, `grantCookieName` and `isGrantUsable` (not past
+  `expiresAt`); `GRANT_TTL_MS` (twelve hours) is the one number behind both the
+  cookie's `Max-Age` and the row's expiry. No database and no Hono — the unlock
+  route mints and stores, the read paths load the row and ask this.
+- `collectionPassword.ts` — hashing (`hashPassword`) and the check
+  (`verifyPassword`) for a collection's password.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
   Collection, the work, its photos, documents and Variants) or a Collection's
   list (the Collection, the works once, each child table once for the whole
   page — at most five queries, six for a collaborator's membership row),
   returning ok, not-found, or forbidden for the list. The verdict is
-  `access.ts`'s over rows the module loads through `authorize.ts`; the module
-  carries no Hono type and the route owns the wire code. The save routes read
-  their work back through it.
+  `access.ts`'s over rows the module loads through `authorize.ts`, with the
+  request's grant validity handed in as a fact; the module carries no Hono type
+  and the route owns the wire code. The save routes read their work back
+  through it.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
@@ -172,8 +189,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `collections`, `access` (the access read, removal, leaving and
-  transfer), `invitations` (create,
+- `routes/` — `collections` (the reads, the settings write, `…/unlock` and the
+  import), `access` (the access read, removal, leaving and transfer),
+  `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
   (stage/process, under the caller's own staging prefix).
@@ -197,12 +215,16 @@ system.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `collections`, `collectionCollaborators`,
-`collectionInvitations`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
-`artworkDocuments`) and the `schema` object the adapter consumes. The two
-sharing tables are in the schema and `collectionCollaborators` is read on every
+`collectionInvitations`, `collectionAccessGrants`, `collectionUnlockAttempts`,
+`artworks`, `artworkPhotos`, `artworkPhotoVariants`, `artworkDocuments`) and the
+`schema` object the adapter consumes. The two sharing tables are in the schema
+and `collectionCollaborators` is read on every
 access question; the invitation routes write `collectionInvitations`, while the
 code that writes `collectionCollaborators` covers acceptance, removal, leaving
 and transfer, which swaps the two membership rows and rewrites the owner.
+`collections.passwordHash` is the one password fact; `collectionAccessGrants`
+holds a grant's token hash and its expiry, and `collectionUnlockAttempts` exists
+for the throttle that is not built yet.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an
@@ -280,6 +302,43 @@ between (`WHERE "mediaNamespaceId" IS NULL`) and set the column `NOT NULL`.
 worked example of the forward-only rule above. The full schema narrative is in
 `project-plan.md`; the migration detail is in `packages/db/README.md`.
 
+## Protected collections
+
+A password is a **second condition on a public collection**, never a third
+visibility state ([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
+`collections.passwordHash` nullable is the whole of the stored protection — a
+collection without one is the normal state — and the member read carries
+`isPasswordProtected`, derived from the hash's presence, while the hash never
+leaves the server. Membership bypasses the challenge; a visitor needs an
+**Access grant**.
+
+The grant is a 32-byte token in the cookie named for its collection
+(`arcula_grant_{id}`, `Path=/api/v1`, `HttpOnly`, `SameSite=Lax`, twelve
+hours), and the row stores only its SHA-256 hash with the same expiry. The
+cookie's path is broad because the media proxy is one route for every
+collection's bytes; the **name** is the scope, and `grantHeld` reads only the
+name for the collection it serves and looks the row up by collection id and
+token hash, so a grant minted elsewhere is never consulted. The verdict is still
+`access.ts`'s: `canSeeCollection` and `canSeeArtwork` take the grant as a fact
+beside membership, and the collection read, the artwork list, the single-artwork
+read and the media proxy all ask it — so a grant admits exactly what a visitor
+sees (published, live works; never a draft, never a document) and a private
+collection stays shut to a grant holder.
+
+`POST /collections/:id/unlock` takes the password: `201` and the cookie on
+success, `403 invalid-password` on a wrong one, `409` on a collection with no
+password (or a private one, where there is nothing to get past). A refused
+collection read is `403 password-required` with `details.collectionName`, which
+the public pages fold to the lock screen — app chrome, not a skin — and whose
+success calls the hook's `reload` to re-run the ordinary load, collection read
+first. An expired grant lands back on the lock screen the same way. A password
+write (`PATCH /collections/:id`) revokes the collection's grants in the same
+transaction, so changing the password closes every open cookie.
+
+**Not built yet:** the unlock throttle. `collection_unlock_attempts` is in the
+schema and nothing writes it, so a human-chosen password has no rate limit —
+that is issue #90, and the deliberate gap is recorded in `project-plan.md`.
+
 ## What to test
 
 The suite is fast, so volume is not the problem. **Altitude** is: every test is
@@ -301,7 +360,7 @@ Three tiers, and the first is where nearly everything belongs:
    `parseAcquisitionDate` (`packages/shared/src/schemas/artworkImport.ts`),
    `sortPhotos` / `reindexPhotos` (`packages/shared/src/artworkPhotos.ts`),
    `collectionLimitForTier` (`packages/shared/src/limits.ts`),
-   `publicCollectionState`
+   `publicCollectionState` / `publicFailure`
    (`apps/web/src/components/collection/usePublicCollection.ts`),
    `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
    verdict (`apps/api/src/access.ts`). Ours end to end, and where a real

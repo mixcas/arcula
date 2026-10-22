@@ -377,6 +377,9 @@ describe("GET /api/v1/media — final documents", () => {
     const own = await get(key, owner.cookies);
     expect(own.status).toBe(200);
     expect(own.headers.get("Content-Type")).toBe("application/pdf");
+    // A document is a member's at every status, so its bytes are never a
+    // public answer: no shared cache may hand them to the next reader.
+    expect(own.headers.get("Cache-Control")).toBe("private, max-age=3600");
     const pdf = makePdf();
     expect(Array.from(new Uint8Array(await own.arrayBuffer()))).toEqual(
       Array.from(pdf),

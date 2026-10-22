@@ -2,7 +2,9 @@
 // against it, and hand the route a row it can trust.
 //
 //   readable — the collection exists and the viewer is a member of it or is
-//              looking at something public (the visitor rule in access.ts).
+//              looking at something public (the visitor rule in access.ts),
+//              which for a Protected collection also means holding a valid
+//              Access grant (`grantHeld`, read off the collection's cookie).
 //   member   — the collection exists and the caller is its owner or one of
 //              its collaborators. Every write path — the collection's
 //              settings, artwork create/edit/restore/bulk-delete, CSV import,
@@ -17,7 +19,8 @@
 //
 // The split between "does not exist" (404) and "you may not see it"
 // matters for visitors: a private collection 403s, never 404s — the web
-// client maps that refusal to its "private" state.
+// client maps that refusal to its "private" state — and a Protected one
+// 403s with `password-required` and its name, which maps to the lock screen.
 //
 // `artworks.userId` is never compared with the caller: it mirrors the
 // collection's owner (ADR-0004), and a row's own id must not admit anyone the
@@ -25,8 +28,10 @@
 
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
 import {
   artworks as artworksTable,
+  collectionAccessGrants as grantsTable,
   collectionCollaborators as collectionCollaboratorsTable,
   collections as collectionsTable,
 } from "@arcula/db";
@@ -40,6 +45,11 @@ import {
   type CollectionFacts,
   type Membership,
 } from "./access";
+import {
+  grantCookieName,
+  hashGrantToken,
+  isGrantUsable,
+} from "./collectionGrants";
 import { db } from "./db";
 import { ApiError } from "./errors";
 import { resolveSession } from "./session";
@@ -129,6 +139,12 @@ export const loadArtworkById = async (
  * cannot read 403s — never 404s, the web client maps that refusal to its
  * "private" state.
  *
+ * A Protected collection a non-member holds no grant for is the other 403, and
+ * it is a distinct code (`password-required`) carrying the collection's name:
+ * it is a challenge rather than a refusal, and the lock screen it opens has to
+ * be able to name what is being unlocked (ADR-0005). The name rides that one
+ * refusal only — a private collection's says nothing.
+ *
  * The audience comes back with the row because it decides what the read may
  * say: a member's document carries the password state, a visitor's does not.
  */
@@ -146,11 +162,67 @@ export async function requireReadableCollection(
     collection,
     session?.user.id ?? null,
   );
-  if (!canSeeCollection(membership, collection)) {
-    throw new ApiError("forbidden", "This collection is private");
+  // A member bypasses the challenge, so the grant is only worth loading for
+  // someone it could admit.
+  const hasValidGrant = isMember(membership)
+    ? false
+    : await grantHeld(c, collectionId);
+  if (!canSeeCollection(membership, collection, hasValidGrant)) {
+    throw collectionRefusal(collection);
   }
   return { collection, audience: audienceOf(membership) };
 }
+
+/**
+ * How a collection the verdict refuses is answered. A Public collection with a
+ * password is a challenge — it names itself so the lock screen can ask for the
+ * password — and everything else is the plain refusal for a private one.
+ *
+ * The name rides in `details`, the envelope's one nested slot, because
+ * `errorResponse` spreads a detail at the top level: a bare
+ * `{ collectionName }` would land on `error.collectionName`, which no client
+ * reads and the lock screen would never see.
+ */
+function collectionRefusal(collection: CollectionFacts & { name: string }) {
+  if (collection.isPublic && collection.passwordHash != null) {
+    return new ApiError("password-required", "This collection is protected", {
+      details: { collectionName: collection.name },
+    });
+  }
+  return new ApiError("forbidden", "This collection is private");
+}
+
+/**
+ * Whether this request holds a usable grant for THIS collection.
+ *
+ * The cookie's name is the scope: only `arcula_grant_{collectionId}` is read,
+ * so a grant minted for another collection is never consulted (ADR-0005). The
+ * row is looked up by the collection id and the token's hash, so a token
+ * replayed under the wrong name finds nothing either, and expiry is the same
+ * pure question everywhere (`isGrantUsable`).
+ *
+ * A request with no such cookie costs no query — which is every member's and
+ * every visitor's ordinary read.
+ */
+export const grantHeld = async (
+  c: Context,
+  collectionId: string,
+): Promise<boolean> => {
+  const token = getCookie(c, grantCookieName(collectionId));
+  if (!token) return false;
+  const row = (
+    await db
+      .select({ expiresAt: grantsTable.expiresAt })
+      .from(grantsTable)
+      .where(
+        and(
+          eq(grantsTable.collectionId, collectionId),
+          eq(grantsTable.tokenHash, hashGrantToken(token)),
+        ),
+      )
+  )[0];
+  return row !== undefined && isGrantUsable(row);
+};
 
 /**
  * The write-side check: the collection exists and the caller is a member of

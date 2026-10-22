@@ -4,6 +4,7 @@
 //   POST   /collections                              create (cap check first)
 //   GET    /collections/{cid}                        one collection
 //   PATCH  /collections/{cid}                        update
+//   POST   /collections/{cid}/unlock                 the lock screen's password attempt
 //   POST   /collections/{cid}/import/csv             the CSV import's bulk write
 //   POST   /collections/{cid}/artworks/bulk-delete   the batch soft delete
 //   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (present, unused in beta)
@@ -32,6 +33,7 @@ import {
   artworkBulkDeleteSchema,
   artworkImportSchema,
   collectionCreateSchema,
+  collectionUnlockSchema,
   collectionUpdateSchema,
   collectionLimitForTier,
   artworkSchema,
@@ -39,17 +41,27 @@ import {
   type ArtworkBulkDeletePayload,
   type ArtworkImportPayload,
   type CollectionCreatePayload,
+  type CollectionUnlockPayload,
   type CollectionUpdatePayload,
 } from "@arcula/shared";
 import { Hono } from "hono";
+import { setCookie } from "hono/cookie";
 import {
   loadCollection,
   requireMemberArtwork,
   requireMemberCollection,
   requireReadableCollection,
 } from "../authorize";
-import { hashPassword } from "../collectionPassword";
+import {
+  GRANT_COOKIE_PATH,
+  GRANT_TTL_MS,
+  grantCookieName,
+  hashGrantToken,
+  mintGrantToken,
+} from "../collectionGrants";
+import { hashPassword, verifyPassword } from "../collectionPassword";
 import { db } from "../db";
+import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
 import { mintId } from "../ids";
@@ -265,6 +277,59 @@ collectionRoutes.patch(
     return c.json(serializeCollection(row, { audience: "member" }));
   },
 );
+
+// POST …/unlock — the lock screen's password attempt, and the one route a
+// non-member reaches a Protected collection through.
+//
+// A right password mints an Access grant: a 32-byte token whose only stored
+// form is its SHA-256 hash, in a row that expires in twelve hours, handed back
+// as the cookie named for this collection on the API path. The cookie is
+// `HttpOnly` because no script needs it, and `SameSite=Lax` because one
+// collection's page fetching another's bytes is not a case the product has.
+//
+// A wrong password is `403 invalid-password`, deliberately distinct from the
+// uniform `not-found` an invitation token gets: the reader already has the
+// lock screen, which named the collection, so a uniform refusal would buy no
+// secrecy and only cost the prompt the ability to say "that is not it"
+// (ADR-0005).
+//
+// A collection with no password, or a private one, is not unlockable at all:
+// there is nothing in front of it to get past. The attempt is answered `409`
+// — the state the request does not suit, rather than a permission question.
+collectionRoutes.post("/collections/:collectionId/unlock", async (c) => {
+  const collection = await loadCollection(param(c, "collectionId"));
+  if (!collection) {
+    throw new ApiError("not-found", "The collection does not exist");
+  }
+  if (!collection.isPublic || collection.passwordHash === null) {
+    throw new ApiError("conflict", "This collection is not protected");
+  }
+  const payload: CollectionUnlockPayload = await parseBody(
+    c,
+    collectionUnlockSchema,
+  );
+  if (!(await verifyPassword(payload.password, collection.passwordHash))) {
+    throw new ApiError("invalid-password", "That is not the password");
+  }
+
+  const now = new Date();
+  const token = mintGrantToken();
+  await db.insert(grantsTable).values({
+    collectionId: collection.id,
+    tokenHash: hashGrantToken(token),
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + GRANT_TTL_MS),
+  });
+  // One number for both clocks: the cookie lapses when the row does.
+  setCookie(c, grantCookieName(collection.id), token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: GRANT_COOKIE_PATH,
+    maxAge: GRANT_TTL_MS / 1000,
+    secure: useSecureCookies,
+  });
+  return c.json({ unlocked: true }, 201);
+});
 
 // POST …/import/csv — one row per validated artwork. Each row is checked
 // against the shared `artworkSchema` the Add/Edit forms use: a failing row
