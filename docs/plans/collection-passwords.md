@@ -29,7 +29,7 @@ what the work had to reconcile — none of it describes the code today.
 ## The vocabulary this introduces
 
 **Protected** and **Access grant**, both defined in
-[GLOSSARY.md](../GLOSSARY.md).
+[GLOSSARY.md](../../GLOSSARY.md).
 
 ## Release 1 — the schema, alone
 

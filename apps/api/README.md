@@ -162,8 +162,9 @@ Membership bypasses the challenge; a non-member needs a valid Access grant. A
 refused collection read is `403 password-required` with the collection's name
 in `details.collectionName`, which the public pages fold to the lock screen. A
 refused work, artwork list or media object is not that challenge: the list
-answers `403 forbidden` (as a Private collection does), and a single work or an
-object answers `404`.
+answers `403 forbidden` (as a Private collection does), and a single work or a
+photo object answers `404` (a document is `403` to a non-member, whatever the
+collection).
 
 **Unlocking.** `POST /collections/:collectionId/unlock` takes
 `{ "password": "…" }` — any non-blank guess, not the eight-character rule,
