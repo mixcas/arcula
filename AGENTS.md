@@ -191,7 +191,7 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
 - `invitations.ts` — the pure token algebra (`mintInvitationToken`,
-  `hashInvitationToken`, `normalizeEmail`) and the two questions the routes ask
+  `hashInvitationToken`) and the two questions the routes ask
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
@@ -212,11 +212,13 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   failure surfaces as `emailSent: false`, never as a failed write.
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
-**`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
-collection, invitation, document, user), `artworkPhotos.ts` (the `order`
-invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file
-caps + accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
-`types.ts`.
+**`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
+artworkImport, collection, invitation, document, user), `artworkPhotos.ts` (the
+`order` invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder),
+`caps.ts` (file caps + accepted types), `limits.ts` (the per-tier collection
+cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase both sides use),
+`invitationTime.ts` (the invitation durations and the two questions the access
+card asks of a row), `slug.ts`, `types.ts`.
 
 **`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;

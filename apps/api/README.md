@@ -152,12 +152,14 @@ commit in one transaction, so a password change can never leave a reader
 holding a grant to the old password. A `null` write revokes too, though there
 is nothing left to admit. The hash itself is never a wire field.
 
-**Reading a Protected collection.** The member read — each signed-in `GET
-/collections` row and `GET /collections/:collectionId` for the owner or a
-collaborator — carries `isPasswordProtected`, derived from the hash's presence.
-A visitor's document does not carry the field at all, not even `false`. The
-anonymous `GET /collections` omits a Protected collection exactly as it omits a
-Private one, so a Protected collection is reachable only by its direct link.
+**Reading a Protected collection.** `isPasswordProtected` is on every
+member-audience collection document — each signed-in `GET /collections` row,
+`GET /collections/:collectionId` for the owner or a collaborator, and the
+`POST /collections` and `PATCH /collections/:collectionId` responses — derived
+from the hash's presence. A visitor's document does not carry the field at
+all, not even `false`. The anonymous `GET /collections` omits a Protected
+collection exactly as it omits a Private one, so a Protected collection is
+reachable only by its direct link.
 Membership bypasses the challenge; a non-member needs a valid Access grant. A
 refused collection read is `403 password-required` with the collection's name
 in `details.collectionName`, which the public pages fold to the lock screen. A
@@ -167,7 +169,7 @@ photo object answers `404` (a document is `403` to a non-member, whatever the
 collection).
 
 **Unlocking.** `POST /collections/:collectionId/unlock` takes
-`{ "password": "…" }` — any non-blank guess, not the eight-character rule,
+`{ "password": "…" }` — any non-empty guess, not the eight-character rule,
 because a short guess is a wrong password rather than a malformed request. A
 right password answers `201` `{ "unlocked": true }` and sets the Access grant
 cookie. A wrong one is `403 invalid-password`, deliberately distinct from the

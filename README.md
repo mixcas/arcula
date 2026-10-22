@@ -57,27 +57,27 @@ is yours to argue with.
 
 Early, and honest about what is missing:
 
-| Area                                        | State                                                 |
-| ------------------------------------------- | ----------------------------------------------------- |
-| Email/password auth, protected routes       | Working (Better Auth)                                 |
-| Sign up                                     | Working                                               |
-| Sign in / sign out, password reset by email | Working                                               |
-| Account profile (name), change password     | Working                                               |
-| Create, list, view, rename collections      | Working                                               |
-| Share a collection with collaborators       | Working (invite, administer, remove, leave, transfer) |
-| Collections per account                     | Free tier cap: one owned collection; shared excluded  |
-| Public/private flag per collection          | Working                                               |
-| List a collection's artworks                | Working                                               |
-| Add and edit an artwork                     | Working                                               |
-| Published/draft status per artwork          | Working; the collection is the gate                   |
-| Public collection and single-artwork pages  | Working (the "skins")                                 |
-| Photo uploads                               | Working — server-side variants (5 + original)         |
-| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy          |
-| Soft delete of artworks (in bulk)           | Working                                               |
-| Restore a soft-deleted artwork              | API route present; no trash UI yet                    |
-| CSV import of artworks                      | Working                                               |
-| Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)         |
-| Delete a collection, export, search         | Not implemented (see the roadmap)                     |
+| Area                                        | State                                                         |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| Email/password auth, protected routes       | Working (Better Auth)                                         |
+| Sign up                                     | Working                                                       |
+| Sign in / sign out, password reset by email | Working                                                       |
+| Account profile (name), change password     | Working                                                       |
+| Create, list, view, rename collections      | Working                                                       |
+| Share a collection with collaborators       | Working (invite, administer, remove, leave, transfer)         |
+| Collections per account                     | Free tier cap: one owned collection; shared ones do not count |
+| Public/private flag per collection          | Working                                                       |
+| List a collection's artworks                | Working                                                       |
+| Add and edit an artwork                     | Working                                                       |
+| Published/draft status per artwork          | Working; the collection is the gate                           |
+| Public collection and single-artwork pages  | Working (the "skins")                                         |
+| Photo uploads                               | Working — server-side variants (5 + original)                 |
+| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy                  |
+| Soft delete of artworks (in bulk)           | Working                                                       |
+| Restore a soft-deleted artwork              | API route present; no trash UI yet                            |
+| CSV import of artworks                      | Working                                                       |
+| Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)                 |
+| Delete a collection, export, search         | Not implemented (see the roadmap)                             |
 
 ### How access control works
 
@@ -124,11 +124,11 @@ because the media proxy is one route for every collection's bytes, so the same
 grant covers the page and the bytes behind it. A grant admits exactly what a
 visitor sees — published, live works, never a draft and never a document — and
 the anonymous collection list excludes a Protected collection as it excludes a
-Private one, so it is reachable only by its direct link. A refused read answers
-`403 password-required` and folds to the Lock screen; unlock attempts are
-throttled per address and collection in a fixed ten-minute window, and changing
-the password revokes every outstanding grant. The decision, and the
-alternatives it rejected, are in
+Private one, so it is reachable only by its direct link. A refused collection
+read answers `403 password-required` and folds to the Lock screen; unlock
+attempts are throttled per address and collection in a fixed ten-minute
+window, and changing the password revokes every outstanding grant. The
+decision, and the alternatives it rejected, are in
 [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
 ## Mail
