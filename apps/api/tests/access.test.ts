@@ -33,10 +33,15 @@ const COLLABORATOR_MEMBERSHIP: Membership = "collaborator";
 const NOBODY: Membership = null;
 
 const collection = (
-  overrides: { userId?: string; isPublic?: boolean } = {},
+  overrides: {
+    userId?: string;
+    isPublic?: boolean;
+    passwordHash?: string;
+  } = {},
 ) => ({
   userId: overrides.userId ?? OWNER,
   isPublic: overrides.isPublic ?? true,
+  passwordHash: overrides.passwordHash ?? null,
 });
 
 const collaboratorRow = (userId: string) => ({ userId });
@@ -53,6 +58,11 @@ const artwork = (
 
 const PUBLISHED_AND_PUBLIC = collection();
 const PRIVATE_COLLECTION = collection({ isPublic: false });
+/** Public with a second condition: a password, and a grant to get past it. */
+const PROTECTED_COLLECTION = collection({ passwordHash: "scrypt$stored" });
+
+const GRANT = true;
+const NO_GRANT = false;
 
 const LIVE_PUBLISHED = artwork();
 const LIVE_DRAFT = artwork({ status: "draft" });
@@ -95,9 +105,15 @@ describe("membershipOf", () => {
 });
 
 describe("canSeeCollection", () => {
-  it("admits the owner and every collaborator, public or private", () => {
+  it("admits the owner and every collaborator, public, private or protected, with no grant", () => {
+    // Membership is the strongest verdict: the password is a second condition
+    // on a visitor, never on somebody already inside (ADR-0005).
     for (const membership of [OWNER_MEMBERSHIP, COLLABORATOR_MEMBERSHIP]) {
-      for (const coll of [PUBLISHED_AND_PUBLIC, PRIVATE_COLLECTION]) {
+      for (const coll of [
+        PUBLISHED_AND_PUBLIC,
+        PRIVATE_COLLECTION,
+        PROTECTED_COLLECTION,
+      ]) {
         expect(canSeeCollection(membership, coll)).toBe(true);
       }
     }
@@ -111,15 +127,35 @@ describe("canSeeCollection", () => {
     expect(canSeeCollection(NOBODY, PUBLISHED_AND_PUBLIC)).toBe(true);
     expect(canSeeCollection(NOBODY, PRIVATE_COLLECTION)).toBe(false);
   });
+
+  it("admits a non-member to a protected collection only with a valid grant", () => {
+    expect(canSeeCollection(NOBODY, PROTECTED_COLLECTION, GRANT)).toBe(true);
+    // The grant's validity is a fact the caller loads and decides: absent,
+    // malformed and wrong-collection grants all arrive as `false` here.
+    expect(canSeeCollection(NOBODY, PROTECTED_COLLECTION, NO_GRANT)).toBe(
+      false,
+    );
+    expect(canSeeCollection(NOBODY, PROTECTED_COLLECTION)).toBe(false);
+  });
+
+  it("refuses a private collection even with a valid grant", () => {
+    // The password is a condition on Public, not a third visibility state:
+    // `isPublic` remains the only gate (ADR-0005).
+    expect(canSeeCollection(NOBODY, PRIVATE_COLLECTION, GRANT)).toBe(false);
+  });
 });
 
 describe("canSeeArtwork", () => {
-  it("shows the owner and every collaborator every work of the collection", () => {
+  it("shows the owner and every collaborator every work of the collection, protected or not", () => {
     // Status and tombstones are the visitor's question, not a member's: a
     // collaborator editing a draft, or restoring a deleted work, must read it.
     for (const membership of [OWNER_MEMBERSHIP, COLLABORATOR_MEMBERSHIP]) {
       for (const row of [LIVE_PUBLISHED, LIVE_DRAFT, DELETED]) {
-        for (const coll of [PUBLISHED_AND_PUBLIC, PRIVATE_COLLECTION]) {
+        for (const coll of [
+          PUBLISHED_AND_PUBLIC,
+          PRIVATE_COLLECTION,
+          PROTECTED_COLLECTION,
+        ]) {
           expect(canSeeArtwork(membership, coll, row)).toBe(true);
         }
       }
@@ -182,6 +218,37 @@ describe("canSeeArtwork", () => {
       expect(canSeeArtwork(NOBODY, coll, row)).toBe(false);
     },
   );
+
+  it("shows a non-member with a valid grant a published, live work of a protected collection", () => {
+    expect(
+      canSeeArtwork(NOBODY, PROTECTED_COLLECTION, LIVE_PUBLISHED, GRANT),
+    ).toBe(true);
+  });
+
+  it("hides a published, live work of a protected collection without a valid grant", () => {
+    expect(
+      canSeeArtwork(NOBODY, PROTECTED_COLLECTION, LIVE_PUBLISHED, NO_GRANT),
+    ).toBe(false);
+    expect(canSeeArtwork(NOBODY, PROTECTED_COLLECTION, LIVE_PUBLISHED)).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ["a draft", LIVE_DRAFT],
+    ["a deleted work", DELETED],
+  ] as const)("never lets a grant admit %s", (_label, row) => {
+    // The password buys entry through the collection's gate; once through,
+    // the visitor rule decides what is inside (ADR-0005).
+    expect(canSeeArtwork(NOBODY, PROTECTED_COLLECTION, row, GRANT)).toBe(false);
+  });
+
+  it("does not let a grant admit a work of a private collection", () => {
+    // A private collection stays private whatever grant the reader holds.
+    expect(
+      canSeeArtwork(NOBODY, PRIVATE_COLLECTION, LIVE_PUBLISHED, GRANT),
+    ).toBe(false);
+  });
 });
 
 describe("canReadArtworkDocuments", () => {
