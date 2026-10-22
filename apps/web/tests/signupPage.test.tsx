@@ -90,8 +90,10 @@ const submitSignUp = async (
     lastName?: string;
     email?: string;
     password?: string;
+    confirmation?: string;
   } = {},
 ) => {
+  const password = values.password ?? "sunlight-123";
   await user.type(
     screen.getByLabelText(/^First name/),
     values.firstName ?? "Sofía",
@@ -104,9 +106,10 @@ const submitSignUp = async (
     screen.getByLabelText(/^Email/),
     values.email ?? "new@example.test",
   );
+  await user.type(screen.getByLabelText(/^Password/), password);
   await user.type(
-    screen.getByLabelText(/^Password/),
-    values.password ?? "sunlight-123",
+    screen.getByLabelText(/^Confirm password/),
+    values.confirmation ?? password,
   );
   await user.click(screen.getByRole("button", { name: "Sign up" }));
 };
@@ -154,20 +157,55 @@ describe("the sign-up schema and payload (tier 1)", () => {
     expect(badEmail.success).toBe(false);
   });
 
+  it("rejects a mismatched pair on the confirmation field and accepts a matching one", () => {
+    const values = {
+      ...EMPTY_SIGN_UP_FORM,
+      email: "a@b.co",
+      password: "sunlight-123",
+      firstName: "Sofía",
+    };
+
+    const mismatch = signUpSchema.safeParse({
+      ...values,
+      confirmPassword: "sunlight-124",
+    });
+    expect(mismatch.success).toBe(false);
+    if (!mismatch.success) {
+      expect(mismatch.error.issues).toContainEqual(
+        expect.objectContaining({
+          message: "Passwords do not match",
+          path: ["confirmPassword"],
+        }),
+      );
+    }
+
+    expect(
+      signUpSchema.safeParse({
+        ...values,
+        confirmPassword: "sunlight-123",
+      }).success,
+    ).toBe(true);
+  });
+
   it("derives the core name from the trimmed halves, dropping a blank last name", () => {
     const both = toSignUpPayload({
       email: "a@b.co",
       password: "sunlight-123",
+      confirmPassword: "sunlight-123",
       firstName: "  Sofía  ",
       lastName: "  Lara ",
     });
     expect(both.name).toBe("Sofía Lara");
     expect(both.firstName).toBe("Sofía");
     expect(both.lastName).toBe("Lara");
+    // The confirmation is form state alone: the payload the auth client
+    // receives must not gain a field its endpoint does not own.
+    expect(Object.keys(both)).not.toContain("confirmPassword");
 
     const firstOnly = toSignUpPayload({
       email: "a@b.co",
       password: "sunlight-123",
+      confirmPassword: "sunlight-123",
       firstName: "Sofía",
       lastName: "   ",
     });
@@ -193,6 +231,33 @@ describe("the sign-up page", () => {
     );
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe("/manage"),
+    );
+  });
+
+  it("blocks sign-up when the passwords differ and names the box to fix", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await submitSignUp(user, {
+      password: "sunlight-123",
+      confirmation: "sunlight-124",
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("Passwords do not match")).toBeInTheDocument(),
+    );
+    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location").textContent).toBe("/signup");
+  });
+
+  it("asks the browser for a new password in both boxes", () => {
+    renderPage();
+    expect(screen.getByLabelText(/^Password/)).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
+    expect(screen.getByLabelText(/^Confirm password/)).toHaveAttribute(
+      "autocomplete",
+      "new-password",
     );
   });
 
