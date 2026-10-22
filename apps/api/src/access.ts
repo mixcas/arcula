@@ -14,8 +14,16 @@
 //   - **Outside it** — a Visitor (a signed-in somebody else) and Anonymous
 //     (no session). The visitor rule is unchanged (ADR-0003): the collection
 //     is the only gate, so a work is visible exactly when the collection is
-//     public AND the work is published AND live. Signing in buys nothing here,
-//     which is why the two are one membership (`null`).
+//     public AND the work is published AND live. A **Protected** collection
+//     (public with a password) adds a second condition in front of that gate:
+//     a non-member also needs a valid Access grant (ADR-0005). Signing in buys
+//     nothing here, which is why the two are one membership (`null`) — and a
+//     grant buys entry through the gate, not membership: once through, the
+//     visitor rule decides what is inside.
+//
+// The grant arrives as a fact, never as a database read: the caller loads the
+// grant row and asks `collectionGrants.isGrantUsable`, so an absent, malformed
+// or wrong-collection grant is simply `hasValidGrant = false` here.
 //
 // Documents carry no visitor rule at all: they are readable by the owner and
 // collaborators only, at every status, in every collection — which is why that
@@ -40,8 +48,12 @@ export type Viewer = string | null;
 /** The collection row's access-relevant shape. */
 export type CollectionFacts = Pick<
   typeof collectionsTable.$inferSelect,
-  "userId" | "isPublic"
+  "userId" | "isPublic" | "passwordHash"
 >;
+
+/** A collection with a second condition: a password (ADR-0005). */
+const hasPassword = (collection: CollectionFacts): boolean =>
+  collection.passwordHash != null;
 
 /** The membership row, as `authorize.ts` loads it (or `null` for none). */
 export type CollaboratorRow = Pick<
@@ -79,13 +91,19 @@ export const isMember = (membership: Membership): boolean =>
   membership !== null;
 
 /**
- * The collection itself: open to every member (public or private), and to a
- * non-member exactly when the collection is public.
+ * The collection itself: open to every member (public or private, protected
+ * or not), and to a non-member exactly when the collection is public and —
+ * if it is protected — the reader holds a valid grant. A private collection
+ * stays closed even to a grant holder: the password is a condition on Public,
+ * not a third visibility state.
  */
 export const canSeeCollection = (
   membership: Membership,
   collection: CollectionFacts,
-): boolean => isMember(membership) || collection.isPublic;
+  hasValidGrant = false,
+): boolean =>
+  isMember(membership) ||
+  (collection.isPublic && (!hasPassword(collection) || hasValidGrant));
 
 /** What the visitor rule reads off an artwork row. `status` is the database's
  *  text column: anything but `published` is not published, so an unknown value
@@ -98,15 +116,18 @@ export interface ArtworkFacts {
 /**
  * A work inside the collection: any work at all, to a member — a draft, a
  * soft-deleted work and a work in a private collection included. To anyone
- * else, the visitor rule: published AND live AND the collection public.
+ * else, the visitor rule: published AND live AND the collection readable —
+ * which for a Protected collection also needs a valid grant. The grant never
+ * reaches past the visitor rule, so it cannot admit a draft or a deleted work.
  */
 export const canSeeArtwork = (
   membership: Membership,
   collection: CollectionFacts,
   artwork: ArtworkFacts,
+  hasValidGrant = false,
 ): boolean =>
   isMember(membership) ||
-  (collection.isPublic &&
+  (canSeeCollection(membership, collection, hasValidGrant) &&
     artwork.deletedAt === null &&
     artwork.status === "published");
 

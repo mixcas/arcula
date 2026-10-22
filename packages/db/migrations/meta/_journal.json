@@ -36,6 +36,13 @@
       "when": 1792612800486,
       "tag": "0004_media_namespace_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792639083846,
+      "tag": "0005_collection_passwords",
+      "breakpoints": true
     }
   ]
 }
