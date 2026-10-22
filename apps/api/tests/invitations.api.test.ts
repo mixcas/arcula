@@ -13,6 +13,7 @@ import { controlChars } from "./helpers/html";
 import {
   collectionCollaborators as collaboratorsTable,
   collectionInvitations as invitationsTable,
+  collections as collectionsTable,
 } from "@arcula/db";
 import type {
   InvitationCreateResponse,
@@ -358,11 +359,23 @@ describe("POST /invitations/{token}/accept", () => {
     const token = await tokenFromMail(email);
     const invited = await signUpAs(email, "Accept Invitee");
 
+    // The accept response is a member read: it may say the collection is
+    // Protected, and the hash never leaves the server.
+    const storedHash = "scrypt$16384$8$1$deadbeef$cafebabe";
+    await db
+      .update(collectionsTable)
+      .set({ passwordHash: storedHash })
+      .where(eq(collectionsTable.id, cid));
+
     const res = await req("POST", `/api/v1/invitations/${token}/accept`, {
       cookies: invited.cookies,
     });
     expect(res.status).toBe(200);
-    expect((await json<{ id: string }>(res)).id).toBe(cid);
+    const body = await json<Record<string, unknown>>(res);
+    expect(body.id).toBe(cid);
+    expect(body.isPasswordProtected).toBe(true);
+    expect(body).not.toHaveProperty("passwordHash");
+    expect(JSON.stringify(body)).not.toContain(storedHash);
 
     const read = await req("GET", `/api/v1/collections/${cid}`, {
       cookies: invited.cookies,

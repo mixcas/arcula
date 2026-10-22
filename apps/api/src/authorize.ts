@@ -31,10 +31,12 @@ import {
   collections as collectionsTable,
 } from "@arcula/db";
 import {
+  audienceOf,
   canSeeCollection,
   isMember,
   membershipOf,
   type CollaboratorRow,
+  type CollectionAudience,
   type CollectionFacts,
   type Membership,
 } from "./access";
@@ -126,11 +128,14 @@ export const loadArtworkById = async (
  * or is looking at something public. A private collection a non-member
  * cannot read 403s — never 404s, the web client maps that refusal to its
  * "private" state.
+ *
+ * The audience comes back with the row because it decides what the read may
+ * say: a member's document carries the password state, a visitor's does not.
  */
 export async function requireReadableCollection(
   c: Context,
   collectionId: string,
-): Promise<CollectionRow> {
+): Promise<{ collection: CollectionRow; audience: CollectionAudience }> {
   const collection = await loadCollection(collectionId);
   if (!collection) {
     throw new ApiError("not-found", "The collection does not exist");
@@ -144,7 +149,7 @@ export async function requireReadableCollection(
   if (!canSeeCollection(membership, collection)) {
     throw new ApiError("forbidden", "This collection is private");
   }
-  return collection;
+  return { collection, audience: audienceOf(membership) };
 }
 
 /**

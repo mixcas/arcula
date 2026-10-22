@@ -32,10 +32,28 @@ export type CollectionCreatePayload = z.infer<typeof collectionCreateSchema>;
 const clearableText = z.string().trim().min(1).nullable().optional();
 
 /**
+ * A collection password, as both sides enforce it: eight characters, no
+ * complexity rule. Deliberately not trimmed — a space is a character somebody
+ * chose, and trimming would silently change the secret they typed.
+ *
+ * The same rule runs in the settings form (where a confirmation also has to
+ * match) and in the PATCH body: the client's check is a courtesy, and the
+ * server's is the one that decides.
+ */
+export const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters");
+
+/**
  * PATCH /collections/{cid}. The settings form always sends `name` and
  * `isPublic` — they are the fields it cannot omit — and the rest only when
  * they differ from what it loaded, which is what makes absent-key-leave-alone
  * load-bearing here.
+ *
+ * `password` follows the same contract, with the three meanings the settings
+ * form needs: a string sets (or overwrites) it, `null` removes it, and an
+ * absent key leaves it alone. Setting and overwriting are the same write, and
+ * every password write revokes the collection's outstanding grants.
  */
 export const collectionUpdateSchema = z.object({
   name: z.string().trim().min(1, "Collection name is required"),
@@ -46,6 +64,7 @@ export const collectionUpdateSchema = z.object({
     .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))
     .nullable()
     .optional(),
+  password: passwordSchema.nullable().optional(),
 });
 
 export type CollectionUpdatePayload = z.infer<typeof collectionUpdateSchema>;

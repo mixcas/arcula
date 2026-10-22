@@ -45,6 +45,7 @@ import {
   type Timestamp,
 } from "@arcula/shared";
 import { ApiError } from "./errors";
+import type { CollectionAudience } from "./access";
 import {
   extensionFor,
   finalDocumentKey,
@@ -62,10 +63,16 @@ export type InvitationRow = typeof collectionInvitationsTable.$inferSelect;
 
 /** The dashboard list's per-row extras. Absent on every other read, which is
  *  what keeps the otherwise-identical documents distinguishable: a shared row
- *  carries `role` and `ownerName`, an owned one `role` alone. */
+ *  carries `role` and `ownerName`, an owned one `role` alone.
+ *
+ *  `audience` is not per-row data: it says the caller is the owner or a
+ *  collaborator, which is what makes the collection's password state theirs
+ *  to see. The value itself is derived below from `passwordHash` — the hash is
+ *  never a document field, under any read. */
 export interface SerializeCollectionOptions {
   role?: CollectionRole;
   ownerName?: string;
+  audience?: CollectionAudience;
 }
 
 /** The joined shape the read routes hand to the serializer. */
@@ -376,6 +383,12 @@ export function serializeCollection(
   };
   if (opts.role !== undefined) out.role = opts.role;
   if (opts.ownerName !== undefined) out.ownerName = opts.ownerName;
+  // A member's fact, derived from the hash's presence. An anonymous read does
+  // not carry it at all — not even `false` — and the hash itself is never on
+  // the wire.
+  if (opts.audience === "member") {
+    out.isPasswordProtected = row.passwordHash !== null;
+  }
   if (row.description !== null) out.description = row.description;
   // `skin`/`skinOptions` are read-time defaulted on the client side
   // (resolveSkin), so an unset value is an absent key.

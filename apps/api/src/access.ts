@@ -91,6 +91,16 @@ export const isMember = (membership: Membership): boolean =>
   membership !== null;
 
 /**
+ * How a collection read may address the viewer: a member is shown the
+ * password state, a visitor is not. This is the membership fact in the one
+ * place a read needs it as a word rather than a boolean.
+ */
+export type CollectionAudience = "member" | "visitor";
+
+export const audienceOf = (membership: Membership): CollectionAudience =>
+  isMember(membership) ? "member" : "visitor";
+
+/**
  * The collection itself: open to every member (public or private, protected
  * or not), and to a non-member exactly when the collection is public and —
  * if it is protected — the reader holds a valid grant. A private collection
