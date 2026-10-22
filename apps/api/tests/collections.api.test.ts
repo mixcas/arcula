@@ -12,6 +12,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  collectionAccessGrants as grantsTable,
   collectionCollaborators as collaboratorsTable,
   collections as collectionsTable,
   user as userTable,
@@ -60,10 +61,12 @@ describe("POST /collections", () => {
     });
     expect(res.status).toBe(201);
     const body = await json<Record<string, unknown>>(res);
-    // The exact wire document shape: no blank keys, no extras.
+    // The exact wire document shape: no blank keys, no extras. A brand-new
+    // collection is a member read, so it carries the password state.
     expect(Object.keys(body).sort()).toEqual([
       "createdAt",
       "id",
+      "isPasswordProtected",
       "isPublic",
       "name",
       "updatedAt",
@@ -620,5 +623,246 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
       { cookies: stranger.cookies },
     );
     expect(foreign.status).toBe(403);
+  });
+});
+
+// The owner's half of collection passwords: the settings PATCH sets,
+// overwrites and removes a password, revokes the collection's outstanding
+// Access grants in the same write, and keeps the hash on a private/public
+// round trip. The hash itself is never on the wire, under any read.
+//
+// This lives in the same file as the anonymous-list test on purpose: the
+// shared test database is one, and a protected public collection left in it
+// while that test runs would fail its verdict check (the list still filters
+// on `isPublic` alone until T6). Files run in parallel, tests in a file do
+// not.
+//
+// The visitor's half — unlock, lock screen and the anonymous filter — is not
+// here. The extended verdict (T3) already refuses a Protected collection to a
+// non-member, so until T5 lands the public link answers 403 rather than a
+// lock screen; T6 removes it from the anonymous list.
+describe("the collection password write", () => {
+  let pwdOwner: { cookies: string; userId: string };
+  let pwdMate: { cookies: string; userId: string };
+  let protectedId = "";
+
+  beforeAll(async () => {
+    pwdOwner = await freshUser("Pwd");
+    pwdMate = await freshUser("Pwd");
+  });
+
+  /** The stored hash, read directly: the one fact the wire must never carry. */
+  const storedHash = async (): Promise<string | null> => {
+    const [row] = await db
+      .select({ passwordHash: collectionsTable.passwordHash })
+      .from(collectionsTable)
+      .where(eq(collectionsTable.id, protectedId));
+    return row?.passwordHash ?? null;
+  };
+
+  /** No read may carry the hash, nor the key the wire does not have. */
+  const expectNoHash = (body: unknown, hash: string | null): void => {
+    expect(body).not.toHaveProperty("passwordHash");
+    if (hash !== null) {
+      expect(JSON.stringify(body)).not.toContain(hash);
+    }
+  };
+
+  const patch = (cookies: string, body: Record<string, unknown>) =>
+    req("PATCH", `/api/v1/collections/${protectedId}`, { cookies, body });
+
+  it("sets a password, marks the member read protected, and never emits the hash", async () => {
+    const created = await req("POST", "/api/v1/collections", {
+      cookies: pwdOwner.cookies,
+      body: JSON.stringify({ name: "Protected Wall" }),
+    });
+    expect(created.status).toBe(201);
+    const createdBody = await json<Record<string, unknown>>(created);
+    protectedId = String(createdBody.id);
+    // A brand-new member read says so explicitly: the form needs the fact,
+    // not an absent key it has to interpret.
+    expect(createdBody.isPasswordProtected).toBe(false);
+    expectNoHash(createdBody, null);
+
+    const res = await patch(pwdOwner.cookies, {
+      name: "Protected Wall",
+      isPublic: true,
+      password: "first-password",
+    });
+    expect(res.status).toBe(200);
+    const body = await json<Record<string, unknown>>(res);
+    expect(body.isPasswordProtected).toBe(true);
+    expectNoHash(body, await storedHash());
+
+    const hash = await storedHash();
+    // The encoding, not the cost: the parameters are deliberately raisable
+    // (ADR-0005), so pinning today's `N` would fail an intentional change.
+    expect(hash).toMatch(/^scrypt\$\d+\$\d+\$\d+\$[0-9a-f]+\$[0-9a-f]+$/);
+    expect(hash).not.toContain("first-password");
+
+    // The single member read.
+    const single = await req("GET", `/api/v1/collections/${protectedId}`, {
+      cookies: pwdOwner.cookies,
+    });
+    expect(single.status).toBe(200);
+    const singleBody = await json<Record<string, unknown>>(single);
+    expect(singleBody.isPasswordProtected).toBe(true);
+    expectNoHash(singleBody, hash);
+
+    // The dashboard list's row.
+    const list = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: pwdOwner.cookies }),
+    );
+    const row = list.find((c) => c.id === protectedId)!;
+    expect(row.isPasswordProtected).toBe(true);
+    expectNoHash(row, hash);
+
+    // An anonymous read is already refused by the extended verdict (T3):
+    // until the unlock route and lock screen land, a protected collection is
+    // not readable to a non-member. The refusal carries neither the flag nor
+    // the hash.
+    const anon = await req("GET", `/api/v1/collections/${protectedId}`);
+    expect(anon.status).toBe(403);
+    const anonBody = await json<Record<string, unknown>>(anon);
+    expect("isPasswordProtected" in anonBody).toBe(false);
+    expectNoHash(anonBody, hash);
+
+    // The anonymous list's rows carry no flag either.
+    const anonList = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections"),
+    );
+    for (const anonRow of anonList) {
+      expect("isPasswordProtected" in anonRow).toBe(false);
+      expect("passwordHash" in anonRow).toBe(false);
+    }
+  });
+
+  it("leaves the password alone when the key is absent", async () => {
+    const before = await storedHash();
+    const res = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+    });
+    expect(res.status).toBe(200);
+    const body = await json<Record<string, unknown>>(res);
+    expect(body.isPasswordProtected).toBe(true);
+    expect(await storedHash()).toBe(before);
+    expectNoHash(body, before);
+  });
+
+  it("overwrites the password and revokes the collection's grants in one write", async () => {
+    const before = await storedHash();
+    await db.insert(grantsTable).values({
+      collectionId: protectedId,
+      tokenHash: `grant-${uuid()}`,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: "second-password",
+    });
+    expect(res.status).toBe(200);
+    const after = await storedHash();
+    expect(after).not.toBe(before);
+
+    const grants = await db
+      .select({ tokenHash: grantsTable.tokenHash })
+      .from(grantsTable)
+      .where(eq(grantsTable.collectionId, protectedId));
+    expect(grants).toEqual([]);
+  });
+
+  it("removes the password and clears the member flag", async () => {
+    const res = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: null,
+    });
+    expect(res.status).toBe(200);
+    const body = await json<Record<string, unknown>>(res);
+    expect(body.isPasswordProtected).toBe(false);
+    expect(await storedHash()).toBeNull();
+
+    const single = await json<Record<string, unknown>>(
+      await req("GET", `/api/v1/collections/${protectedId}`, {
+        cookies: pwdOwner.cookies,
+      }),
+    );
+    expect(single.isPasswordProtected).toBe(false);
+  });
+
+  it("keeps the password when the collection is made private and public again", async () => {
+    const set = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: "third-password",
+    });
+    expect(set.status).toBe(200);
+    const hash = await storedHash();
+    expect(hash).not.toBeNull();
+
+    const off = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: false,
+    });
+    expect(off.status).toBe(200);
+    const offBody = await json<Record<string, unknown>>(off);
+    expect(offBody.isPublic).toBe(false);
+    expect(offBody.isPasswordProtected).toBe(true);
+    expect(await storedHash()).toBe(hash);
+
+    const on = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+    });
+    expect(on.status).toBe(200);
+    const onBody = await json<Record<string, unknown>>(on);
+    expect(onBody.isPublic).toBe(true);
+    expect(onBody.isPasswordProtected).toBe(true);
+    expect(await storedHash()).toBe(hash);
+  });
+
+  it("rejects a password shorter than the shared minimum without writing", async () => {
+    const before = await storedHash();
+    const res = await patch(pwdOwner.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: "short",
+    });
+    expect(res.status).toBe(400);
+    const body = await json<{
+      error: { code: string; fields?: Record<string, string> };
+    }>(res);
+    expect(body.error.code).toBe("validation");
+    expect(body.error.fields?.password).toBeTruthy();
+    expect(await storedHash()).toBe(before);
+  });
+
+  it("lets a collaborator set and remove the password, as any other setting", async () => {
+    await db
+      .insert(collaboratorsTable)
+      .values({ collectionId: protectedId, userId: pwdMate.userId });
+
+    const set = await patch(pwdMate.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: "mate-password",
+    });
+    expect(set.status).toBe(200);
+    expect((await json<Record<string, unknown>>(set)).isPasswordProtected).toBe(
+      true,
+    );
+
+    const removed = await patch(pwdMate.cookies, {
+      name: "Renamed Wall",
+      isPublic: true,
+      password: null,
+    });
+    expect(removed.status).toBe(200);
+    expect(
+      (await json<Record<string, unknown>>(removed)).isPasswordProtected,
+    ).toBe(false);
   });
 });

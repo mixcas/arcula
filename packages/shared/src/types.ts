@@ -29,6 +29,10 @@ export interface Collection {
   // The owner's display name (falling back to email), on a shared row of the
   // dashboard list only. An owned row names nobody: you are the owner.
   ownerName?: string;
+  // Whether a password is set, on a member read only. Derived from the hash's
+  // presence at the serializer boundary; the hash itself never leaves the
+  // server. Absent on every anonymous read.
+  isPasswordProtected?: boolean;
   // Which skin renders this collection's public view. An unknown or absent id
   // falls back to DEFAULT_SKIN_ID — see apps/web/src/skins/registry.ts.
   //
