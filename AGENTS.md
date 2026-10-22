@@ -274,8 +274,9 @@ collaborator read every live work in the collection — drafts included — and 
 deleted work by id, and read its documents at every status. A deleted work is in
 no live list; the collection's **Deleted** view lists the stamped works, most
 recently deleted first, and restores one or many, and a deleted work's Edit page
-disables Save and restores in place. Every write path asks the same membership
-question through `requireMemberCollection` / `requireMemberArtwork`.
+disables Save and the media uploaders and restores in place. Every write path
+asks the same membership question through `requireMemberCollection` /
+`requireMemberArtwork`.
 
 The boundary is access administration. A collaborator changes every setting
 (public/private included), creates, edits, imports, bulk-deletes, restores and

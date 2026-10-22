@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Button, Loader, Text } from "@mantine/core";
 import { useForm, schemaResolver } from "@mantine/form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -78,6 +78,10 @@ const ArtworkEditPage: React.FC = () => {
   // uncontrolled, so nothing the user typed is lost.
   const [isDeleted, setIsDeleted] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  // The synchronous half of the guard below: `restoring` is state, so two
+  // clicks dispatched before React re-renders would both read `false`. The ref
+  // is what makes the second click a no-op.
+  const restoringRef = useRef(false);
   // Kept apart from `error`: a failed restore must not look like a failed save,
   // and it lives inside the banner it failed to dismiss.
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -159,6 +163,11 @@ const ArtworkEditPage: React.FC = () => {
   // refetch the work (it already holds it), does not re-initialise the form
   // (the unsaved input is the point of restoring here) and does not save.
   const restore = async () => {
+    // A click can land while the request is in flight but before the disabled
+    // button repaints, so the guard lives in the handler rather than only in
+    // the props.
+    if (restoringRef.current) return;
+    restoringRef.current = true;
     setRestoreError(null);
     setRestoring(true);
     try {
@@ -170,6 +179,7 @@ const ArtworkEditPage: React.FC = () => {
       console.error("Error restoring artwork:", err);
       setRestoreError("Failed to restore artwork. Please try again.");
     } finally {
+      restoringRef.current = false;
       setRestoring(false);
     }
   };
@@ -261,7 +271,12 @@ const ArtworkEditPage: React.FC = () => {
           }
         })}
       >
-        <ArtworkFields form={form} photos={photos} documents={documents} />
+        <ArtworkFields
+          form={form}
+          photos={photos}
+          documents={documents}
+          uploadsDisabled={isDeleted}
+        />
 
         {error ? (
           <Alert color="red" mb="md">

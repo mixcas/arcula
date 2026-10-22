@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Badge,
@@ -14,32 +14,17 @@ import { notifications } from "@mantine/notifications";
 import { Link, useParams } from "react-router-dom";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
+import { ApiRequestError } from "@/services/api";
+import { relativeTime } from "@/utils/relativeTime";
 import { parseId, primaryPhotoUrl, timestampMillis } from "@arcula/shared";
-import type { Artwork, Timestamp } from "@arcula/shared";
+import type { Artwork } from "@arcula/shared";
 
-// Deletion time is read as a distance ("2 days ago"), with the exact instant
-// on hover and in the `<time>` element. A list sorted by recency is easier to
-// scan by distance than by a column of timestamps.
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-
-const RELATIVE_UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 365 * 24 * 60 * 60 * 1000],
-  ["month", 30 * 24 * 60 * 60 * 1000],
-  ["week", 7 * 24 * 60 * 60 * 1000],
-  ["day", 24 * 60 * 60 * 1000],
-  ["hour", 60 * 60 * 1000],
-  ["minute", 60 * 1000],
-];
-
-const relativeTime = (deletedAt: Timestamp): string => {
-  const distance = timestampMillis(deletedAt) - Date.now();
-  for (const [unit, size] of RELATIVE_UNITS) {
-    if (Math.abs(distance) >= size) {
-      return relative.format(Math.round(distance / size), unit);
-    }
-  }
-  return relative.format(Math.round(distance / 1000), "second");
-};
+/**
+ * Why a read did not produce a list: the collection is refused or gone (403,
+ * 404), or the request itself failed (no connection, 5xx). Only the second is
+ * worth a Retry — asking again cannot change a refusal.
+ */
+type LoadFailure = "unavailable" | "transport";
 
 /**
  * A collection's Deleted view: the works that carry a deletion stamp, most
@@ -63,7 +48,7 @@ const DeletedArtworksPage: React.FC = () => {
   // A route without an id has nothing to fetch, so it starts settled rather
   // than spinning forever.
   const [loading, setLoading] = useState(collectionId !== "");
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   // One restore at a time: a row's button reports its own progress, and the
   // other rows are held while it is in flight so a double click cannot write
   // the same restore twice.
@@ -78,47 +63,43 @@ const DeletedArtworksPage: React.FC = () => {
     selectedIds.includes(artwork.id),
   );
 
-  // After a read, drop ids the server no longer lists (a row restored in
-  // another tab), so the next bulk action cannot carry stale ticks.
-  const showArtworks = (next: Artwork[]) => {
-    setArtworks(next);
-    setSelectedIds((ids) =>
-      ids.filter((id) => next.some((artwork) => artwork.id === id)),
-    );
-  };
-
-  // The initial read lives inside the effect (as the other manage pages do)
-  // so the page settles once; `refresh` is the same read for a retry and for
-  // the refetch after a restore.
-  useEffect(() => {
-    const fetchDeleted = async () => {
-      if (!collectionId) return;
-      try {
-        setArtworks(await artworkService.getDeletedArtworks(collectionId));
-        setLoadError(false);
-      } catch (err) {
-        console.error("Error fetching deleted artworks:", err);
-        setLoadError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void fetchDeleted();
-  }, [collectionId]);
-
-  const refresh = async () => {
+  // One read, used by the first load, the retry and every refetch after a
+  // restore. Selecting by id means the prune below is needed on the first load
+  // as much as on a refresh: a tick keyed by a row the server no longer lists
+  // must never survive into a bulk action.
+  const load = useCallback(async () => {
+    if (!collectionId) return;
     try {
-      showArtworks(await artworkService.getDeletedArtworks(collectionId));
-      setLoadError(false);
+      const next = await artworkService.getDeletedArtworks(collectionId);
+      setArtworks(next);
+      setSelectedIds((ids) =>
+        ids.filter((id) => next.some((artwork) => artwork.id === id)),
+      );
+      setLoadError(null);
     } catch (err) {
       console.error("Error fetching deleted artworks:", err);
-      setLoadError(true);
+      setLoadError(
+        err instanceof ApiRequestError &&
+          (err.status === 401 || err.status === 403 || err.status === 404)
+          ? "unavailable"
+          : "transport",
+      );
     }
-  };
+  }, [collectionId]);
+
+  // The initial read lives inside the effect (as the other manage pages do)
+  // so the page settles once.
+  useEffect(() => {
+    const fetchFirst = async () => {
+      await load();
+      setLoading(false);
+    };
+    void fetchFirst();
+  }, [load]);
 
   const retry = () => {
     setLoading(true);
-    void refresh().finally(() => setLoading(false));
+    void load().finally(() => setLoading(false));
   };
 
   const restore = async (artwork: Artwork) => {
@@ -130,7 +111,7 @@ const DeletedArtworksPage: React.FC = () => {
         title: "Restored",
         message: `"${artwork.title}" is back in the collection.`,
       });
-      await refresh();
+      await load();
     } catch (err) {
       // The row stays where it is: nothing was restored, so the retry is
       // simply clicking Restore again.
@@ -157,14 +138,16 @@ const DeletedArtworksPage: React.FC = () => {
         selectedIds,
       );
       setSelectedIds([]);
-      await refresh();
+      await load();
       notifications.show({
         color: "green",
         title: "Restored",
         message:
-          restored === 1
-            ? "1 artwork is back in the collection."
-            : `${restored} artworks are back in the collection.`,
+          restored === 0
+            ? "Nothing needed restoring — those works are already back."
+            : restored === 1
+              ? "1 artwork is back in the collection."
+              : `${restored} artworks are back in the collection.`,
       });
     } catch (err) {
       // Nothing moved, so the ticks stay: clicking the action again is the
@@ -263,6 +246,20 @@ const DeletedArtworksPage: React.FC = () => {
     },
   ];
 
+  // A route with no id cannot name a collection to list. Say that instead of
+  // falling through to the empty state, which would claim the collection has
+  // nothing deleted.
+  if (!collectionId) {
+    return (
+      <Alert color="red" title="No collection selected">
+        <Text size="sm">
+          The Deleted view belongs to a collection. Open it from the
+          collection&rsquo;s page.
+        </Text>
+      </Alert>
+    );
+  }
+
   return (
     <Stack gap="lg">
       <Group justify="space-between">
@@ -280,7 +277,16 @@ const DeletedArtworksPage: React.FC = () => {
         <Group justify="center" py="xl">
           <Loader />
         </Group>
-      ) : loadError ? (
+      ) : loadError === "unavailable" ? (
+        // A refusal is not a flaky connection: Retry cannot change it, so it
+        // is not offered. The copy covers the missing collection and the
+        // non-member alike, exactly as the server refuses both.
+        <Alert color="red" title="Could not open this collection">
+          <Text size="sm">
+            This collection does not exist, or you do not have access to it.
+          </Text>
+        </Alert>
+      ) : loadError === "transport" ? (
         <Alert color="red" title="Could not load deleted artworks">
           <Stack gap="sm" align="flex-start">
             <Text size="sm">
