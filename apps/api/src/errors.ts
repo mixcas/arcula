@@ -15,6 +15,7 @@ export type ApiErrorCode =
   | "forbidden"
   | "password-required"
   | "invalid-password"
+  | "too-many-attempts"
   | "not-found"
   | "conflict"
   | "limit-reached"
@@ -22,7 +23,7 @@ export type ApiErrorCode =
   | "internal";
 
 // Hono's c.json() wants a literal status union, not `number`.
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 500;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
 
 const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   validation: 400,
@@ -35,6 +36,10 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   // An unlock attempt whose password did not match. Distinct for the same
   // reason: the prompt has to be able to say "that is not it".
   "invalid-password": 403,
+  // An unlock attempt refused unread, because this address has spent the
+  // window's failures on this collection. The window, never the countdown —
+  // see the unlock route.
+  "too-many-attempts": 429,
   "not-found": 404,
   conflict: 409,
   "limit-reached": 409,

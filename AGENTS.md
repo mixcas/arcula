@@ -17,11 +17,10 @@
 > as-built detail is in **Sharing** below.
 >
 > **Collection passwords are built too.** A password is a second condition on a
-> public collection, answered by an Access grant in a per-collection cookie; the
-> design record is
+> public collection, answered by an Access grant in a per-collection cookie, and
+> the unlock route is throttled per address and collection; the design record is
 > [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)
-> and the as-built detail is under **Protected collections**. The unlock
-> throttle is **not** built (issue #90).
+> and the as-built detail is under **Protected collections**.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -172,6 +171,13 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   route mints and stores, the read paths load the row and ask this.
 - `collectionPassword.ts` — hashing (`hashPassword`) and the check
   (`verifyPassword`) for a collection's password.
+- `unlockThrottle.ts` — the throttle's policy and nothing else: `UNLOCK_WINDOW_MS`
+  (ten minutes, **fixed**, and why not sliding) and `unlockWindowStart`, which
+  floors an attempt to the window it belongs to. `clientAddress.ts` — the
+  address the counter is keyed by: the Lambda entry writes the gateway's
+  `sourceIp` into `x-arcula-client-ip` with `set`, so a client cannot choose its
+  own, and no forwarding header is ever trusted; locally the header is absent
+  and every attempt shares one bucket.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
   Collection, the work, its photos, documents and Variants) or a Collection's
   list (the Collection, the works once, each child table once for the whole
@@ -223,8 +229,9 @@ access question; the invitation routes write `collectionInvitations`, while the
 code that writes `collectionCollaborators` covers acceptance, removal, leaving
 and transfer, which swaps the two membership rows and rewrites the owner.
 `collections.passwordHash` is the one password fact; `collectionAccessGrants`
-holds a grant's token hash and its expiry, and `collectionUnlockAttempts` exists
-for the throttle that is not built yet.
+holds a grant's token hash and its expiry, and `collectionUnlockAttempts` is the
+unlock throttle's counter — `(ip, collectionId, windowStart)` with `attempts`,
+written and read by the unlock route alone.
 `packages/db/migrations/` is generated; hand edits are the documented exception:
 a data backfill appended to the generated file, and the add-nullable → backfill
 → set-not-null sequence for a column that cannot be added `NOT NULL` on an
@@ -327,17 +334,30 @@ collection stays shut to a grant holder.
 
 `POST /collections/:id/unlock` takes the password: `201` and the cookie on
 success, `403 invalid-password` on a wrong one, `409` on a collection with no
-password (or a private one, where there is nothing to get past). A refused
-collection read is `403 password-required` with `details.collectionName`, which
-the public pages fold to the lock screen — app chrome, not a skin — and whose
-success calls the hook's `reload` to re-run the ordinary load, collection read
-first. An expired grant lands back on the lock screen the same way. A password
-write (`PATCH /collections/:id`) revokes the collection's grants in the same
-transaction, so changing the password closes every open cookie.
+password (or a private one, where there is nothing to get past), and `429
+too-many-attempts` once the window is spent. A refused collection read is `403
+password-required` with `details.collectionName`, which the public pages fold to
+the lock screen — app chrome, not a skin — and whose success calls the hook's
+`reload` to re-run the ordinary load, collection read first. An expired grant
+lands back on the lock screen the same way. A password write (`PATCH
+/collections/:id`) revokes the collection's grants in the same transaction, so
+changing the password closes every open cookie.
 
-**Not built yet:** the unlock throttle. `collection_unlock_attempts` is in the
-schema and nothing writes it, so a human-chosen password has no rate limit —
-that is issue #90, and the deliberate gap is recorded in `project-plan.md`.
+**The unlock throttle.** Guessing is counted in `collection_unlock_attempts`,
+one row per `(address, collection, window)` — the pair is the key precisely so
+one collection's throttle cannot lock visitors out of another's through a
+shared address. The window is **fixed**, ten minutes, floored from the
+attempt's own time (`unlockThrottle.ts`), so a row names the span it counts
+instead of the span depending on the clock. Ten failures spend it and the
+eleventh is refused unread, in one atomic claim (`setWhere` on the upsert), so
+two attempts racing the tenth failure cannot both get through; a right password
+deletes the pair's counter rows, so a member who mistyped carries no debt. The
+refusal states the window and never the time left in it, and sends no
+`Retry-After`, which would be the same countdown. The address is the gateway's
+`sourceIp`, carried by the Lambda entry in `x-arcula-client-ip`
+(`clientAddress.ts`), which a client cannot set; the residual weakness is
+recorded in `project-plan.md` — an address is shared behind a proxy and cheap
+to multiply, so this raises the cost of guessing without being a proof.
 
 ## What to test
 

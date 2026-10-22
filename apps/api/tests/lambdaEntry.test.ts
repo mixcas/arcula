@@ -6,7 +6,8 @@
 // same shape API Gateway delivers, so no gateway in the loop.
 
 import { closeDb } from "../src/db";
-import { handler } from "../src/lambda";
+import { CLIENT_ADDRESS_HEADER } from "../src/clientAddress";
+import { gatewayHeaders, handler } from "../src/lambda";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,6 +76,21 @@ describe("the Lambda entry", () => {
     expect(res.isBase64Encoded).toBe(false);
     expect(JSON.parse(res.body)).toEqual({ status: "ok" });
     expect(res.headers["content-type"]).toContain("application/json");
+  });
+
+  it("passes the gateway's source address on, and never one the client supplied", () => {
+    // The unlock throttle counts against this header, so a forged value must
+    // not survive the adapter: API Gateway appends to a client-sent
+    // `x-forwarded-for`, and a guesser who could name their own address would
+    // simply mint a new one per attempt.
+    const headers = gatewayHeaders({
+      rawPath: "/api/health",
+      headers: { host: "smoke.local", [CLIENT_ADDRESS_HEADER]: "203.0.113.99" },
+      requestContext: {
+        http: { method: "GET", path: "/api/health", sourceIp: "198.51.100.2" },
+      },
+    });
+    expect(headers.get(CLIENT_ADDRESS_HEADER)).toBe("198.51.100.2");
   });
 
   it("serves the app shell as a text response", async () => {

@@ -77,7 +77,9 @@ export const collectionService = {
    * The lock screen's attempt: a right password sets the Access grant cookie
    * for this collection, and the ordinary read then succeeds. A wrong one
    * rejects with 403 `invalid-password`; a collection with no password (or a
-   * private one) rejects with 409 — there is nothing to unlock.
+   * private one) rejects with 409 — there is nothing to unlock; and one too
+   * many failures from this address rejects with 429 `too-many-attempts`,
+   * whose message names the window.
    */
   async unlockCollection(id: string, password: string): Promise<void> {
     await apiRequest<unknown>(`${BASE}/${id}/unlock`, {

@@ -41,12 +41,18 @@ interface CollectionLockScreenProps {
   onUnlocked: () => void;
 }
 
-/** What a refused attempt says. A wrong password is the only one worth a
- *  different sentence: everything else is the connection, not the secret. */
-const attemptMessage = (error: unknown): string =>
-  error instanceof ApiRequestError && error.code === "invalid-password"
-    ? "That is not the password for this collection."
-    : "Could not unlock this collection. Please try again.";
+/** What a refused attempt says. A wrong password is the common one; the
+ *  spent window is the other worth its own sentence, and only the server can
+ *  word it — it names the window and deliberately not the time left in it. */
+const attemptMessage = (error: unknown): string => {
+  if (error instanceof ApiRequestError && error.code === "invalid-password") {
+    return "That is not the password for this collection.";
+  }
+  if (error instanceof ApiRequestError && error.code === "too-many-attempts") {
+    return error.message;
+  }
+  return "Could not unlock this collection. Please try again.";
+};
 
 const CollectionLockScreen: React.FC<CollectionLockScreenProps> = ({
   collectionId,
