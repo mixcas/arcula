@@ -3,6 +3,7 @@ import React from "react";
 import "@testing-library/jest-dom/vitest";
 import * as rtl from "@testing-library/react";
 import { cleanup, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,11 +49,14 @@ vi.mock("@mantine/carousel", async () => {
 const getCollection = vi.fn<() => Promise<Collection | null>>();
 const getArtwork = vi.fn<() => Promise<Artwork | null>>();
 const getCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
+const unlockCollection = vi.fn<() => Promise<void>>();
 
 vi.mock("@/services/collectionService", () => ({
   collectionService: {
     getCollection: (...args: unknown[]) =>
       (getCollection as unknown as (...a: unknown[]) => unknown)(...args),
+    unlockCollection: (...args: unknown[]) =>
+      (unlockCollection as unknown as (...a: unknown[]) => unknown)(...args),
   },
 }));
 
@@ -139,6 +143,7 @@ beforeEach(() => {
   getCollection.mockReset();
   getArtwork.mockReset();
   getCollectionArtworks.mockReset();
+  unlockCollection.mockReset();
 });
 
 afterEach(() => {
@@ -247,5 +252,52 @@ describe("PublicArtworkPage — the reachable states", () => {
     // needs a neighbour — the page offers a link back to the collection and
     // nothing else.
     expect(getCollectionArtworks).not.toHaveBeenCalled();
+  });
+});
+
+describe("PublicArtworkPage — a protected collection", () => {
+  /** The challenge: a Public collection with a password, and no grant held. */
+  const passwordRequired = (): ApiRequestError =>
+    new ApiRequestError(
+      403,
+      "password-required",
+      "This collection is protected",
+      undefined,
+      { collectionName: "Flores Solares" },
+    );
+
+  it("asks for the password rather than saying the artwork is gone", async () => {
+    // A work's own link is not a way around the collection's lock (ADR-0005):
+    // the collection read is the gate on this page too, so its challenge is
+    // what the visitor gets.
+    getCollection.mockRejectedValue(passwordRequired());
+    renderPage();
+    expect(await screen.findByText("Flores Solares")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeVisible();
+    expect(getArtwork).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the ordinary load on success, collection first and artwork after", async () => {
+    getCollection.mockRejectedValueOnce(passwordRequired());
+    getCollection.mockResolvedValue(collection());
+    getArtwork.mockResolvedValue(artwork());
+    unlockCollection.mockResolvedValue(undefined);
+    renderPage();
+
+    await userEvent.type(
+      await screen.findByLabelText("Password"),
+      "open-sesame",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "Estudio en rojo" }),
+      ).toBeVisible(),
+    );
+    expect(unlockCollection).toHaveBeenCalledWith(COLLECTION_ID, "open-sesame");
+    expect(getCollection.mock.invocationCallOrder[1]).toBeLessThan(
+      getArtwork.mock.invocationCallOrder[0],
+    );
   });
 });

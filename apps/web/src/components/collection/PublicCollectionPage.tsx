@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Container, Text } from "@mantine/core";
 
+import CollectionLockScreen from "./CollectionLockScreen";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicCollection } from "./usePublicCollection";
@@ -13,7 +14,8 @@ import { artworkSlug, collectionSlug, parseId } from "@arcula/shared";
  * A thin shell: load, decide, hand over. The layout, the type and the
  * interaction all belong to the collection's skin (see `SkinHost`), which is why
  * this file has no presentation of its own beyond the states where there is
- * nothing to present.
+ * nothing to present — and the lock screen, which is about the collection
+ * rather than its presentation (ADR-0005).
  *
  * The canonical-URL rewrite below is the one behaviour that has to live here
  * rather than in a skin, because it is about the address rather than about the
@@ -27,7 +29,7 @@ const PublicCollectionPage: React.FC = () => {
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
 
-  const state = usePublicCollection(collectionId);
+  const { state, reload } = usePublicCollection(collectionId);
   // Read once so the effect below and the render agree on the same object.
   // `state.value` only changes identity when the load completes, so this is
   // stable across re-renders and safe as an effect dependency.
@@ -47,6 +49,18 @@ const PublicCollectionPage: React.FC = () => {
     }
     void navigate(`/collection/${canonical}`, { replace: true });
   }, [param, ready, navigate]);
+
+  if (state.status === "locked") {
+    // App chrome, and the same load on success: the collection read is still
+    // the first thing requested, and the artwork list follows it.
+    return (
+      <CollectionLockScreen
+        collectionId={collectionId}
+        collectionName={state.collectionName}
+        onUnlocked={reload}
+      />
+    );
+  }
 
   if (state.status !== "ready") {
     return <PublicStateMessage status={state.status} />;

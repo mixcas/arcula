@@ -3,6 +3,7 @@ import React from "react";
 import "@testing-library/jest-dom/vitest";
 import * as rtl from "@testing-library/react";
 import { cleanup, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -40,11 +41,14 @@ vi.mock("@mantine/carousel", async () => {
 
 const getCollection = vi.fn<() => Promise<Collection | null>>();
 const getCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
+const unlockCollection = vi.fn<() => Promise<void>>();
 
 vi.mock("@/services/collectionService", () => ({
   collectionService: {
     getCollection: (...args: unknown[]) =>
       (getCollection as unknown as (...a: unknown[]) => unknown)(...args),
+    unlockCollection: (...args: unknown[]) =>
+      (unlockCollection as unknown as (...a: unknown[]) => unknown)(...args),
   },
 }));
 
@@ -110,6 +114,7 @@ const renderPage = () =>
 beforeEach(() => {
   getCollection.mockReset();
   getCollectionArtworks.mockReset();
+  unlockCollection.mockReset();
 });
 
 afterEach(() => {
@@ -232,5 +237,71 @@ describe("PublicCollectionPage — the reachable states", () => {
       "href",
       `/collection/flores-solares-${COLLECTION_ID}/artwork/bodeg-n-a1`,
     );
+  });
+});
+
+describe("PublicCollectionPage — a protected collection", () => {
+  /** The challenge: a Public collection with a password, and no grant held. */
+  const passwordRequired = (): ApiRequestError =>
+    new ApiRequestError(
+      403,
+      "password-required",
+      "This collection is protected",
+      undefined,
+      { collectionName: "Flores Solares" },
+    );
+
+  it("shows the lock screen naming the collection, and reads nothing behind it", async () => {
+    getCollection.mockRejectedValue(passwordRequired());
+    renderPage();
+    // The name is the point of the challenge: the reader is told what they
+    // are unlocking, and the works are not requested until they are in.
+    expect(await screen.findByText("Flores Solares")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeVisible();
+    expect(getCollectionArtworks).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the ordinary load on success, the collection first and the list after", async () => {
+    getCollection.mockRejectedValueOnce(passwordRequired());
+    getCollection.mockResolvedValue(collection());
+    getCollectionArtworks.mockResolvedValue([artwork("a1", "Bodegón")]);
+    unlockCollection.mockResolvedValue(undefined);
+    renderPage();
+
+    await userEvent.type(
+      await screen.findByLabelText("Password"),
+      "open-sesame",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+
+    await waitFor(() => expect(screen.getAllByRole("region")).toHaveLength(1));
+    expect(unlockCollection).toHaveBeenCalledWith(COLLECTION_ID, "open-sesame");
+    // One path to ready: the lock screen asks the page to re-run the load a
+    // visitor's page runs — so the collection read is still the first of the
+    // two, and the list is asked only once that read has answered.
+    expect(getCollection.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(getCollection.mock.invocationCallOrder[1]).toBeLessThan(
+      getCollectionArtworks.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("says the password is wrong, and stays on the lock screen", async () => {
+    getCollection.mockRejectedValue(passwordRequired());
+    unlockCollection.mockRejectedValue(
+      new ApiRequestError(403, "invalid-password", "That is not the password"),
+    );
+    renderPage();
+
+    await userEvent.type(await screen.findByLabelText("Password"), "nope");
+    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+
+    expect(
+      await screen.findByText("That is not the password for this collection."),
+    ).toBeVisible();
+    // Still the lock screen: the prompt is still there to try again.
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeVisible();
+    // A refused attempt is not a new load: nothing was re-read.
+    expect(getCollection).toHaveBeenCalledTimes(1);
+    expect(getCollectionArtworks).not.toHaveBeenCalled();
   });
 });

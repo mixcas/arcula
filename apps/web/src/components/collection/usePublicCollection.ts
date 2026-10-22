@@ -4,7 +4,7 @@
  * ## Why the state is a union, and why half of it is pure
  *
  * The page this replaces tracked six overlapping booleans (`loading`, `error`,
- * `denied`, the collection, the artworks, the password prompt) and picked a
+ * `denied`, the collection, the artworks, the lock screen) and picked a
  * branch out of them in the render body, where two of them could be true at
  * once and the ordering of the conditionals was doing real work. A refusal in
  * particular only reached the right screen because the `!collection` branch
@@ -14,9 +14,9 @@
  * holds, and the render is a switch. But a union is only worth having if the
  * decisions can be tested, and a hook that both fetches and decides can only be
  * tested against a live API. So the *decisions* are pure functions over
- * already-fetched values — `publicCollectionState`, `publicArtworkState` — and
- * the hooks are thin wrappers that call the services and hand the results
- * over.
+ * already-fetched values — `publicCollectionState`, `publicArtworkState`,
+ * `publicFailure` — and the hooks are thin wrappers that call the services and
+ * hand the results over.
  *
  * ## The sequencing that matters
  *
@@ -24,10 +24,14 @@
  * known to be published. That is not an optimisation: a private collection's
  * name and description must never reach an unauthenticated client, and the
  * API denies that read outright — so the denial happens before the second
- * round trip is ever issued.
+ * round trip is ever issued. A **Protected** collection is the same shape: its
+ * read is refused until the reader has the password, and the lock screen the
+ * refusal opens is answered by re-running this very load with the grant cookie
+ * now set. There is one path to ready.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 
 import { artworkService } from "@/services/artworkService";
 import { collectionService } from "@/services/collectionService";
@@ -36,10 +40,12 @@ import type { Artwork, Collection } from "@arcula/shared";
 
 /** The only status a page ever renders. */
 export type PublicStatus =
-  "invalid" | "loading" | "error" | "private" | "notFound" | "ready";
+  "invalid" | "loading" | "error" | "private" | "locked" | "notFound" | "ready";
 
 export type PublicState<T> =
-  { status: Exclude<PublicStatus, "ready"> } | { status: "ready"; value: T };
+  | { status: "locked"; collectionName?: string }
+  | { status: Exclude<PublicStatus, "ready" | "locked"> }
+  | { status: "ready"; value: T };
 
 export interface PublicCollectionData {
   collection: Collection;
@@ -52,6 +58,13 @@ export interface PublicArtworkData {
 }
 
 /**
+ * What a `password-required` refusal carries: the name the lock screen puts on
+ * screen. Parsed rather than read loosely, so a reshaped detail leaves the
+ * screen with its generic line instead of the string "undefined".
+ */
+const lockDetails = z.object({ collectionName: z.string().min(1) });
+
+/**
  * A read that was refused, or that failed for any other reason.
  *
  * A 403 is the API doing its job, not a malfunction, so it gets its own state
@@ -59,11 +72,24 @@ export interface PublicArtworkData {
  * the real answer is "this collection is not published" both reads badly and
  * invites a retry that cannot succeed. Everything else — including a dropped
  * connection, which carries no status at all — is an error.
+ *
+ * The two 403s are different states. `password-required` is a **challenge**:
+ * the collection is public and Protected, the reader holds no grant, and the
+ * lock screen can pass it — so it names the collection and asks. A plain
+ * `forbidden` is the refusal a private collection makes, and stays `private`.
  */
-export const publicFailure = (error: unknown): PublicState<never> =>
-  error instanceof ApiRequestError && error.status === 403
-    ? { status: "private" }
-    : { status: "error" };
+export const publicFailure = (error: unknown): PublicState<never> => {
+  if (!(error instanceof ApiRequestError) || error.status !== 403) {
+    return { status: "error" };
+  }
+  if (error.code !== "password-required") {
+    return { status: "private" };
+  }
+  const details = lockDetails.safeParse(error.details);
+  return details.success
+    ? { status: "locked", collectionName: details.data.collectionName }
+    : { status: "locked" };
+};
 
 /**
  * Fold a published-collection read into a state.
@@ -167,13 +193,39 @@ const loadCollection = async (
   return publicCollectionState(collection, byTitle(artworks));
 };
 
-/** The public state of a whole collection. */
+/**
+ * What both public views' hooks answer: exactly one status holds, and the
+ * `reload` the lock screen calls on success. One interface for the two
+ * because the lock screen, the render and the page's reload are the same
+ * shape whichever document was locked.
+ */
+export interface PublicView<T> {
+  state: PublicState<T>;
+  /**
+   * Re-run the ordinary load — what the lock screen calls on success, with the
+   * grant cookie now set. It is the same load a visitor's page runs, so there
+   * is one path to ready and the sequencing is unchanged.
+   */
+  reload: () => void;
+}
+
+/** The public state of a whole collection, and a way to run the load again. */
 export const usePublicCollection = (
   collectionId: string,
-): PublicState<PublicCollectionData> => {
+): PublicView<PublicCollectionData> => {
   const [state, setState] = useState<PublicState<PublicCollectionData>>({
     status: "loading",
   });
+  // A reload is a new attempt, not a new collection: the effect below re-runs
+  // against the same id and starts from `loading` again.
+  const [attempt, setAttempt] = useState(0);
+  // Back to `loading` here rather than in the effect: a reload a visitor asked
+  // for is a state change they should see immediately, and React asks that an
+  // effect not set state synchronously.
+  const reload = useCallback(() => {
+    setState({ status: "loading" });
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!collectionId) {
@@ -193,12 +245,15 @@ export const usePublicCollection = (
     return () => {
       cancelled = true;
     };
-  }, [collectionId]);
+  }, [collectionId, attempt]);
 
   // A missing id is decided from the argument rather than stored, so there is no
   // state to set and no extra render to schedule for a case the route has
   // already decided.
-  return collectionId ? state : { status: "invalid" };
+  return {
+    state: collectionId ? state : { status: "invalid" },
+    reload,
+  };
 };
 
 /**
@@ -238,10 +293,18 @@ const loadArtwork = async (
 export const usePublicArtwork = (
   collectionId: string,
   artworkId: string,
-): PublicState<PublicArtworkData> => {
+): PublicView<PublicArtworkData> => {
   const [state, setState] = useState<PublicState<PublicArtworkData>>({
     status: "loading",
   });
+  const [attempt, setAttempt] = useState(0);
+  // Back to `loading` here rather than in the effect: a reload a visitor asked
+  // for is a state change they should see immediately, and React asks that an
+  // effect not set state synchronously.
+  const reload = useCallback(() => {
+    setState({ status: "loading" });
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!collectionId || !artworkId) {
@@ -259,7 +322,10 @@ export const usePublicArtwork = (
     return () => {
       cancelled = true;
     };
-  }, [collectionId, artworkId]);
+  }, [collectionId, artworkId, attempt]);
 
-  return collectionId && artworkId ? state : { status: "invalid" };
+  return {
+    state: collectionId && artworkId ? state : { status: "invalid" },
+    reload,
+  };
 };

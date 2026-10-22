@@ -33,12 +33,46 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
 const denied = (): ApiRequestError =>
   new ApiRequestError(403, "forbidden", "Missing or insufficient permissions.");
 
+/** The refusal a Public, Protected collection makes to a reader with no
+ *  grant: a challenge, carrying the name the lock screen puts on screen. */
+const passwordRequired = (collectionName?: string): ApiRequestError =>
+  new ApiRequestError(
+    403,
+    "password-required",
+    "This collection is protected",
+    undefined,
+    collectionName === undefined ? {} : { collectionName },
+  );
+
 describe("publicFailure", () => {
   it("maps a 403 to `private`, and nothing else", () => {
     // A refused read is the API doing its job, not a malfunction. Reporting it
     // as an error both reads badly to a visitor and invites a retry that
     // cannot succeed.
     expect(publicFailure(denied())).toEqual({ status: "private" });
+  });
+
+  it("maps a password-required 403 to `locked`, naming the collection", () => {
+    // The other 403: not a refusal but a challenge, and the one screen that
+    // can pass it has to name what is being unlocked (ADR-0005).
+    expect(publicFailure(passwordRequired("Flores Solares"))).toEqual({
+      status: "locked",
+      collectionName: "Flores Solares",
+    });
+  });
+
+  it("is still `locked`, without a name, when the refusal carries no usable one", () => {
+    // The status comes from the code, which is the decision; the name is
+    // copy. A reshaped or absent detail must not turn a challenge into
+    // "private" — or into the string "undefined" on screen.
+    expect(publicFailure(passwordRequired())).toEqual({ status: "locked" });
+    expect(
+      publicFailure(
+        new ApiRequestError(403, "password-required", "…", undefined, {
+          collectionName: 42,
+        }),
+      ),
+    ).toEqual({ status: "locked" });
   });
 
   it("maps every other failure to `error`", () => {

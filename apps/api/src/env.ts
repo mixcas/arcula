@@ -44,3 +44,9 @@ export const deployedCommit = (process.env.DEPLOYED_COMMIT ?? "").trim();
 // else, where both the header and the robots path behave exactly as they
 // always have.
 export const noindexFlag = process.env.NOINDEX;
+
+// Whether cookies the API sets are marked `Secure`. The session cookie's rule
+// and the Access grant's are the same one, kept here rather than written twice:
+// production is https, where a `Secure` cookie is the safe default; local dev
+// is plain http, where a browser rejects it.
+export const useSecureCookies = process.env.NODE_ENV === "production";

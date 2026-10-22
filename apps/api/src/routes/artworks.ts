@@ -45,6 +45,7 @@ import {
 import { Hono } from "hono";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
+  grantHeld,
   loadArtworkById,
   requireMemberArtwork,
   requireMemberCollection,
@@ -93,10 +94,15 @@ artworkRoutes.get(
   async (c) => {
     const session = await resolveSession(c);
     const collectionId = param(c, "collectionId");
+    // The grant is a fact the route reads off the cookie and the verdict
+    // takes as one; a member's read never needs it (`grantHeld` still costs
+    // nothing without the cookie, and the verdict ignores it for a member).
+    const hasValidGrant = await grantHeld(c, collectionId);
     const read = await readArtwork(
       collectionId,
       param(c, "artworkId"),
       session?.user.id ?? null,
+      hasValidGrant,
     );
     // A draft work, a deleted work and a public work inside a private
     // collection are one uniform 404 for a visitor: saying which was
@@ -114,7 +120,12 @@ artworkRoutes.get(
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
   const session = await resolveSession(c);
   const collectionId = param(c, "collectionId");
-  const read = await readArtworkList(collectionId, session?.user.id ?? null);
+  const hasValidGrant = await grantHeld(c, collectionId);
+  const read = await readArtworkList(
+    collectionId,
+    session?.user.id ?? null,
+    hasValidGrant,
+  );
   if (read.status === "not-found") {
     throw new ApiError("not-found", "The collection does not exist");
   }

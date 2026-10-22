@@ -148,6 +148,13 @@ public, and the owner and collaborators never face the challenge. A protected
 collection is absent from the public list and reachable only by its link.
 _Avoid_: Locked, password-protected, gated, restricted
 
+**Lock screen**:
+What a visitor to a protected collection is shown instead of the page until they
+enter its password. App chrome, never a skin, because the lock belongs to the
+collection rather than to how the collection is presented; the public views call
+the state it puts them in `locked`, and a refused read is what reaches it.
+_Avoid_: Password page, gate, interstitial
+
 **Published**:
 An artwork the owner or a collaborator has put in front of the collection's
 gate. A published work is visible to a visitor exactly when its collection is
