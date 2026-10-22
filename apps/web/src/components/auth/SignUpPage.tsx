@@ -240,7 +240,18 @@ const SignUpPage: React.FC = () => {
           placeholder="At least 8 characters"
           required
           mt="md"
+          autoComplete="new-password"
           {...form.getInputProps("password")}
+        />
+
+        <PasswordInput
+          key={form.key("confirmPassword")}
+          label="Confirm password"
+          placeholder="Repeat the password"
+          required
+          mt="md"
+          autoComplete="new-password"
+          {...form.getInputProps("confirmPassword")}
         />
 
         <Group mt="xl">
