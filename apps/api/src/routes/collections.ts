@@ -63,22 +63,30 @@ export const collectionRoutes = new Hono();
 // GET /collections — signed in: the collections the caller owns *and* those
 // shared with them, together, name-ordered, each row carrying its `role`
 // (and, on a shared row, the owner's display name); anonymous: the public
-// list, unchanged. A signed-in visitor never sees other people's collections
-// through this route.
+// list, which excludes a Protected collection exactly as it excludes a
+// Private one, so a collection with a password is reachable only by its
+// direct link (ADR-0005). A signed-in visitor never sees other people's
+// collections through this route.
 //
 // The two are one list on purpose (ADR-0004): a separate `/shared` endpoint
 // would split one list into two client paths and make the dashboard merge
 // them.
 //
-// The anonymous filter is the SQL form of `canSeeCollection` with no
-// membership in access.ts; collections.api.test.ts asserts the two agree.
+// The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
+// access.ts — public AND not protected — and collections.api.test.ts asserts
+// the two agree.
 collectionRoutes.get("/collections", async (c) => {
   const session = await resolveSession(c);
   if (session === null) {
     const rows = await db
       .select()
       .from(collectionsTable)
-      .where(eq(collectionsTable.isPublic, true))
+      .where(
+        and(
+          eq(collectionsTable.isPublic, true),
+          isNull(collectionsTable.passwordHash),
+        ),
+      )
       .orderBy(asc(collectionsTable.name));
     return c.json(rows.map((row) => serializeCollection(row)));
   }
