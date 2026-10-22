@@ -164,12 +164,15 @@ describe("DeletedArtworksPage", () => {
 
     await screen.findByText("Newest Out");
 
-    const newestRow = within(
-      rows().find((row) => row.textContent?.includes("Newest Out"))!,
-    );
+    const newestRowElement = rows().find((row) =>
+      row.textContent?.includes("Newest Out"),
+    )!;
+    const newestRow = within(newestRowElement);
     expect(newestRow.getByText("N. Out")).toBeTruthy();
-    // The thumbnail is the primary photo's small square variant.
-    expect(newestRow.getByRole("img").getAttribute("src")).toBe(
+    // The thumbnail is the primary photo's small square variant. It is
+    // decorative (`alt=""`), so it has no `img` role to query by; read the
+    // element directly.
+    expect(newestRowElement.querySelector("img")?.getAttribute("src")).toBe(
       "/api/v1/media?key=thumb",
     );
     // The relative label is the reading; `<time>` carries the exact instant

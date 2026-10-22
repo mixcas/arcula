@@ -9,6 +9,7 @@ import {
   type DataTableSortStatus,
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
+import ArtworkThumbnail from "@/components/manage/collection/ArtworkThumbnail";
 import { artworkSlug, parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
@@ -190,6 +191,16 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
 
   const columns = useMemo<DataTableColumn<Artwork>[]>(
     () => [
+      {
+        // The thumbnail identifies a work before its title is read, and is not
+        // a value to sort by: `sortable: false` keeps it out of the sort cycle,
+        // which would otherwise order rows by their photo array.
+        accessor: "photos",
+        title: "",
+        width: 72,
+        sortable: false,
+        render: (artwork) => <ArtworkThumbnail artwork={artwork} />,
+      },
       {
         accessor: "title",
         title: "Title",
