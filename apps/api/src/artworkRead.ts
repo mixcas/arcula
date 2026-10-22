@@ -12,9 +12,11 @@
 // `authorize.ts`; this module reports `not-found` or `forbidden` and carries
 // no HTTP code or framework type. The route owns the wire codes. Only the
 // list can answer `forbidden` — a Private Collection the viewer is not a
-// member of — because that is the list's existing wire, and a single read
-// answers `not-found` for every refusal (a Private Collection included) so
-// the refusal discloses nothing.
+// member of, or a Protected one the visitor holds no grant for — because that
+// is the list's existing wire, and the Collection read answers the same
+// refusal so the two reads agree about who is inside; a single read answers
+// `not-found` for every refusal (a Private Collection included) so the
+// refusal discloses nothing.
 //
 // No transaction spans the reads: a work or child added or removed between
 // them is a torn read the product tolerates, and no caller may assume a
@@ -173,8 +175,9 @@ export async function readArtwork(
  * every live work of the collection — no `userId` filter, because every
  * member reads the same list — and a non-member only Published, live works;
  * a Deleted work is in neither. A Private Collection the viewer is not a
- * member of is `forbidden` (never `not-found` — the client maps it to
- * "private"), and a missing Collection is `not-found`.
+ * member of, or a Protected one they hold no grant for, is `forbidden` (never
+ * `not-found` — the client maps it to "private"), and a missing Collection is
+ * `not-found`.
  *
  * The rows are ordered by creation time and then id, so repeated reads agree,
  * and their children arrive from the same three batched queries as the single

@@ -108,8 +108,9 @@ artworkRoutes.get(
   },
 );
 
-// GET list — member: every live work; non-member: the published ones; private
-// collection: 403 (never 404 — the client maps the refusal to "private").
+// GET list — member: every live work; non-member: the published ones; a
+// private collection, or a protected one the visitor holds no grant for: 403
+// (never 404 — the client maps the refusal to "private").
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
   const session = await resolveSession(c);
   const collectionId = param(c, "collectionId");
