@@ -35,7 +35,9 @@ media pipeline, and — in production — serving the built SPA.
 | `GET` / `PATCH`   | `/collections/:collectionId`                                        |
 | `POST`            | `/collections/:collectionId/unlock`                                 |
 | `POST`            | `/collections/:collectionId/import/csv`                             |
+| `GET`             | `/collections/:collectionId/deleted-artworks`                       |
 | `POST`            | `/collections/:collectionId/artworks/bulk-delete`                   |
+| `POST`            | `/collections/:collectionId/artworks/bulk-restore`                  |
 | `POST`            | `/collections/:collectionId/artworks/:artworkId/restore`            |
 | `POST`            | `/collections/:collectionId/maintenance/sweep`                      |
 | `GET` / `POST`    | `/collections/:collectionId/artworks`                               |
@@ -65,13 +67,15 @@ Access is membership. `access.ts` answers the visitor and access questions as
 pure functions over the collection, the viewer's membership and the row:
 the owner (`collections.userId`) and every row of `collection_collaborators`
 read every live work in the collection — drafts included — and a deleted work by
-id, and its documents, at every status, never a visitor. `authorize.ts` loads the
-collection and the viewer's membership row for every read, and every write
-path asks the same membership question through `requireMemberCollection` /
-`requireMemberArtwork`: a collaborator changes every setting (public/private
-included), creates, edits, imports, bulk-deletes, restores and sweeps exactly
-as the owner does, while a non-member gets `403` and a missing collection
-`404`. Only the access-administration routes below stay owner-only. A save
+id, and its documents, at every status, never a visitor. A collection's
+**Deleted** view lists the works carrying a deletion stamp, most recently
+deleted first, and restores one or several; it is member-only, even on a public
+collection. `authorize.ts` loads the collection and the viewer's membership row
+for every read, and every write path asks the same membership question through
+`requireMemberCollection` / `requireMemberArtwork`: a collaborator changes every
+setting (public/private included), creates, edits, imports, bulk-deletes,
+restores and sweeps exactly as the owner does, while a non-member gets `403`
+and a missing collection `404`. Only the access-administration routes below stay owner-only. A save
 records `artworks.userId` as the collection's owner, never the session user:
 it is a mirror, not an authorization fact. `GET /collections` returns owned
 and shared collections together, name-ordered, each row with `role` and — on
