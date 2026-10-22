@@ -12,6 +12,7 @@ import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
+import DeletedArtworksPage from "./components/manage/collection/DeletedArtworksPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
@@ -73,6 +74,18 @@ const App: React.FC = () => {
                   width for its title, artist and action columns side by side. */}
               <ManageLayout containerProps={{ size: "xl" }}>
                 <CollectionPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/collection/:collectionId/deleted"
+          element={
+            <ProtectedRoute>
+              {/* The Deleted view is its own deep-linkable page, at the
+                  collection's table width. */}
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <DeletedArtworksPage />
               </ManageLayout>
             </ProtectedRoute>
           }

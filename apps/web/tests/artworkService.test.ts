@@ -41,6 +41,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("the Deleted view's service calls", () => {
+  // A minimal wire work: `getDeletedArtworks` parses every row through
+  // `artworkReadSchema`, so the fixture has to be a real document.
+  const wireArtwork = {
+    id: "a1",
+    userId: "u1",
+    title: "Out",
+    artistName: "A. Artist",
+    documents: [],
+    photos: [],
+    collectionId: "c1",
+    status: "published",
+    deletedAt: { seconds: 1, nanoseconds: 0 },
+    createdAt: { seconds: 1, nanoseconds: 0 },
+    updatedAt: { seconds: 1, nanoseconds: 0 },
+  };
+
+  it("reads the deleted list from the collection-level route, not under /artworks", async () => {
+    const calls = stubFetch(ok([wireArtwork]));
+
+    const rows = await artworkService.getDeletedArtworks("c1");
+
+    expect(rows.map((row) => row.id)).toEqual(["a1"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/deleted-artworks");
+  });
+
+  it("posts a restore to the single-artwork restore route", async () => {
+    const calls = stubFetch(ok({ restored: true }));
+
+    await artworkService.restoreArtwork("c1", "a1");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks/a1/restore");
+    expect(calls[0]?.init.method).toBe("POST");
+  });
+});
+
 describe("createArtworks", () => {
   it("posts the {rows} envelope to the import route, not the create route", async () => {
     const rows = [{ title: "Estudio en rojo" }];
