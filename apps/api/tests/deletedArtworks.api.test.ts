@@ -209,6 +209,221 @@ describe("GET /collections/{cid}/deleted-artworks", () => {
   });
 });
 
+// Bulk restore over a selection. The count is the works this call moved, so a
+// live id, an id from another collection and an id a previous call already
+// restored do not count. Its own collection keeps these assertions independent
+// of the single-restore tests above, which mutate the shared one.
+describe("POST /collections/{cid}/artworks/bulk-restore", () => {
+  // The free tier owns one collection per account, so this suite signs up its
+  // own owner and its own stranger rather than reusing the pair above.
+  let bulkOwner: { cookies: string; userId: string };
+  let bulkStranger: { cookies: string; userId: string };
+  let bulkCollectionId = "";
+  let firstId = "";
+  let secondId = "";
+  let liveId = "";
+  let foreignCollectionId = "";
+  let foreignDeletedId = "";
+
+  const createWorkIn = async (
+    target: string,
+    cookies: string,
+    title: string,
+    status: "draft" | "published" = "published",
+  ): Promise<string> => {
+    const res = await req("POST", `/api/v1/collections/${target}/artworks`, {
+      cookies,
+      body: JSON.stringify({
+        artworkId: uuid(),
+        title,
+        artistName: title,
+        status,
+      }),
+    });
+    expect(res.status).toBe(201);
+    return String((await json<Record<string, unknown>>(res)).id);
+  };
+
+  /** The work's deletion stamp as the member reads it. */
+  const stampOf = async (
+    target: string,
+    artworkId: string,
+    cookies: string,
+  ): Promise<unknown> => {
+    const res = await req(
+      "GET",
+      `/api/v1/collections/${target}/artworks/${artworkId}`,
+      { cookies },
+    );
+    expect(res.status).toBe(200);
+    return artworkReadSchema.parse(await json(res)).deletedAt;
+  };
+
+  beforeAll(async () => {
+    bulkOwner = await freshUser("BulkRestore");
+    bulkStranger = await freshUser("BulkRestore");
+
+    const created = await req("POST", "/api/v1/collections", {
+      cookies: bulkOwner.cookies,
+      body: JSON.stringify({ name: "The Bulk Restore" }),
+    });
+    expect(created.status).toBe(201);
+    bulkCollectionId = String(
+      (await json<Record<string, unknown>>(created)).id,
+    );
+
+    firstId = await createWorkIn(
+      bulkCollectionId,
+      bulkOwner.cookies,
+      "Restore Me",
+    );
+    secondId = await createWorkIn(
+      bulkCollectionId,
+      bulkOwner.cookies,
+      "Restore Me Too",
+    );
+    liveId = await createWorkIn(
+      bulkCollectionId,
+      bulkOwner.cookies,
+      "Never Deleted",
+    );
+    await stampDeleted(firstId, "2026-02-01T10:00:00.000Z");
+    await stampDeleted(secondId, "2026-02-02T10:00:00.000Z");
+
+    const foreign = await req("POST", "/api/v1/collections", {
+      cookies: bulkStranger.cookies,
+      body: JSON.stringify({ name: "Someone Else's Restore" }),
+    });
+    expect(foreign.status).toBe(201);
+    foreignCollectionId = String(
+      (await json<Record<string, unknown>>(foreign)).id,
+    );
+    foreignDeletedId = await createWorkIn(
+      foreignCollectionId,
+      bulkStranger.cookies,
+      "Not Yours",
+    );
+    await stampDeleted(foreignDeletedId, "2026-02-03T10:00:00.000Z");
+  });
+
+  it("restores the deleted works of the collection and counts only them", async () => {
+    const res = await req(
+      "POST",
+      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
+      {
+        cookies: bulkOwner.cookies,
+        body: JSON.stringify({
+          artworkIds: [firstId, secondId, liveId, foreignDeletedId],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    // Two were deleted in this collection; the live id did not move and the
+    // foreign id is another collection's.
+    expect(await json(res)).toEqual({ restored: 2 });
+
+    expect(
+      await stampOf(bulkCollectionId, firstId, bulkOwner.cookies),
+    ).toBeNull();
+    expect(
+      await stampOf(bulkCollectionId, secondId, bulkOwner.cookies),
+    ).toBeNull();
+    // The live work was already live: untouched and uncounted.
+    expect(
+      await stampOf(bulkCollectionId, liveId, bulkOwner.cookies),
+    ).toBeNull();
+    // The foreign work is still deleted: another collection's row was not
+    // moved by this call.
+    expect(
+      await stampOf(
+        foreignCollectionId,
+        foreignDeletedId,
+        bulkStranger.cookies,
+      ),
+    ).not.toBeNull();
+
+    const deleted = await json<{ id: string }[]>(
+      await req(
+        "GET",
+        `/api/v1/collections/${bulkCollectionId}/deleted-artworks`,
+        { cookies: bulkOwner.cookies },
+      ),
+    );
+    expect(deleted).toEqual([]);
+  });
+
+  it("counts zero when every id is already live or belongs to another collection", async () => {
+    const res = await req(
+      "POST",
+      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
+      {
+        cookies: bulkOwner.cookies,
+        body: JSON.stringify({
+          artworkIds: [firstId, liveId, foreignDeletedId],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    // Restoring a restored work is a no-op, not an error, and it is not
+    // counted; the foreign row is still deleted.
+    expect(await json(res)).toEqual({ restored: 0 });
+    expect(
+      await stampOf(
+        foreignCollectionId,
+        foreignDeletedId,
+        bulkStranger.cookies,
+      ),
+    ).not.toBeNull();
+  });
+
+  it("refuses a non-member, an anonymous caller and 404s a missing collection", async () => {
+    const foreign = await req(
+      "POST",
+      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
+      {
+        cookies: bulkStranger.cookies,
+        body: JSON.stringify({ artworkIds: [secondId] }),
+      },
+    );
+    expect(foreign.status).toBe(403);
+    expect((await err(foreign)).code).toBe("forbidden");
+
+    const anonymous = await req(
+      "POST",
+      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
+      { body: JSON.stringify({ artworkIds: [secondId] }) },
+    );
+    expect(anonymous.status).toBe(401);
+    expect((await err(anonymous)).code).toBe("unauthorized");
+
+    const missing = await req(
+      "POST",
+      `/api/v1/collections/${crypto.randomUUID()}/artworks/bulk-restore`,
+      {
+        cookies: bulkOwner.cookies,
+        body: JSON.stringify({ artworkIds: [secondId] }),
+      },
+    );
+    expect(missing.status).toBe(404);
+    expect((await err(missing)).code).toBe("not-found");
+  });
+
+  it("rejects an empty selection", async () => {
+    const res = await req(
+      "POST",
+      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
+      {
+        cookies: bulkOwner.cookies,
+        body: JSON.stringify({ artworkIds: [] }),
+      },
+    );
+    expect(res.status).toBe(400);
+    const e = await err(res);
+    expect(e.code).toBe("validation");
+    expect(e.fields?.artworkIds).toBeTruthy();
+  });
+});
+
 describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
   it("brings back a published work with its status, fields, photos and documents, publicly visible again", async () => {
     const restored = await req(

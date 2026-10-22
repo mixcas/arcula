@@ -8,6 +8,7 @@
 //   POST   /collections/{cid}/import/csv             the CSV import's bulk write
 //   GET    /collections/{cid}/deleted-artworks       the Deleted view's list
 //   POST   /collections/{cid}/artworks/bulk-delete   the batch soft delete
+//   POST   /collections/{cid}/artworks/bulk-restore  the batch restore
 //   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (present, unused in beta)
 //
 // Collections are never deleted (there is no trash for them in this model),
@@ -19,7 +20,17 @@
 // counts OWNED collections: creating one is the caller's own, and a shared
 // collection does not consume their slot.
 
-import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
@@ -33,6 +44,7 @@ import {
 import {
   UPDATABLE_TEXT_FIELDS,
   artworkBulkDeleteSchema,
+  artworkBulkRestoreSchema,
   artworkImportSchema,
   collectionCreateSchema,
   collectionUnlockSchema,
@@ -41,6 +53,7 @@ import {
   artworkSchema,
   IMPORTED_WORK_STATUS,
   type ArtworkBulkDeletePayload,
+  type ArtworkBulkRestorePayload,
   type ArtworkImportPayload,
   type CollectionCreatePayload,
   type CollectionUnlockPayload,
@@ -531,6 +544,43 @@ collectionRoutes.post(
           .returning({ id: artworksTable.id }),
     );
     return c.json({ deleted: result.length });
+  },
+);
+
+// POST …/artworks/bulk-restore — the inverse of the batch soft delete: one
+// transaction clears `deletedAt` for the ids this call actually moves. A live
+// id, an id from another collection and an id a previous call already restored
+// are not in the WHERE clause's result and do not count, so a repeated call is
+// a no-op rather than an error and the response is the number restored.
+collectionRoutes.post(
+  "/collections/:collectionId/artworks/bulk-restore",
+  requireSession,
+  async (c) => {
+    const collection = await requireMemberCollection(
+      c,
+      param(c, "collectionId"),
+    );
+    const payload: ArtworkBulkRestorePayload = await parseBody(
+      c,
+      artworkBulkRestoreSchema,
+    );
+
+    const now = new Date();
+    const result = await safeTx(
+      async (tx) =>
+        await tx
+          .update(artworksTable)
+          .set({ deletedAt: null, updatedAt: now })
+          .where(
+            and(
+              eq(artworksTable.collectionId, collection.id),
+              inArray(artworksTable.id, payload.artworkIds),
+              isNotNull(artworksTable.deletedAt),
+            ),
+          )
+          .returning({ id: artworksTable.id }),
+    );
+    return c.json({ restored: result.length });
   },
 );
 

@@ -68,6 +68,24 @@ const DeletedArtworksPage: React.FC = () => {
   // other rows are held while it is in flight so a double click cannot write
   // the same restore twice.
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  // Selected rows are held as ids, not record objects, for the same reason the
+  // live table does: a refetch replaces every object, and a selection keyed by
+  // identity would silently empty itself.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [restoringSelected, setRestoringSelected] = useState(false);
+
+  const selectedRecords = artworks.filter((artwork) =>
+    selectedIds.includes(artwork.id),
+  );
+
+  // After a read, drop ids the server no longer lists (a row restored in
+  // another tab), so the next bulk action cannot carry stale ticks.
+  const showArtworks = (next: Artwork[]) => {
+    setArtworks(next);
+    setSelectedIds((ids) =>
+      ids.filter((id) => next.some((artwork) => artwork.id === id)),
+    );
+  };
 
   // The initial read lives inside the effect (as the other manage pages do)
   // so the page settles once; `refresh` is the same read for a retry and for
@@ -90,7 +108,7 @@ const DeletedArtworksPage: React.FC = () => {
 
   const refresh = async () => {
     try {
-      setArtworks(await artworkService.getDeletedArtworks(collectionId));
+      showArtworks(await artworkService.getDeletedArtworks(collectionId));
       setLoadError(false);
     } catch (err) {
       console.error("Error fetching deleted artworks:", err);
@@ -124,6 +142,41 @@ const DeletedArtworksPage: React.FC = () => {
       });
     } finally {
       setRestoringId(null);
+    }
+  };
+
+  const restoreSelected = async () => {
+    if (selectedIds.length === 0) return;
+    setRestoringSelected(true);
+    try {
+      // The ids are the ticks, not the loaded page: the action restores
+      // exactly what the member selected, and the toast reports what the
+      // server moved rather than what was asked for.
+      const { restored } = await artworkService.bulkRestoreArtworks(
+        collectionId,
+        selectedIds,
+      );
+      setSelectedIds([]);
+      await refresh();
+      notifications.show({
+        color: "green",
+        title: "Restored",
+        message:
+          restored === 1
+            ? "1 artwork is back in the collection."
+            : `${restored} artworks are back in the collection.`,
+      });
+    } catch (err) {
+      // Nothing moved, so the ticks stay: clicking the action again is the
+      // retry.
+      console.error("Error restoring artworks:", err);
+      notifications.show({
+        color: "red",
+        title: "Could not restore",
+        message: "Nothing was restored. Check your connection and try again.",
+      });
+    } finally {
+      setRestoringSelected(false);
     }
   };
 
@@ -199,7 +252,10 @@ const DeletedArtworksPage: React.FC = () => {
           size="compact-xs"
           onClick={() => void restore(artwork)}
           loading={restoringId === artwork.id}
-          disabled={restoringId !== null && restoringId !== artwork.id}
+          disabled={
+            restoringSelected ||
+            (restoringId !== null && restoringId !== artwork.id)
+          }
         >
           Restore
         </Button>
@@ -239,15 +295,38 @@ const DeletedArtworksPage: React.FC = () => {
       ) : artworks.length === 0 ? (
         <Text c="dimmed">Nothing has been deleted from this collection.</Text>
       ) : (
-        <DataTable<Artwork>
-          idAccessor="id"
-          records={artworks}
-          columns={columns}
-          withTableBorder
-          highlightOnHover
-          striped={false}
-          minHeight={200}
-        />
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Text size="sm" c="dimmed">
+              {artworks.length} artwork{artworks.length === 1 ? "" : "s"}
+              {selectedIds.length > 0
+                ? ` — ${selectedIds.length} selected`
+                : ""}
+            </Text>
+            {selectedIds.length > 0 ? (
+              <Button
+                onClick={() => void restoreSelected()}
+                loading={restoringSelected}
+                disabled={restoringSelected || restoringId !== null}
+              >
+                Restore selected
+              </Button>
+            ) : null}
+          </Group>
+          <DataTable<Artwork>
+            idAccessor="id"
+            records={artworks}
+            columns={columns}
+            selectedRecords={selectedRecords}
+            onSelectedRecordsChange={(records) =>
+              setSelectedIds(records.map((record) => record.id))
+            }
+            withTableBorder
+            highlightOnHover
+            striped={false}
+            minHeight={200}
+          />
+        </Stack>
       )}
     </Stack>
   );

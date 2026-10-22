@@ -128,3 +128,15 @@ export const artworkBulkDeleteSchema = z.object({
 });
 
 export type ArtworkBulkDeletePayload = z.infer<typeof artworkBulkDeleteSchema>;
+
+/**
+ * POST /collections/{cid}/artworks/bulk-restore. The same selection the batch
+ * soft delete takes — the ids the client minted — so the two halves of the
+ * Deleted view share one request shape and one validation rule. The answer is
+ * `{ restored: n }`: how many rows this call actually moved.
+ */
+export const artworkBulkRestoreSchema = artworkBulkDeleteSchema;
+
+export type ArtworkBulkRestorePayload = z.infer<
+  typeof artworkBulkRestoreSchema
+>;
