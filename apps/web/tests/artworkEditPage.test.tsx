@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { ModalsProvider } from "@mantine/modals";
@@ -67,7 +73,11 @@ vi.mock("@/hooks/useArtworkDocuments", () => ({
 }));
 
 vi.mock("@/services/artworkService", () => ({
-  artworkService: { getArtwork: vi.fn(), updateArtwork: vi.fn() },
+  artworkService: {
+    getArtwork: vi.fn(),
+    updateArtwork: vi.fn(),
+    restoreArtwork: vi.fn(),
+  },
 }));
 
 // Mantine resolves the colour scheme and responsive props through `matchMedia`,
@@ -111,6 +121,7 @@ const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
 /* eslint-disable @typescript-eslint/unbound-method */
 const getArtwork = vi.mocked(artworkService.getArtwork);
 const updateArtwork = vi.mocked(artworkService.updateArtwork);
+const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
 /* eslint-enable @typescript-eslint/unbound-method */
 
 const renderPage = () =>
@@ -146,6 +157,7 @@ const sentPatch = async (): Promise<ArtworkUpdatePayload> => {
 beforeEach(() => {
   getArtwork.mockResolvedValue(stored());
   updateArtwork.mockResolvedValue(stored());
+  restoreArtwork.mockResolvedValue({ restored: true });
 });
 
 afterEach(() => {
@@ -195,5 +207,114 @@ describe("the Edit page — the status the owner chose", () => {
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect((await sentPatch()).status).toBe("published");
+  });
+});
+
+/**
+ * A deleted work still loads (the API lets a member read and edit one), so the
+ * page has to be the thing that says it is deleted. Save stays shut until a
+ * restore succeeds, and the restore happens in place: the form is uncontrolled
+ * and is never re-initialised, so what the user typed survives.
+ */
+describe("the Edit page — a deleted work", () => {
+  const DELETED_AT = { seconds: 1_760_000_000, nanoseconds: 0 };
+
+  /**
+   * Scoped to the page's container: Mantine's notification store is
+   * module-global and its portal lives outside the rendered container, so a
+   * toast raised by an earlier test survives `cleanup` and would otherwise be
+   * counted as an alert on this page.
+   */
+  const renderDeleted = () => {
+    getArtwork.mockResolvedValue(stored({ deletedAt: DELETED_AT }));
+    const page = within(renderPage().container);
+    const saveButton = async () =>
+      await page.findByRole("button", { name: "Save Changes" });
+    return { page, saveButton };
+  };
+
+  it("explains the deletion and keeps Save shut", async () => {
+    const { page, saveButton } = renderDeleted();
+
+    expect(await saveButton()).toBeDisabled();
+    // The banner is the page's only alert before a restore is attempted, and
+    // the Restore it offers is the one recovery the page presents.
+    expect(page.getByRole("alert")).toBeInTheDocument();
+    expect(page.getByRole("button", { name: "Restore" })).toBeEnabled();
+  });
+
+  it("restores in place, leaving the typed title alone", async () => {
+    const user = userEvent.setup();
+    const { page, saveButton } = renderDeleted();
+
+    const title = await page.findByLabelText(/^Title/);
+    await user.clear(title);
+    await user.type(title, "Unsaved new title");
+
+    await user.click(page.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() =>
+      expect(page.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(await saveButton()).toBeEnabled();
+    expect(restoreArtwork).toHaveBeenCalledTimes(1);
+    expect(restoreArtwork).toHaveBeenCalledWith(COLLECTION_ID, ARTWORK_ID);
+    // Re-read: a re-initialised form remounts the input, so the element found
+    // before the click would keep its value even if the page discarded it.
+    expect(await page.findByLabelText(/^Title/)).toHaveValue(
+      "Unsaved new title",
+    );
+    // No navigation, no refetch, no auto-save.
+    expect(getArtwork).toHaveBeenCalledTimes(1);
+    expect(updateArtwork).not.toHaveBeenCalled();
+  });
+
+  it("stays deleted after a rejected restore and shows the failure", async () => {
+    // The page logs the rejection; keep the run's output to what is under test.
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    restoreArtwork.mockRejectedValue(new Error("network down"));
+    const { page, saveButton } = renderDeleted();
+
+    const title = await page.findByLabelText(/^Title/);
+    await user.type(title, " (edited)");
+
+    await user.click(page.getByRole("button", { name: "Restore" }));
+
+    // The banner's alert plus the inline failure.
+    await waitFor(() => expect(page.getAllByRole("alert")).toHaveLength(2));
+    expect(await saveButton()).toBeDisabled();
+    // The banner is still the same state, so the retry is simply clicking again.
+    expect(page.getByRole("button", { name: "Restore" })).toBeEnabled();
+    expect(page.getByLabelText(/^Title/)).toHaveValue(
+      "Estudio en rojo (edited)",
+    );
+    expect(updateArtwork).not.toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("cannot start a second restore while one is in flight", async () => {
+    const user = userEvent.setup();
+    let settle: (value: { restored: true }) => void = () => undefined;
+    restoreArtwork.mockImplementation(
+      () =>
+        new Promise<{ restored: true }>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const { page } = renderDeleted();
+
+    const restore = await page.findByRole("button", { name: "Restore" });
+    await user.click(restore);
+    await waitFor(() => expect(restore).toBeDisabled());
+    await user.click(restore);
+    expect(restoreArtwork).toHaveBeenCalledTimes(1);
+
+    settle({ restored: true });
+    await waitFor(() =>
+      expect(page.queryByRole("alert")).not.toBeInTheDocument(),
+    );
   });
 });

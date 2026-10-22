@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Loader, Text } from "@mantine/core";
+import { Alert, Button, Loader, Text } from "@mantine/core";
 import { useForm, schemaResolver } from "@mantine/form";
 import { useNavigate, useParams } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
@@ -72,6 +72,16 @@ const ArtworkEditPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // A deleted work still loads — the read admits a member to a tombstoned work
+  // so it can be restored from here. Save stays shut while it is deleted, and
+  // Restore clears the state in place rather than navigating: the form below is
+  // uncontrolled, so nothing the user typed is lost.
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  // Kept apart from `error`: a failed restore must not look like a failed save,
+  // and it lives inside the banner it failed to dismiss.
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
   // The hooks stage under the collection and artwork the route names — no load
   // has to complete first, because staging needs neither.
   const photos = useArtworkPhotos({ collectionId, artworkId });
@@ -103,6 +113,7 @@ const ArtworkEditPage: React.FC = () => {
         const values = fromArtwork(artwork);
         setLoadedValues(values);
         setLoadedTitle(values.title);
+        setIsDeleted(artwork.deletedAt != null);
         // The stored photos, hydrated into the working list. This is what makes
         // an existing image re-orderable and removable rather than only
         // appendable.
@@ -144,6 +155,25 @@ const ArtworkEditPage: React.FC = () => {
     );
   }, [artworkParam, collectionParam, artworkId, loadedTitle, navigate]);
 
+  // One POST, and the page's own state is the whole response: it does not
+  // refetch the work (it already holds it), does not re-initialise the form
+  // (the unsaved input is the point of restoring here) and does not save.
+  const restore = async () => {
+    setRestoreError(null);
+    setRestoring(true);
+    try {
+      await artworkService.restoreArtwork(collectionId, artworkId);
+      setIsDeleted(false);
+    } catch (err) {
+      // The banner stays, so the retry is the same button; the failure is
+      // shown inside it rather than replacing the deleted state with an error.
+      console.error("Error restoring artwork:", err);
+      setRestoreError("Failed to restore artwork. Please try again.");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   if (!artworkId || !collectionId) {
     return <Alert color="red">Invalid artwork id</Alert>;
   }
@@ -161,6 +191,29 @@ const ArtworkEditPage: React.FC = () => {
       <Text size="h2" mb="xl">
         Edit Artwork
       </Text>
+      {isDeleted ? (
+        <Alert color="orange" title="This artwork is deleted" mb="md">
+          <Text size="sm">
+            It is not shown in the collection or on its public page, and Save
+            stays off until it is back. Restore it here to keep editing;
+            anything you have typed is kept. The Deleted view lists the
+            collection&rsquo;s deleted works.
+          </Text>
+          {restoreError ? (
+            <Alert color="red" title="Restore failed" mt="sm">
+              {restoreError}
+            </Alert>
+          ) : null}
+          <Button
+            mt="md"
+            onClick={() => void restore()}
+            loading={restoring}
+            disabled={restoring}
+          >
+            Restore
+          </Button>
+        </Alert>
+      ) : null}
       <form
         // Room for the fixed action bar, so the last field and the alerts
         // above are never permanently behind it.
@@ -168,6 +221,11 @@ const ArtworkEditPage: React.FC = () => {
         // Uncontrolled mode repaints a field by remounting it, which is what
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
+          // The button is disabled while deleted, but Enter in a field can
+          // still submit a form, so the state is enforced here too.
+          if (isDeleted) {
+            return;
+          }
           setError(null);
 
           try {
@@ -218,6 +276,7 @@ const ArtworkEditPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Changes"
           submitting={form.submitting}
+          submitDisabled={isDeleted}
           cancelTo={`/manage/collection/${collectionParam ?? ""}`}
         />
       </form>
