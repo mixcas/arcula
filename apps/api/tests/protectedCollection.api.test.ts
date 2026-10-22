@@ -15,7 +15,16 @@
 // the transport; the exact serialisation is Hono's job.
 
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   collectionAccessGrants as grantsTable,
   collections as collectionsTable,
@@ -26,6 +35,7 @@ import {
   hashGrantToken,
   mintGrantToken,
 } from "../src/collectionGrants";
+import { CLIENT_ADDRESS_HEADER } from "../src/clientAddress";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
@@ -36,6 +46,8 @@ import {
 } from "./helpers/fixtures";
 
 const PASSWORD = "open-sesame";
+/** The collection the throttle cases spend their windows on. */
+const THROTTLED_PASSWORD = "throttle-me";
 
 let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
@@ -43,6 +55,8 @@ let stranger: { cookies: string; userId: string };
 let otherId = "";
 /** A public collection nobody has protected: there is nothing to unlock. */
 let openId = "";
+/** A protected collection the throttle cases spend their windows on. */
+let throttledId = "";
 let cid = "";
 /** The published work, with one photo and one document. */
 let workId = "";
@@ -194,6 +208,11 @@ beforeAll(async () => {
     isPublic: true,
     name: "Open Wall",
   });
+  throttledId = await makeCollection(owner.userId, {
+    isPublic: true,
+    name: "Throttled Wall",
+  });
+  await protect(throttledId, THROTTLED_PASSWORD);
 });
 
 afterAll(async () => {
@@ -409,5 +428,107 @@ describe("a protected collection's visitor half", () => {
       .where(eq(collectionsTable.id, cid));
     expect(row.passwordHash).toMatch(/^scrypt\$/);
     expect(row.passwordHash).not.toContain("a-new-password");
+  });
+});
+
+// Guessing at a password, end to end: the counter the route writes, the 429 it
+// answers past the window, and the two things that make the counter safe to
+// live with — a right password clears the debt, and one collection's throttle
+// never becomes another's weapon. Each case invents its own address, so the
+// cases cannot spend each other's windows.
+describe("the unlock throttle", () => {
+  // The window is floored from the attempt's own time, so a sequence that
+  // happened to cross a ten-minute boundary would spend two windows and leave
+  // the eleventh attempt answered as a wrong password. Pinning the clock is
+  // what keeps one case one window on every run.
+  beforeEach(() => {
+    vi.setSystemTime(new Date("2026-03-01T12:00:05.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** One attempt from an address the gateway would have named. */
+  const attempt = (address: string, collectionId: string, password: string) =>
+    req("POST", `/api/v1/collections/${collectionId}/unlock`, {
+      body: { password },
+      headers: { [CLIENT_ADDRESS_HEADER]: address },
+    });
+
+  /** Spend a window: ten wrong passwords, which are ten failures. */
+  async function spendWindow(address: string): Promise<void> {
+    for (let failure = 1; failure <= 10; failure += 1) {
+      const res = await attempt(address, throttledId, "not-the-password");
+      expect(res.status, `failure ${failure} is still a password check`).toBe(
+        403,
+      );
+    }
+  }
+
+  it("counts ten failures and refuses the eleventh, stating the window", async () => {
+    const address = "198.51.100.10";
+    await spendWindow(address);
+
+    const refused = await attempt(address, throttledId, "not-the-password");
+    expect(refused.status).toBe(429);
+    const body = await err(refused);
+    expect(body.code).toBe("too-many-attempts");
+    // The window, not the countdown: a reader is told how long a window is,
+    // and nobody is told how much of it is left.
+    expect(body.details.windowMinutes).toBe(10);
+    // Refused unread: no grant, however the guess would have gone.
+    expect(refused.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("refuses a right password once the window is spent", async () => {
+    const address = "198.51.100.11";
+    await spendWindow(address);
+
+    const right = await attempt(address, throttledId, THROTTLED_PASSWORD);
+    expect(right.status).toBe(429);
+    expect((await err(right)).code).toBe("too-many-attempts");
+    expect(right.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("lets a right password through inside the limit, and clears the debt", async () => {
+    const address = "198.51.100.12";
+    for (let failure = 1; failure <= 9; failure += 1) {
+      expect(
+        (await attempt(address, throttledId, "not-the-password")).status,
+      ).toBe(403);
+    }
+
+    const admitted = await attempt(address, throttledId, THROTTLED_PASSWORD);
+    expect(admitted.status).toBe(201);
+    expect(grantCookie(admitted, throttledId)).toBeTruthy();
+
+    // The count went with it: ten *more* failures are all counted, where a
+    // surviving count would have refused the second of them.
+    for (let failure = 1; failure <= 10; failure += 1) {
+      const res = await attempt(address, throttledId, "not-the-password");
+      expect(res.status, `failure after a success: ${failure}`).toBe(403);
+    }
+    expect(
+      (await attempt(address, throttledId, "not-the-password")).status,
+    ).toBe(429);
+  });
+
+  it("keys the window by address and collection, so neither throttles the other", async () => {
+    const spent = "198.51.100.13";
+    await spendWindow(spent);
+    expect((await attempt(spent, throttledId, THROTTLED_PASSWORD)).status).toBe(
+      429,
+    );
+
+    // The same address against someone else's protected collection is still
+    // answered — a shared address (a gallery's wifi, a proxy) is not a way to
+    // close every lock in the product.
+    expect((await attempt(spent, otherId, "another-password")).status).toBe(
+      201,
+    );
+    // And a different address against the spent collection still is.
+    expect(
+      (await attempt("198.51.100.14", throttledId, THROTTLED_PASSWORD)).status,
+    ).toBe(201);
   });
 });

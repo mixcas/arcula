@@ -22,6 +22,7 @@
  *   (a miss falls to base64, which is always representable).
  */
 import { app } from "./app";
+import { CLIENT_ADDRESS_HEADER } from "./clientAddress";
 
 interface GatewayEvent {
   rawPath: string;
@@ -30,19 +31,24 @@ interface GatewayEvent {
   cookies?: string[];
   body?: string;
   isBase64Encoded?: boolean;
-  requestContext?: { http?: { method?: string; path?: string } };
+  requestContext?: {
+    http?: { method?: string; path?: string; sourceIp?: string };
+  };
 }
 
 const TEXT_TYPES =
   /^(text\/|application\/json|application\/javascript|application\/xml|image\/svg\+xml|application\/x-ndjson)/;
 
-export const handler = async (event: GatewayEvent) => {
-  const method = event.requestContext?.http?.method ?? "GET";
-  const url = new URL(
-    `${event.rawPath}${event.rawQueryString ? `?${event.rawQueryString}` : ""}`,
-    "http://localhost",
-  );
-
+/**
+ * The request headers the event becomes — the one place the adapter turns the
+ * gateway's facts into the ones the app reads.
+ *
+ * The gateway's own `sourceIp` is the only address a client cannot choose, so
+ * it is written with `set`, which replaces whatever the client sent under the
+ * same name; `x-forwarded-for` is never trusted for the unlock throttle
+ * (clientAddress.ts), because API Gateway appends to a client-supplied one.
+ */
+export function gatewayHeaders(event: GatewayEvent): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(event.headers ?? {})) {
     headers.set(key, String(value));
@@ -51,6 +57,19 @@ export const handler = async (event: GatewayEvent) => {
   if (event.cookies?.length) {
     headers.set("cookie", event.cookies.join("; "));
   }
+  const sourceIp = event.requestContext?.http?.sourceIp;
+  if (sourceIp) headers.set(CLIENT_ADDRESS_HEADER, sourceIp);
+  return headers;
+}
+
+export const handler = async (event: GatewayEvent) => {
+  const method = event.requestContext?.http?.method ?? "GET";
+  const url = new URL(
+    `${event.rawPath}${event.rawQueryString ? `?${event.rawQueryString}` : ""}`,
+    "http://localhost",
+  );
+
+  const headers = gatewayHeaders(event);
 
   let body: BodyInit | undefined;
   if (method !== "GET" && method !== "HEAD" && event.body !== undefined) {

@@ -95,10 +95,13 @@ complete — the identity is an IP, which is shared behind a proxy and plentiful
 to an attacker with many — and the residual weakness is recorded here rather
 than hidden.
 
-_The route and the lock screen ship without it (#89), with
-`collection_unlock_attempts` already in the schema; #90 adds the counting.
-Until it does, a human-chosen password is the only thing between a stranger and
-the collection._
+The route and the lock screen shipped first (#89), with
+`collection_unlock_attempts` already in the schema; #90 added the counting. The
+window is floored from the attempt's own time (`unlockThrottle.ts`), each
+attempt claims a failure slot in one atomic upsert, a right password deletes the
+pair's rows, and the refusal names the window without a countdown — no
+`Retry-After`, which would be one. The address is the gateway's `sourceIp`,
+carried past any client-supplied header.
 
 **The password's rule is a minimum length.** Eight characters, in a shared
 schema so both sides enforce one rule, and no complexity requirement — the

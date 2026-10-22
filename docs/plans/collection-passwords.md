@@ -63,9 +63,9 @@ Ordered so each step is independently testable.
 5. **Routes:**
    - `POST /collections/:collectionId/unlock` — verify the password, mint the
      grant, set the `HttpOnly`/`SameSite=Lax`/path-scoped cookie; `403
-invalid-password` on a miss; `429` past the throttle window. The throttle (and
-     its counter table) is deferred to the follow-up ticket #90, so the route
-     ships without it.
+invalid-password` on a miss; `429` past the throttle window. The route shipped
+     in #89 without the counting; #90 added it, over the counter table `0005`
+     had already created, with the window's arithmetic in `unlockThrottle.ts`.
    - `PATCH /collections/:collectionId` — accept a password write on the
      settings path: set or overwrite the hash and delete the collection's grants
      in one transaction. Present-key semantics as the rest of the PATCH.

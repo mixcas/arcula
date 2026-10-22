@@ -18,13 +18,14 @@
 // counts OWNED collections: creating one is the caller's own, and a shared
 // collection does not consume their slot.
 
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
   collectionAccessGrants as grantsTable,
   collectionCollaborators as collectionCollaboratorsTable,
+  collectionUnlockAttempts as unlockAttemptsTable,
   collections as collectionsTable,
   user as userTable,
 } from "@arcula/db";
@@ -52,6 +53,7 @@ import {
   requireMemberCollection,
   requireReadableCollection,
 } from "../authorize";
+import { CLIENT_ADDRESS_HEADER, clientAddress } from "../clientAddress";
 import {
   GRANT_COOKIE_PATH,
   GRANT_TTL_MS,
@@ -69,6 +71,11 @@ import { parseMediaKey, stagedCollectionPrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
 import { displayName, serializeCollection } from "../serialize";
+import {
+  UNLOCK_MAX_FAILURES,
+  UNLOCK_WINDOW_MINUTES,
+  unlockWindowStart,
+} from "../unlockThrottle";
 
 export const collectionRoutes = new Hono();
 
@@ -296,6 +303,22 @@ collectionRoutes.patch(
 // A collection with no password, or a private one, is not unlockable at all:
 // there is nothing in front of it to get past. The attempt is answered `409`
 // — the state the request does not suit, rather than a permission question.
+//
+// **The throttle.** This is the one route whose purpose is to be guessed at,
+// so its attempts are counted in `collection_unlock_attempts`, per address and
+// per collection, in a **fixed** ten-minute window (unlockThrottle.ts has the
+// arithmetic and the reason it is fixed). The count is spent *before* the
+// secret is read, in one atomic claim: an INSERT that opens the window's row,
+// or an UPDATE that adds this failure to it while the window still has room
+// (`setWhere`). A refused claim is the `429`, and because it is one statement,
+// two attempts racing for the tenth failure cannot both get through. The
+// consequence is deliberate — a right password past the limit is refused too:
+// the throttle is about the address's attempts, not about which secret they
+// guessed.
+//
+// The refusal states the window and nothing about the time left in it, and
+// carries no `Retry-After` for the same reason: a countdown would tell a
+// guesser exactly when their next ten attempts open.
 collectionRoutes.post("/collections/:collectionId/unlock", async (c) => {
   const collection = await loadCollection(param(c, "collectionId"));
   if (!collection) {
@@ -308,9 +331,48 @@ collectionRoutes.post("/collections/:collectionId/unlock", async (c) => {
     c,
     collectionUnlockSchema,
   );
+
+  const ip = clientAddress(c.req.header(CLIENT_ADDRESS_HEADER));
+  const windowStart = unlockWindowStart(new Date());
+  const [claim] = await db
+    .insert(unlockAttemptsTable)
+    .values({ ip, collectionId: collection.id, windowStart, attempts: 1 })
+    .onConflictDoUpdate({
+      target: [
+        unlockAttemptsTable.ip,
+        unlockAttemptsTable.collectionId,
+        unlockAttemptsTable.windowStart,
+      ],
+      set: { attempts: sql`${unlockAttemptsTable.attempts} + 1` },
+      // Past the allowance the UPDATE matches nothing, so the claim returns
+      // no row and nothing about this attempt is recorded.
+      setWhere: lt(unlockAttemptsTable.attempts, UNLOCK_MAX_FAILURES),
+    })
+    .returning({ attempts: unlockAttemptsTable.attempts });
+  if (!claim) {
+    throw new ApiError(
+      "too-many-attempts",
+      `Too many failed attempts. Try again once this ${UNLOCK_WINDOW_MINUTES}-minute window has passed.`,
+      { windowMinutes: UNLOCK_WINDOW_MINUTES },
+    );
+  }
+
   if (!(await verifyPassword(payload.password, collection.passwordHash))) {
     throw new ApiError("invalid-password", "That is not the password");
   }
+
+  // A right password leaves no debt: every counter row for this address and
+  // collection goes, so the next attempt starts the window from zero even if
+  // this one was the ninth. Deleting all of them, not just this window's, is
+  // what makes "clears the counter" be true of the pair rather than of a span.
+  await db
+    .delete(unlockAttemptsTable)
+    .where(
+      and(
+        eq(unlockAttemptsTable.ip, ip),
+        eq(unlockAttemptsTable.collectionId, collection.id),
+      ),
+    );
 
   const now = new Date();
   const token = mintGrantToken();
