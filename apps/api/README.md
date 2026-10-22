@@ -33,6 +33,7 @@ media pipeline, and — in production — serving the built SPA.
 | `GET`             | `/media?key=` — the object proxy (re-checks visibility per request) |
 | `GET` / `POST`    | `/collections`                                                      |
 | `GET` / `PATCH`   | `/collections/:collectionId`                                        |
+| `POST`            | `/collections/:collectionId/unlock`                                 |
 | `POST`            | `/collections/:collectionId/import/csv`                             |
 | `POST`            | `/collections/:collectionId/artworks/bulk-delete`                   |
 | `POST`            | `/collections/:collectionId/artworks/:artworkId/restore`            |
@@ -130,11 +131,99 @@ invalid, expired, revoked, consumed or unknown invitation token is one
 own live offer. The SPA's landing page is `/invite/:token`; the API preview is
 `GET /invitations/:token`.
 
+## Protected collections
+
+A **Protected** collection is a **Public** collection with a password: the
+password is a second condition on the collection's gate, never a third
+visibility state
+([ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
+A **Private** collection stays shut to a grant holder exactly as it is to every
+other visitor.
+
+**The password write is the collection update.** `PATCH
+/collections/:collectionId` takes `password` with the three meanings the
+settings form needs: a string sets or overwrites it (eight characters minimum,
+deliberately not trimmed), `null` removes it, and an absent key leaves the
+column alone — which is why taking a collection private and public again
+returns it to Protected. The plaintext is hashed with `scrypt`, the cost
+parameters encoded in the stored string, before the transaction; the settings
+write and the deletion of **every** Access grant row for the collection then
+commit in one transaction, so a password change can never leave a reader
+holding a grant to the old password. A `null` write revokes too, though there
+is nothing left to admit. The hash itself is never a wire field.
+
+**Reading a Protected collection.** `isPasswordProtected` is on every
+member-audience collection document — each signed-in `GET /collections` row,
+`GET /collections/:collectionId` for the owner or a collaborator, and the
+`POST /collections` and `PATCH /collections/:collectionId` responses — derived
+from the hash's presence. A visitor's document does not carry the field at
+all, not even `false`. The anonymous `GET /collections` omits a Protected
+collection exactly as it omits a Private one, so a Protected collection is
+reachable only by its direct link.
+Membership bypasses the challenge; a non-member needs a valid Access grant. A
+refused collection read is `403 password-required` with the collection's name
+in `details.collectionName`, which the public pages fold to the lock screen. A
+refused work, artwork list or media object is not that challenge: the list
+answers `403 forbidden` (as a Private collection does), and a single work or a
+photo object answers `404` (a document is `403` to a non-member, whatever the
+collection).
+
+**Unlocking.** `POST /collections/:collectionId/unlock` takes
+`{ "password": "…" }` — any non-empty guess, not the eight-character rule,
+because a short guess is a wrong password rather than a malformed request. A
+right password answers `201` `{ "unlocked": true }` and sets the Access grant
+cookie. A wrong one is `403 invalid-password`, deliberately distinct from the
+uniform `not-found` an invitation token gets: the lock screen already named the
+collection, so it can say "that is not it". A collection with no password, or a
+Private one, has nothing to get past and answers `409 conflict`; an unknown
+collection is `404`. A grant admits exactly what a visitor sees — published,
+live works, and never a draft or a document.
+
+**The Access grant.** The cookie is `arcula_grant_{collectionId}`:
+`HttpOnly`, `SameSite=Lax`, `Path=/api/v1`, `Max-Age=43200` (twelve hours), and
+`Secure` in production. Its value is a 32-byte random token; the row stores
+only its SHA-256 hash, with the same twelve-hour expiry, so the cookie lapses
+when the row does. The cookie's name is its scope: each route reads only the
+name for the collection it serves and looks the row up by collection id and
+token hash, so the broad path does not admit one collection's grant to
+another's reads. An expired or revoked grant lands the reader back on the lock
+screen.
+
+**The unlock throttle.** Guessing is counted in `collection_unlock_attempts`,
+one row per address, collection and **fixed** ten-minute window, floored from
+the attempt's own time. Ten failures spend the window and the eleventh attempt
+is refused unread — before the password is checked — as `429
+too-many-attempts` with `details.windowMinutes`. The refusal states the window
+and not the time left in it, and sends no `Retry-After`. A right password
+deletes every counter row for that address and collection, so a member who
+mistyped carries no debt; the pair is the key, so one collection's throttle
+cannot lock a shared address out of another's. The address is the gateway's
+`sourceIp`, carried by the Lambda entry in `x-arcula-client-ip` and never read
+from a forwarding header (`clientAddress.ts`).
+
 ## Modules
 
 - `auth.ts` · `session.ts` · `access.ts` · `authorize.ts` — the Better Auth
   instance (Drizzle adapter), session resolution, the pure access verdicts, and
   the collection, membership and row checks the routes share.
+- `collectionPassword.ts` — the stored password's two facts: `hashPassword`
+  (scrypt, with the cost encoded in the string) and `verifyPassword`. No
+  plaintext is stored or logged, and a malformed hash is a failed check, not a
+  `500`.
+- `collectionGrants.ts` — the Access grant's pure facts: the 32-byte token,
+  its SHA-256 hash, the cookie name and path, the twelve-hour lifetime, and
+  whether a row is still usable. No database and no Hono.
+- `unlockThrottle.ts` — the throttle's policy: the fixed ten-minute window and
+  the flooring that names the span an attempt belongs to.
+- `clientAddress.ts` — the address the unlock throttle counts against, read
+  from the gateway-written `x-arcula-client-ip` header and never from a
+  client-supplied forwarding header.
+- `artworkRead.ts` — the single read path for works, one and listed, with the
+  access verdict applied over the rows it loads. It carries no HTTP type; the
+  route owns the wire codes.
+- `invitations.ts` — the invitation token algebra and the usability and
+  resendability questions the routes ask of a row.
+
 - `media/keys.ts` — the object-key algebra (final and staging) and its parser;
   the parser is what makes the proxy's per-request authorization work from the
   key alone. With sharing, final keys use the collection's fixed
@@ -143,6 +232,9 @@ own live offer. The SPA's landing page is `/invite/:token`; the API preview is
 - `media/variants.ts` — the variant geometry; one table drives the encoder, the
   tests and the key algebra.
 - `media/promote.ts` — staged → final at save.
+- `media/populations.ts` — what differs between Photos and documents in one
+  record: caps, accepted types, the entry table, the variant specs, the key
+  shape and whether a non-image is admissible.
 - `storage.ts` — the single S3 client. `S3_ENDPOINT` is required (it refuses to
   fall through to AWS's default); credentials come from `S3_ACCESS_KEY`/
   `S3_SECRET_KEY` in dev and the Lambda's IAM role in production.

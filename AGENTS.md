@@ -191,7 +191,7 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
 - `invitations.ts` — the pure token algebra (`mintInvitationToken`,
-  `hashInvitationToken`, `normalizeEmail`) and the two questions the routes ask
+  `hashInvitationToken`) and the two questions the routes ask
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
@@ -199,20 +199,26 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   import), `access` (the access read, removal, leaving and transfer),
   `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
-  in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
+  in-app decline), `artworks`, `artworkSave` (the write half of a save: the
+  staged entries promoted, upserted and deleted once the payload validates),
+  `me`, `media` (the object proxy), `artworkMedia`
   (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
-  `variants.ts` (the geometry), `promote.ts` (staged → final).
+  `populations.ts` (what distinguishes photos from documents: caps, types,
+  tables, variants and key shape), `variants.ts` (the geometry), `promote.ts`
+  (staged → final).
 - `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly
   two mails, the invitation and the ownership-transfer notice; a provider
   failure surfaces as `emailSent: false`, never as a failed write.
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
-**`packages/shared/src/`** — the contract: `schemas/` (artwork, artworkImport,
-collection, invitation, document, user), `artworkPhotos.ts` (the `order`
-invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder), `caps.ts` (file
-caps + accepted types), `limits.ts` (the per-tier collection cap), `slug.ts`,
-`types.ts`.
+**`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
+artworkImport, collection, invitation, document, user), `artworkPhotos.ts` (the
+`order` invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder),
+`caps.ts` (file caps + accepted types), `limits.ts` (the per-tier collection
+cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase both sides use),
+`invitationTime.ts` (the invitation durations and the two questions the access
+card asks of a row), `slug.ts`, `types.ts`.
 
 **`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;
