@@ -21,6 +21,7 @@ vi.mock("@/services/artworkService", () => ({
   artworkService: {
     getDeletedArtworks: vi.fn(),
     restoreArtwork: vi.fn(),
+    bulkRestoreArtworks: vi.fn(),
   },
 }));
 
@@ -35,6 +36,8 @@ const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 const getDeletedMock = vi.mocked(artworkService.getDeletedArtworks);
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const restoreMock = vi.mocked(artworkService.restoreArtwork);
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const bulkRestoreMock = vi.mocked(artworkService.bulkRestoreArtworks);
 
 const COLLECTION_PARAM = "deleted-view-collection1";
 
@@ -79,6 +82,7 @@ describe("DeletedArtworksPage", () => {
   beforeEach(() => {
     getDeletedMock.mockReset();
     restoreMock.mockReset();
+    bulkRestoreMock.mockReset();
     consoleError.mockClear();
     // `matches: query === ""` mirrors Chrome: mantine-datatable resolves each
     // column through `matchMedia("")`, and a stub answering false for
@@ -185,6 +189,40 @@ describe("DeletedArtworksPage", () => {
     await waitFor(() => expect(getDeletedMock).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText("Bring Me Back")).toBeNull());
     expect(screen.getByText("Leave Me")).toBeTruthy();
+  });
+
+  it("restores the ticked rows in one call and refetches the list", async () => {
+    const user = userEvent.setup();
+    getDeletedMock
+      .mockResolvedValueOnce([
+        deletedArtwork({ id: "a", title: "First Out" }),
+        deletedArtwork({ id: "b", title: "Second Out" }),
+        deletedArtwork({ id: "c", title: "Third Out" }),
+      ])
+      .mockResolvedValueOnce([
+        deletedArtwork({ id: "b", title: "Second Out" }),
+      ]);
+    bulkRestoreMock.mockResolvedValue({ restored: 2 });
+    renderPage();
+
+    await screen.findByText("First Out");
+    // [0] is the header's "select all"; the rest are the rows.
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[1]);
+    await user.click(checkboxes[3]);
+    await user.click(screen.getByRole("button", { name: "Restore selected" }));
+
+    // No confirmation: the click is the write, with exactly the ticked ids —
+    // not the whole list and not the unticked row between them.
+    await waitFor(() =>
+      expect(bulkRestoreMock).toHaveBeenCalledWith("collection1", ["a", "c"]),
+    );
+    // The list is refetched, not spliced: the restored rows leave because the
+    // server no longer returns them.
+    await waitFor(() => expect(getDeletedMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("First Out")).toBeNull());
+    expect(screen.queryByText("Third Out")).toBeNull();
+    expect(screen.getByText("Second Out")).toBeTruthy();
   });
 
   it("offers a retry when the read fails, then shows the rows", async () => {

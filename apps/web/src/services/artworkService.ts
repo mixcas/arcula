@@ -113,6 +113,21 @@ export const artworkService = {
   },
 
   /**
+   * Bring several deleted works back in one call. The server clears the stamp
+   * on the rows the call actually moves and answers that count — a live or
+   * foreign id is not counted — and the view refetches rather than splicing.
+   */
+  async bulkRestoreArtworks(
+    collectionId: string,
+    artworkIds: string[],
+  ): Promise<{ restored: number }> {
+    return apiRequest<{ restored: number }>(
+      `${base(collectionId)}/bulk-restore`,
+      { method: "POST", body: { artworkIds } },
+    );
+  },
+
+  /**
    * The batch soft delete behind the table's selection. The server stamps
    * `deletedAt` and answers the count — the table refetches, it does not
    * splice.

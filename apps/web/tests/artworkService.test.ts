@@ -77,6 +77,20 @@ describe("the Deleted view's service calls", () => {
     expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks/a1/restore");
     expect(calls[0]?.init.method).toBe("POST");
   });
+
+  it("posts a bulk restore to the batch route with exactly the given ids", async () => {
+    const calls = stubFetch(ok({ restored: 2 }));
+
+    const result = await artworkService.bulkRestoreArtworks("c1", ["a1", "a2"]);
+
+    expect(result).toEqual({ restored: 2 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks/bulk-restore");
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
+      artworkIds: ["a1", "a2"],
+    });
+  });
 });
 
 describe("createArtworks", () => {
