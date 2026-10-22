@@ -126,6 +126,10 @@ export const artworkReadSchema = z.object({
  * `role`/`ownerName` are the dashboard list's per-row extras: the signed-in
  * list emits `role` on every row and `ownerName` on a shared one, while the
  * public list and the single read emit neither. Hence optional.
+ *
+ * `isPasswordProtected` is the member read's one-bit answer about the
+ * collection's password — never the hash. It is absent from every anonymous
+ * read, so a visitor never learns more than the lock screen tells them.
  */
 export const collectionReadSchema = z.object({
   id: z.string(),
@@ -133,6 +137,7 @@ export const collectionReadSchema = z.object({
   userId: z.string(),
   description: z.string().optional(),
   isPublic: z.boolean(),
+  isPasswordProtected: z.boolean().optional(),
   role: z.enum(["owner", "collaborator"]).optional(),
   ownerName: z.string().optional(),
   skin: z.string().optional(),

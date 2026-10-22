@@ -22,6 +22,7 @@ import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
+  collectionAccessGrants as grantsTable,
   collectionCollaborators as collectionCollaboratorsTable,
   collections as collectionsTable,
   user as userTable,
@@ -47,6 +48,7 @@ import {
   requireMemberCollection,
   requireReadableCollection,
 } from "../authorize";
+import { hashPassword } from "../collectionPassword";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
@@ -111,13 +113,17 @@ collectionRoutes.get("/collections", async (c) => {
   return c.json(
     rows.map(({ collection, ownerName, ownerEmail }) => {
       if (collection.userId === userId) {
-        return serializeCollection(collection, { role: "owner" });
+        return serializeCollection(collection, {
+          role: "owner",
+          audience: "member",
+        });
       }
       // The glossary's "the owner's display name, falling back to email": an
       // account with no usable name is named by its address.
       return serializeCollection(collection, {
         role: "collaborator",
         ownerName: displayName(ownerName, ownerEmail),
+        audience: "member",
       });
     }),
   );
@@ -167,16 +173,17 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
       "The created collection could not be read back",
     );
   }
-  return c.json(serializeCollection(row), 201);
+  return c.json(serializeCollection(row, { audience: "member" }), 201);
 });
 
-// GET one — a member always; a visitor when the collection is public.
+// GET one — a member always; a visitor when the collection is public. The
+// password flag is the member's alone: a visitor's document does not carry it.
 collectionRoutes.get("/collections/:collectionId", async (c) => {
-  const collection = await requireReadableCollection(
+  const { collection, audience } = await requireReadableCollection(
     c,
     param(c, "collectionId"),
   );
-  return c.json(serializeCollection(collection));
+  return c.json(serializeCollection(collection, { audience }));
 });
 
 // PATCH — any member: the owner or a collaborator, exactly as the settings
@@ -196,6 +203,19 @@ collectionRoutes.patch(
       collectionUpdateSchema,
     );
 
+    // A password present means a write: a string sets (or overwrites) it,
+    // `null` removes it. Hashing happens before the transaction — it touches
+    // no row — and the update plus the grant revocation share one, so a
+    // change can never leave a reader holding a grant to the old password.
+    // An absent key leaves the column alone, which is why making a collection
+    // private and public again returns it to Protected.
+    const passwordHash =
+      payload.password === undefined
+        ? undefined
+        : payload.password === null
+          ? null
+          : await hashPassword(payload.password);
+
     const set: Partial<typeof collectionsTable.$inferInsert> = {
       name: payload.name,
       isPublic: payload.isPublic,
@@ -210,10 +230,22 @@ collectionRoutes.patch(
     if (payload.skinOptions !== undefined) {
       set.skinOptions = payload.skinOptions ?? null;
     }
-    await db
-      .update(collectionsTable)
-      .set(set)
-      .where(eq(collectionsTable.id, collection.id));
+    if (passwordHash !== undefined) {
+      set.passwordHash = passwordHash;
+    }
+    await safeTx(async (tx) => {
+      await tx
+        .update(collectionsTable)
+        .set(set)
+        .where(eq(collectionsTable.id, collection.id));
+      if (passwordHash !== undefined) {
+        // Revocation, in the same transaction: setting and changing are one
+        // operation, and removing has nothing left to admit.
+        await tx
+          .delete(grantsTable)
+          .where(eq(grantsTable.collectionId, collection.id));
+      }
+    });
 
     const row = await loadCollection(collection.id);
     if (!row) {
@@ -222,7 +254,7 @@ collectionRoutes.patch(
         "The saved collection could not be read back",
       );
     }
-    return c.json(serializeCollection(row));
+    return c.json(serializeCollection(row, { audience: "member" }));
   },
 );
 

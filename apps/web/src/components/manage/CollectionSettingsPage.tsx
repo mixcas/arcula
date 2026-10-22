@@ -29,6 +29,10 @@ import {
 import type { SkinOptionValue } from "@/skins/types";
 import type { CollectionUpdatePayload } from "@arcula/shared";
 import AccessCard from "./collection/AccessCard";
+import {
+  passwordControlMode,
+  resolvePasswordWrite,
+} from "./collectionPassword";
 
 /** Shallow equality over the option bag. Order does not matter, values do. */
 const optionsChanged = (
@@ -63,8 +67,16 @@ const CollectionSettingsPage: React.FC = () => {
   // rendered anyway (loading gate below), so this initial value only matters as
   // the pre-fetch state that the loaded value always overrides.
   const [isPublic, setIsPublic] = useState(true);
-  const [requirePassword, setRequirePassword] = useState(false);
+  // Whether the collection already has a password, as the member read
+  // reports it. The hash never reaches the browser, so this one bit is all
+  // the form gets to know.
+  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  // The two deliberate states beyond "show the fields": changing a password
+  // that is already set, and a removal waiting for Save.
+  const [editingPassword, setEditingPassword] = useState(false);
+  const [removingPassword, setRemovingPassword] = useState(false);
 
   // The skin and its options, as loaded. Kept apart from the editable buffers
   // below for the same reason `loadedName` is: the save compares against these,
@@ -114,6 +126,7 @@ const CollectionSettingsPage: React.FC = () => {
           setDescription(collectionData.description ?? "");
           setLoadedDescription(collectionData.description ?? "");
           setIsPublic(Boolean(collectionData.isPublic));
+          setIsPasswordProtected(collectionData.isPasswordProtected === true);
 
           // Resolved through the registry rather than stored raw, so the form
           // shows the defaults for a collection written before `skin` existed
@@ -189,6 +202,27 @@ const CollectionSettingsPage: React.FC = () => {
       if (optionsChanged(skinOptions, loadedSkinOptions)) {
         update.skinOptions = skinOptions;
       }
+      // The password is the one field with a confirmation, and the
+      // confirmation is a client-side check only: `resolvePasswordWrite`
+      // answers what to send, and the payload never carries `confirm`.
+      const passwordWrite = resolvePasswordWrite({
+        isPublic,
+        isPasswordProtected,
+        editing: editingPassword,
+        removing: removingPassword,
+        password,
+        confirm: confirmPassword,
+      });
+      if (passwordWrite.kind === "error") {
+        setError(passwordWrite.message);
+        return;
+      }
+      if (passwordWrite.kind === "set") {
+        update.password = passwordWrite.password;
+      }
+      if (passwordWrite.kind === "remove") {
+        update.password = null;
+      }
       await collectionService.updateCollection(collectionId, update);
       // Build the slug from the name just saved, so the URL reflects the rename
       // rather than carrying the old one.
@@ -212,6 +246,13 @@ const CollectionSettingsPage: React.FC = () => {
   if (loadError) {
     return <Alert color="red">{loadError}</Alert>;
   }
+
+  const passwordMode = passwordControlMode({
+    isPublic,
+    isPasswordProtected,
+    editing: editingPassword,
+    removing: removingPassword,
+  });
 
   return (
     <Container size="xl">
@@ -259,30 +300,110 @@ const CollectionSettingsPage: React.FC = () => {
               { label: "Public", value: "public" },
             ]}
             value={isPublic ? "public" : "private"}
-            onChange={(value) => setIsPublic(value === "public")}
+            onChange={(value) => {
+              const nextPublic = value === "public";
+              setIsPublic(nextPublic);
+              if (nextPublic) return;
+              // The password control disappears on a private collection.
+              // Drop any unsaved password intent with it, rather than
+              // applying a hidden Remove or a half-typed change on Save.
+              setEditingPassword(false);
+              setRemovingPassword(false);
+              setPassword("");
+              setConfirmPassword("");
+            }}
             fullWidth
             mb="md"
           />
 
-          {isPublic && (
-            <Group justify="space-between" mb="md">
-              <Text>Require Password for Access</Text>
-              <Switch
-                checked={requirePassword}
-                onChange={(e) => setRequirePassword(e.target.checked)}
-                label="Password protected"
-              />
-            </Group>
+          {/*
+            The password control, in the four states ADR-0005 names. A
+            private collection shows nothing: there is no visitor in front of
+            it to protect the works from. The confirmation is checked here and
+            never sent — the payload carries `password` alone.
+          */}
+          {passwordMode === "protected" && (
+            <Box mb="md">
+              <Text fw={600}>
+                Protected — the current password stays in effect
+              </Text>
+              <Group mt="xs">
+                <Button
+                  type="button"
+                  variant="light"
+                  onClick={() => {
+                    setPassword("");
+                    setConfirmPassword("");
+                    setEditingPassword(true);
+                    setRemovingPassword(false);
+                  }}
+                >
+                  Reset password
+                </Button>
+                <Button
+                  type="button"
+                  variant="subtle"
+                  color="red"
+                  onClick={() => {
+                    setEditingPassword(false);
+                    setRemovingPassword(true);
+                  }}
+                >
+                  Remove password
+                </Button>
+              </Group>
+            </Box>
           )}
 
-          {requirePassword && (
-            <PasswordInput
-              label="Password"
-              placeholder="Enter password to protect collection"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              mb="md"
-            />
+          {passwordMode === "removing" && (
+            <Alert color="yellow" mb="md" title="The password will be removed">
+              <Text size="sm">
+                Anyone with the link will be able to read this collection again
+                as soon as the change is saved.
+              </Text>
+              <Button
+                type="button"
+                variant="subtle"
+                mt="xs"
+                onClick={() => setRemovingPassword(false)}
+              >
+                Cancel
+              </Button>
+            </Alert>
+          )}
+
+          {(passwordMode === "fields" || passwordMode === "editing") && (
+            <>
+              <PasswordInput
+                label="Password"
+                description="Visitors need this password to read the collection."
+                placeholder="At least 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                mb="sm"
+              />
+              <PasswordInput
+                label="Confirm password"
+                placeholder="Type it again"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.currentTarget.value)}
+                mb="sm"
+              />
+              {passwordMode === "editing" && (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  mb="md"
+                  onClick={() => {
+                    setPassword("");
+                    setConfirmPassword("");
+                    setEditingPassword(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </>
           )}
 
           <Divider mt="md" mb="md" />

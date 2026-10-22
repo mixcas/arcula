@@ -466,7 +466,11 @@ invitationRoutes.post(
       }
     });
 
-    const read: CollectionRead = serializeCollection(collection);
+    // The caller is a member now, so this is a member read: it may say
+    // whether the collection is protected.
+    const read: CollectionRead = serializeCollection(collection, {
+      audience: "member",
+    });
     return c.json(read);
   },
 );
