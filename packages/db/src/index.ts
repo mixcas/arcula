@@ -1,6 +1,8 @@
-// The Drizzle schema: eleven tables. Four Better Auth core tables (extended
-// with the typed `user` columns), five domain tables and the two sharing
-// tables (`collection_collaborators`, `collection_invitations`).
+// The Drizzle schema: thirteen tables. Four Better Auth core tables (extended
+// with the typed `user` columns), five domain tables, the two sharing tables
+// (`collection_collaborators`, `collection_invitations`) and the two a
+// protected collection needs (`collection_access_grants`,
+// `collection_unlock_attempts`).
 //
 // This package is the single source of truth for the schema: the API imports
 // it over a live driver, the migration tooling reads it to generate SQL, and
@@ -110,8 +112,7 @@ export const verification = pgTable("verification", {
 // ---------------------------------------------------------------------------
 
 // There is no `artworks: string[]` column: it would be a denormalized list the
-// join replaces. There is no `passwordHash` column either: collection password
-// protection is not built.
+// join replaces.
 export const collections = pgTable(
   "collections",
   {
@@ -130,6 +131,12 @@ export const collections = pgTable(
     skin: text("skin"),
     skinOptions: jsonb("skinOptions"),
     isPublic: boolean("isPublic").notNull().default(true),
+    // A one-way hash with its salt and parameters in the string, or NULL for a
+    // collection anyone may read. Nullable on purpose: a collection without a
+    // password is the normal state, not a gap to backfill, so this column needs
+    // no tightening step. The plaintext is never stored, and there is no
+    // read-back path by design (ADR-0005).
+    passwordHash: text("passwordHash"),
     createdAt: timestamptz("createdAt"),
     updatedAt: timestamptz("updatedAt"),
   },
@@ -181,6 +188,48 @@ export const collectionInvitations = pgTable(
       "collection_invitations_status_check",
       sql`"status" in ('pending', 'accepted', 'declined', 'revoked')`,
     ),
+  ],
+);
+
+// An Access grant: what a reader holds after entering a protected
+// collection's password. The row keeps the token's hash, never the token, so a
+// database leak is a set of unguessable hashes rather than a set of working
+// grants. Expiry is computed from `expiresAt` rather than stored as a status,
+// and the index below exists so that revoking a collection's grants on a
+// password change is one statement (ADR-0005).
+export const collectionAccessGrants = pgTable(
+  "collection_access_grants",
+  {
+    collectionId: text("collectionId").notNull(),
+    tokenHash: text("tokenHash").notNull().unique(),
+    createdAt: timestamptz("createdAt"),
+    // When the grant stops being usable. The TTL is policy, decided by the
+    // route that mints the row; the schema only carries the clock.
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    // Revocation: deleting one collection's grants in a single statement.
+    index("collection_access_grants_collection_id_idx").on(table.collectionId),
+  ],
+);
+
+// The unlock throttle's counter: one row per address, collection and window.
+// `attempts` counts failures, and a window lapses once its start is older than
+// the window length — which is policy the unlock route owns, not the schema.
+// Keying on both identifiers keeps one collection's throttle from locking
+// visitors out of another's through a shared address (ADR-0005).
+export const collectionUnlockAttempts = pgTable(
+  "collection_unlock_attempts",
+  {
+    ip: text("ip").notNull(),
+    collectionId: text("collectionId").notNull(),
+    // The window's start, floored from the attempt time, so a row names the
+    // window it belongs to without a second clock column.
+    windowStart: timestamp("windowStart", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ip, table.collectionId, table.windowStart] }),
   ],
 );
 
@@ -309,6 +358,8 @@ export const schema = {
   collections,
   collectionCollaborators,
   collectionInvitations,
+  collectionAccessGrants,
+  collectionUnlockAttempts,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,

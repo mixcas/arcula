@@ -21,8 +21,10 @@ import {
   artworkPhotoVariants,
   artworkPhotos,
   artworks,
+  collectionAccessGrants,
   collectionCollaborators,
   collectionInvitations,
+  collectionUnlockAttempts,
   collections,
   schema,
   session,
@@ -91,6 +93,8 @@ const TABLE_NAMES = [
   "collections",
   "collectionCollaborators",
   "collectionInvitations",
+  "collectionAccessGrants",
+  "collectionUnlockAttempts",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -123,8 +127,11 @@ const SHARED_SQL = readMigration("0003_shared_collections");
 // The committed follow-up that tightens the media namespace.
 const NOT_NULL_SQL = readMigration("0004_media_namespace_not_null");
 
-describe("the eleven-table schema", () => {
-  it("declares exactly the eleven tables, and `user` is singular", () => {
+// The committed schema-first migration for password protection.
+const PASSWORD_SQL = readMigration("0005_collection_passwords");
+
+describe("the thirteen-table schema", () => {
+  it("declares exactly the thirteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -261,6 +268,63 @@ describe("the eleven-table schema", () => {
     // tolerates null, because the Lambda deploys before the migration does.
     expect(c.mediaNamespaceId.dataType).toBe("string");
     expect(c.mediaNamespaceId.notNull).toBe(true);
+  });
+
+  it("collections carries a nullable password hash, with no default to hide a gap", () => {
+    const c = cols(collections);
+    // Nullable is the whole point: a collection without a password is the
+    // normal state, so no backfill and no NOT NULL step is owed later. A
+    // default would invent a password none was set for.
+    expect(c.passwordHash.dataType).toBe("string");
+    expect(c.passwordHash.notNull).toBe(false);
+    expect(c.passwordHash.hasDefault).toBe(false);
+  });
+
+  it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
+    const c = cols(collectionAccessGrants);
+    expect(Object.keys(c)).toEqual([
+      "collectionId",
+      "tokenHash",
+      "createdAt",
+      "expiresAt",
+    ]);
+    expect(c.collectionId.notNull).toBe(true);
+    // The raw token exists only in the reader's cookie, as with an invitation.
+    expect(c.tokenHash.notNull).toBe(true);
+    expect(c.tokenHash.isUnique).toBe(true);
+    expect(c.createdAt.notNull).toBe(true);
+    expect(c.createdAt.hasDefault).toBe(true);
+    // Expiry is computed from the timestamp, never stored as a status.
+    expect(c.expiresAt.dataType).toBe("date");
+    expect(c.expiresAt.notNull).toBe(true);
+    // One statement deletes a collection's grants on a password change.
+    expect(indexesOf(collectionAccessGrants)).toMatchObject({
+      collection_access_grants_collection_id_idx: ["collectionId"],
+    });
+  });
+
+  it("collection_unlock_attempts is keyed by address, collection and window", () => {
+    const c = cols(collectionUnlockAttempts);
+    expect(Object.keys(c)).toEqual([
+      "ip",
+      "collectionId",
+      "windowStart",
+      "attempts",
+    ]);
+    expect(c.ip.notNull).toBe(true);
+    expect(c.collectionId.notNull).toBe(true);
+    expect(c.windowStart.dataType).toBe("date");
+    expect(c.windowStart.notNull).toBe(true);
+    expect(c.attempts.dataType).toBe("number");
+    expect(c.attempts.notNull).toBe(true);
+    expect(c.attempts.default).toBe(0);
+    // The triple is the key: one counter per address, collection and window.
+    const pk = getTableConfig(collectionUnlockAttempts).primaryKeys[0];
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "ip",
+      "collectionId",
+      "windowStart",
+    ]);
   });
 
   it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
@@ -558,6 +622,70 @@ describe("the committed namespace migration (as it will actually be applied)", (
     // tighten a column the old code still inserts without.
     expect(SHARED_SQL).not.toContain(
       'ALTER COLUMN "mediaNamespaceId" SET NOT NULL',
+    );
+  });
+});
+
+describe("the committed password migration (as it will actually be applied)", () => {
+  it("creates both new tables, with no foreign keys", () => {
+    expect(PASSWORD_SQL).toMatch(
+      /CREATE TABLE "collection_access_grants" \([\s\S]*CONSTRAINT "collection_access_grants_tokenHash_unique" UNIQUE\("tokenHash"\)/,
+    );
+    expect(PASSWORD_SQL).toMatch(
+      /CREATE TABLE "collection_unlock_attempts" \([\s\S]*PRIMARY KEY\("ip","collectionId","windowStart"\)/,
+    );
+    // Domain tables stay reference-free, like the ones before them.
+    expect(PASSWORD_SQL).not.toContain("FOREIGN KEY");
+  });
+
+  it("adds the password hash nullable, with no NOT NULL step and no backfill", () => {
+    expect(PASSWORD_SQL).toContain(
+      'ALTER TABLE "collections" ADD COLUMN "passwordHash" text;',
+    );
+    // Nullable is load-bearing: a collection without a password is normal.
+    expect(PASSWORD_SQL).not.toMatch(/ADD COLUMN "passwordHash" text NOT NULL/);
+    expect(PASSWORD_SQL).not.toContain(
+      'ALTER COLUMN "passwordHash" SET NOT NULL',
+    );
+  });
+
+  it("writes no rows — the release is pure DDL", () => {
+    // Unlike the sharing release, there is nothing to backfill: the new
+    // column's absence IS the intended value, so a data write would be a bug.
+    expect(dataWrites(PASSWORD_SQL)).toEqual([]);
+  });
+
+  it("carries the revocation index over the collection", () => {
+    expect(PASSWORD_SQL).toMatch(
+      /CREATE INDEX "collection_access_grants_collection_id_idx" ON "collection_access_grants" USING btree \("collectionId"\)/,
+    );
+  });
+
+  it("keeps the password hash optional and defaultless in the DDL too", () => {
+    // The in-memory schema says nullable with no default; this is the same
+    // claim against the SQL actually applied. A `DEFAULT` here would invent a
+    // password no owner set, and `NOT NULL` would fail on every existing row.
+    expect(PASSWORD_SQL).toMatch(/"passwordHash" text[;,]/);
+    expect(PASSWORD_SQL).not.toMatch(/"passwordHash" text[^;]*DEFAULT/);
+  });
+
+  it("types the grant and counter columns as the schema declares them", () => {
+    // Column types are the other half of the two-source contract: a changed
+    // `expiresAt` type or a missing default on `attempts` must not survive.
+    expect(PASSWORD_SQL).toContain(
+      '"expiresAt" timestamp with time zone NOT NULL',
+    );
+    expect(PASSWORD_SQL).toContain(
+      '"createdAt" timestamp with time zone DEFAULT now() NOT NULL',
+    );
+    expect(PASSWORD_SQL).toContain('"ip" text NOT NULL');
+    expect(PASSWORD_SQL).toContain('"attempts" integer DEFAULT 0 NOT NULL');
+  });
+
+  it("uses timestamptz for every timestamp", () => {
+    // Stripping the qualified type leaves no bare `timestamp` anywhere.
+    expect(PASSWORD_SQL.replace(/timestamp with time zone/g, "")).not.toContain(
+      "timestamp",
     );
   });
 });
