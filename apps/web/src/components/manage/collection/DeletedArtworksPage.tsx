@@ -4,7 +4,6 @@ import {
   Badge,
   Button,
   Group,
-  Image,
   Loader,
   Stack,
   Text,
@@ -15,8 +14,9 @@ import { Link, useParams } from "react-router-dom";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
 import { ApiRequestError } from "@/services/api";
+import ArtworkThumbnail from "@/components/manage/collection/ArtworkThumbnail";
 import { relativeTime } from "@/utils/relativeTime";
-import { parseId, primaryPhotoUrl, timestampMillis } from "@arcula/shared";
+import { parseId, timestampMillis } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
 /**
@@ -168,19 +168,7 @@ const DeletedArtworksPage: React.FC = () => {
       accessor: "photos",
       title: "",
       width: 72,
-      render: (artwork) => {
-        const thumbnail = primaryPhotoUrl(artwork, "square_sm");
-        return thumbnail ? (
-          <Image
-            src={thumbnail}
-            alt={artwork.title}
-            w={48}
-            h={48}
-            fit="cover"
-            radius="sm"
-          />
-        ) : null;
-      },
+      render: (artwork) => <ArtworkThumbnail artwork={artwork} />,
     },
     {
       accessor: "title",
