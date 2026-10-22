@@ -34,6 +34,14 @@ let owner: { cookies: string; userId: string; email: string };
 let stranger: { cookies: string; userId: string };
 let mate: { cookies: string; userId: string };
 
+// The Protected fixture the list tests share: a public collection with a
+// password, made through the settings write path. It is created before any
+// list reads so the anonymous list is always exercised with a protected row
+// in the database.
+let protOwner: { cookies: string; userId: string; email: string };
+let protMate: { cookies: string; userId: string };
+let protectedId = "";
+
 // Module-level ids, set by the test that creates them: the cap leaves
 // each user one collection, so the later describes reuse what the
 // earlier ones made.
@@ -47,6 +55,32 @@ beforeAll(async () => {
   owner = await freshUser("Coll");
   stranger = await freshUser("Coll");
   mate = await freshUser("Coll");
+
+  protOwner = await freshUser("Prot");
+  protMate = await freshUser("Prot");
+  const created = await req("POST", "/api/v1/collections", {
+    cookies: protOwner.cookies,
+    body: JSON.stringify({ name: "Protected By Link" }),
+  });
+  expect(created.status).toBe(201);
+  protectedId = String((await json<Record<string, unknown>>(created)).id);
+  // Through the settings write path, not a hand-written row: the fixture is
+  // what the product actually stores when an owner sets a password.
+  const locked = await req("PATCH", `/api/v1/collections/${protectedId}`, {
+    cookies: protOwner.cookies,
+    body: JSON.stringify({
+      name: "Protected By Link",
+      isPublic: true,
+      password: "open-sesame",
+    }),
+  });
+  expect(locked.status).toBe(200);
+  expect(
+    (await json<Record<string, unknown>>(locked)).isPasswordProtected,
+  ).toBe(true);
+  await db
+    .insert(collaboratorsTable)
+    .values({ collectionId: protectedId, userId: protMate.userId });
 });
 
 afterAll(async () => {
@@ -115,7 +149,7 @@ describe("POST /collections", () => {
 });
 
 describe("GET /collections", () => {
-  it("lists each caller's own collections name-ordered; anon sees only the public ones", async () => {
+  it("lists each caller's own collections name-ordered; anon sees only the public, unprotected ones", async () => {
     // A second, private collection the API cap would refuse: inserted
     // directly so the cap stays a route property, not a table property.
     await db.insert(collectionsTable).values({
@@ -146,6 +180,20 @@ describe("GET /collections", () => {
     expect(anonNames).toContain("Study Wall");
     expect(anonNames).not.toContain("AAA Test Wall");
     expect(anonNames).not.toContain("Private Wall");
+    // A Protected collection is excluded exactly as a Private one is, and the
+    // same fixture is refused by the pure verdict: the SQL filter and
+    // canSeeCollection agree on that row.
+    expect(anonNames).not.toContain("Protected By Link");
+    const [protectedRow] = await db
+      .select()
+      .from(collectionsTable)
+      .where(eq(collectionsTable.id, protectedId));
+    if (!protectedRow) {
+      throw new Error("the protected fixture is not stored");
+    }
+    expect(
+      canSeeCollection(membershipOf(null, protectedRow, null), protectedRow),
+    ).toBe(false);
 
     // The public list's SQL filter is the anonymous verdict in access.ts
     // spelled in SQL: every row it returns is one canSeeCollection admits.
@@ -631,16 +679,14 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
 // Access grants in the same write, and keeps the hash on a private/public
 // round trip. The hash itself is never on the wire, under any read.
 //
-// This lives in the same file as the anonymous-list test on purpose: the
+// This lives in the same file as the anonymous-list tests on purpose: the
 // shared test database is one, and a protected public collection left in it
-// while that test runs would fail its verdict check (the list still filters
-// on `isPublic` alone until T6). Files run in parallel, tests in a file do
-// not.
+// while those tests run must still be absent from the list — the exclusion
+// T6 pins below. Files run in parallel, tests in a file do not.
 //
-// The visitor's half — unlock, lock screen and the anonymous filter — is not
-// here. The extended verdict (T3) already refuses a Protected collection to a
-// non-member, so until T5 lands the public link answers 403 rather than a
-// lock screen; T6 removes it from the anonymous list.
+// The visitor's half — unlock and the lock screen — is not here. The extended
+// verdict (T3) already refuses a Protected collection to a non-member, so
+// until T5 lands the public link answers 403 rather than a lock screen.
 describe("the collection password write", () => {
   let pwdOwner: { cookies: string; userId: string };
   let pwdMate: { cookies: string; userId: string };
@@ -864,5 +910,47 @@ describe("the collection password write", () => {
     expect(
       (await json<Record<string, unknown>>(removed)).isPasswordProtected,
     ).toBe(false);
+  });
+});
+
+// T6: a Protected collection is shared as a link, not found in an index
+// (ADR-0005). The anonymous exclusion is pinned by the list test above, on
+// the same fixture the verdict refuses; these are the member's side and the
+// artwork list's agreement with the collection read.
+describe("a protected collection's members", () => {
+  it("still see it in their own lists, with the password flag", async () => {
+    const own = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: protOwner.cookies }),
+    );
+    const ownerRow = own.find((c) => c.id === protectedId);
+    expect(ownerRow?.role).toBe("owner");
+    expect(ownerRow?.isPasswordProtected).toBe(true);
+
+    const shared = await json<Record<string, unknown>[]>(
+      await req("GET", "/api/v1/collections", { cookies: protMate.cookies }),
+    );
+    const mateRow = shared.find((c) => c.id === protectedId);
+    expect(mateRow?.role).toBe("collaborator");
+    expect(mateRow?.isPasswordProtected).toBe(true);
+  });
+
+  it("refuses a non-member's artwork list exactly as the collection read does", async () => {
+    // Anonymous and signed-in stranger are one answer: membership is what
+    // admits, and neither holds it.
+    for (const cookies of [undefined, stranger.cookies]) {
+      const read = await req("GET", `/api/v1/collections/${protectedId}`, {
+        cookies,
+      });
+      expect(read.status).toBe(403);
+      expect((await err(read)).code).toBe("forbidden");
+
+      const list = await req(
+        "GET",
+        `/api/v1/collections/${protectedId}/artworks`,
+        { cookies },
+      );
+      expect(list.status).toBe(403);
+      expect((await err(list)).code).toBe("forbidden");
+    }
   });
 });
