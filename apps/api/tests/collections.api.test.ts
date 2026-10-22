@@ -146,17 +146,19 @@ describe("GET /collections", () => {
 
     // The public list's SQL filter is the anonymous verdict in access.ts
     // spelled in SQL: every row it returns is one canSeeCollection admits.
+    // Assert against the stored row, not the wire row, so a listed Protected
+    // collection would be caught by the verdict's own password check.
     for (const row of anon) {
-      expect(
-        canSeeCollection(
-          membershipOf(
-            null,
-            row as { userId: string; isPublic: boolean },
-            null,
-          ),
-          row as { userId: string; isPublic: boolean },
-        ),
-      ).toBe(true);
+      const [stored] = await db
+        .select()
+        .from(collectionsTable)
+        .where(eq(collectionsTable.id, row.id as string));
+      if (!stored) {
+        throw new Error(`the list returned ${String(row.id)}, not stored`);
+      }
+      expect(canSeeCollection(membershipOf(null, stored, null), stored)).toBe(
+        true,
+      );
     }
   });
 
