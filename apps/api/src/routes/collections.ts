@@ -94,6 +94,44 @@ import {
 
 export const collectionRoutes = new Hono();
 
+/**
+ * The one write behind both batch routes: move a collection's deletion stamp
+ * for the selected ids and answer how many rows moved.
+ *
+ * Delete stamps the ids that are live; restore clears the ones that are
+ * stamped. An id already in the other state is not in the WHERE clause and is
+ * not counted, so a repeated call is a no-op and the answer is always what
+ * this call actually changed. The two routes keep their own response key; only
+ * the update is shared.
+ */
+async function moveDeletionStamp(
+  collectionId: string,
+  artworkIds: readonly string[],
+  direction: "delete" | "restore",
+): Promise<number> {
+  const now = new Date();
+  const result = await safeTx(
+    async (tx) =>
+      await tx
+        .update(artworksTable)
+        .set({
+          deletedAt: direction === "delete" ? now : null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(artworksTable.collectionId, collectionId),
+            inArray(artworksTable.id, [...artworkIds]),
+            direction === "delete"
+              ? isNull(artworksTable.deletedAt)
+              : isNotNull(artworksTable.deletedAt),
+          ),
+        )
+        .returning({ id: artworksTable.id }),
+  );
+  return result.length;
+}
+
 // GET /collections — signed in: the collections the caller owns *and* those
 // shared with them, together, name-ordered, each row carrying its `role`
 // (and, on a shared row, the owner's display name); anonymous: the public
@@ -528,22 +566,13 @@ collectionRoutes.post(
       artworkBulkDeleteSchema,
     );
 
-    const now = new Date();
-    const result = await safeTx(
-      async (tx) =>
-        await tx
-          .update(artworksTable)
-          .set({ deletedAt: now, updatedAt: now })
-          .where(
-            and(
-              eq(artworksTable.collectionId, collection.id),
-              inArray(artworksTable.id, payload.artworkIds),
-              isNull(artworksTable.deletedAt),
-            ),
-          )
-          .returning({ id: artworksTable.id }),
-    );
-    return c.json({ deleted: result.length });
+    return c.json({
+      deleted: await moveDeletionStamp(
+        collection.id,
+        payload.artworkIds,
+        "delete",
+      ),
+    });
   },
 );
 
@@ -565,22 +594,13 @@ collectionRoutes.post(
       artworkBulkRestoreSchema,
     );
 
-    const now = new Date();
-    const result = await safeTx(
-      async (tx) =>
-        await tx
-          .update(artworksTable)
-          .set({ deletedAt: null, updatedAt: now })
-          .where(
-            and(
-              eq(artworksTable.collectionId, collection.id),
-              inArray(artworksTable.id, payload.artworkIds),
-              isNotNull(artworksTable.deletedAt),
-            ),
-          )
-          .returning({ id: artworksTable.id }),
-    );
-    return c.json({ restored: result.length });
+    return c.json({
+      restored: await moveDeletionStamp(
+        collection.id,
+        payload.artworkIds,
+        "restore",
+      ),
+    });
   },
 );
 

@@ -1,6 +1,7 @@
 // The collection's Deleted view, over HTTP against the real stack: the
-// member-only read of a collection's deleted works in deletion order, and the
-// single restore that takes one back out of it.
+// member-only read of a collection's deleted works in deletion order, the
+// batch restore that moves a selection's stamps, and the single restore that
+// takes one work back out of the view.
 //
 // The fixtures stamp `deletedAt` directly because bulk delete writes one `now`
 // for every row — the deletion order this suite pins is the order the list
@@ -31,20 +32,25 @@ let liveId = "";
 let photoId = "";
 let documentId = "";
 
-async function createWork(values: {
-  title: string;
-  artistName: string;
-  status?: "draft" | "published";
-  serie?: string;
-}): Promise<string> {
-  const res = await req(
-    "POST",
-    `/api/v1/collections/${collectionId}/artworks`,
-    {
-      cookies: owner.cookies,
-      body: JSON.stringify({ artworkId: uuid(), ...values }),
-    },
-  );
+async function createWork(
+  target: string,
+  cookies: string,
+  values: {
+    title: string;
+    artistName?: string;
+    status?: "draft" | "published";
+    serie?: string;
+  },
+): Promise<string> {
+  const res = await req("POST", `/api/v1/collections/${target}/artworks`, {
+    cookies,
+    body: JSON.stringify({
+      artworkId: uuid(),
+      ...values,
+      // A work named only by its title uses the title as the artist too.
+      artistName: values.artistName ?? values.title,
+    }),
+  });
   expect(res.status).toBe(201);
   return String((await json<Record<string, unknown>>(res)).id);
 }
@@ -55,6 +61,42 @@ async function stampDeleted(artworkId: string, iso: string): Promise<void> {
     .update(artworksTable)
     .set({ deletedAt: at, updatedAt: at })
     .where(eq(artworksTable.id, artworkId));
+}
+
+/**
+ * The refusal every member-only route owes, whatever its method: a signed-in
+ * non-member is forbidden (deliberately on a public collection, so a missing
+ * membership check cannot hide behind the collection gate), an anonymous
+ * caller is unauthorized, and a missing collection is not found. Shared so the
+ * Deleted list and the batch restore are pinned to the same contract.
+ */
+async function expectRefusal(input: {
+  method: "GET" | "POST";
+  target: string;
+  path: (collectionId: string) => string;
+  memberCookies: string;
+  strangerCookies: string;
+  body?: string;
+}): Promise<void> {
+  const { method, target, path, memberCookies, strangerCookies, body } = input;
+
+  const foreign = await req(method, path(target), {
+    cookies: strangerCookies,
+    body,
+  });
+  expect(foreign.status).toBe(403);
+  expect((await err(foreign)).code).toBe("forbidden");
+
+  const anonymous = await req(method, path(target), { body });
+  expect(anonymous.status).toBe(401);
+  expect((await err(anonymous)).code).toBe("unauthorized");
+
+  const missing = await req(method, path(crypto.randomUUID()), {
+    cookies: memberCookies,
+    body,
+  });
+  expect(missing.status).toBe(404);
+  expect((await err(missing)).code).toBe("not-found");
 }
 
 beforeAll(async () => {
@@ -69,23 +111,23 @@ beforeAll(async () => {
   expect(created.status).toBe(201);
   collectionId = String((await json<Record<string, unknown>>(created)).id);
 
-  newestId = await createWork({
+  newestId = await createWork(collectionId, owner.cookies, {
     title: "Newest Out",
     artistName: "N. Out",
     status: "published",
     serie: "Red Series",
   });
-  middleId = await createWork({
+  middleId = await createWork(collectionId, owner.cookies, {
     title: "Middle Out",
     artistName: "M. Out",
     status: "published",
   });
-  oldestDraftId = await createWork({
+  oldestDraftId = await createWork(collectionId, owner.cookies, {
     title: "Oldest Draft",
     artistName: "O. Draft",
     status: "draft",
   });
-  liveId = await createWork({
+  liveId = await createWork(collectionId, owner.cookies, {
     title: "Still Live",
     artistName: "L. Live",
     status: "published",
@@ -163,30 +205,13 @@ describe("GET /collections/{cid}/deleted-artworks", () => {
   });
 
   it("refuses a non-member on a public collection, an anonymous caller, and 404s a missing collection", async () => {
-    // Deliberately a public collection: a private one would refuse through
-    // the collection gate too, hiding a missing membership check.
-    const foreign = await req(
-      "GET",
-      `/api/v1/collections/${collectionId}/deleted-artworks`,
-      { cookies: stranger.cookies },
-    );
-    expect(foreign.status).toBe(403);
-    expect((await err(foreign)).code).toBe("forbidden");
-
-    const anonymous = await req(
-      "GET",
-      `/api/v1/collections/${collectionId}/deleted-artworks`,
-    );
-    expect(anonymous.status).toBe(401);
-    expect((await err(anonymous)).code).toBe("unauthorized");
-
-    const missing = await req(
-      "GET",
-      `/api/v1/collections/${crypto.randomUUID()}/deleted-artworks`,
-      { cookies: owner.cookies },
-    );
-    expect(missing.status).toBe(404);
-    expect((await err(missing)).code).toBe("not-found");
+    await expectRefusal({
+      method: "GET",
+      target: collectionId,
+      path: (id) => `/api/v1/collections/${id}/deleted-artworks`,
+      memberCookies: owner.cookies,
+      strangerCookies: stranger.cookies,
+    });
   });
 
   it("shows a collaborator the same deleted works", async () => {
@@ -212,7 +237,7 @@ describe("GET /collections/{cid}/deleted-artworks", () => {
 // Bulk restore over a selection. The count is the works this call moved, so a
 // live id, an id from another collection and an id a previous call already
 // restored do not count. Its own collection keeps these assertions independent
-// of the single-restore tests above, which mutate the shared one.
+// of the single-restore tests below, which mutate the shared one.
 describe("POST /collections/{cid}/artworks/bulk-restore", () => {
   // The free tier owns one collection per account, so this suite signs up its
   // own owner and its own stranger rather than reusing the pair above.
@@ -224,25 +249,6 @@ describe("POST /collections/{cid}/artworks/bulk-restore", () => {
   let liveId = "";
   let foreignCollectionId = "";
   let foreignDeletedId = "";
-
-  const createWorkIn = async (
-    target: string,
-    cookies: string,
-    title: string,
-    status: "draft" | "published" = "published",
-  ): Promise<string> => {
-    const res = await req("POST", `/api/v1/collections/${target}/artworks`, {
-      cookies,
-      body: JSON.stringify({
-        artworkId: uuid(),
-        title,
-        artistName: title,
-        status,
-      }),
-    });
-    expect(res.status).toBe(201);
-    return String((await json<Record<string, unknown>>(res)).id);
-  };
 
   /** The work's deletion stamp as the member reads it. */
   const stampOf = async (
@@ -272,21 +278,15 @@ describe("POST /collections/{cid}/artworks/bulk-restore", () => {
       (await json<Record<string, unknown>>(created)).id,
     );
 
-    firstId = await createWorkIn(
-      bulkCollectionId,
-      bulkOwner.cookies,
-      "Restore Me",
-    );
-    secondId = await createWorkIn(
-      bulkCollectionId,
-      bulkOwner.cookies,
-      "Restore Me Too",
-    );
-    liveId = await createWorkIn(
-      bulkCollectionId,
-      bulkOwner.cookies,
-      "Never Deleted",
-    );
+    firstId = await createWork(bulkCollectionId, bulkOwner.cookies, {
+      title: "Restore Me",
+    });
+    secondId = await createWork(bulkCollectionId, bulkOwner.cookies, {
+      title: "Restore Me Too",
+    });
+    liveId = await createWork(bulkCollectionId, bulkOwner.cookies, {
+      title: "Never Deleted",
+    });
     await stampDeleted(firstId, "2026-02-01T10:00:00.000Z");
     await stampDeleted(secondId, "2026-02-02T10:00:00.000Z");
 
@@ -298,10 +298,10 @@ describe("POST /collections/{cid}/artworks/bulk-restore", () => {
     foreignCollectionId = String(
       (await json<Record<string, unknown>>(foreign)).id,
     );
-    foreignDeletedId = await createWorkIn(
+    foreignDeletedId = await createWork(
       foreignCollectionId,
       bulkStranger.cookies,
-      "Not Yours",
+      { title: "Not Yours" },
     );
     await stampDeleted(foreignDeletedId, "2026-02-03T10:00:00.000Z");
   });
@@ -377,35 +377,14 @@ describe("POST /collections/{cid}/artworks/bulk-restore", () => {
   });
 
   it("refuses a non-member, an anonymous caller and 404s a missing collection", async () => {
-    const foreign = await req(
-      "POST",
-      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
-      {
-        cookies: bulkStranger.cookies,
-        body: JSON.stringify({ artworkIds: [secondId] }),
-      },
-    );
-    expect(foreign.status).toBe(403);
-    expect((await err(foreign)).code).toBe("forbidden");
-
-    const anonymous = await req(
-      "POST",
-      `/api/v1/collections/${bulkCollectionId}/artworks/bulk-restore`,
-      { body: JSON.stringify({ artworkIds: [secondId] }) },
-    );
-    expect(anonymous.status).toBe(401);
-    expect((await err(anonymous)).code).toBe("unauthorized");
-
-    const missing = await req(
-      "POST",
-      `/api/v1/collections/${crypto.randomUUID()}/artworks/bulk-restore`,
-      {
-        cookies: bulkOwner.cookies,
-        body: JSON.stringify({ artworkIds: [secondId] }),
-      },
-    );
-    expect(missing.status).toBe(404);
-    expect((await err(missing)).code).toBe("not-found");
+    await expectRefusal({
+      method: "POST",
+      target: bulkCollectionId,
+      path: (id) => `/api/v1/collections/${id}/artworks/bulk-restore`,
+      memberCookies: bulkOwner.cookies,
+      strangerCookies: bulkStranger.cookies,
+      body: JSON.stringify({ artworkIds: [secondId] }),
+    });
   });
 
   it("rejects an empty selection", async () => {
