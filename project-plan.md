@@ -319,8 +319,13 @@ dashboard reads `GET /collections` — owned and shared together, name-ordered,
 each row with `role` and a shared row with the owner's `ownerName` — and its
 cap counter counts owned collections only, because the tier cap gates creation.
 
-Soft delete is a `deletedAt` stamp: the work leaves every list, the bytes stay,
-and a restore route flips it back (there is no trash UI yet).
+Soft delete is a `deletedAt` stamp: the work leaves every live list, the bytes
+stay, and the collection's **Deleted** view lists the stamped works, most
+recently deleted first, where one or several are restored. A deleted work's Edit
+page says so, disables Save and offers Restore in place, keeping any unsaved
+input. Restore clears the stamp and touches nothing else, so the work returns
+with its status, fields, photos and documents as they were. No purge and no
+retention window exist: a deleted row lives until it is restored.
 
 ## The API
 
@@ -457,8 +462,9 @@ Roughly in order of how much it matters:
 - **A collaborator cap.** A collection may invite any number of collaborators.
 - **Account deletion**, and what it means for a collection's owner or a
   collaborator.
-- **Trash and restore UI.** The columns and the restore route exist; nothing
-  surfaces them, and nothing purges long-dead rows.
+- **Purge and retention for deleted works.** The collection's Deleted view lists
+  and restores them; nothing purges long-dead rows or promises a retention
+  window.
 - **Delete a collection.** The model does not delete collections at all.
 - **Export**, so a collector is never locked in.
 - **Search and filtering**, once a collection is large enough to need it.

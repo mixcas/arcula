@@ -169,8 +169,9 @@ _Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
 Taken out of the collection as far as its owner and collaborators are
-concerned: it leaves every list, and it can be brought back. The record and its
-media are not destroyed.
+concerned: it leaves every live list, and it can be brought back. The record and
+its media are not destroyed. The **Deleted** view is a collection's list of its
+deleted works, most recently deleted first, where one or several are restored.
 _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:

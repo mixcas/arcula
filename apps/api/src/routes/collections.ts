@@ -9,7 +9,7 @@
 //   GET    /collections/{cid}/deleted-artworks       the Deleted view's list
 //   POST   /collections/{cid}/artworks/bulk-delete   the batch soft delete
 //   POST   /collections/{cid}/artworks/bulk-restore  the batch restore
-//   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (present, unused in beta)
+//   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
 //
 // Collections are never deleted (there is no trash for them in this model),
 // so the cap check counts every collection the owner has.
@@ -586,7 +586,8 @@ collectionRoutes.post(
 
 // POST …/artworks/{aid}/restore — `deletedAt → NULL`, idempotent on a
 // live work (restoring it is a no-op the route does not special-case).
-// Present but unused in beta: there is no trash UI yet.
+// The path both UIs use for one work: a row in the Deleted view, and the banner
+// on a deleted work's Edit page.
 collectionRoutes.post(
   "/collections/:collectionId/artworks/:artworkId/restore",
   requireSession,
