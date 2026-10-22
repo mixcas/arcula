@@ -322,10 +322,11 @@ cap counter counts owned collections only, because the tier cap gates creation.
 Soft delete is a `deletedAt` stamp: the work leaves every live list, the bytes
 stay, and the collection's **Deleted** view lists the stamped works, most
 recently deleted first, where one or several are restored. A deleted work's Edit
-page says so, disables Save and offers Restore in place, keeping any unsaved
-input. Restore clears the stamp and touches nothing else, so the work returns
-with its status, fields, photos and documents as they were. No purge and no
-retention window exist: a deleted row lives until it is restored.
+page says so, disables Save and the media uploaders, and offers Restore in
+place, keeping any unsaved input. Restore clears the stamp and touches nothing
+else, so the work returns with its status, fields, photos and documents as they
+were. No purge and no retention window exist: a deleted row lives until it is
+restored.
 
 ## The API
 

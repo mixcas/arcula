@@ -2,7 +2,9 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import {
+  act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -240,7 +242,16 @@ describe("the Edit page — a deleted work", () => {
     // The banner is the page's only alert before a restore is attempted, and
     // the Restore it offers is the one recovery the page presents.
     expect(page.getByRole("alert")).toBeInTheDocument();
-    expect(page.getByRole("button", { name: "Restore" })).toBeEnabled();
+  });
+
+  it("does not offer media uploads while the work is deleted", async () => {
+    const { page } = renderDeleted();
+
+    await page.findByLabelText(/^Title/);
+    // Staging is a server write that could never be attached to this work, so
+    // the uploaders are gone until the restore.
+    expect(page.queryByTestId("photo-uploader")).toBeNull();
+    expect(page.queryByTestId("documents-uploader")).toBeNull();
   });
 
   it("restores in place, leaving the typed title alone", async () => {
@@ -257,6 +268,8 @@ describe("the Edit page — a deleted work", () => {
       expect(page.queryByRole("alert")).not.toBeInTheDocument(),
     );
     expect(await saveButton()).toBeEnabled();
+    // The uploaders come back with the restore, in place.
+    expect(page.getByTestId("photo-uploader")).toBeInTheDocument();
     expect(restoreArtwork).toHaveBeenCalledTimes(1);
     expect(restoreArtwork).toHaveBeenCalledWith(COLLECTION_ID, ARTWORK_ID);
     // Re-read: a re-initialised form remounts the input, so the element found
@@ -296,7 +309,6 @@ describe("the Edit page — a deleted work", () => {
   });
 
   it("cannot start a second restore while one is in flight", async () => {
-    const user = userEvent.setup();
     let settle: (value: { restored: true }) => void = () => undefined;
     restoreArtwork.mockImplementation(
       () =>
@@ -307,12 +319,19 @@ describe("the Edit page — a deleted work", () => {
     const { page } = renderDeleted();
 
     const restore = await page.findByRole("button", { name: "Restore" });
-    await user.click(restore);
-    await waitFor(() => expect(restore).toBeDisabled());
-    await user.click(restore);
+    // Two clicks in one flush: React has not re-rendered the disabled button
+    // between them, so this is the race the handler's own guard covers. Two
+    // awaited `userEvent.click`s would let the disabled prop win instead.
+    act(() => {
+      fireEvent.click(restore);
+      fireEvent.click(restore);
+    });
     expect(restoreArtwork).toHaveBeenCalledTimes(1);
 
-    settle({ restored: true });
+    await act(async () => {
+      settle({ restored: true });
+      await Promise.resolve();
+    });
     await waitFor(() =>
       expect(page.queryByRole("alert")).not.toBeInTheDocument(),
     );
