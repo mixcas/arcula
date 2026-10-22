@@ -199,10 +199,14 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   import), `access` (the access read, removal, leaving and transfer),
   `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
-  in-app decline), `artworks`, `me`, `media` (the object proxy), `artworkMedia`
+  in-app decline), `artworks`, `artworkSave` (the write half of a save: the
+  staged entries promoted, upserted and deleted once the payload validates),
+  `me`, `media` (the object proxy), `artworkMedia`
   (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
-  `variants.ts` (the geometry), `promote.ts` (staged → final).
+  `populations.ts` (what distinguishes photos from documents: caps, types,
+  tables, variants and key shape), `variants.ts` (the geometry), `promote.ts`
+  (staged → final).
 - `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly
   two mails, the invitation and the ownership-transfer notice; a provider
   failure surfaces as `emailSent: false`, never as a failed write.
