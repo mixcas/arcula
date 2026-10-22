@@ -74,7 +74,7 @@ Early, and honest about what is missing:
 | Photo uploads                               | Working — server-side variants (5 + original)                 |
 | "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy                  |
 | Soft delete of artworks (in bulk)           | Working                                                       |
-| Restore a soft-deleted artwork              | API route present; no trash UI yet                            |
+| Restore a soft-deleted artwork              | Working (the collection's Deleted view)                       |
 | CSV import of artworks                      | Working                                                       |
 | Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)                 |
 | Delete a collection, export, search         | Not implemented (see the roadmap)                             |
@@ -111,7 +111,9 @@ The collection is the only gate: a visitor sees a published, live work exactly
 when its collection is public, and a draft, a deleted work and a private
 collection are one answer to them. A work is published or draft; it carries no
 visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
-deleted work disappears from every list without its bytes going anywhere.
+deleted work disappears from every live list without its bytes going anywhere.
+Each collection's **Deleted** view lists its deleted works, most recently
+deleted first, and restores one or several.
 
 **Protected** is a second condition on a **Public** collection, not a third
 visibility state. The works and the visitor rule are unchanged; a non-member
@@ -421,7 +423,8 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 Roughly in order of how much they matter:
 
-- Trash and restore for soft-deleted artworks, and a purge for long-dead ones
+- Purge and a retention window for soft-deleted artworks (the Deleted view
+  restores them)
 - Delete for collections
 - Export, so you are never locked in
 - Search and filtering, once there are enough works for it to matter

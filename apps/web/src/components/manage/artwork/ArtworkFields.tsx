@@ -29,12 +29,21 @@ interface ArtworkFieldsProps {
   form: UseFormReturnType<ArtworkFormValues, ArtworkPayload>;
   photos: UseArtworkPhotos;
   documents: UseArtworkDocuments;
+  /**
+   * Hide the two uploaders. The Edit page sets this while the work is deleted:
+   * staging is a server write, and media staged for a work whose Save is shut
+   * could never be attached to it — the same misleading-edit problem the
+   * banner exists to prevent. The typed fields stay editable because they are
+   * local and survive the in-place restore.
+   */
+  uploadsDisabled?: boolean;
 }
 
 const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   form,
   photos,
   documents,
+  uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
     <Grid.Col span={8}>
@@ -184,17 +193,31 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         <Text size="sm" fw={500} mb={4}>
           Photos
         </Text>
-        <PhotoUploader photos={photos} />
+        {uploadsDisabled ? (
+          <Text size="sm" c="dimmed">
+            Photos are locked while this artwork is deleted. Restore it to
+            change them.
+          </Text>
+        ) : (
+          <PhotoUploader photos={photos} />
+        )}
       </Box>
 
       <Box mb="md">
         <Text size="sm" fw={500} mb={4}>
           Other Documents
         </Text>
-        <DocumentsUploader
-          documents={documents}
-          description="Condition reports, receipts, provenance notes. Only you can see these."
-        />
+        {uploadsDisabled ? (
+          <Text size="sm" c="dimmed">
+            Documents are locked while this artwork is deleted. Restore it to
+            change them.
+          </Text>
+        ) : (
+          <DocumentsUploader
+            documents={documents}
+            description="Condition reports, receipts, provenance notes. Only you can see these."
+          />
+        )}
       </Box>
     </Grid.Col>
   </Grid>

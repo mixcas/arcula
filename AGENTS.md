@@ -179,10 +179,11 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   own, and no forwarding header is ever trusted; locally the header is absent
   and every attempt shares one bucket.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
-  Collection, the work, its photos, documents and Variants) or a Collection's
-  list (the Collection, the works once, each child table once for the whole
-  page — at most five queries, six for a collaborator's membership row),
-  returning ok, not-found, or forbidden for the list. The verdict is
+  Collection, the work, its photos, documents and Variants), or a Collection's
+  list — live, or the member-only Deleted one, most recently deleted first —
+  loading the Collection and each child table once for the whole page (at most
+  five queries, six for a collaborator's membership row) and returning ok,
+  not-found, or forbidden for the list. The verdict is
   `access.ts`'s over rows the module loads through `authorize.ts`, with the
   request's grant validity handed in as a fact; the module carries no Hono type
   and the route owns the wire code. The save routes read their work back
@@ -195,9 +196,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `collections` (the reads, the settings write, `…/unlock` and the
-  import), `access` (the access read, removal, leaving and transfer),
-  `invitations` (create,
+- `routes/` — `collections` (the reads, the settings write, `…/unlock`, the
+  import, the Deleted list and the batch delete/restore), `access` (the access
+  read, removal, leaving and transfer), `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
@@ -271,8 +272,11 @@ inside the collection. `access.ts` answers the questions over loaded rows and
 `authorize.ts` loads the collection and the viewer's row, so the owner and every
 collaborator read every live work in the collection — drafts included — and a
 deleted work by id, and read its documents at every status. A deleted work is in
-no list; only its own read still returns it. Every write path asks the same
-membership question through `requireMemberCollection` / `requireMemberArtwork`.
+no live list; the collection's **Deleted** view lists the stamped works, most
+recently deleted first, and restores one or many, and a deleted work's Edit page
+disables Save and the media uploaders and restores in place. Every write path
+asks the same membership question through `requireMemberCollection` /
+`requireMemberArtwork`.
 
 The boundary is access administration. A collaborator changes every setting
 (public/private included), creates, edits, imports, bulk-deletes, restores and
