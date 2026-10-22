@@ -144,8 +144,8 @@ status.
 `collection_unlock_attempts`: `(ip, collectionId, windowStart)` as the primary
 key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
 collection's throttle cannot lock visitors out of another's through a shared
-address. The window length is the route's policy, not the schema's. Nothing
-writes it yet (see _What is not built_).
+address. The window length is the route's policy, not the schema's
+(`unlockThrottle.ts`), and the unlock route is the only writer and reader.
 
 ### `collection_collaborators` and `collection_invitations`
 
@@ -361,10 +361,25 @@ the member read carries `isPasswordProtected`, derived from the hash's presence,
 and the hash itself never leaves the server. `POST /collections/:id/unlock`
 takes a password and answers `201` with the grant cookie or `403
 invalid-password`; a collection with no password (or a private one) answers
-`409`, because there is nothing to get past. Both new codes are `403`
+`409`, because there is nothing to get past. Those new codes are `403`
 (`password-required` for the challenge, `invalid-password` for a failed
 attempt), and the envelope's fixed set gained them rather than overloading
 `forbidden`.
+
+Guessing is throttled. Each unlock attempt claims a failure slot for its
+**(address, collection)** pair in `collection_unlock_attempts`, in a **fixed**
+ten-minute window floored from the attempt's own time: ten failures spend the
+window and the eleventh attempt is refused unread with `429
+too-many-attempts`, whose message states the window and nothing about the time
+left in it (no `Retry-After` either, for the same reason). The claim is one
+atomic upsert (`ON CONFLICT … DO UPDATE … WHERE attempts < 10`), so two attempts
+racing the tenth failure cannot both get through, and a right password clears
+the pair's counter rows, so a member who mistyped carries no debt. The address
+is the gateway's own `sourceIp`, which the Lambda entry passes to the app in
+`x-arcula-client-ip` (overwriting anything a client sent under that name); a
+forwarding header is never trusted, because it is client-supplied. The identity
+is honest rather than complete: an address is shared behind a proxy and cheap to
+multiply, so this raises the cost of guessing without being a proof.
 
 ## The frontend
 
@@ -433,10 +448,12 @@ Roughly in order of how much it matters:
   collection owner, so the record does not say who added or edited a work.
 - **Accepting or declining an ownership transfer.** A transfer is immediate and
   sends a notice; reversing it is another transfer.
-- **Rate limiting.** Neither the invitation create route, the password-reset mail
-  nor the unlock route is throttled: `collection_unlock_attempts` is in the
-  schema and nothing writes it, so a human-chosen collection password can be
-  guessed at server speed.
+- **Rate limiting.** The unlock route is throttled per address and collection (a
+  fixed ten-minute window in Postgres), but neither the invitation create route
+  nor the password-reset mail is: both still go out at server speed. And the
+  unlock throttle's identity is an address, which is shared behind a proxy and
+  cheap to multiply, so it raises the cost of guessing rather than proving
+  anything.
 - **A collaborator cap.** A collection may invite any number of collaborators.
 - **Account deletion**, and what it means for a collection's owner or a
   collaborator.

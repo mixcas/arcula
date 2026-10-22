@@ -16,7 +16,8 @@ tables**: `collections`, `collection_collaborators`,
 schema, and the feature code reads them on every access question and writes
 them through the invitation, removal, leaving and transfer routes. The two
 password tables and `collections.passwordHash` are read and written by the
-password routes.
+password routes — and `collection_unlock_attempts` by the unlock route alone,
+which is the throttle's whole surface.
 
 Layout:
 

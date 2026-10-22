@@ -304,4 +304,27 @@ describe("PublicCollectionPage — a protected collection", () => {
     expect(getCollection).toHaveBeenCalledTimes(1);
     expect(getCollectionArtworks).not.toHaveBeenCalled();
   });
+
+  it("says the window is spent, in the server's words, and stays on the lock screen", async () => {
+    getCollection.mockRejectedValue(passwordRequired());
+    // The screen cannot word this one itself: the window is the server's
+    // policy, and it states the window without counting down.
+    unlockCollection.mockRejectedValue(
+      new ApiRequestError(
+        429,
+        "too-many-attempts",
+        "Too many failed attempts. Try again once this 10-minute window has passed.",
+      ),
+    );
+    renderPage();
+
+    await userEvent.type(await screen.findByLabelText("Password"), "nope");
+    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+
+    expect(
+      await screen.findByText(/this 10-minute window has passed/),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeVisible();
+    expect(getCollection).toHaveBeenCalledTimes(1);
+  });
 });
