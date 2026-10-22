@@ -15,13 +15,25 @@ name, never a subpath:
 - `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkStatus`,
   `Collection`, `CollectionRole`, `ArtworkPhoto`, `ArtworkDocument`,
   `ImageVariant`. `Collection` carries `role`/`ownerName` — the dashboard
-  list's per-row extras, absent on every other read.
-- `schemas/` — the Zod schemas: `artwork`, `artworkImport`, `collection`,
-  `invitation` (create, summary, preview), `document`, `user`.
+  list's per-row extras, absent on every other read — and
+  `isPasswordProtected`, the member read's one-bit answer about a password,
+  derived from the hash's presence and never the hash itself, and absent on
+  every anonymous read.
+- `schemas/` — the Zod schemas: `access` (the access read, the transfer
+  payload and its answer), `artwork`, `artworkImport`, `collection` —
+  including `passwordSchema` for the settings write and
+  `collectionUnlockSchema` for the unlock route's guess — `invitation`
+  (create, summary, preview), `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.
 - `limits.ts` — `COLLECTION_LIMITS` and `collectionLimitForTier`, the per-tier
   collection quota the API enforces on create. The quota counts owned
   collections only; a collaboration does not consume it.
+- `email.ts` — `normalizeEmail`, the one trim-and-lowercase an address gets on
+  both sides of every comparison.
+- `invitationTime.ts` — the invitation clock: `INVITATION_TTL_MS` (seven
+  days), `INVITATION_RESEND_COOLDOWN_MS` (one minute), `timestampMillis`, and
+  the two questions the owner's access card asks of a row,
+  `invitationLapsed` and `invitationResendWaitMs`.
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
 - `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
