@@ -6,6 +6,7 @@
 //   PATCH  /collections/{cid}                        update
 //   POST   /collections/{cid}/unlock                 the lock screen's password attempt
 //   POST   /collections/{cid}/import/csv             the CSV import's bulk write
+//   GET    /collections/{cid}/deleted-artworks       the Deleted view's list
 //   POST   /collections/{cid}/artworks/bulk-delete   the batch soft delete
 //   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (present, unused in beta)
 //
@@ -47,6 +48,7 @@ import {
 } from "@arcula/shared";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
+import { readDeletedArtworkList } from "../artworkRead";
 import {
   loadCollection,
   requireMemberArtwork,
@@ -466,6 +468,33 @@ collectionRoutes.post(
     }
 
     return c.json({ inserted: accepted.length, rejected });
+  },
+);
+
+// GET …/deleted-artworks — the collection's deleted works, most recently
+// deleted first. Member-only: a non-member gets the same `forbidden` as every
+// other member-only collection route, even when the collection is public. The
+// path sits at the collection level because a static segment under `artworks`
+// would be shadowed by the single-artwork route (Hono matches in registration
+// order).
+collectionRoutes.get(
+  "/collections/:collectionId/deleted-artworks",
+  requireSession,
+  async (c) => {
+    const read = await readDeletedArtworkList(
+      param(c, "collectionId"),
+      c.get("user").id,
+    );
+    if (read.status === "not-found") {
+      throw new ApiError("not-found", "The collection does not exist");
+    }
+    if (read.status === "forbidden") {
+      throw new ApiError(
+        "forbidden",
+        "You do not have access to this collection",
+      );
+    }
+    return c.json(read.artworks);
   },
 );
 

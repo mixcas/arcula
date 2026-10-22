@@ -86,6 +86,33 @@ export const artworkService = {
   },
 
   /**
+   * The collection's deleted works, most recently deleted first. This is the
+   * Deleted view's read and it sits one level above `base`: a static segment
+   * under `/artworks` would be shadowed by the single-artwork route on the
+   * server. Members only.
+   */
+  async getDeletedArtworks(collectionId: string): Promise<Artwork[]> {
+    const rows = await apiRequest<unknown[]>(
+      `/api/v1/collections/${collectionId}/deleted-artworks`,
+    );
+    return rows.map((row) => artworkReadSchema.parse(row));
+  },
+
+  /**
+   * Bring one deleted work back. The server clears the deletion stamp and
+   * answers at once; the views refetch rather than splicing the row out.
+   */
+  async restoreArtwork(
+    collectionId: string,
+    artworkId: string,
+  ): Promise<{ restored: true }> {
+    return apiRequest<{ restored: true }>(
+      `${base(collectionId)}/${artworkId}/restore`,
+      { method: "POST" },
+    );
+  },
+
+  /**
    * The batch soft delete behind the table's selection. The server stamps
    * `deletedAt` and answers the count — the table refetches, it does not
    * splice.

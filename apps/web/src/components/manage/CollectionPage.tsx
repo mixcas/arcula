@@ -125,6 +125,15 @@ const CollectionPage: React.FC = () => {
           >
             Add Artwork
           </Button>
+          {/* No count: a badge would mean fetching the deleted list on every
+              collection page load, which the view deliberately avoids. */}
+          <Button
+            component={Link}
+            to={`/manage/collection/${param}/deleted`}
+            variant="default"
+          >
+            Deleted
+          </Button>
           <Button component={Link} to={`/manage/collection/${param}/settings`}>
             Settings
           </Button>
