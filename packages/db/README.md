@@ -1,17 +1,22 @@
 # @arcula/db
 
-The Drizzle schema for the Arcula backend: eleven tables, including the two
+The Drizzle schema for the Arcula backend: thirteen tables, including the two
 sharing tables from
-[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md).
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) and the
+two a protected collection will need from
+[ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
 — with `user` extended by the four typed custom columns (`firstName`,
-`lastName`, `tier`, `settings`) the API declares to the adapter. Seven **domain
-tables** with sharing: `collections`, `collection_collaborators`,
-`collection_invitations`, `artworks`, `artwork_photos`,
+`lastName`, `tier`, `settings`) the API declares to the adapter. Nine **domain
+tables**: `collections`, `collection_collaborators`,
+`collection_invitations`, `collection_access_grants`,
+`collection_unlock_attempts`, `artworks`, `artwork_photos`,
 `artwork_photo_variants`, `artwork_documents`. The sharing tables are in the
 schema, and the feature code reads them on every access question and writes
-them through the invitation, removal, leaving and transfer routes.
+them through the invitation, removal, leaving and transfer routes. The two
+password tables and `collections.passwordHash` are in the schema too, shipped
+one release before the code that reads them, by the forward-only rule.
 
 Layout:
 
@@ -34,7 +39,10 @@ Layout:
   (`WHERE "mediaNamespaceId" IS NULL`, so a namespace the new code minted
   survives) and then sets the column `NOT NULL`. `0003` shipped alone, the
   feature code followed, and `0004` tightened the column afterwards. Nothing
-  else is edited by hand.
+  else is edited by hand. `0005_collection_passwords` is the contrast: it adds
+  `collections.passwordHash` nullable and creates the two password tables, and
+  it needs **no** tightening step, because a collection without a password is
+  the normal state rather than a gap to backfill.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
@@ -51,7 +59,10 @@ collaborator is a row in `collection_collaborators`;
 object; and `collection_invitations` stores the token's hash, never the token,
 with one pending offer per collection and address as a partial unique index.
 `artworks.userId` is a mirror of the collection owner, not an authorization
-fact.
+fact. `collections.passwordHash` is nullable and holds a one-way hash with its
+salt and parameters in the string — there is no read-back and no default, and
+`collection_access_grants` keeps a grant's hash, never its token, with the
+collection indexed so a password change revokes in one statement.
 
 The schema must stay **runtime-free**: no driver, no driver-specific types, no
 DOM. Node types are available to the package (its tests read the migration off
