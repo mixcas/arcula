@@ -47,6 +47,12 @@ Moving a collection's owner to one of its collaborators. The previous owner
 stays as a collaborator; only the owner may begin one.
 _Avoid_: Handover, handoff, reassignment
 
+**Access grant**:
+What a reader holds after entering a protected collection's password. Scoped to
+one collection, expiring, and verified on every request; it admits the reader to
+the public view, not to the collection as a member.
+_Avoid_: Session, unlock token, password token
+
 **Collection**:
 A set of artworks recorded together and named by their owner. The unit that is
 shared with collaborators, tiered, and given a public page.
@@ -134,6 +140,13 @@ _Avoid_: Published, shared, live
 Readable by its owner and collaborators alone. To a visitor a private collection
 is indistinguishable from one that does not exist.
 _Avoid_: Hidden, unpublished, draft
+
+**Protected**:
+A public collection that also requires its password. A second condition on
+public readability rather than a visibility of its own: the collection is still
+public, and the owner and collaborators never face the challenge. A protected
+collection is absent from the public list and reachable only by its link.
+_Avoid_: Locked, password-protected, gated, restricted
 
 **Published**:
 An artwork the owner or a collaborator has put in front of the collection's
