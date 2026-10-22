@@ -65,7 +65,7 @@ Early, and honest about what is missing:
 | Account profile (name), change password     | Working                                               |
 | Create, list, view, rename collections      | Working                                               |
 | Share a collection with collaborators       | Working (invite, administer, remove, leave, transfer) |
-| Collections per account                     | One owned collection; enforced by the API             |
+| Collections per account                     | Free tier cap: one owned collection; shared excluded  |
 | Public/private flag per collection          | Working                                               |
 | List a collection's artworks                | Working                                               |
 | Add and edit an artwork                     | Working                                               |
@@ -76,7 +76,7 @@ Early, and honest about what is missing:
 | Soft delete of artworks (in bulk)           | Working                                               |
 | Restore a soft-deleted artwork              | API route present; no trash UI yet                    |
 | CSV import of artworks                      | Working                                               |
-| Private-collection password protection      | Not implemented                                       |
+| Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)         |
 | Delete a collection, export, search         | Not implemented (see the roadmap)                     |
 
 ### How access control works
@@ -92,8 +92,10 @@ members only.
 
 Collaboration is built: an account with a `collection_collaborators`
 row reads every live work in the collection — drafts included — and a deleted
-work by id, and edits the collection exactly as the owner does
-([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)).
+work by id, and edits the collection's works and settings as the owner does
+([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)). What a
+collaborator does not do is administer access: only the owner invites, resends
+or revokes an offer, removes a collaborator, and transfers the collection.
 The owner can invite an address by email; the link carries a single-use token,
 and the invited account accepts or declines it. The invitation mail is the only
 place the raw token exists, and accepting needs both that link and a signed-in
@@ -110,6 +112,24 @@ when its collection is public, and a draft, a deleted work and a private
 collection are one answer to them. A work is published or draft; it carries no
 visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
 deleted work disappears from every list without its bytes going anywhere.
+
+**Protected** is a second condition on a **Public** collection, not a third
+visibility state. The works and the visitor rule are unchanged; a non-member
+must also get past the **Lock screen**. Membership bypasses the challenge, and a
+**Private** collection stays closed even to an **Access grant**. The grant is
+what a right password buys: a 32-byte token kept only as its SHA-256 hash,
+delivered in the cookie `arcula_grant_{id}`, scoped to `/api/v1`
+(`HttpOnly`, `SameSite=Lax`) and good for twelve hours. The path is that broad
+because the media proxy is one route for every collection's bytes, so the same
+grant covers the page and the bytes behind it. A grant admits exactly what a
+visitor sees — published, live works, never a draft and never a document — and
+the anonymous collection list excludes a Protected collection as it excludes a
+Private one, so it is reachable only by its direct link. A refused read answers
+`403 password-required` and folds to the Lock screen; unlock attempts are
+throttled per address and collection in a fixed ten-minute window, and changing
+the password revokes every outstanding grant. The decision, and the
+alternatives it rejected, are in
+[ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
 ## Mail
 
@@ -401,8 +421,6 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 Roughly in order of how much they matter:
 
-- Real password protection for public collections, with a server-side
-  verification path
 - Trash and restore for soft-deleted artworks, and a purge for long-dead ones
 - Delete for collections
 - Export, so you are never locked in
