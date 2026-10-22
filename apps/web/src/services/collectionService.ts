@@ -72,4 +72,17 @@ export const collectionService = {
     });
     return collectionReadSchema.parse(row);
   },
+
+  /**
+   * The lock screen's attempt: a right password sets the Access grant cookie
+   * for this collection, and the ordinary read then succeeds. A wrong one
+   * rejects with 403 `invalid-password`; a collection with no password (or a
+   * private one) rejects with 409 — there is nothing to unlock.
+   */
+  async unlockCollection(id: string, password: string): Promise<void> {
+    await apiRequest<unknown>(`${BASE}/${id}/unlock`, {
+      method: "POST",
+      body: { password },
+    });
+  },
 };

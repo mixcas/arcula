@@ -9,13 +9,15 @@
 //
 // The access verdict is the pure rule in access.ts over the rows loaded here
 // — the Collection, the work and the viewer's membership row, loaded by
-// `authorize.ts`; this module reports `not-found` or `forbidden` and carries
-// no HTTP code or framework type. The route owns the wire codes. Only the
-// list can answer `forbidden` — a Private Collection the viewer is not a
-// member of, or a Protected one the visitor holds no grant for — because that
-// is the list's existing wire, and the Collection read answers the same
-// refusal so the two reads agree about who is inside; a single read answers
-// `not-found` for every refusal (a Private Collection included) so the
+// `authorize.ts`, plus the Access grant's validity, read off the request's
+// cookie by the route and handed in as a fact (a Protected Collection admits a
+// non-member only through it, ADR-0005). This module reports `not-found` or
+// `forbidden` and carries no HTTP code or framework type. The route owns the
+// wire codes. Only the list can answer `forbidden` — a Private Collection the
+// viewer is not a member of, or a Protected one the visitor holds no grant for
+// — because that is the list's existing wire, and the Collection read answers
+// the same refusal so the two reads agree about who is inside; a single read
+// answers `not-found` for every refusal (a Private Collection included) so the
 // refusal discloses nothing.
 //
 // No transaction spans the reads: a work or child added or removed between
@@ -149,13 +151,14 @@ export async function readArtwork(
   collectionId: string,
   artworkId: string,
   viewer: string | null,
+  hasValidGrant = false,
 ): Promise<ArtworkReadResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
   const artwork = await loadArtworkInCollection(collectionId, artworkId);
   if (!artwork) return { status: "not-found" };
   const membership = await loadMembership(collectionId, collection, viewer);
-  if (!canSeeArtwork(membership, collection, artwork)) {
+  if (!canSeeArtwork(membership, collection, artwork, hasValidGrant)) {
     return { status: "not-found" };
   }
   const children = await loadChildren([artworkId]);
@@ -187,11 +190,14 @@ export async function readArtwork(
 export async function readArtworkList(
   collectionId: string,
   viewer: string | null,
+  hasValidGrant = false,
 ): Promise<ArtworkListResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
   const member = await loadMembership(collectionId, collection, viewer);
-  if (!canSeeCollection(member, collection)) return { status: "forbidden" };
+  if (!canSeeCollection(member, collection, hasValidGrant)) {
+    return { status: "forbidden" };
+  }
 
   const rows = await db
     .select()
@@ -210,7 +216,9 @@ export async function readArtworkList(
     )
     .orderBy(asc(artworksTable.createdAt), asc(artworksTable.id));
 
-  const works = rows.filter((row) => canSeeArtwork(member, collection, row));
+  const works = rows.filter((row) =>
+    canSeeArtwork(member, collection, row, hasValidGrant),
+  );
   const artworkIds = works.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {

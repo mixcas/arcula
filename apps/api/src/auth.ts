@@ -14,7 +14,7 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { schema } from "@arcula/db";
 import { db } from "./db";
-import { corsOrigins } from "./env";
+import { corsOrigins, useSecureCookies } from "./env";
 import { passwordResetMail, verificationMail } from "./email/compose";
 import { clientUrl } from "./email/links";
 import { emailProvider } from "./email/provider";
@@ -81,9 +81,10 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    // The session cookie is Secure in prod; local dev is plain
-    // http, where a Secure cookie would be rejected.
-    useSecureCookies: process.env.NODE_ENV === "production",
+    // The session cookie is Secure in prod, where the API is https; local dev
+    // is plain http, where a Secure cookie would be rejected. The Access
+    // grant's cookie follows the same rule, from the same place (env.ts).
+    useSecureCookies,
   },
   plugins: [bearer()],
 });

@@ -13,6 +13,8 @@ export type ApiErrorCode =
   | "validation"
   | "unauthorized"
   | "forbidden"
+  | "password-required"
+  | "invalid-password"
   | "not-found"
   | "conflict"
   | "limit-reached"
@@ -26,6 +28,13 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   validation: 400,
   unauthorized: 401,
   forbidden: 403,
+  // A Protected collection a non-member holds no grant for. Distinct from
+  // `forbidden` on purpose: it is not a refusal but a challenge, and the lock
+  // screen it opens is the only thing that can pass it (ADR-0005).
+  "password-required": 403,
+  // An unlock attempt whose password did not match. Distinct for the same
+  // reason: the prompt has to be able to say "that is not it".
+  "invalid-password": 403,
   "not-found": 404,
   conflict: 409,
   "limit-reached": 409,

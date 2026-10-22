@@ -684,9 +684,8 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
 // while those tests run must still be absent from the list — the exclusion
 // T6 pins below. Files run in parallel, tests in a file do not.
 //
-// The visitor's half — unlock and the lock screen — is not here. The extended
-// verdict (T3) already refuses a Protected collection to a non-member, so
-// until T5 lands the public link answers 403 rather than a lock screen.
+// The visitor's half — unlock, the grant cookie and the lock screen — is in
+// protectedCollection.api.test.ts, end to end on the real stack.
 describe("the collection password write", () => {
   let pwdOwner: { cookies: string; userId: string };
   let pwdMate: { cookies: string; userId: string };
@@ -763,10 +762,9 @@ describe("the collection password write", () => {
     expect(row.isPasswordProtected).toBe(true);
     expectNoHash(row, hash);
 
-    // An anonymous read is already refused by the extended verdict (T3):
-    // until the unlock route and lock screen land, a protected collection is
-    // not readable to a non-member. The refusal carries neither the flag nor
-    // the hash.
+    // An anonymous read is the challenge: a Protected collection is not
+    // readable to a non-member without a grant, and the refusal carries
+    // neither the flag nor the hash.
     const anon = await req("GET", `/api/v1/collections/${protectedId}`);
     expect(anon.status).toBe(403);
     const anonBody = await json<Record<string, unknown>>(anon);
@@ -934,15 +932,19 @@ describe("a protected collection's members", () => {
     expect(mateRow?.isPasswordProtected).toBe(true);
   });
 
-  it("refuses a non-member's artwork list exactly as the collection read does", async () => {
+  it("refuses a non-member's artwork list too, though only the collection read can name the challenge", async () => {
     // Anonymous and signed-in stranger are one answer: membership is what
-    // admits, and neither holds it.
+    // admits, and neither holds it. The collection read is the challenge point
+    // — it names the collection so the lock screen can ask — while the list
+    // has no lock screen to open and stays the plain refusal. The public page
+    // never sees the second: it asks for the list only once the collection
+    // read has answered, and this one refuses first.
     for (const cookies of [undefined, stranger.cookies]) {
       const read = await req("GET", `/api/v1/collections/${protectedId}`, {
         cookies,
       });
       expect(read.status).toBe(403);
-      expect((await err(read)).code).toBe("forbidden");
+      expect((await err(read)).code).toBe("password-required");
 
       const list = await req(
         "GET",
