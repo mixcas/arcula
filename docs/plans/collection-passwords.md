@@ -1,10 +1,20 @@
 # Plan: real password protection for collections
 
+**Status: shipped.** Both releases below are in production, and the design record
+now carries the feature — `project-plan.md`'s _Protected_ section and
+`packages/db/README.md`'s `0005` narrative. What follows is the historical
+working record of how it was built: the release order, the schema split, and the
+parameters settled at the time. Read it as a record of a completed plan, not as
+a gap still to close.
+
 The design is [ADR-0005](../adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 This file is the working record: what ships, in what order, and how it is
 proven. It is not a contract — the ADR is.
 
-## What exists today (the gap being closed)
+## The state before the feature (the gap this closed)
+
+This is what the repository looked like before Release 1, kept as the record of
+what the work had to reconcile — none of it describes the code today.
 
 - `collections` has no password column. `packages/db/src/index.ts` says so in a
   comment, and `project-plan.md` lists password protection first under _What is
@@ -19,7 +29,7 @@ proven. It is not a contract — the ADR is.
 ## The vocabulary this introduces
 
 **Protected** and **Access grant**, both defined in
-[GLOSSARY.md](../GLOSSARY.md).
+[GLOSSARY.md](../../GLOSSARY.md).
 
 ## Release 1 — the schema, alone
 
@@ -136,13 +146,12 @@ invalid-password` on a miss; `429` past the throttle window. The route shipped
   collection is challenged, and the collection read stays the challenge point
   because it is already sequenced first.
 
-## Documentation updates on completion
+## Documentation updates (done at completion)
 
-- `project-plan.md`: remove password protection from _What is not built_; add
-  the feature, the two-release schema narrative, and the residual throttle
-  weakness.
+- `project-plan.md`: password protection left _What is not built_; the feature,
+  the two-release schema narrative, and the residual throttle weakness are in.
 - `packages/db/README.md`: the `0005` migration and why it needs no tightening
   step.
-- `AGENTS.md`: the `collections`/`access.ts` descriptions gain the challenge;
-  the file is the working guide and currently says password protection is not
+- `AGENTS.md`: the `collections`/`access.ts` descriptions gained the challenge;
+  the file is the working guide and used to say password protection was not
   built.

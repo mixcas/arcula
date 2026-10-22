@@ -92,8 +92,8 @@ The first-run order is in `infra/cdk/README.md`.
 
 ## The data model
 
-Eleven tables in Postgres with sharing, defined in `packages/db/src/index.ts`
-and migrated in `packages/db/migrations/`.
+Thirteen tables in Postgres with sharing and password protection, defined in
+`packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 ### Auth (Better Auth core)
 
