@@ -8,6 +8,13 @@
  * construction.
  */
 
+/**
+ * How many distinct fallback code points one Collection PDF font-subset
+ * request may carry. The export chunks the document's set at this size and
+ * the API refuses anything larger, so the two sides cannot drift.
+ */
+export const MAX_PDF_FALLBACK_CODE_POINTS = 512;
+
 /** Hard cap on images per artwork. Enforced in the form and by the API. */
 export const MAX_ARTWORK_PHOTOS = 10;
 
