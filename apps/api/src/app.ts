@@ -21,6 +21,7 @@ import { collectionRoutes } from "./routes/collections";
 import { invitationRoutes } from "./routes/invitations";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
+import { pdfRoutes } from "./routes/pdf";
 import { spaMiddleware } from "./spa";
 
 export const app = new Hono();
@@ -74,6 +75,7 @@ app.route("/api/v1", accessRoutes);
 app.route("/api/v1", invitationRoutes);
 app.route("/api/v1", artworkMediaRoutes);
 app.route("/api/v1", artworkRoutes);
+app.route("/api/v1", pdfRoutes);
 
 // Dev-only indexing guard, after every API mount so it wraps only the SPA.
 // When the flag is set, `/robots.txt` answers a disallow-all document rather

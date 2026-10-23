@@ -52,6 +52,9 @@ const CONTENT_TYPES: Record<string, string> = {
   ".map": "application/json",
   ".txt": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
+  // The Collection PDF's brand statics. Without this the file is served as
+  // application/octet-stream, not a font.
+  ".ttf": "font/ttf",
 };
 
 function distRoot(): string {
