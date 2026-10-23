@@ -63,6 +63,13 @@ echo "==> bundling ($ENV)"
 bun build apps/api/src/lambda.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
+# 1b. The Collection PDF's fallback face travels beside the bundle: the
+#     bundle is one index.js, so the module's import.meta.url-relative
+#     resolve (`./assets/fonts/…`) would otherwise point at nothing in
+#     production. It is an asset, not a runtime npm dependency.
+mkdir -p "$STAGE/assets/fonts"
+cp -R apps/api/src/assets/fonts/. "$STAGE/assets/fonts/"
+
 # The smoke's pipeline access (never part of the package).
 bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
