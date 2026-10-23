@@ -117,6 +117,18 @@ const CollectionPage: React.FC = () => {
           >
             View
           </Button>
+          <Button
+            variant="subtle"
+            component="a"
+            href={`/collection/${collectionSlug(
+              collection.name,
+              collection.id,
+            )}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            PDF
+          </Button>
         </Group>
         <Group>
           <Button
