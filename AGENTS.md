@@ -8,7 +8,8 @@
 > The product is **Arcula** (`arcula.art`), and the packages, the repository
 > and the identifiers all say `arcula` too. The product's own vocabulary is in
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
-> **`docs/adr/`**.
+> **`docs/adr/`**, and implementation-ready feature specs are in
+> **`docs/specs/`**.
 >
 > **Sharing is built.** Access is membership: the owner and every collaborator
 > read and edit one collection, invitations are mailed single-use tokens, and
