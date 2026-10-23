@@ -52,6 +52,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".map": "application/json",
   ".txt": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
 };
 
 function distRoot(): string {

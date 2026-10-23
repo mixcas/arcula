@@ -20,6 +20,10 @@ import PublicArtworkPage from "./components/collection/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./auth/AuthProvider";
 
+// PROTOTYPE (#129): the renderer is half a megabyte gzipped, so the PDF route
+// is its own lazy chunk. Throwaway module on `prototype/pdf-export`.
+const PdfExportPage = React.lazy(() => import("./prototype/pdf/PdfExportPage"));
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -139,6 +143,16 @@ const App: React.FC = () => {
         <Route
           path="/collection/:collectionId/artwork/:artworkId"
           element={<PublicArtworkPage />}
+        />
+        {/* PROTOTYPE (#129): the Collection PDF viewer, lazily loaded so the
+            renderer is not in the app's initial bundle. Never merged. */}
+        <Route
+          path="/collection/:collectionId/pdf"
+          element={
+            <React.Suspense fallback={<div>Loading the PDF prototype…</div>}>
+              <PdfExportPage />
+            </React.Suspense>
+          }
         />
 
         {/* Redirect all other routes to homepage */}
