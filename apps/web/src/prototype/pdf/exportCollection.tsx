@@ -10,7 +10,13 @@
 import { pdf } from "@react-pdf/renderer";
 
 import type { ArtworkPhoto, Collection } from "@arcula/shared";
-import { CollectionPdf, PHOTO_BOX, type PdfTypography } from "./CollectionPdf";
+import {
+  CollectionPdf,
+  PHOTO_BOX,
+  pdfTexts,
+  type PdfTypography,
+} from "./CollectionPdf";
+import { loadFallbackFont } from "./fallbackFont";
 import {
   convertPhotoToJpeg,
   ExportAbortedError,
@@ -53,6 +59,12 @@ export interface ExportStats {
   decodeMs: number;
   encodeMs: number;
   renderMs: number;
+  /** Fetching the fallback-font subset, when the text needed one. */
+  fallbackMs: number;
+  /** Distinct non-ASCII characters the fallback covered; 0 when none. */
+  fallbackCharacters: number;
+  /** Bytes of the fallback font the browser fetched. */
+  fallbackBytes: number;
   totalMs: number;
   peakHeapMb: number | null;
 }
@@ -242,6 +254,17 @@ export async function exportCollection(
     throw new ExportAbortedError();
   }
 
+  // The renderer embeds its fonts, so the browser's own fallback never runs.
+  // Fetch the subset before rendering, not after: a family registered mid-run
+  // is only used by the next render.
+  const fallbackStarted = performance.now();
+  const fallback = await loadFallbackFont(pdfTexts(collection, pages), signal);
+  const fallbackMs = Math.round(performance.now() - fallbackStarted);
+
+  if (signal.aborted) {
+    throw new ExportAbortedError();
+  }
+
   onProgress({ phase: "rendering", done: photos.length, total: photos.length });
   const renderStarted = performance.now();
   const blob = await pdf(
@@ -250,6 +273,7 @@ export async function exportCollection(
       pages={pages}
       images={images}
       typography={options.typography}
+      fallbackFamily={fallback?.family}
     />,
   ).toBlob();
   const renderMs = Math.round(performance.now() - renderStarted);
@@ -279,6 +303,9 @@ export async function exportCollection(
       decodeMs: Math.round(decodeMs),
       encodeMs: Math.round(encodeMs),
       renderMs,
+      fallbackMs,
+      fallbackCharacters: fallback?.characters ?? 0,
+      fallbackBytes: fallback?.bytes ?? 0,
       totalMs: Math.round(performance.now() - started),
       peakHeapMb: peakHeap,
     },

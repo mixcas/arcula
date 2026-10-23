@@ -87,8 +87,8 @@ const LOAD = async (collectionId: string): Promise<LoadState> => {
 
 const DEFAULTS: ExportOptions = {
   source: "xlarge",
-  dpi: 200,
-  typography: "compact",
+  dpi: 300,
+  typography: "template",
   jpegQuality: 0.9,
 };
 
@@ -105,8 +105,11 @@ const optionsFromQuery = (): ExportOptions => {
   const quality = Number(params.get("quality"));
   return {
     source: source === "original" ? "original" : DEFAULTS.source,
-    dpi: dpi === 150 || dpi === 300 ? dpi : DEFAULTS.dpi,
-    typography: typography === "template" ? "template" : DEFAULTS.typography,
+    dpi: dpi === 150 || dpi === 200 || dpi === 300 ? dpi : DEFAULTS.dpi,
+    typography:
+      typography === "template" || typography === "compact"
+        ? typography
+        : DEFAULTS.typography,
     jpegQuality:
       quality === 0.8 || quality === 0.95 ? quality : DEFAULTS.jpegQuality,
   };
@@ -550,6 +553,14 @@ const PdfExportPage: React.FC = () => {
                 <StatRow
                   label="Photo phases"
                   value={`${done.stats.fetchMs} ms fetch, ${done.stats.decodeMs} ms decode, ${done.stats.encodeMs} ms encode (summed over ${done.stats.photos} photos)`}
+                />
+                <StatRow
+                  label="Font fallback"
+                  value={
+                    done.stats.fallbackCharacters === 0
+                      ? "not needed (ASCII only)"
+                      : `${done.stats.fallbackCharacters} chars, ${formatBytes(done.stats.fallbackBytes)} fetched in ${done.stats.fallbackMs} ms`
+                  }
                 />
                 <StatRow
                   label="Peak JS heap"

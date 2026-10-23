@@ -5,7 +5,10 @@ on the branch `prototype/pdf-export`. **Do not merge this branch.** The sample
 files live beside this document.
 
 - Branch: <https://github.com/mixcas/arcula/tree/prototype/pdf-export>
-- Sample, 17 pages, real photos and grid:
+- Sample at the defaults (300 dpi, 12/10 pt template type), 17 pages, real
+  photos and grid:
+  [flores-solares-300dpi.pdf](flores-solares-300dpi.pdf)
+- The same document at 200 dpi for the size comparison:
   [flores-solares-200dpi.pdf](flores-solares-200dpi.pdf)
 - Sample, 2 pages, six-up and a partial continuation:
   [grid-continuation.pdf](grid-continuation.pdf)
@@ -13,19 +16,22 @@ files live beside this document.
   [grid-continuation-page.png](grid-continuation-page.png),
   [placeholder-page.png](placeholder-page.png)
 
+The defaults are **12 pt body / 10 pt header and 300 dpi**; `compact`
+(9 / 7.5) and 150/200 dpi remain URL options for comparison.
+
 ## Verdict
 
 `@react-pdf/renderer` can produce the collection PDF in the browser, and the
-measured geometry lands on the template. The remaining costs are not layout
-problems; they are a **font-coverage gap** (a non-Latin title renders blank) and
-a **library page-height bug** under `wrap={false}`. Both have known workarounds.
-The renderer chunk is 494.2 kB gzip and lazy-loads, so it costs nothing on the
-normal pages.
+measured geometry lands on the template. The font-coverage gap is solved in the
+prototype by a per-export subset of a fallback face (below), and the remaining
+library problem — a page-height bug under `wrap={false}` — has a one-line
+workaround. The renderer chunk is 494.2 kB gzip and lazy-loads, so it costs
+nothing on the normal pages.
 
 The photo path is the surprise: the `xlarge` WebP is the better source at both
-200 and 300 dpi. The 12 MP original downloads 42 % more bytes, takes ~30–50 %
-longer, and adds only 1.2 % to the PDF at 300 dpi (4.3 % at 200 dpi), because
-the printed box is smaller than the `xlarge` variant.
+200 and 300 dpi. At 200 dpi the 12 MP original downloads 42 % more bytes, takes
+~30–50 % longer, and adds only 4.3 % to the PDF; at 300 dpi it adds 1.2 %,
+because the printed box is smaller than the `xlarge` variant.
 
 ## What was built
 
@@ -34,12 +40,19 @@ the printed box is smaller than the `xlarge` variant.
   through one `Intl.Collator` with an id tie-break, at most three photos per
   Artwork, one photo per page, no-photo Artworks in a 2 × 3 grid after them,
   header-only page for an empty collection.
-- Both templates: `compact` (9 pt body / 7.5 pt header, 12.2 pt line, 22.5 pt
-  Title gap) and `template` (the template's own 12 / 10 pt, 16.27 pt line, 30 pt
-  Title gap).
-- Photo prefetch and conversion: same-origin fetch (the grant cookie rides
-  along), `createImageBitmap(..., { imageOrientation: "from-image" })`,
-  `OffscreenCanvas` with a DOM `<canvas>` fallback, white flatten, JPEG.
+- Both templates: `template` (the template's 12 / 10 pt, 16.27 pt line, 30 pt
+  Title gap) is the **default**, and `compact` (9 pt body / 7.5 pt header,
+  12.2 pt line, 22.5 pt Title gap) stays as the comparison.
+- Photo prefetch and conversion at 300 dpi by default: same-origin fetch (the
+  grant cookie rides along), `createImageBitmap(..., { imageOrientation:
+"from-image" })`, `OffscreenCanvas` with a DOM `<canvas>` fallback, white
+  flatten, JPEG.
+- A font fallback for titles outside Darker Grotesque's coverage: the export
+  collects the non-ASCII code points it will draw, asks the API's prototype
+  route for a TrueType subset of them (Google Fonts' `text=` API, Noto Sans
+  SC), registers that as a second family, and passes
+  `fontFamily: ["Darker Grotesque", "Arcula Fallback"]`. React-PDF substitutes
+  per code point across the stack.
 - Progress per photo and cancellation, a single `pdf().toBlob()`, an iframe
   viewer, Download, and the mobile “Open PDF” path.
 - A fixed header on every page and the `Image unavailable` placeholder.
@@ -47,7 +60,9 @@ the printed box is smaller than the `xlarge` variant.
   again and re-locks on `403 password-required`.
 
 Run it locally with the stack up, then open
-`/collection/<id>/pdf`. The URL also accepts `?auto=1&source=xlarge|original&dpi=150|200|300&typography=compact|template&quality=0.8|0.9|0.95`.
+`/collection/<id>/pdf`. The defaults are `template` typography at 300 dpi. The
+URL also accepts
+`?auto=1&source=xlarge|original&dpi=150|200|300&typography=template|compact&quality=0.8|0.9|0.95`.
 
 ## The collection used
 
@@ -60,7 +75,7 @@ the prototype used the seeded local collection **Flores Solares**
   its first three.
 - 18 without photos, so the grid is three full six-up pages.
 - Real long titles, accents, sparse metadata, and one title (`☆⼺`) outside the
-  font's coverage — the hard cases, not a tidy fixture.
+  brand font's coverage — the hard cases, not a tidy fixture.
 
 ## Geometry against the template
 
@@ -115,23 +130,35 @@ Other geometry notes:
 
 ## Typography and the skew
 
-- Compact is 9 pt / 7.5 pt with a 12.2 pt line and a 22.5 pt Title-to-Artist
-  gap; template is 12 / 10, 16.27, 30. The compact scale is the template's
-  rhythm × 0.75, and all field baselines matched the arithmetic exactly.
+- The default scale is the template's own 12 pt / 10 pt, 16.27 pt line and
+  30 pt Title-to-Artist gap. Compact is 9 / 7.5 with a 12.2 pt line and a
+  22.5 pt gap: the template's rhythm × 0.75. Baselines matched the arithmetic
+  exactly in both.
 - Darker Grotesque Regular/Bold statics are shipped in
   `apps/web/public/fonts/` with `OFL.txt`. The browser build emits a separate
   494.2 kB gzip chunk for the whole PDF route.
-- **Missing glyphs are the real typographic defect.** The title `☆⼺` has no
-  coverage in Darker Grotesque and renders as a blank/`??` in the PDF; the
-  sample's first page is that artwork. A fallback font (a Latin+CJK or symbol
-  face) is needed before this is usable for arbitrary collection titles, or the
-  product must state a Latin-only limitation.
+- **Missing glyphs.** React-PDF embeds its own fonts, so the browser's fallback
+  never runs: a title with a glyph Darker Grotesque lacks draws as `.notdef`
+  (the blank/boxes seen in the first sample). The fix is a font stack, not a
+  different brand face. React-PDF substitutes per code point across
+  `fontFamily`, so the export now registers a second family covering exactly
+  the non-ASCII characters it will draw. On this collection that is seven code
+  points (á é í ñ ó ☆ ⼺), a 4.3 kB TrueType subset served in ~5 ms warm, which
+  adds ~1.4 kB to the 17-page PDF. The API's
+  `/api/v1/prototype/font-fallback` route asks Google Fonts for the subset
+  (Noto Sans SC, `text=`), caches it, and returns TrueType — the CSS API
+  answers WOFF2 to a browser User-Agent, which the embedder cannot take.
+  Production should own that step (a local Noto face plus fontkit, or an edge
+  cache) rather than call Google per export, and emoji or scripts outside Noto
+  Sans SC need more faces in the stack. The `☆⼺` page in both samples now
+  renders.
 - Real long titles wrap in both columns; rows below move down, and the second
   line of a wrapped title moves **left** by the stagger (3.05 pt compact,
   4.07 pt template). The right column is not invaded; the lower line moves
-  away from it. The visible effect is that a wrapped second line starts
-  ~2.4 pt (compact) or ~4.1 pt (template) inside the 72 pt left margin. A
-  three-line title measured 68.09, i.e. 3.9 pt into the margin.
+  away from it. With compact type a wrapped second line starts ~2.4 pt inside
+  the 72 pt left margin, and a three-line title measured 68.09 (3.9 pt inside);
+  the template scale moves it further, so the margin overflow is worth deciding
+  on before a baked oblique is dismissed.
 - Visually the skew reads as a clean bold italic, not a broken effect. On this
   evidence a baked oblique is **not** required for legibility; it would only be
   worth it if the 72 pt margin is a hard rule or a wrapped title must not move.
@@ -204,8 +231,8 @@ should not hold 300 dpi output for a 60-page collection on a low-memory device
 without a warning.
 
 The 49.7 MB figure in the research was full-resolution photos. Sizing to the
-printed box gives 2.32 MB for the 17-page real sample and 22.86 MB for 63 pages
-at 200 dpi.
+printed box gives 2.32 MB for the 17-page real sample at 200 dpi and 3.00 MB at
+300 dpi, against 22.86 MB for 63 pages at 200 dpi.
 
 ## Viewer, progress and cancellation
 
@@ -236,6 +263,13 @@ at 200 dpi.
   “Image unavailable”, and the source filename. The filename is useful in a
   prototype but leaks an internal name in a public PDF; drop it or replace it
   with a neutral line in production.
+- **Font fallback.** Seven non-ASCII code points in this collection produced a
+  4.3 kB subset and ~1.4 kB of extra PDF; the subset request is a cacheable GET
+  and the API caches it for a day. A title that adds a code point not in the
+  subset is impossible here because the subset is built from the same `pdfTexts`
+  list the document draws from. Emoji beyond Noto Sans SC's coverage would
+  still draw `.notdef`; a monochrome emoji face or an explicit limitation is
+  the next decision.
 - **Empty collection.** One header-only page; 6,010 bytes.
 - **Partial grid page.** Seven no-photo works produced 2 pages (six, then one),
   with the header repeated on page 2 and the `--` aligned.
@@ -252,8 +286,12 @@ at 200 dpi.
 
 - A real, photographic 12 MP comparison at 300 dpi to decide q0.8 vs q0.9;
   the synthetic fixtures show size but not grain.
-- A fallback font strategy for titles outside Darker Grotesque's coverage, and
-  the resulting font bytes in the PDF.
+- A production font pipeline: own the subsetting (local Noto faces + fontkit, or
+  an edge-cached service) instead of calling Google on the export's request
+  path, and decide the fallback coverage for emoji and non-Han scripts.
+- The margin overflow at the default 12 pt scale: decide whether a wrapped
+  Title may start inside the 72 pt margin or whether the type must be a baked
+  oblique.
 - Whether the right column really starts on Title (template) or Artist (#125).
 - iOS hardware confirmation of the blob “Open PDF” path.
 - The exact memory ceiling for a 60-page 300 dpi export on a phone; the desktop
@@ -267,11 +305,15 @@ at 200 dpi.
 - `apps/web/src/prototype/pdf/plan.ts` — the pure page plan.
 - `apps/web/src/prototype/pdf/photoToJpeg.ts` — fetch, decode, fit, encode,
   with per-phase timings.
+- `apps/web/src/prototype/pdf/fallbackFont.ts` — collects the drawn code points
+  and registers the subset as a second family.
 - `apps/web/src/prototype/pdf/CollectionPdf.tsx` — both templates, geometry,
-  the skew, the fixed header, the placeholder.
+  the skew, the fixed header, the placeholder, the per-page font stack.
 - `apps/web/src/prototype/pdf/exportCollection.tsx` — orchestration, progress,
   cancellation, grant expiry, stats.
 - `apps/web/src/prototype/pdf/PdfExportPage.tsx` — the throwaway shell.
 - `apps/web/src/App.tsx` — the lazy route.
 - `apps/web/public/fonts/` — Darker Grotesque statics and `OFL.txt`.
+- `apps/api/src/routes/prototypeFont.ts` — the subset route
+  (`/api/v1/prototype/font-fallback`).
 - `apps/api/src/spa.ts` — `.ttf` → `font/ttf`.

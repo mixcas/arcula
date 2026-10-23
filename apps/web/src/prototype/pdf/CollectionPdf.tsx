@@ -37,6 +37,10 @@ Font.registerHyphenationCallback((word) => [word]);
 
 export type PdfTypography = "compact" | "template";
 
+/** React-PDF accepts a family stack and substitutes per code point, which is
+ *  the mechanism the fallback font rides on. */
+export type PdfFontFamily = string | string[];
+
 interface TypeScale {
   body: number;
   header: number;
@@ -154,6 +158,31 @@ const fullFields = (metadata: Metadata): string[] => [
   ...leftFields(metadata),
   ...rightFields(metadata),
 ];
+
+/**
+ * Every string the document draws, so the fallback-font subset covers exactly
+ * what can appear on the page. The placeholder filename is included because a
+ * failed image prints it.
+ */
+export const pdfTexts = (
+  collection: Collection,
+  pages: PdfPlanPage[],
+): string[] => {
+  const texts = [collection.name];
+  for (const page of pages) {
+    if (page.kind === "photo") {
+      const metadata = metadataOf(page.artwork);
+      texts.push(metadata.title, ...fullFields(metadata), page.photo.name);
+    }
+    if (page.kind === "grid") {
+      for (const artwork of page.artworks) {
+        const metadata = metadataOf(artwork);
+        texts.push(metadata.title, ...fullFields(metadata));
+      }
+    }
+  }
+  return texts;
+};
 
 // ---------------------------------------------------------------------------
 // Shared text pieces
@@ -327,8 +356,9 @@ const PhotoPage: React.FC<{
   image: Blob | null;
   scale: TypeScale;
   collectionName: string;
-}> = ({ artwork, photo, image, scale, collectionName }) => (
-  <Page size="LETTER" wrap={false} style={styles.page}>
+  fontFamily: PdfFontFamily;
+}> = ({ artwork, photo, image, scale, collectionName, fontFamily }) => (
+  <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
     <PageHeader name={collectionName} scale={scale} />
     <View
       style={{
@@ -378,8 +408,9 @@ const GridPage: React.FC<{
   artworks: Artwork[];
   scale: TypeScale;
   collectionName: string;
-}> = ({ artworks, scale, collectionName }) => (
-  <Page size="LETTER" wrap={false} style={styles.page}>
+  fontFamily: PdfFontFamily;
+}> = ({ artworks, scale, collectionName, fontFamily }) => (
+  <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
     <PageHeader name={collectionName} scale={scale} />
     {artworks.map((artwork, index) => (
       <GridBlock
@@ -395,11 +426,12 @@ const GridPage: React.FC<{
   </Page>
 );
 
-const EmptyPage: React.FC<{ collectionName: string; scale: TypeScale }> = ({
-  collectionName,
-  scale,
-}) => (
-  <Page size="LETTER" wrap={false} style={styles.page}>
+const EmptyPage: React.FC<{
+  collectionName: string;
+  scale: TypeScale;
+  fontFamily: PdfFontFamily;
+}> = ({ collectionName, scale, fontFamily }) => (
+  <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
     <PageHeader name={collectionName} scale={scale} />
   </Page>
 );
@@ -414,6 +446,8 @@ export interface CollectionPdfProps {
   /** photo id → converted JPEG, or null when its fetch failed. */
   images: Map<string, Blob | null>;
   typography: PdfTypography;
+  /** A registered family covering glyphs Darker Grotesque lacks. */
+  fallbackFamily?: string | null;
 }
 
 export const CollectionPdf: React.FC<CollectionPdfProps> = ({
@@ -421,9 +455,13 @@ export const CollectionPdf: React.FC<CollectionPdfProps> = ({
   pages,
   images,
   typography,
+  fallbackFamily,
 }) => {
   const scale = TYPE_SCALES[typography];
   const name = collection.name;
+  const fontFamily: PdfFontFamily = fallbackFamily
+    ? ["Darker Grotesque", fallbackFamily]
+    : "Darker Grotesque";
 
   return (
     <Document
@@ -440,6 +478,7 @@ export const CollectionPdf: React.FC<CollectionPdfProps> = ({
               key={`empty-${index}`}
               collectionName={name}
               scale={scale}
+              fontFamily={fontFamily}
             />
           );
         }
@@ -450,6 +489,7 @@ export const CollectionPdf: React.FC<CollectionPdfProps> = ({
               artworks={page.artworks}
               scale={scale}
               collectionName={name}
+              fontFamily={fontFamily}
             />
           );
         }
@@ -461,6 +501,7 @@ export const CollectionPdf: React.FC<CollectionPdfProps> = ({
             image={images.get(page.photo.id) ?? null}
             scale={scale}
             collectionName={name}
+            fontFamily={fontFamily}
           />
         );
       })}
