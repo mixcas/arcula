@@ -1,10 +1,18 @@
-// The fallback subset's own decisions: what a request normalizes to, and the
-// bounds of the warm-Lambda cache. fontkit's subsetting is not exercised —
-// that is the library's behaviour, not ours.
+// The fallback subset's own decisions: what a request normalizes to, the
+// bounds of the warm-Lambda cache, and the one thing the bytes must be able to
+// do — answer a character with a glyph. fontkit's subsetting is not exercised,
+// but its output is: the subsetter leaves `cmap` out, and a renderer handed a
+// font without one throws on the first text run, which no layout sees and no
+// review reads.
 
+import * as fontkit from "fontkit";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../src/errors";
-import { createSubsetCache, subsetCharacters } from "../src/pdfFontSubset";
+import {
+  createSubsetCache,
+  fontSubsetFor,
+  subsetCharacters,
+} from "../src/pdfFontSubset";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -43,6 +51,54 @@ describe("the request text", () => {
 
     expect(validationOf(run(512))).toBeNull();
     expect(validationOf(run(513))).toBe("validation");
+  });
+});
+
+describe("the served subset", () => {
+  // The served bytes are parsed exactly as the renderer parses them, so a
+  // table the subsetter leaves out fails here rather than in a browser.
+  const served = async (text: string) =>
+    fontkit.create(
+      Buffer.from(await fontSubsetFor(subsetCharacters(text))),
+    ) as fontkit.Font;
+
+  it("answers every requested character with a glyph", async () => {
+    // A Latin accent, Han, a symbol and kana: four scripts the brand face
+    // cannot draw, and one map only covers them if it is built from the
+    // subset's own renumbered glyphs.
+    const font = await served("é中★ア");
+
+    for (const char of "é中★ア") {
+      const codePoint = char.codePointAt(0)!;
+      expect(font.hasGlyphForCodePoint(codePoint)).toBe(true);
+      // 0 is .notdef: a real answer, not the missing-glyph fallback.
+      expect(font.glyphForCodePoint(codePoint).id).toBeGreaterThan(0);
+    }
+  });
+
+  it("carries the PostScript header the embedder reads", async () => {
+    // PDFKit takes `post.isFixedPitch` and the italic angle from this table
+    // while embedding; without it the document fails after every page is laid
+    // out, which is the last place a missing table should surface.
+    const font = await served("☆");
+    const post = (font as unknown as { post?: { isFixedPitch: number } }).post;
+
+    expect(post).toBeDefined();
+    expect([0, 1]).toContain(post?.isFixedPitch);
+  });
+
+  it("answers nothing for a character that was not requested", async () => {
+    const font = await served("é中");
+
+    expect(font.hasGlyphForCodePoint(0x41)).toBe(false);
+  });
+
+  it("answers a requested character the face cannot draw without throwing", async () => {
+    // Noto Sans SC has no emoji, so an emoji title asks for a code point with
+    // no glyph. The subset must answer .notdef rather than fail the renderer.
+    const font = await served("😀");
+
+    expect(font.hasGlyphForCodePoint(0x1f600)).toBe(false);
   });
 });
 

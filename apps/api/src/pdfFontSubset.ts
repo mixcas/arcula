@@ -24,6 +24,11 @@ import { MAX_PDF_FALLBACK_CODE_POINTS } from "@arcula/shared";
 import * as fontkit from "fontkit";
 import type { Font } from "fontkit";
 import { ApiError } from "./errors";
+import {
+  type CharacterMapEntry,
+  type PostHeader,
+  withRendererTables,
+} from "./pdfFontSubsetTables";
 
 /** The client sends the document's set in chunks of this size. */
 export const MAX_FALLBACK_CODE_POINTS = MAX_PDF_FALLBACK_CODE_POINTS;
@@ -128,18 +133,58 @@ function loadFont(): Promise<Font> {
   return pending;
 }
 
+/**
+ * The subset's `post` header, taken from the face it was cut out of.
+ *
+ * `@types/fontkit` does not declare the per-table accessors, though the font
+ * object carries one for every table; this is the narrow shape we read. A face
+ * without `post` gets an upright, proportional, zeroed header rather than a
+ * failed export.
+ */
+interface SourcePost {
+  italicAngle?: number;
+  underlinePosition?: number;
+  underlineThickness?: number;
+  /** 0 or 1 in the table; `PostHeader` is what carries it as a boolean. */
+  isFixedPitch?: number;
+}
+
+function postHeader(font: Font): PostHeader {
+  const post = (font as unknown as { post?: SourcePost }).post;
+  return {
+    italicAngle: post?.italicAngle ?? 0,
+    underlinePosition: post?.underlinePosition ?? 0,
+    underlineThickness: post?.underlineThickness ?? 0,
+    isFixedPitch: (post?.isFixedPitch ?? 0) !== 0,
+  };
+}
+
 async function subsetFont(
   characters: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   try {
     const font = await loadFont();
     const subset = font.createSubset();
+    const entries: CharacterMapEntry[] = [];
     for (const char of characters) {
-      subset.includeGlyph(font.glyphForCodePoint(char.codePointAt(0) ?? 0));
+      const codePoint = char.codePointAt(0) ?? 0;
+      // The subsetter renumbers glyphs, so the map is built from the ids it
+      // hands back rather than from the source face's. `@types/fontkit`
+      // declares that answer as a boolean; it is the subset's glyph id.
+      const glyphId = subset.includeGlyph(
+        font.glyphForCodePoint(codePoint),
+      ) as unknown as number;
+      entries.push({ codePoint, glyphId });
     }
     // fontkit's declaration widens to ArrayBufferLike; copy into an owned
-    // buffer so the response body is Hono's Uint8Array<ArrayBuffer>.
-    return new Uint8Array(subset.encode());
+    // buffer so the response body is Hono's Uint8Array<ArrayBuffer>. The
+    // subset leaves out `cmap` and `post`, so both go back in before the bytes
+    // leave: see pdfFontSubsetTables.ts.
+    return withRendererTables(
+      new Uint8Array(subset.encode()),
+      entries,
+      postHeader(font),
+    );
   } catch {
     // Deliberately no character detail in the message or the log: the text
     // is the caller's document, not ours to echo.

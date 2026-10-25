@@ -57,6 +57,7 @@ link may carry either the slugged or the bare id.
 | Memory policy and warning threshold | Release converted blobs and the URL; warn at 30 photo pages (15 on a low-memory device); no cap |
 | A wrapped Title inside the margin   | The paint-time skew stands; 72 pt is a layout margin, not an ink boundary; no baked oblique     |
 | Production font fallback            | A self-hosted Noto Sans SC subset served by the API, cached; no Google call per export          |
+| The subset's missing tables         | Written by us: fontkit's TTF subset is glyph-only and leaves `cmap` and `post` out              |
 | Font serving                        | Keep `public/fonts/` under the one-hour cache; add `font/ttf`; no hashing or preload            |
 | iOS hardware                        | The mobile shell never embeds an iframe; confirm the blob popup once on a device                |
 | The renderer's `Buffer` warning     | Leave it; do not add a polyfill                                                                 |
@@ -517,6 +518,45 @@ Client side:
   missing brand glyph today; it must never turn a successful export into an
   error.
 
+#### The tables fontkit's subset leaves out
+
+`fontkit`'s TrueType subsetter is glyph-only: it emits head, hhea, loca, maxp,
+cvt, prep, fpgm, glyf and hmtx and stops, because a PDF _writer_ supplies its
+own encoding and font descriptor. The client is not that writer — it lays text
+out and then embeds the font again — so two omissions break the export, and
+neither is visible in review, in a screenshot, or in the API's own response:
+the bytes are a valid-looking font.
+
+- **`cmap`.** React-PDF resolves a `fontFamily` stack by asking each family
+  `hasGlyphForCodePoint`, which reads `font.tables.cmap`. A subset straight out
+  of `subset.encode()` throws `Cannot read properties of undefined (reading
+'tables')` on the first text run, so **every collection whose text has one
+  non-ASCII character fails to export**.
+- **`post`.** PDFKit reads `post.isFixedPitch` and the italic angle while it
+  embeds the face. Without the table it throws
+  `Cannot read properties of undefined (reading 'isFixedPitch')` after every
+  page is already laid out — the latest possible place to fail.
+
+So the endpoint writes both back (`apps/api/src/pdfFontSubsetTables.ts`):
+
+- the character → glyph pairs `subset.includeGlyph` returns, spliced in as a
+  format 12 `cmap` (Windows platform, UCS-4, one group per code point);
+- a version 3.0 `post` — header only, since a subset's glyphs are renumbered
+  and any name table would name the wrong ones — carrying the source face's
+  italic angle, underline placement and fixed-pitch flag;
+
+and the sfnt directory, checksums and `head.checkSumAdjustment` are rebuilt
+around them. Substituting a different subsetter was considered and rejected:
+`fontkit` is already there, inlines cleanly, and a second binary dependency (or
+a wasm subsetter) buys only the tables we can write in a hundred lines. A code
+point the face cannot draw maps to glyph 0 and stays `.notdef`, which is the
+honest answer rather than a throw.
+
+The correctness floor is a test on the **served bytes**: parse the response,
+assert each requested character answers a non-zero glyph, that an unrequested
+one answers none, and that the `post` header is readable. Dropping either table
+turns them red.
+
 Emoji outside Noto Sans SC, and any script it does not cover, are an accepted
 limitation of this release. Adding more fallback faces is future work, not a
 blocker.
@@ -700,9 +740,15 @@ no server work and no file upload.
   `[0 0 612 0]`. Every page must set `minHeight: 792`, which restores
   `[0 0 612 792]`. Keep the workaround until upstream fixes it.
 - The browser console reports `Buffer is not defined` from the renderer. It is
-  harmless and does not affect the output. **Do not add a Buffer polyfill** for
-  it; that would grow the lazy chunk for a warning. Record it as an expected
-  warning in the implementation notes.
+  harmless and does not affect the output: `@react-pdf/layout` bundles its Node
+  build, whose `fetchImage` evaluates `Buffer.isBuffer(source)` inside a
+  `try`/`catch`, so the reference throws, is caught, and is printed as a
+  `console.warn` **after** the image is already attached. The only visible
+  consequence is that `node.image.key` is never set, which costs a per-image
+  embed cache nothing needs — a photo prints once. **Do not add a Buffer
+  polyfill** for it; that would grow the lazy chunk for a warning.
+- Because that warning is the loudest thing in the console, it is not the cause
+  of a failed export. See **The fallback font's `cmap`** under **Fonts**.
 
 ## Testing
 
@@ -757,6 +803,11 @@ checks the route needs:
   `font/ttf`, and a TrueType header (the `0x00010000` / `true` magic). The
   magic is a correctness floor, not a fontkit test: the PDF embedder cannot take
   a WOFF2, and that failure would otherwise be silent;
+- the served bytes answer every requested character with a non-zero glyph and
+  an unrequested character with none, and carry a readable `post` header,
+  asserted in `pdfFontSubset.test.ts`. This is the floor above: fontkit's
+  subset has no `cmap` and no `post`, and a font missing either fails the whole
+  export while looking perfectly valid on the wire;
 - empty or ASCII-only text answers 400; more than 512 distinct code points
   answers 400;
 - no session is required (the Visitor's export needs it).
