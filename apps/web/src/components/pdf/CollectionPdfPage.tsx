@@ -282,6 +282,10 @@ const CollectionPdfPage: React.FC = () => {
           setLoad({ id: collectionId, state: error.state });
           return;
         }
+        // The state below says only that it failed. Whatever threw is the
+        // whole diagnosis, so it goes to the console rather than nowhere: the
+        // first bug this shipped with was invisible for exactly this reason.
+        console.error("the Collection PDF export failed", error);
         setRun({ forKey: key, status: "failed" });
       },
     );
