@@ -216,6 +216,55 @@ describe("ArtworksTable", () => {
     expect(within(rows[1]).queryByText("Draft")).toBeNull();
   });
 
+  it("shows the first photo as a small square thumbnail, and nothing without one", () => {
+    renderTable({
+      artworks: [
+        artwork({
+          id: "a",
+          title: "Art 1",
+          photos: [
+            {
+              id: "p1",
+              order: 0,
+              name: "red.jpg",
+              size: 100,
+              contentType: "image/jpeg",
+              width: 10,
+              height: 10,
+              original: {
+                url: "/api/v1/media?key=original",
+                size: 100,
+                contentType: "image/jpeg",
+              },
+              variants: [
+                {
+                  key: "square_sm",
+                  url: "/api/v1/media?key=thumb",
+                  width: 10,
+                  height: 10,
+                  size: 10,
+                  contentType: "image/jpeg",
+                },
+              ],
+            },
+          ],
+        }),
+        artwork({ id: "b", title: "Art 2" }),
+      ],
+    });
+
+    const [withPhoto, withoutPhoto] = screen.getAllByRole("row").slice(1);
+    const thumbnail = withPhoto.querySelector("img");
+    // The primary photo's small square variant, which is what makes a row
+    // recognisable before its title is read.
+    expect(thumbnail?.getAttribute("src")).toBe("/api/v1/media?key=thumb");
+    // Decorative: the title in the next cell already names the work. Lazy:
+    // a fifty-row page must not fetch fifty images on mount.
+    expect(thumbnail?.getAttribute("alt")).toBe("");
+    expect(thumbnail?.getAttribute("loading")).toBe("lazy");
+    expect(withoutPhoto.querySelector("img")).toBeNull();
+  });
+
   it("soft-deletes one artwork after confirmation and refetches", async () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();

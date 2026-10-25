@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Center, Loader } from "@mantine/core";
 import ProductPage from "./components/ProductPage";
 import LoginPage from "./components/auth/LoginPage";
 import SignUpPage from "./components/auth/SignUpPage";
@@ -12,12 +13,19 @@ import ArtworkEditPage from "./components/manage/ArtworkEditPage";
 import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
 import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
+import DeletedArtworksPage from "./components/manage/collection/DeletedArtworksPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import PublicArtworkPage from "./components/collection/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./auth/AuthProvider";
+
+// The PDF renderer is a large separate chunk: only this route may import it,
+// so no other page pays for React-PDF in the main bundle.
+const CollectionPdfPage = React.lazy(
+  () => import("./components/pdf/CollectionPdfPage"),
+);
 
 const App: React.FC = () => {
   return (
@@ -78,6 +86,18 @@ const App: React.FC = () => {
           }
         />
         <Route
+          path="/manage/collection/:collectionId/deleted"
+          element={
+            <ProtectedRoute>
+              {/* The Deleted view is its own deep-linkable page, at the
+                  collection's table width. */}
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <DeletedArtworksPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/manage/collection/:collectionId/artwork/add"
           element={
             <ProtectedRoute>
@@ -126,6 +146,22 @@ const App: React.FC = () => {
         <Route
           path="/collection/:collectionId/artwork/:artworkId"
           element={<PublicArtworkPage />}
+        />
+        {/* The Collection PDF viewer. Public chrome: the route itself decides
+            access through the ordinary reads, never a ProtectedRoute. */}
+        <Route
+          path="/collection/:collectionId/pdf"
+          element={
+            <React.Suspense
+              fallback={
+                <Center py="xl">
+                  <Loader />
+                </Center>
+              }
+            >
+              <CollectionPdfPage />
+            </React.Suspense>
+          }
         />
 
         {/* Redirect all other routes to homepage */}

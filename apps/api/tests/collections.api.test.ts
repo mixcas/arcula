@@ -1,7 +1,7 @@
 // The collection resource routes: list/create with the tier cap, the
 // owner/visitor reads, the settings-form PATCH (absent-leave / null-clear),
 // the CSV import's mixed-batch contract, the bulk soft delete, and the
-// unused-in-beta restore — driven in-process with app.request() against the
+// single restore — driven in-process with app.request() against the
 // real stack.
 //
 // The beta cap is one collection per free account, so the users in this

@@ -54,6 +54,11 @@ interface FormActionsBarProps {
   submitLabel: string;
   /** Mirrors `form.submitting`; the button is the busy indicator. */
   submitting: boolean;
+  /**
+   * Shuts Save without touching it: the Edit page guards against saving a
+   * work that is still deleted. Omitted (the Add page's case) means enabled.
+   */
+  submitDisabled?: boolean;
   /** Where Cancel goes. A link, not a handler, so it is a real destination. */
   cancelTo: string;
 }
@@ -61,6 +66,7 @@ interface FormActionsBarProps {
 const FormActionsBar: React.FC<FormActionsBarProps> = ({
   submitLabel,
   submitting,
+  submitDisabled = false,
   cancelTo,
 }) => (
   <Box
@@ -79,7 +85,7 @@ const FormActionsBar: React.FC<FormActionsBarProps> = ({
     }}
   >
     <Group h="100%" justify="flex-end">
-      <Button type="submit" loading={submitting}>
+      <Button type="submit" loading={submitting} disabled={submitDisabled}>
         {submitLabel}
       </Button>
       <Button component={Link} to={cancelTo} variant="outline">

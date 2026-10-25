@@ -117,6 +117,18 @@ const CollectionPage: React.FC = () => {
           >
             View
           </Button>
+          <Button
+            variant="subtle"
+            component="a"
+            href={`/collection/${collectionSlug(
+              collection.name,
+              collection.id,
+            )}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            PDF
+          </Button>
         </Group>
         <Group>
           <Button
@@ -124,6 +136,15 @@ const CollectionPage: React.FC = () => {
             to={`/manage/collection/${param}/artwork/add`}
           >
             Add Artwork
+          </Button>
+          {/* No count: a badge would mean fetching the deleted list on every
+              collection page load, which the view deliberately avoids. */}
+          <Button
+            component={Link}
+            to={`/manage/collection/${param}/deleted`}
+            variant="default"
+          >
+            Deleted
           </Button>
           <Button component={Link} to={`/manage/collection/${param}/settings`}>
             Settings

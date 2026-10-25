@@ -14,7 +14,9 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
+    "@types/fontkit": "2.0.9",
     "@types/nodemailer": "^8.0.2",
+    "fontkit": "^2.0.4",
     "vitest": "5.0.2"
   },
   "dependencies": {
@@ -28,6 +30,7 @@
     "nodemailer": "^10.0.14",
     "postgres": "3.4.9",
     "sharp": "^0.35.5",
+    "subset-font": "^2.9.0",
     "zod": "4.6.5"
   }
 }

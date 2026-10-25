@@ -9,6 +9,7 @@ import {
   type DataTableSortStatus,
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
+import ArtworkThumbnail from "@/components/manage/collection/ArtworkThumbnail";
 import { artworkSlug, parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
@@ -134,8 +135,8 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
       children: (
         <Text size="sm">
           {label} will be removed from this collection and from the public page.
-          The record is kept — this is a soft delete, so it can be restored
-          later.
+          The record is kept — this is a soft delete, so you can restore it from
+          the collection's Deleted view.
         </Text>
       ),
       labels: { confirm: "Delete", cancel: "Cancel" },
@@ -163,8 +164,8 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
               title: "Deleted",
               message:
                 ids.length === 1
-                  ? "The artwork was removed. The record is kept and can be restored."
-                  : `${ids.length} artworks were removed. The records are kept and can be restored.`,
+                  ? "The artwork was removed. You can restore it from the Deleted view."
+                  : `${ids.length} artworks were removed. You can restore them from the Deleted view.`,
             });
           })
           .catch((error: unknown) => {
@@ -190,6 +191,16 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
 
   const columns = useMemo<DataTableColumn<Artwork>[]>(
     () => [
+      {
+        // The thumbnail identifies a work before its title is read, and is not
+        // a value to sort by: `sortable: false` keeps it out of the sort cycle,
+        // which would otherwise order rows by their photo array.
+        accessor: "photos",
+        title: "",
+        width: 72,
+        sortable: false,
+        render: (artwork) => <ArtworkThumbnail artwork={artwork} />,
+      },
       {
         accessor: "title",
         title: "Title",

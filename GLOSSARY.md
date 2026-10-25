@@ -169,8 +169,9 @@ _Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
 Taken out of the collection as far as its owner and collaborators are
-concerned: it leaves every list, and it can be brought back. The record and its
-media are not destroyed.
+concerned: it leaves every live list, and it can be brought back. The record and
+its media are not destroyed. The **Deleted** view is a collection's list of its
+deleted works, most recently deleted first, where one or several are restored.
 _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:
@@ -186,6 +187,13 @@ _Avoid_: Theme, template, layout, design
 **Skin options**:
 A collection's choices within its skin — the settings the skin itself defines.
 _Avoid_: Theme settings, preferences
+
+**Collection PDF**:
+A collection's published, live artworks exported as one document: a photo page
+for each of an artwork's photos, up to three, and a grid for the artworks that
+have none, ordered by artist then title. An export of the collection, never a
+second presentation of it.
+_Avoid_: Catalogue, catalogue PDF, portfolio
 
 ### Media
 

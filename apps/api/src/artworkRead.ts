@@ -13,23 +13,25 @@
 // cookie by the route and handed in as a fact (a Protected Collection admits a
 // non-member only through it, ADR-0005). This module reports `not-found` or
 // `forbidden` and carries no HTTP code or framework type. The route owns the
-// wire codes. Only the list can answer `forbidden` — a Private Collection the
-// viewer is not a member of, or a Protected one the visitor holds no grant for
-// — because that is the list's existing wire, and the Collection read answers
+// wire codes. Only a list can answer `forbidden` — a Private Collection the
+// viewer is not a member of, a Protected one the visitor holds no grant for,
+// or the Deleted list asked for by a non-member — because that is the list's
+// existing wire, and the Collection read answers
 // the same refusal so the two reads agree about who is inside; a single read
 // answers `not-found` for every refusal (a Private Collection included) so the
 // refusal discloses nothing.
 //
 // No transaction spans the reads: a work or child added or removed between
 // them is a torn read the product tolerates, and no caller may assume a
-// snapshot. Ordering is part of the document: the list is creation time and
-// then id, photos are in `order`, documents by id, and the serializer groups
-// Variants by parent.
+// snapshot. Ordering is part of the document: the live list is creation time
+// and then id, the Deleted list is deletion time (newest first) and then id,
+// photos are in `order`, documents by id, and the serializer groups Variants
+// by parent.
 //
 // The save routes read their own work back through `readArtwork`, so a save
 // answers exactly what a read of the same work would.
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   artworks as artworksTable,
   artworkDocuments as artworkDocumentsTable,
@@ -37,7 +39,7 @@ import {
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import type { ArtworkRead } from "@arcula/shared";
-import { canSeeArtwork, canSeeCollection } from "./access";
+import { canSeeArtwork, canSeeCollection, isMember } from "./access";
 import {
   loadArtworkInCollection,
   loadCollection,
@@ -172,30 +174,49 @@ export async function readArtwork(
 }
 
 /**
- * A Collection's Artwork list as its Viewer sees it.
- *
- * The works query keeps the two filters it has always used: a member gets
- * every live work of the collection — no `userId` filter, because every
- * member reads the same list — and a non-member only Published, live works;
- * a Deleted work is in neither. A Private Collection the viewer is not a
- * member of, or a Protected one they hold no grant for, is `forbidden` (never
- * `not-found` — the client maps it to "private"), and a missing Collection is
- * `not-found`.
- *
- * The rows are ordered by creation time and then id, so repeated reads agree,
- * and their children arrive from the same three batched queries as the single
- * read. The verdict still runs over each loaded row, so the list fails closed
- * if the filter and the rule ever disagree.
+ * Which side of the deletion stamp a list read is about. The two are separate
+ * reads of the same module, not one route with a query flag: a visitor may
+ * never ask for the Deleted side at all (ADR-0004), and the live list is the
+ * only one the public pages touch.
  */
-export async function readArtworkList(
+type ArtworkListMode = "live" | "deleted";
+
+/**
+ * A Collection's Artwork list as its Viewer sees it, on one side of the
+ * deletion stamp.
+ *
+ * The live list keeps the two filters it has always used: a member gets every
+ * live work of the collection — no `userId` filter, because every member reads
+ * the same list — and a non-member only Published, live works; a Deleted work
+ * is in neither. The Deleted list is member-only, even on a Public Collection,
+ * and holds only works with a deletion stamp: membership is the whole gate, so
+ * a non-member is `forbidden` rather than an empty list.
+ *
+ * A Private Collection the viewer is not a member of, or a Protected one they
+ * hold no grant for, is `forbidden` (never `not-found` — the client maps it to
+ * "private"), and a missing Collection is `not-found`.
+ *
+ * The rows are ordered by creation time (live) or deletion time, newest first
+ * (deleted), and then id, so repeated reads agree. Children arrive from the
+ * same three batched queries as the single read, and the verdict still runs
+ * over each loaded row, so each list fails closed if its filter and the rule
+ * ever disagree.
+ */
+async function readArtworkListInMode(
   collectionId: string,
   viewer: string | null,
+  mode: ArtworkListMode,
   hasValidGrant = false,
 ): Promise<ArtworkListResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
   const member = await loadMembership(collectionId, collection, viewer);
-  if (!canSeeCollection(member, collection, hasValidGrant)) {
+
+  if (mode === "deleted") {
+    // Membership alone: a public collection's deleted works are still the
+    // members' business, and a grant is not an invitation to them.
+    if (!isMember(member)) return { status: "forbidden" };
+  } else if (!canSeeCollection(member, collection, hasValidGrant)) {
     return { status: "forbidden" };
   }
 
@@ -203,18 +224,28 @@ export async function readArtworkList(
     .select()
     .from(artworksTable)
     .where(
-      member !== null
+      mode === "deleted"
         ? and(
             eq(artworksTable.collectionId, collectionId),
-            isNull(artworksTable.deletedAt),
+            isNotNull(artworksTable.deletedAt),
           )
-        : and(
-            eq(artworksTable.collectionId, collectionId),
-            eq(artworksTable.status, "published"),
-            isNull(artworksTable.deletedAt),
-          ),
+        : member !== null
+          ? and(
+              eq(artworksTable.collectionId, collectionId),
+              isNull(artworksTable.deletedAt),
+            )
+          : and(
+              eq(artworksTable.collectionId, collectionId),
+              eq(artworksTable.status, "published"),
+              isNull(artworksTable.deletedAt),
+            ),
     )
-    .orderBy(asc(artworksTable.createdAt), asc(artworksTable.id));
+    .orderBy(
+      mode === "deleted"
+        ? desc(artworksTable.deletedAt)
+        : asc(artworksTable.createdAt),
+      asc(artworksTable.id),
+    );
 
   const works = rows.filter((row) =>
     canSeeArtwork(member, collection, row, hasValidGrant),
@@ -233,4 +264,25 @@ export async function readArtworkList(
       ),
     ),
   };
+}
+
+/** The live list: a member's every live work, a visitor's published ones. */
+export function readArtworkList(
+  collectionId: string,
+  viewer: string | null,
+  hasValidGrant = false,
+): Promise<ArtworkListResult> {
+  return readArtworkListInMode(collectionId, viewer, "live", hasValidGrant);
+}
+
+/**
+ * The Deleted view's list: every work of the collection that carries a
+ * deletion stamp, most recently deleted first. Member-only (ADR-0004) — the
+ * owner and every collaborator see the same list, and nobody else sees one.
+ */
+export function readDeletedArtworkList(
+  collectionId: string,
+  viewer: string | null,
+): Promise<ArtworkListResult> {
+  return readArtworkListInMode(collectionId, viewer, "deleted");
 }
