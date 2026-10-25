@@ -11,6 +11,7 @@ import React from "react";
 import {
   Document,
   Font,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -24,7 +25,11 @@ import {
   ARTWORK_LEFT_FIELDS,
   ARTWORK_RIGHT_FIELDS,
   IMAGE_UNAVAILABLE,
+  PHOTO_PRINT_BOX,
+  placeInPhotoBox,
+  printedSize,
 } from "./collectionPdfPreflight";
+import type { ConvertedPhoto } from "./photoPipeline";
 
 Font.register({
   family: "Darker Grotesque",
@@ -51,7 +56,6 @@ const LINE = 16.27;
 const TITLE_RHYTHM = 30;
 
 const HEADER_BASELINE = 45.38;
-const PHOTO_BOX = { left: 111, top: 73.5, width: 390, height: 519 };
 const PHOTO_METADATA_BASELINE = 641.32;
 /** The measured Title → Artist baseline on a photo page. */
 const PHOTO_ARTIST_RHYTHM = 28.8;
@@ -135,6 +139,18 @@ const styles = StyleSheet.create({
     height: HEADER * 1.2,
     overflow: "hidden",
     fontWeight: 400,
+  },
+  /** The print box a failed photo draws instead of an image. */
+  placeholder: {
+    position: "absolute",
+    left: PHOTO_PRINT_BOX.left,
+    top: PHOTO_PRINT_BOX.top,
+    width: PHOTO_PRINT_BOX.width,
+    height: PHOTO_PRINT_BOX.height,
+    borderWidth: 0.75,
+    borderColor: "#c9c9c9",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
@@ -223,40 +239,35 @@ const PhotoMetadata: React.FC<{ artwork: Artwork }> = ({ artwork }) => {
 
 const PhotoPage: React.FC<{
   artwork: Artwork;
+  source: ConvertedPhoto | undefined;
   collectionName: string;
   fontFamily: PdfFontFamily;
-}> = ({ artwork, collectionName, fontFamily }) => (
-  <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
-    <PageHeader name={collectionName} />
-    <View
-      style={{
-        position: "absolute",
-        left: PHOTO_BOX.left,
-        top: PHOTO_BOX.top,
-        width: PHOTO_BOX.width,
-        height: PHOTO_BOX.height,
-      }}
-    >
-      {/* The print box is final. The photo pipeline lands in its own ticket;
-          until then every photo page draws the specified placeholder. */}
-      <View
-        style={{
-          width: "100%",
-          height: "100%",
-          borderWidth: 0.75,
-          borderColor: "#c9c9c9",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ fontSize: BODY, color: "#666666" }}>
-          {IMAGE_UNAVAILABLE}
-        </Text>
-      </View>
-    </View>
-    <PhotoMetadata artwork={artwork} />
-  </Page>
-);
+}> = ({ artwork, source, collectionName, fontFamily }) => {
+  return (
+    <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
+      <PageHeader name={collectionName} />
+      {/* A photo that failed has no source and draws the placeholder in the
+          same box. The page itself is unaffected: the plan, not the image,
+          decides how many pages the document has. */}
+      {source ? (
+        <Image
+          src={source.blob}
+          style={{
+            position: "absolute",
+            ...placeInPhotoBox(printedSize(source.pixels)),
+          }}
+        />
+      ) : (
+        <View style={styles.placeholder}>
+          <Text style={{ fontSize: BODY, color: "#666666" }}>
+            {IMAGE_UNAVAILABLE}
+          </Text>
+        </View>
+      )}
+      <PhotoMetadata artwork={artwork} />
+    </Page>
+  );
+};
 
 const GridBlock: React.FC<{
   artwork: Artwork;
@@ -322,17 +333,30 @@ const EmptyPage: React.FC<{
   </Page>
 );
 
+/**
+ * The converted photos by photo id. A photo with no entry — because it failed,
+ * because it had no object, or because access stopped the run — prints the
+ * placeholder.
+ *
+ * The renderer takes the `Blob` itself rather than a URL, so the photo's life
+ * is the document's: it is unreachable — and collectable — as soon as
+ * `toBlob()` resolves.
+ */
+export type PdfPhotoSources = ReadonlyMap<string, ConvertedPhoto>;
+
 export interface CollectionPdfProps {
   collection: Collection;
   pages: CollectionPdfPage[];
   /** Every registered fallback family, in chunk order. */
   fallbackFamilies: string[];
+  photoSources: PdfPhotoSources;
 }
 
 export const CollectionPdf: React.FC<CollectionPdfProps> = ({
   collection,
   pages,
   fallbackFamilies,
+  photoSources,
 }) => {
   const name = collection.name;
   const fontFamily: PdfFontFamily = ["Darker Grotesque", ...fallbackFamilies];
@@ -363,6 +387,7 @@ export const CollectionPdf: React.FC<CollectionPdfProps> = ({
           <PhotoPage
             key={`photo-${page.photo.id}-${index}`}
             artwork={page.artwork}
+            source={photoSources.get(page.photo.id)}
             collectionName={name}
             fontFamily={fontFamily}
           />

@@ -40,9 +40,11 @@ import {
   publicFailure,
   type PublicState,
 } from "@/components/collection/usePublicCollection";
+import { CollectionPdfAccessError } from "./collectionPdfAccess";
 import { buildCollectionPdfPlan } from "./collectionPdfPlan";
 import { collectionPdfFileName } from "./collectionPdfPreflight";
 import { exportCollection } from "./exportCollection";
+import { isAbortError } from "./photoPipeline";
 
 interface ExportData {
   collection: Collection;
@@ -163,6 +165,8 @@ const CollectionPdfPage: React.FC = () => {
   const autoStartedRef = useRef<string | null>(null);
   /** Invalidates a result whose collection, run or component has gone away. */
   const exportIdRef = useRef(0);
+  /** The run in flight, so a reload or an unmount can abort it. */
+  const abortRef = useRef<AbortController | null>(null);
 
   const runKey = `${collectionId}:${attempt}`;
   const currentRun: Run =
@@ -175,12 +179,20 @@ const CollectionPdfPage: React.FC = () => {
     }
   }, []);
 
+  // Aborting is what releases an in-flight export's fetched photos: the
+  // pipeline drops a cancelled conversion instead of encoding it.
+  const abortRun = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
   const reload = useCallback(() => {
     exportIdRef.current += 1;
+    abortRun();
     revokeUrl();
     setLoad({ id: collectionId, state: { status: "loading" } });
     setAttempt((value) => value + 1);
-  }, [collectionId, revokeUrl]);
+  }, [collectionId, abortRun, revokeUrl]);
 
   // The usual load: Collection first, Artwork list only after it succeeds.
   useEffect(() => {
@@ -204,16 +216,18 @@ const CollectionPdfPage: React.FC = () => {
   // A new collection drops the previous document and its URL.
   useEffect(() => {
     exportIdRef.current += 1;
+    abortRun();
     revokeUrl();
-  }, [collectionId, revokeUrl]);
+  }, [collectionId, abortRun, revokeUrl]);
 
   // The viewer's own unmount is the last place the blob URL can be released.
   useEffect(
     () => () => {
       exportIdRef.current += 1;
+      abortRun();
       revokeUrl();
     },
-    [revokeUrl],
+    [abortRun, revokeUrl],
   );
 
   const startExport = useCallback(() => {
@@ -223,11 +237,24 @@ const CollectionPdfPage: React.FC = () => {
     exportIdRef.current += 1;
     const exportId = exportIdRef.current;
     const key = runKey;
+    abortRun();
     revokeUrl();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRun({ forKey: key, status: "generating" });
 
-    void exportCollection(state.value.collection, state.value.artworks).then(
+    /** The run is over, however it ended: stop calling its controller "in flight". */
+    const settle = () => {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    };
+
+    void exportCollection(state.value.collection, state.value.artworks, {
+      signal: controller.signal,
+    }).then(
       (result) => {
+        settle();
         if (exportIdRef.current !== exportId) {
           return;
         }
@@ -241,13 +268,24 @@ const CollectionPdfPage: React.FC = () => {
           size: result.blob.size,
         });
       },
-      () => {
-        if (exportIdRef.current === exportId) {
-          setRun({ forKey: key, status: "failed" });
+      (error: unknown) => {
+        settle();
+        if (exportIdRef.current !== exportId || isAbortError(error)) {
+          return;
         }
+        if (error instanceof CollectionPdfAccessError) {
+          // A photo was refused and the Collection no longer reads the same
+          // way: the export stops where the reader's access stopped, and the
+          // ordinary load takes over — never a document of placeholders.
+          // Unlocking re-runs the load and this export from the beginning.
+          setRun(null);
+          setLoad({ id: collectionId, state: error.state });
+          return;
+        }
+        setRun({ forKey: key, status: "failed" });
       },
     );
-  }, [state, runKey, revokeUrl]);
+  }, [state, runKey, collectionId, abortRun, revokeUrl]);
 
   // Ready starts generation on its own. Deferred by a tick because starting
   // writes state, and React asks that an effect not do that synchronously.

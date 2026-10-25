@@ -19,13 +19,33 @@ import {
   type CollectionPdfPage,
 } from "./collectionPdfPlan";
 
-/** 390 × 519 pt at 300 dpi. */
-export const PRINT_BOX_PX = { width: 1625, height: 2163 } as const;
+/** The density the print box is measured at. */
+export const PRINT_DPI = 300;
+
+/** The photo box on a photo page, in points, measured from the page's top-left. */
+export const PHOTO_PRINT_BOX = {
+  left: 111,
+  top: 73.5,
+  width: 390,
+  height: 519,
+} as const;
 
 export interface PixelSize {
   width: number;
   height: number;
 }
+
+/**
+ * 390 × 519 pt at 300 dpi.
+ *
+ * The height lands on a half pixel (519 pt is 2162.5 px) and rounds up, so a
+ * photo converted into this box can print a hair taller than the box itself;
+ * `placeInPhotoBox` caps that away.
+ */
+export const PRINT_BOX_PX: PixelSize = {
+  width: Math.round((PHOTO_PRINT_BOX.width * PRINT_DPI) / 72),
+  height: Math.round((PHOTO_PRINT_BOX.height * PRINT_DPI) / 72),
+};
 
 /**
  * The source size fitted inside the print box, never enlarged.
@@ -42,6 +62,41 @@ export const fitInsideBox = (source: PixelSize, box: PixelSize): PixelSize => {
   return {
     width: Math.max(1, Math.round(source.width * scale)),
     height: Math.max(1, Math.round(source.height * scale)),
+  };
+};
+
+export interface PointSize {
+  width: number;
+  height: number;
+}
+
+/** A photo's print size: its own pixels at 300 dpi, never scaled to the box. */
+export const printedSize = (pixels: PixelSize): PointSize => ({
+  width: (pixels.width * 72) / PRINT_DPI,
+  height: (pixels.height * 72) / PRINT_DPI,
+});
+
+export interface PhotoPlacement extends PointSize {
+  left: number;
+  top: number;
+}
+
+/**
+ * Where a converted photo sits on the page: its print size, centred in the
+ * print box and capped at it.
+ *
+ * This is `contain` with no upscaling — the photo keeps its own proportions
+ * and is never stretched to fill the box — and it is why a small source still
+ * prints small rather than being blown up to a blurry full page.
+ */
+export const placeInPhotoBox = (printed: PointSize): PhotoPlacement => {
+  const width = Math.min(printed.width, PHOTO_PRINT_BOX.width);
+  const height = Math.min(printed.height, PHOTO_PRINT_BOX.height);
+  return {
+    left: PHOTO_PRINT_BOX.left + (PHOTO_PRINT_BOX.width - width) / 2,
+    top: PHOTO_PRINT_BOX.top + (PHOTO_PRINT_BOX.height - height) / 2,
+    width,
+    height,
   };
 };
 

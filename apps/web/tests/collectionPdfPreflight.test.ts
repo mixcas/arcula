@@ -7,7 +7,10 @@ import {
   fallbackChunks,
   fitInsideBox,
   IMAGE_UNAVAILABLE,
+  PHOTO_PRINT_BOX,
+  placeInPhotoBox,
   PRINT_BOX_PX,
+  printedSize,
   shouldWarnForLargeExport,
 } from "@/components/pdf/collectionPdfPreflight";
 import type { Artwork, ArtworkPhoto } from "@arcula/shared";
@@ -81,6 +84,59 @@ describe("fitInsideBox", () => {
         { width: 1625, height: 2163 },
       ),
     ).toEqual({ width: 541, height: 2163 });
+  });
+});
+
+describe("printedSize", () => {
+  it("converts pixels to points at 300 dpi", () => {
+    // 1625 px / 300 dpi = 5.4167 in = 390 pt.
+    expect(printedSize({ width: 1625, height: 1000 })).toEqual({
+      width: 390,
+      height: 240,
+    });
+  });
+
+  it("keeps the converted photo's own pixel size, which may exceed the box", () => {
+    // 2163 px at 300 dpi is 519.12 pt; the box is the cap, not the source.
+    expect(printedSize(PRINT_BOX_PX).height).toBeCloseTo(519.12, 3);
+  });
+});
+
+describe("placeInPhotoBox", () => {
+  it("centres a photo that is exactly the box", () => {
+    expect(placeInPhotoBox({ width: 390, height: 519 })).toEqual({
+      left: PHOTO_PRINT_BOX.left,
+      top: PHOTO_PRINT_BOX.top,
+      width: 390,
+      height: 519,
+    });
+  });
+
+  it("centres a landscape photo vertically without stretching it", () => {
+    // 1625 x 1000 px is 390 x 240 pt: full width, 139.5 pt above and below.
+    const placement = placeInPhotoBox({ width: 390, height: 240 });
+
+    expect(placement.width).toBe(390);
+    expect(placement.height).toBe(240);
+    expect(placement.left).toBe(PHOTO_PRINT_BOX.left);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 139.5, 3);
+  });
+
+  it("centres a small photo at its own size instead of enlarging it", () => {
+    // 500 x 500 px is 120 x 120 pt, well inside the box.
+    const placement = placeInPhotoBox({ width: 120, height: 120 });
+
+    expect(placement.width).toBe(120);
+    expect(placement.height).toBe(120);
+    expect(placement.left).toBeCloseTo(PHOTO_PRINT_BOX.left + 135, 3);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 199.5, 3);
+  });
+
+  it("caps a photo larger than the box instead of overflowing it", () => {
+    const placement = placeInPhotoBox({ width: 390, height: 519.12 });
+
+    expect(placement.height).toBe(519);
+    expect(placement.top).toBe(PHOTO_PRINT_BOX.top);
   });
 });
 
