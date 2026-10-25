@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Center, Loader } from "@mantine/core";
 import ProductPage from "./components/ProductPage";
 import LoginPage from "./components/auth/LoginPage";
 import SignUpPage from "./components/auth/SignUpPage";
@@ -19,6 +20,12 @@ import PublicCollectionPage from "./components/collection/PublicCollectionPage";
 import PublicArtworkPage from "./components/collection/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./auth/AuthProvider";
+
+// The PDF renderer is a large separate chunk: only this route may import it,
+// so no other page pays for React-PDF in the main bundle.
+const CollectionPdfPage = React.lazy(
+  () => import("./components/pdf/CollectionPdfPage"),
+);
 
 const App: React.FC = () => {
   return (
@@ -139,6 +146,22 @@ const App: React.FC = () => {
         <Route
           path="/collection/:collectionId/artwork/:artworkId"
           element={<PublicArtworkPage />}
+        />
+        {/* The Collection PDF viewer. Public chrome: the route itself decides
+            access through the ordinary reads, never a ProtectedRoute. */}
+        <Route
+          path="/collection/:collectionId/pdf"
+          element={
+            <React.Suspense
+              fallback={
+                <Center py="xl">
+                  <Loader />
+                </Center>
+              }
+            >
+              <CollectionPdfPage />
+            </React.Suspense>
+          }
         />
 
         {/* Redirect all other routes to homepage */}

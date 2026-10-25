@@ -17,13 +17,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const INDEX = "<html>FIXTURE-INDEX</html>";
 const JS = "console.log('fixture');";
 const CSS = "body{}";
+const TTF = "fixture-ttf";
 
 let distDir: string;
 
 beforeAll(async () => {
   distDir = await mkdtemp(join(tmpdir(), "arcula-spa-"));
   await mkdir(join(distDir, "assets"), { recursive: true });
+  await mkdir(join(distDir, "fonts"), { recursive: true });
   await writeFile(join(distDir, "index.html"), INDEX);
+  await writeFile(join(distDir, "fonts/DarkerGrotesque-Regular.ttf"), TTF);
   await writeFile(join(distDir, "assets/index-abc.js"), JS);
   await writeFile(join(distDir, "assets/style-def.css"), CSS);
   await writeFile(join(distDir, "assets/blob.bin"), "bin");
@@ -72,6 +75,14 @@ describe("the built SPA", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('{"name":"fixture"}');
     expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
+  });
+
+  it("serves a brand font as font/ttf, not the shell or octet-stream", async () => {
+    const res = await app.request("/fonts/DarkerGrotesque-Regular.ttf");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(TTF);
+    expect(res.headers.get("content-type")).toBe("font/ttf");
     expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
   });
 

@@ -188,6 +188,13 @@ _Avoid_: Theme, template, layout, design
 A collection's choices within its skin — the settings the skin itself defines.
 _Avoid_: Theme settings, preferences
 
+**Collection PDF**:
+A collection's published, live artworks exported as one document: a photo page
+for each of an artwork's photos, up to three, and a grid for the artworks that
+have none, ordered by artist then title. An export of the collection, never a
+second presentation of it.
+_Avoid_: Catalogue, catalogue PDF, portfolio
+
 ### Media
 
 **Staged**:
