@@ -60,7 +60,13 @@ mkdir -p "$STAGE"
 DEFINE_NODE_ENV='process.env.NODE_ENV="production"'
 
 echo "==> bundling ($ENV)"
-bun build apps/api/src/lambda.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
+#    `harfbuzzjs` is external for the same class of reason as sharp: its wasm
+#    is a runtime asset, not code. Bundling it makes `bun build` emit the wasm
+#    beside the bundle while leaving an ABSOLUTE build-machine path in the
+#    `require.resolve` that loads it, which resolves to nothing in /var/task.
+#    External, the subsetter resolves `harfbuzzjs/…` through the package that
+#    step 3 installs — the same mechanism that ships Sharp.
+bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
 # 1b. The Collection PDF's fallback face travels beside the bundle: the
@@ -83,14 +89,16 @@ rm -rf "$STAGE/web"
 mkdir -p "$STAGE/web"
 cp -R apps/web/dist "$STAGE/web/dist"
 
-# 3. The package manifest: only sharp is a runtime dependency (it is
-#    native; everything else is in the bundle).
+# 3. The package manifest: only the runtime dependencies that are not
+#    bundleable — sharp (native) and harfbuzzjs (wasm, see step 1) —
+#    are here; everything else is in the bundle.
 cat > "$STAGE/package.json" <<'EOF'
 {
   "name": "arcula-api-lambda",
   "private": true,
   "type": "module",
   "dependencies": {
+    "harfbuzzjs": "^1.6.4",
     "sharp": "^0.35.5"
   }
 }

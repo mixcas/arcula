@@ -1,9 +1,9 @@
 // API integration: the Collection PDF's fallback font.
 //
 // The route is public and answers a TrueType subset of the bundled Noto Sans
-// SC. The magic number is a correctness floor, not a fontkit test: the PDF
+// SC. The magic number is a correctness floor, not a subsetter test: the PDF
 // embedder cannot take a WOFF2, and that failure would otherwise be silent.
-// Glyph outlines are fontkit's business and are not asserted.
+// Glyph outlines are harfbuzz's business and are not asserted.
 
 import { afterAll, describe, expect, it } from "vitest";
 import { closeDb } from "../src/db";
@@ -13,7 +13,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-/** 0x00010000 for a plain TTF, or the `true` tag fontkit's subset emits. */
+/** 0x00010000 for a plain TTF, or the `true` tag a subsetter may emit. */
 async function magicOf(res: Response): Promise<number> {
   const bytes = new Uint8Array(await res.arrayBuffer());
   expect(bytes.length).toBeGreaterThanOrEqual(4);

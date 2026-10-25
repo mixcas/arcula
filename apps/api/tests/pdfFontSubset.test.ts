@@ -1,9 +1,8 @@
 // The fallback subset's own decisions: what a request normalizes to, the
 // bounds of the warm-Lambda cache, and the one thing the bytes must be able to
-// do — answer a character with a glyph. fontkit's subsetting is not exercised,
-// but its output is: the subsetter leaves `cmap` out, and a renderer handed a
-// font without one throws on the first text run, which no layout sees and no
-// review reads.
+// do — answer a character with a glyph. Harfbuzz's subsetting is not exercised,
+// but its output is: `fontkit` parses the served bytes the way the renderer
+// does, so a complete font is asserted rather than assumed.
 
 import * as fontkit from "fontkit";
 import { describe, expect, it } from "vitest";
@@ -94,8 +93,10 @@ describe("the served subset", () => {
   });
 
   it("answers a requested character the face cannot draw without throwing", async () => {
-    // Noto Sans SC has no emoji, so an emoji title asks for a code point with
-    // no glyph. The subset must answer .notdef rather than fail the renderer.
+    // Noto Sans SC has no emoji, so an emoji-only title asks for code points
+    // with no glyph at all — the case where hb-subset writes a `cmap` with no
+    // subtable, which makes the renderer throw instead of drawing `.notdef`.
+    // The space the subset always asks for is what keeps the map non-empty.
     const font = await served("😀");
 
     expect(font.hasGlyphForCodePoint(0x1f600)).toBe(false);

@@ -57,7 +57,7 @@ link may carry either the slugged or the bare id.
 | Memory policy and warning threshold | Release converted blobs and the URL; warn at 30 photo pages (15 on a low-memory device); no cap |
 | A wrapped Title inside the margin   | The paint-time skew stands; 72 pt is a layout margin, not an ink boundary; no baked oblique     |
 | Production font fallback            | A self-hosted Noto Sans SC subset served by the API, cached; no Google call per export          |
-| The subset's missing tables         | Written by us: fontkit's TTF subset is glyph-only and leaves `cmap` and `post` out              |
+| The subset's missing tables         | Not ours: hb-subset (via `subset-font`) writes a complete font, `cmap` and `post` included      |
 | Font serving                        | Keep `public/fonts/` under the one-hour cache; add `font/ttf`; no hashing or preload            |
 | iOS hardware                        | The mobile shell never embeds an iframe; confirm the blob popup once on a device                |
 | The renderer's `Buffer` warning     | Leave it; do not add a polyfill                                                                 |
@@ -477,10 +477,9 @@ Production shape (this replaces the prototype's call to Google Fonts):
   limitation.
 - Add `GET /api/v1/pdf/font-fallback?text=<characters>` to the API. It is public
   (a Visitor needs it too), takes the distinct **non-ASCII** characters, and
-  answers a TrueType subset (`font/ttf`) built with `fontkit` from the bundled
-  face. It never fetches a remote font. Add `fontkit` to `apps/api`'s
-  dependencies; it is pure JavaScript and the existing `bun build` inlines it,
-  so it is not a Lambda runtime dependency.
+  answers a TrueType subset (`font/ttf`) of the bundled face. It never fetches
+  a remote font. The subsetting is harfbuzz's (`subset-font`), which writes a
+  complete font — see **The subsetter** below.
 - Cap the request at **512 distinct code points**. The client requests the
   document's set in chunks of 512 and stacks the resulting families, so a
   pathological collection still covers every character it can.
@@ -518,44 +517,59 @@ Client side:
   missing brand glyph today; it must never turn a successful export into an
   error.
 
-#### The tables fontkit's subset leaves out
+#### The subsetter
+
+The endpoint answers a subset built by **harfbuzz** (`hb-subset`, through
+`subset-font`), not by `fontkit`.
 
 `fontkit`'s TrueType subsetter is glyph-only: it emits head, hhea, loca, maxp,
 cvt, prep, fpgm, glyf and hmtx and stops, because a PDF _writer_ supplies its
 own encoding and font descriptor. The client is not that writer — it lays text
-out and then embeds the font again — so two omissions break the export, and
-neither is visible in review, in a screenshot, or in the API's own response:
-the bytes are a valid-looking font.
+out and then embeds the face again — so a glyph-only subset failed twice, one
+throw hidden behind the other, and neither was visible in review, in a
+screenshot, or in the API's own response: the bytes are a valid-looking font.
 
 - **`cmap`.** React-PDF resolves a `fontFamily` stack by asking each family
   `hasGlyphForCodePoint`, which reads `font.tables.cmap`. A subset straight out
-  of `subset.encode()` throws `Cannot read properties of undefined (reading
-'tables')` on the first text run, so **every collection whose text has one
-  non-ASCII character fails to export**.
+  of `fontkit`'s `subset.encode()` throws `Cannot read properties of undefined
+(reading 'tables')` on the first text run, so **every collection whose text
+  has one non-ASCII character failed to export**.
 - **`post`.** PDFKit reads `post.isFixedPitch` and the italic angle while it
   embeds the face. Without the table it throws
   `Cannot read properties of undefined (reading 'isFixedPitch')` after every
   page is already laid out — the latest possible place to fail.
 
-So the endpoint writes both back (`apps/api/src/pdfFontSubsetTables.ts`):
+harfbuzz's subset is a complete font — `cmap`, `post`, `name`, `OS/2`, the
+metrics and the hints all survive — so there are no tables to write by hand and
+no sfnt directory, checksum or `head.checkSumAdjustment` to rebuild. What that
+costs: the subset is about 2.4 kB where a stripped one was 0.5 kB, the Lambda
+package carries a 683 kB wasm asset, and `scripts/build-lambda.sh` grows one
+line — `--external harfbuzzjs`, because Bun otherwise emits the wasm beside the
+bundle while baking the **build machine's absolute path** into the
+`require.resolve` that loads it, which is nothing in `/var/task`. External, it
+resolves through the package the deploy installs, exactly like Sharp. What it
+buys: 220 fewer lines of binary table writing, and `fontkit` leaves the runtime
+bundle (−230 kB).
 
-- the character → glyph pairs `subset.includeGlyph` returns, spliced in as a
-  format 12 `cmap` (Windows platform, UCS-4, one group per code point);
-- a version 3.0 `post` — header only, since a subset's glyphs are renumbered
-  and any name table would name the wrong ones — carrying the source face's
-  italic angle, underline placement and fixed-pitch flag;
+Two details are decided here rather than inherited:
 
-and the sfnt directory, checksums and `head.checkSumAdjustment` are rebuilt
-around them. Substituting a different subsetter was considered and rejected:
-`fontkit` is already there, inlines cleanly, and a second binary dependency (or
-a wasm subsetter) buys only the tables we can write in a hundred lines. A code
-point the face cannot draw maps to glyph 0 and stays `.notdef`, which is the
-honest answer rather than a throw.
+- **The subset always includes a space.** hb-subset writes a `cmap` with _no
+  subtable_ when none of the requested code points have a glyph — an emoji-only
+  title, say — and a `cmap` with no subtable makes the renderer throw instead of
+  falling back to `.notdef`. A space is the one code point a text face is
+  guaranteed to draw; it costs one glyph.
+- **Every table harfbuzz writes is kept.** Dropping the layout and variation
+  tables would shave a kilobyte and leave one more table the renderer might
+  reach for.
+
+A code point the face cannot draw (color emoji) maps to glyph 0 and stays
+`.notdef`, which is the honest answer rather than a throw.
 
 The correctness floor is a test on the **served bytes**: parse the response,
 assert each requested character answers a non-zero glyph, that an unrequested
-one answers none, and that the `post` header is readable. Dropping either table
-turns them red.
+one answers none, that the `post` header is readable, and that a request for a
+code point the face cannot draw answers `.notdef` instead of throwing. The last
+one is the space sentinel's guard.
 
 Emoji outside Noto Sans SC, and any script it does not cover, are an accepted
 limitation of this release. Adding more fallback faces is future work, not a
@@ -801,18 +815,19 @@ checks the route needs:
 
 - `GET /api/v1/pdf/font-fallback?text=…` with non-ASCII text answers 200,
   `font/ttf`, and a TrueType header (the `0x00010000` / `true` magic). The
-  magic is a correctness floor, not a fontkit test: the PDF embedder cannot take
-  a WOFF2, and that failure would otherwise be silent;
+  magic is a correctness floor, not a subsetter test: the PDF embedder cannot
+  take a WOFF2, and that failure would otherwise be silent;
 - the served bytes answer every requested character with a non-zero glyph and
-  an unrequested character with none, and carry a readable `post` header,
-  asserted in `pdfFontSubset.test.ts`. This is the floor above: fontkit's
-  subset has no `cmap` and no `post`, and a font missing either fails the whole
-  export while looking perfectly valid on the wire;
+  an unrequested character with none, carry a readable `post` header, and answer
+  `.notdef` rather than throwing for a code point the face cannot draw,
+  asserted in `pdfFontSubset.test.ts`. This is the floor above: a subset without
+  `cmap` or `post` fails the whole export while looking perfectly valid on the
+  wire, and the emoji-only case is what the space sentinel exists for;
 - empty or ASCII-only text answers 400; more than 512 distinct code points
   answers 400;
 - no session is required (the Visitor's export needs it).
 
-The subsetter itself is fontkit's behaviour; do not test glyph outlines.
+The subsetter itself is harfbuzz's behaviour; do not test glyph outlines.
 
 ### Component and manual checks
 

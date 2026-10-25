@@ -5,7 +5,11 @@
 // draws blank. The export collects the distinct non-ASCII code points it will
 // draw and asks this module for a TrueType subset of a bundled Noto Sans SC.
 //
-// Three decisions live here, and they are ours rather than fontkit's:
+// The subsetting itself is harfbuzz (hb-subset, through `subset-font`): its
+// output is a complete font — `cmap`, `post`, `name`, `OS/2` and all — which is
+// what the renderer needs, and what a glyph-only subsetter leaves out.
+//
+// Three decisions live here, and they are ours rather than the library's:
 //
 //  - what the request text normalizes to — distinct non-ASCII code points,
 //    sorted by code point, capped at 512;
@@ -21,14 +25,8 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { MAX_PDF_FALLBACK_CODE_POINTS } from "@arcula/shared";
-import * as fontkit from "fontkit";
-import type { Font } from "fontkit";
+import subsetFont from "subset-font";
 import { ApiError } from "./errors";
-import {
-  type CharacterMapEntry,
-  type PostHeader,
-  withRendererTables,
-} from "./pdfFontSubsetTables";
 
 /** The client sends the document's set in chunks of this size. */
 export const MAX_FALLBACK_CODE_POINTS = MAX_PDF_FALLBACK_CODE_POINTS;
@@ -110,81 +108,45 @@ export function createSubsetCache(now: () => number = Date.now): SubsetCache {
 
 const cache = createSubsetCache();
 
-let fontPromise: Promise<Font> | null = null;
+let facePromise: Promise<Buffer> | null = null;
 
 /** Read the bundled face once per warm process. */
-function loadFont(): Promise<Font> {
-  if (fontPromise !== null) return fontPromise;
+function loadFace(): Promise<Buffer> {
+  if (facePromise !== null) return facePromise;
 
-  const pending: Promise<Font> = readFile(FONT_FILE).then((buffer) => {
-    const font = fontkit.create(buffer);
-    // A collection has no single face to subset; the shipped asset is a TTF.
-    if (font.type !== "TTF") {
-      throw new Error("The fallback font asset is not a TrueType face");
-    }
-    return font;
-  });
+  const pending = readFile(FONT_FILE);
   // A failed read is not a permanent verdict for this process: the next
   // request tries again rather than inheriting a rejected promise.
   pending.catch(() => {
-    if (fontPromise === pending) fontPromise = null;
+    if (facePromise === pending) facePromise = null;
   });
-  fontPromise = pending;
+  facePromise = pending;
   return pending;
 }
 
 /**
- * The subset's `post` header, taken from the face it was cut out of.
+ * The code point always added to the subset, drawn or not.
  *
- * `@types/fontkit` does not declare the per-table accessors, though the font
- * object carries one for every table; this is the narrow shape we read. A face
- * without `post` gets an upright, proportional, zeroed header rather than a
- * failed export.
+ * hb-subset writes a `cmap` with **no subtable** when none of the requested
+ * code points have a glyph — an emoji-only title, say — and a font whose
+ * `cmap` has no subtable makes the renderer throw instead of falling back to
+ * `.notdef`. A space is the one character a text face is guaranteed to draw,
+ * and one more glyph costs nothing.
  */
-interface SourcePost {
-  italicAngle?: number;
-  underlinePosition?: number;
-  underlineThickness?: number;
-  /** 0 or 1 in the table; `PostHeader` is what carries it as a boolean. */
-  isFixedPitch?: number;
-}
+const SUBSET_SENTINEL = " ";
 
-function postHeader(font: Font): PostHeader {
-  const post = (font as unknown as { post?: SourcePost }).post;
-  return {
-    italicAngle: post?.italicAngle ?? 0,
-    underlinePosition: post?.underlinePosition ?? 0,
-    underlineThickness: post?.underlineThickness ?? 0,
-    isFixedPitch: (post?.isFixedPitch ?? 0) !== 0,
-  };
-}
-
-async function subsetFont(
+async function subsetFontForFace(
   characters: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   try {
-    const font = await loadFont();
-    const subset = font.createSubset();
-    const entries: CharacterMapEntry[] = [];
-    for (const char of characters) {
-      const codePoint = char.codePointAt(0) ?? 0;
-      // The subsetter renumbers glyphs, so the map is built from the ids it
-      // hands back rather than from the source face's. `@types/fontkit`
-      // declares that answer as a boolean; it is the subset's glyph id.
-      const glyphId = subset.includeGlyph(
-        font.glyphForCodePoint(codePoint),
-      ) as unknown as number;
-      entries.push({ codePoint, glyphId });
-    }
-    // fontkit's declaration widens to ArrayBufferLike; copy into an owned
-    // buffer so the response body is Hono's Uint8Array<ArrayBuffer>. The
-    // subset leaves out `cmap` and `post`, so both go back in before the bytes
-    // leave: see pdfFontSubsetTables.ts.
-    return withRendererTables(
-      new Uint8Array(subset.encode()),
-      entries,
-      postHeader(font),
-    );
+    const face = await loadFace();
+    // Every table harfbuzz writes is kept: the renderer reads `cmap`, `post`,
+    // `name` and `OS/2` while it lays text out and embeds the face, and the
+    // subset is about 2 kB either way.
+    const subset = await subsetFont(face, characters + SUBSET_SENTINEL, {
+      targetFormat: "truetype",
+    });
+    return new Uint8Array(subset);
   } catch {
     // Deliberately no character detail in the message or the log: the text
     // is the caller's document, not ours to echo.
@@ -200,7 +162,7 @@ export async function fontSubsetFor(
   const cached = cache.get(characters);
   if (cached) return cached;
 
-  const bytes = await subsetFont(characters);
+  const bytes = await subsetFontForFace(characters);
   cache.set(characters, bytes);
   return bytes;
 }
