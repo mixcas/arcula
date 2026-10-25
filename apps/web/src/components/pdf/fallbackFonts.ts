@@ -16,6 +16,7 @@
 import { Font } from "@react-pdf/renderer";
 
 import { fallbackCharacters, fallbackChunks } from "./collectionPdfPreflight";
+import { throwIfAborted } from "./photoPipeline";
 
 const FALLBACK_ENDPOINT = "/api/v1/pdf/font-fallback";
 
@@ -50,12 +51,21 @@ const toDataUrl = (blob: Blob): Promise<string> =>
  *
  * An empty array means the text is all ASCII, every fetch failed, or there was
  * nothing to cover — the document then names only Darker Grotesque.
+ *
+ * A cancel is the one failure that is not swallowed: the viewer has already
+ * discarded the run, and continuing to fetch more chunks would leave work
+ * behind for a document that will never be rendered.
  */
-export async function loadFallbackFamilies(texts: string[]): Promise<string[]> {
+export async function loadFallbackFamilies(
+  texts: string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
   const chunks = fallbackChunks(fallbackCharacters(texts));
   const families: string[] = [];
 
   for (const chunk of chunks) {
+    throwIfAborted(signal);
+
     const existing = registered.get(chunk);
     if (existing) {
       families.push(existing);
@@ -65,6 +75,7 @@ export async function loadFallbackFamilies(texts: string[]): Promise<string[]> {
     try {
       const response = await fetch(
         `${FALLBACK_ENDPOINT}?text=${encodeURIComponent(chunk)}`,
+        { signal },
       );
       if (!response.ok) {
         continue;
@@ -83,7 +94,11 @@ export async function loadFallbackFamilies(texts: string[]): Promise<string[]> {
       families.push(family);
     } catch {
       // Not fatal: the brand face carries every Latin glyph, and an uncovered
-      // glyph stays `.notdef` rather than failing the document.
+      // glyph stays `.notdef` rather than failing the document. A cancel is
+      // not a font failure, though.
+      if (signal?.aborted) {
+        throwIfAborted(signal);
+      }
     }
   }
 

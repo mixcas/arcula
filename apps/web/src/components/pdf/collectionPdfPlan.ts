@@ -79,8 +79,9 @@ export function buildCollectionPdfPlan(
 }
 
 /**
- * The plan's photo pages — what the viewer counts for progress and for the
- * large-export warning. Grid and empty pages do not cost image memory.
+ * The plan's photo pages — what the viewer counts for the large-export warning.
+ * Grid and empty pages do not cost image memory; progress counts the distinct
+ * photos those pages schedule.
  */
 export const photoPageCount = (pages: CollectionPdfPage[]): number =>
   pages.filter((page) => page.kind === "photo").length;
