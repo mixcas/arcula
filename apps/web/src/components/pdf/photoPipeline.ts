@@ -274,6 +274,13 @@ export interface PreparePhotosOptions {
   recheckAccess?: () => Promise<AccessOutcome>;
   /** The conversion itself. Defaults to the browser pipeline. */
   convert?: PhotoConverter;
+  /**
+   * Called with `0 of total` before the first conversion and again after every
+   * photo settles, whether it became a JPEG or a placeholder. `total` is the
+   * number of distinct scheduled photos, so a no-photo export never reports
+   * `0 of 0`.
+   */
+  onProgress?: (done: number, total: number) => void;
 }
 
 /** The converted photos by photo id. A photo with no entry is a placeholder. */
@@ -293,13 +300,23 @@ export async function preparePhotos(
   photos: ArtworkPhoto[],
   options: PreparePhotosOptions = {},
 ): Promise<PhotoResults> {
-  const { signal, recheckAccess, convert = convertPhoto } = options;
+  const { signal, recheckAccess, convert = convertPhoto, onProgress } = options;
 
   const results: PhotoResults = new Map();
   let next = 0;
+  let done = 0;
   // A holder rather than a `let`: the workers assign it after the compiler's
   // control-flow analysis has already looked at it.
   const lost: { error: CollectionPdfAccessError | null } = { error: null };
+
+  if (photos.length > 0) {
+    onProgress?.(0, photos.length);
+  }
+
+  const settled = (): void => {
+    done += 1;
+    onProgress?.(done, photos.length);
+  };
 
   let access: Promise<AccessOutcome> | null = null;
   const refusalOutcome = (): Promise<AccessOutcome> => {
@@ -337,6 +354,10 @@ export async function preparePhotos(
           }
         }
       }
+
+      // A failed photo is still settled: it keeps its page and draws the
+      // placeholder. The count is photos finished, not photos that loaded.
+      settled();
     }
   };
 

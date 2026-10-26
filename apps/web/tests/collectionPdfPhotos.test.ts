@@ -304,6 +304,35 @@ describe("preparePhotos", () => {
     expect(results.get("good")).toMatchObject({ pixels: { width: 10 } });
   });
 
+  it("reports progress over every scheduled photo, failed ones included", async () => {
+    const photos = [photo("a"), photo("bad"), photo("c")];
+    const seen: Array<[number, number]> = [];
+    const convert: PhotoConverter = (entry) =>
+      entry.id === "bad"
+        ? Promise.reject(new Error("decode failed"))
+        : Promise.resolve(converted());
+
+    await preparePhotos(photos, {
+      convert,
+      onProgress: (done, total) => seen.push([done, total]),
+    });
+
+    // The opening frame is `0 of N`, then one settlement per photo — a failed
+    // photo keeps its placeholder page, so it still counts as finished.
+    expect(seen[0]).toEqual([0, 3]);
+    expect(seen.at(-1)).toEqual([3, 3]);
+    expect(seen.map(([done]) => done)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("reports no progress at all when there are no photos", async () => {
+    const onProgress = vi.fn();
+
+    await preparePhotos([], { onProgress });
+
+    // The viewer goes straight to rendering; a `0 of 0` frame is not shown.
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+
   it("stops and re-locks when the Collection re-read demands a password", async () => {
     const photos = [photo("a"), photo("b"), photo("c")];
     const recheckAccess = vi.fn((): Promise<AccessOutcome> =>

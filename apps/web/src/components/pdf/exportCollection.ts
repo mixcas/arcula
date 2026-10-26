@@ -35,8 +35,12 @@ export interface CollectionPdfResult {
 }
 
 export interface ExportOptions {
-  /** Aborted by an unmount or a superseded export. */
+  /** Aborted by a cancel, an unmount or a superseded export. */
   signal?: AbortSignal;
+  /** Progress over distinct scheduled photos; `0 of total` first. */
+  onProgress?: (done: number, total: number) => void;
+  /** The photos are ready and the renderer is about to run; cancel is too late. */
+  onRendering?: () => void;
 }
 
 /**
@@ -57,6 +61,7 @@ export async function exportCollection(
   const photoSources = await preparePhotos(scheduledPhotos(pages), {
     signal: options.signal,
     recheckAccess: () => recheckCollectionAccess(collection.id),
+    onProgress: options.onProgress,
   });
 
   // The photos are the slow half; a run cancelled while they were converting
@@ -65,8 +70,13 @@ export async function exportCollection(
 
   const fallbackFamilies = await loadFallbackFamilies(
     collectionPdfTexts(collection.name, artworks),
+    options.signal,
   );
   throwIfAborted(options.signal);
+
+  // Preflight is over. The renderer is atomic, so from here a cancel has no
+  // meaning and the viewer disables it.
+  options.onRendering?.();
 
   const document = createElement(CollectionPdf, {
     collection,
