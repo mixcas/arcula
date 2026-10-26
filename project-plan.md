@@ -234,11 +234,14 @@ literal prefixes, so one rule expires every staged object everywhere.
    filename), and writes `staging/…/{entryId}.{ext}`. A decode gives the source
    dimensions. Re-staging the same entry id replaces it.
 2. **Process** — Sharp decodes once, applies the EXIF orientation, and encodes
-   every variant to WebP at quality 95. The variants: `xlarge` (max 2400, inside),
-   `square_lg` (800 cover), `square_sm` (400 cover), `large` (max 1200, inside),
-   `medium` (max 800, inside). A document image gets only `square_sm` and `large`
-   — the two a document actually renders with. A PDF has no variants; the
-   original is the whole entry.
+   every variant to WebP at quality 95. The variants: `xxlarge` (max 3000,
+   inside), `xlarge` (max 2400, inside), `square_lg` (800 cover), `square_sm`
+   (400 cover), `large` (max 1200, inside), `medium` (max 800, inside).
+   `xxlarge` is the Collection PDF's source — its photo box needs 2417 px at
+   300 dpi, past `xlarge`'s cap — and the widest `srcSet` candidate the
+   slideshow offers. A document image gets only `square_sm` and `large` — the
+   two a document actually renders with. A PDF has no variants; the original is
+   the whole entry.
 3. **Save** — one Postgres transaction writes the artwork fields, copies each
    entry's staged objects to their final keys, and upserts the rows; dropped
    entries lose their rows, and their final objects are deleted after commit.
@@ -360,11 +363,21 @@ expired, revoked or consumed invitation token answers `not-found` like an
 unknown one, as does an in-app decline of anything but the caller's own live
 offer.
 
-Collection passwords are built too. `PATCH /collections/:id` carries the
-password write (a string sets or overwrites it, `null` removes it, an absent key
-leaves it alone) and revokes the collection's grants in the same transaction;
-the member read carries `isPasswordProtected`, derived from the hash's presence,
-and the hash itself never leaves the server. `POST /collections/:id/unlock`
+The settings write is partial. `PATCH /collections/:id` makes every field
+optional — name and visibility included: an absent key leaves the column
+alone, a present key validates as before (a name still trims and still cannot
+be blank), and a body that names nothing is a valid, successful no-op that
+changes no column and does not move the record's timestamp, so "updated"
+continues to mean something was. The relaxation is strictly additive: a
+bundle cached from before it still sends both fields and is still accepted,
+and the two halves cannot skew, because the client and the server ship as one
+Lambda.
+
+Collection passwords ride the same write. A string sets (or overwrites) the
+password, `null` removes it, and an absent key leaves it alone; the write
+revokes the collection's grants in the same transaction, and the member read
+carries `isPasswordProtected`, derived from the hash's presence, the hash
+itself never leaving the server. `POST /collections/:id/unlock`
 takes a password and answers `201` with the grant cookie or `403
 invalid-password`; a collection with no password (or a private one) answers
 `409`, because there is nothing to get past. Those new codes are `403`
@@ -392,7 +405,8 @@ multiply, so this raises the cost of guessing without being a proof.
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
 
 - **Public** — `/` (product page), `/login`, `/signup`,
-  `/reset-password/:token`, `/invite/:token` (the invitation landing page, which
+  `/reset-password` (the request) and `/reset-password/:token` (the form the
+  mailed link lands on), `/invite/:token` (the invitation landing page, which
   shows the collection and invited email before sign-in), and the skin-rendered
   `/collection/:collectionId` and `/collection/:collectionId/artwork/:artworkId`.
 - **Protected** — everything under `/manage`: the dashboard, a collection and its
@@ -425,12 +439,30 @@ A shared collection is readable and editable: the manage page's write controls
 work for a collaborator exactly as for the owner, because the server answers
 them by membership. Above that list sit the pending invitations addressed to
 the signed-in account, each naming its collection and inviter and offering
-decline only — acceptance is the mailed link, and the card says so. The
-collection settings page carries the access card: the owner sees the invite
-form, every pending offer (expired ones marked, with resend and revoke) and the
-collaborators with remove and transfer; a collaborator sees the owner and the
-collaborators and can leave. Both endings confirm first and warn that the
-departing account's unsaved uploads are discarded. Transfer also confirms, and
+decline only — acceptance is the mailed link, and the card says so.
+
+The collection settings page is four tabs, each with its own save:
+**General** (name, description, public or private, and the password control),
+**Public view** (the skin and the options the selected skin declares, with the
+notice that some stored options are unused), **Access** (the card described
+below) and **Data** (the CSV import card). Each tab is an address —
+`/settings/general`, `/settings/public`, `/settings/access`,
+`/settings/data` — and a bare or unknown segment lands on General through the
+effect that rewrites the collection's name-and-id in the address, so an old
+settings link needs no redirect route of its own. Each tab saves only its own
+half of the collection update, as the pure decision beside the page answers
+it: a save leaves the member on the tab it saved from, names the tab in the
+confirmation, and re-canonicalises the name in the address in place; a failed
+save keeps the input on screen; and the Save is off while the tab's decision
+answers an empty payload. The inactive panels are not kept mounted, which is
+why the access card fetches nothing until its tab is reached and a tab left
+mid-edit comes back to the stored values.
+
+The settings page's access card carries the access administration: the owner
+sees the invite form, every pending offer (expired ones marked, with resend
+and revoke) and the collaborators with remove and transfer; a collaborator
+sees the owner and the collaborators and can leave. Both endings confirm
+first and warn that the departing account's unsaved uploads are discarded. Transfer also confirms, and
 warns that it is immediate and that the previous owner becomes a collaborator;
 after it the card re-reads itself as the collaborator's view.
 

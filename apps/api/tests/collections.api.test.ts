@@ -414,6 +414,55 @@ describe("PATCH /collections/{cid}", () => {
     });
   });
 
+  it("leaves every other column alone for a body that names one field", async () => {
+    const before = await json<Record<string, unknown>>(
+      await req("GET", `/api/v1/collections/${studyWallId}`, {
+        cookies: owner.cookies,
+      }),
+    );
+
+    // One key only: what the body does not name stays exactly as it was —
+    // the settings tabs' per-tab saves are built on exactly this.
+    const one = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({ description: "One field only" }),
+    });
+    expect(one.status).toBe(200);
+    const after = await json<Record<string, unknown>>(one);
+    expect(after.description).toBe("One field only");
+    expect(after.name).toBe(before.name);
+    expect(after.isPublic).toBe(before.isPublic);
+    expect(after.isPasswordProtected).toBe(before.isPasswordProtected);
+    // Absent optional keys stay absent: naming one field does not mint the
+    // rest of the document.
+    expect("skin" in after).toBe("skin" in before);
+    expect("skinOptions" in after).toBe("skinOptions" in before);
+
+    // Leave the fixture as the next describes find it.
+    await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({ description: null }),
+    });
+  });
+
+  it("answers a valid no-op for a body that names nothing", async () => {
+    const before = await json<Record<string, unknown>>(
+      await req("GET", `/api/v1/collections/${studyWallId}`, {
+        cookies: owner.cookies,
+      }),
+    );
+
+    const noop = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({}),
+    });
+    expect(noop.status).toBe(200);
+    // No column moves and the timestamp is not moved: the document comes
+    // back exactly as it was, `updatedAt` deep equal to the read that stood
+    // before the write.
+    expect(await json<Record<string, unknown>>(noop)).toEqual(before);
+  });
+
   it("rejects a blank name with the failed field", async () => {
     const res = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
       cookies: owner.cookies,

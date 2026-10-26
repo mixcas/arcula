@@ -26,7 +26,14 @@ export const wireTimestamp = z.object({
 
 /** One generated derivative on the wire — the API's variant key space. */
 export const wireImageVariant = z.object({
-  key: z.enum(["xlarge", "square_lg", "square_sm", "large", "medium"]),
+  key: z.enum([
+    "xxlarge",
+    "xlarge",
+    "square_lg",
+    "square_sm",
+    "large",
+    "medium",
+  ]),
   url: z.string(),
   width: z.number(),
   height: z.number(),

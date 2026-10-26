@@ -2,8 +2,9 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectionSlug, type Collection } from "@arcula/shared";
 
@@ -12,10 +13,21 @@ import { accessService } from "@/services/accessService";
 import { collectionService } from "@/services/collectionService";
 
 /**
- * The settings page's half of the access card: the card is mounted with the
- * bare collection id (the route carries "{slug}-{id}"), and a collaborator
- * keeps the settings form. The card's own views are pinned by
- * `accessCard.test`; this is the wiring between the page and that component.
+ * The address, readable: a case can assert the address means what the tab
+ * shows. The probe reads the router's own state, not the tab control's
+ * rendering.
+ */
+const AddressProbe: React.FC = () => {
+  const location = useLocation();
+  return <div data-testid="address">{location.pathname}</div>;
+};
+
+/**
+ * The settings page's half of the access card: the card fetches nothing until
+ * its tab is reached, then mounts with the bare collection id (the route
+ * carries "{slug}-{id}"), and a collaborator keeps the settings form. The
+ * card's own views are pinned by `accessCard.test`; this is the wiring
+ * between the page and that component.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -101,11 +113,18 @@ const renderPage = () => {
   });
   return render(
     <MantineProvider>
-      <MemoryRouter initialEntries={[`/manage/collection/${param}/settings`]}>
+      <MemoryRouter
+        initialEntries={[`/manage/collection/${param}/settings/general`]}
+      >
         <Routes>
           <Route
-            path="/manage/collection/:collectionId/settings"
-            element={<CollectionSettingsPage />}
+            path="/manage/collection/:collectionId/settings/:tab?"
+            element={
+              <>
+                <AddressProbe />
+                <CollectionSettingsPage />
+              </>
+            }
           />
         </Routes>
       </MemoryRouter>
@@ -119,17 +138,34 @@ afterEach(() => {
 });
 
 describe("the settings page's access card", () => {
-  it("mounts the card with the parsed id and keeps the settings form for a collaborator", async () => {
+  it("mounts the card on its tab with the parsed id, and keeps the settings form for a collaborator", async () => {
     renderPage();
+
+    // The General panel renders first — the panel is the tab the address
+    // names; a collaborator changes every setting, so the form is theirs.
+    // The access read has not happened: the card lives on its own tab and
+    // fetches nothing until it is reached.
+    expect(await screen.findByTestId("address")).toHaveTextContent(
+      /\/settings\/general$/,
+    );
+    expect(
+      await screen.findByLabelText(/collection name/i),
+    ).toBeInTheDocument();
+    expect(getAccess).not.toHaveBeenCalled();
+
+    // Choosing another tab changes the address as well as the panel.
+    await userEvent.click(screen.getByRole("tab", { name: /access/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("address")).toHaveTextContent(
+        /\/settings\/access$/,
+      ),
+    );
 
     // The route carries the slug; the access read needs the id alone.
     await waitFor(() => expect(getAccess).toHaveBeenCalledWith(COLLECTION_ID));
     expect(await screen.findByTestId("access-card")).toBeInTheDocument();
 
-    // A collaborator changes every setting, so the form stays theirs.
-    expect(screen.getByLabelText(/collection name/i)).toBeInTheDocument();
-
-    // …and the card renders their view: leave, never remove.
+    // …and the card renders the collaborator's view: leave, never remove.
     expect(
       await screen.findByRole("button", { name: /leave collection/i }),
     ).toBeInTheDocument();

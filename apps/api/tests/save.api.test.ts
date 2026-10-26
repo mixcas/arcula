@@ -250,7 +250,7 @@ describe("POST …/artworks", () => {
     const finals = await listObjects(
       finalPhotoPrefix(owner.userId, cid, aid, pOne),
     );
-    expect(finals).toHaveLength(6);
+    expect(finals).toHaveLength(7);
     for (const key of finals) {
       const parsed = parseMediaKey(key);
       expect(parsed?.kind).toBe("final");
@@ -301,8 +301,9 @@ describe("POST …/artworks", () => {
       ),
     );
 
-    // The variants: exactly the five keys, spec order, webp, proxy urls.
+    // The variants: exactly the six keys, spec order, webp, proxy urls.
     expect(photo.variants.map((v) => v.key)).toEqual([
+      "xxlarge",
       "xlarge",
       "square_lg",
       "square_sm",
@@ -312,6 +313,7 @@ describe("POST …/artworks", () => {
     // 400x300 source: the inside fits stay at source scale, the squares
     // cover their boxes.
     const geometry: Record<string, [number, number]> = {
+      xxlarge: [400, 300],
       xlarge: [400, 300],
       square_lg: [800, 800],
       square_sm: [400, 400],
@@ -580,7 +582,7 @@ describe("PATCH …/artworks/{aid}", () => {
     ]);
     expect(
       await listObjects(finalPhotoPrefix(owner.userId, cid, aid, twoC)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   it("answers an edit with exactly the document a read returns", async () => {
@@ -615,7 +617,7 @@ describe("PATCH …/artworks/{aid}", () => {
     ).toEqual([]);
     expect(
       await listObjects(finalPhotoPrefix(owner.userId, cid, aid, a)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   it("clears a text field with null and leaves absent fields alone", async () => {

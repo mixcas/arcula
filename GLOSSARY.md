@@ -19,6 +19,15 @@ A collector's identity in Arcula — the email and password they sign in with.
 An account owns collections and may collaborate on others.
 _Avoid_: User, profile, tenant
 
+**Reset request**:
+An address asked by anyone, answered the same sentence whether or not an
+account exists.
+_Avoid_: Forgot password, reset email
+
+**Reset form**:
+Where a collector sets a new password, reached only through the mailed link.
+_Avoid_: Reset page, change-password form
+
 **Owner**:
 The account a collection belongs to. The only party who may invite, remove or
 transfer, and the account the tier cap counts. An artwork's owner is its

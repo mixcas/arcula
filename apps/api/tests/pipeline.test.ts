@@ -94,6 +94,7 @@ describe("generateVariants (photo set)", () => {
 
     // The table's answer for a 1600x1200 source:
     const expected: Record<string, { width: number; height: number }> = {
+      xxlarge: { width: 1600, height: 1200 }, // 3000 cap not reached
       xlarge: { width: 1600, height: 1200 }, // 2400 cap not reached
       square_lg: { width: 800, height: 800 },
       square_sm: { width: 400, height: 400 },
@@ -118,6 +119,7 @@ describe("generateVariants (photo set)", () => {
     const variants = await generateVariants(await orientSource(source));
 
     const expected: Record<string, { width: number; height: number }> = {
+      xxlarge: { width: 300, height: 200 },
       xlarge: { width: 300, height: 200 },
       large: { width: 300, height: 200 },
       medium: { width: 300, height: 200 },

@@ -10,13 +10,28 @@ import {
   MediaRefusal,
   preparePhotos,
   scheduledPhotos,
-  scheduledPhotoUrl,
+  scheduledPhotoSource,
   type ConvertedPhoto,
   type PhotoConversionEnv,
   type PhotoConverter,
   type PhotoSurface,
 } from "@/components/pdf/photoPipeline";
+import type { PixelSize } from "@/components/pdf/collectionPdfPreflight";
 import type { Artwork, ArtworkPhoto } from "@arcula/shared";
+
+const variant = (
+  id: string,
+  key: "xxlarge" | "xlarge",
+  width: number,
+  height: number,
+) => ({
+  key,
+  url: `/media/${id}/${key}`,
+  width,
+  height,
+  size: 10,
+  contentType: "image/webp",
+});
 
 const photo = (id: string, order = 0): ArtworkPhoto => ({
   id,
@@ -32,14 +47,8 @@ const photo = (id: string, order = 0): ArtworkPhoto => ({
     contentType: "image/jpeg",
   },
   variants: [
-    {
-      key: "xlarge",
-      url: `/media/${id}/xlarge`,
-      width: 2400,
-      height: 1800,
-      size: 10,
-      contentType: "image/webp",
-    },
+    variant(id, "xxlarge", 3000, 2250),
+    variant(id, "xlarge", 2400, 1800),
   ],
 });
 
@@ -69,15 +78,35 @@ const deferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-describe("scheduledPhotoUrl", () => {
-  it("uses the xlarge variant", () => {
-    expect(scheduledPhotoUrl(photo("one"))).toBe("/media/one/xlarge");
+describe("scheduledPhotoSource", () => {
+  it("uses the xxlarge variant and its recorded pixels", () => {
+    // 3000 x 2250 covers the box (2100 x 2417) on its long side; the recorded
+    // size is what the decoder is asked for, so it travels with the URL.
+    expect(scheduledPhotoSource(photo("one"))).toEqual({
+      url: "/media/one/xxlarge",
+      pixels: { width: 3000, height: 2250 },
+    });
   });
 
-  it("falls back to the original when there is no xlarge", () => {
+  it("falls back to xlarge for a photo uploaded before xxlarge existed", () => {
+    const legacy: ArtworkPhoto = {
+      ...photo("one"),
+      variants: [variant("one", "xlarge", 2400, 1800)],
+    };
+
+    expect(scheduledPhotoSource(legacy)).toEqual({
+      url: "/media/one/xlarge",
+      pixels: { width: 2400, height: 1800 },
+    });
+  });
+
+  it("falls back to the original, with the photo's own size, when there is neither", () => {
     const bare: ArtworkPhoto = { ...photo("one"), variants: [] };
 
-    expect(scheduledPhotoUrl(bare)).toBe("/media/one/original");
+    expect(scheduledPhotoSource(bare)).toEqual({
+      url: "/media/one/original",
+      pixels: { width: 10, height: 10 },
+    });
   });
 
   it("is null when the photo has no object at all", () => {
@@ -87,8 +116,8 @@ describe("scheduledPhotoUrl", () => {
       original: { url: "", size: 0, contentType: "" },
     };
 
-    expect(scheduledPhotoUrl(empty)).toBeNull();
-    expect(scheduledPhotoUrl(null)).toBeNull();
+    expect(scheduledPhotoSource(empty)).toBeNull();
+    expect(scheduledPhotoSource(null)).toBeNull();
   });
 });
 
@@ -148,9 +177,13 @@ describe("convertPhoto", () => {
     const bitmap = { width: 3250, height: 4326, close: vi.fn() };
     const recording = recordingSurface();
     const fetchMock = vi.fn(() => Promise.resolve(okResponse()));
+    const decodeTargets: Array<PixelSize | undefined> = [];
     const env: PhotoConversionEnv = {
       fetch: fetchMock,
-      decode: () => Promise.resolve(bitmap),
+      decode: (_blob, target) => {
+        decodeTargets.push(target);
+        return Promise.resolve(bitmap);
+      },
       surface: (width: number, height: number) => {
         recording.size.width = width;
         recording.size.height = height;
@@ -158,7 +191,7 @@ describe("convertPhoto", () => {
       },
       ...overrides,
     };
-    return { env, fetchMock, bitmap, recording };
+    return { env, fetchMock, bitmap, recording, decodeTargets };
   };
 
   it("fetches the photo same-origin, carrying the access grant and the signal", async () => {
@@ -167,20 +200,49 @@ describe("convertPhoto", () => {
 
     await convertPhoto(photo("one"), controller.signal, env);
 
-    expect(fetchMock).toHaveBeenCalledWith("/media/one/xlarge", {
+    expect(fetchMock).toHaveBeenCalledWith("/media/one/xxlarge", {
       credentials: "same-origin",
       signal: controller.signal,
     });
   });
 
-  it("fits the source inside the 300 dpi box before drawing", async () => {
+  it("asks the decoder for the print box, not for the source's size", async () => {
+    // The memory bound: a 3000 x 2250 xxlarge fitted into 2100 x 2417 is
+    // 2100 x 1575, and decoding to it is what keeps four conversions in flight
+    // from allocating four sources. A decoder asked for the source would pass
+    // this test too, so the assertion is on the target it was handed.
+    const { env, decodeTargets } = envWith();
+
+    await convertPhoto(photo("one"), undefined, env);
+
+    expect(decodeTargets).toEqual([{ width: 2100, height: 1575 }]);
+  });
+
+  it("draws at the box-fitted size the wire records", async () => {
     const { env, recording } = envWith();
 
     const result = await convertPhoto(photo("one"), undefined, env);
 
-    // A 3250 x 4326 source is twice the box: it halves, it does not overflow.
-    expect(recording.size).toEqual({ width: 1625, height: 2163 });
-    expect(result.pixels).toEqual({ width: 1625, height: 2163 });
+    expect(recording.size).toEqual({ width: 2100, height: 1575 });
+    expect(result.pixels).toEqual({ width: 2100, height: 1575 });
+  });
+
+  it("fits the decoded bitmap when the wire records no size", async () => {
+    // A record written before dimensions were kept: the decoder cannot be
+    // told a target, so the fit happens after the decode — same picture,
+    // larger peak.
+    const unsized: ArtworkPhoto = {
+      ...photo("one"),
+      variants: [variant("one", "xxlarge", 0, 0)],
+    };
+    const { env, decodeTargets, recording } = envWith();
+
+    const result = await convertPhoto(unsized, undefined, env);
+
+    expect(decodeTargets).toEqual([undefined]);
+    // 3250 x 4326 into 2100 x 2417: the height binds.
+    expect(recording.size).toEqual({ width: 1816, height: 2417 });
+    expect(result.pixels).toEqual({ width: 1816, height: 2417 });
   });
 
   it("paints a white ground before the bitmap and encodes JPEG at quality 0.9", async () => {

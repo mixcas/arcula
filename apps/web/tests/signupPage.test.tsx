@@ -16,8 +16,7 @@ import {
 } from "@/schemas/user";
 
 /**
- * The sign-up page: what it sends, where each outcome lands, and
- * the reset request that shares the page.
+ * The sign-up page: what it sends and where each outcome lands.
  *
  * The seam is the auth client itself: everything past `authClient` is
  * Better Auth's native endpoint, pinned on the API side
@@ -30,7 +29,6 @@ import {
 vi.mock("@/auth/client", () => ({
   authClient: {
     signUp: { email: vi.fn() },
-    requestPasswordReset: vi.fn(),
   },
 }));
 
@@ -54,7 +52,6 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 const signUpEmail = vi.mocked(authClient.signUp.email);
-const requestPasswordReset = vi.mocked(authClient.requestPasswordReset);
 
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
@@ -119,7 +116,6 @@ beforeEach(() => {
   signUpEmail.mockResolvedValue({
     data: { token: "session-token", user: { id: "u1" } },
   });
-  requestPasswordReset.mockResolvedValue({ data: { status: true } });
 });
 
 afterEach(() => {
@@ -319,41 +315,5 @@ describe("the sign-up page", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByTestId("location").textContent).toBe("/signup");
-  });
-
-  it("requests a reset with the address the form was holding, and answers without confirming", async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    // Type an address into the sign-up form, then switch: the reset view
-    // should already hold it.
-    await user.type(screen.getByLabelText(/^Email/), "lapsed@example.test");
-    await user.click(
-      screen.getByRole("button", { name: /forgot your password/i }),
-    );
-
-    expect(screen.getByText(/reset your password/i)).toBeInTheDocument();
-    const resetEmail = screen.getByLabelText(/^Email/);
-    expect(resetEmail).toHaveValue("lapsed@example.test");
-
-    await user.click(screen.getByRole("button", { name: "Send reset email" }));
-
-    await waitFor(() =>
-      expect(requestPasswordReset).toHaveBeenCalledWith({
-        email: "lapsed@example.test",
-      }),
-    );
-    // The notice must not say the address has an account — the endpoint is
-    // enumeration-safe for a reason, and the page repeats that discipline.
-    await waitFor(() =>
-      expect(
-        screen.getByText(/if an account exists for that address/i),
-      ).toBeInTheDocument(),
-    );
-    // The request form is gone; only the way back remains.
-    expect(
-      screen.queryByRole("button", { name: "Send reset email" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("Back to sign up")).toBeInTheDocument();
   });
 });

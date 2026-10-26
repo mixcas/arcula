@@ -50,10 +50,20 @@ export type ImageVariantSpec = SquareVariantSpec | BoundedVariantSpec;
  *
  * `xlarge` exists for the fullscreen slideshow. `large` caps at 1200px, which
  * is smaller than a 1440px display and visibly soft on a detail-heavy painting.
- * The cost is one more object per photo (sixty per ten-photo artwork) and a
+ * The cost is one more object per photo (seventy per ten-photo artwork) and a
  * key change: the `OBJECT_KEYS` list in `keys.ts` must stay in step, or every
  * new variant 404s at the proxy. `tests/pipeline.test.ts` cross-checks the
  * two so a forgotten edit fails CI rather than production.
+ *
+ * `xxlarge` has two consumers, and its number is theirs rather than a screen's:
+ * the Collection PDF's photo box is 504 × 580 pt, so at the 300 dpi the export
+ * converts at it needs 2100 × 2417 px — 17 px more than `xlarge` can give,
+ * which would have left the largest page a hair under its box. 3000 covers that
+ * box with a quarter of its side in hand for a page that grows or is enlarged on
+ * paper. The other consumer is the slideshow: `SlideImage` offers it in its
+ * `srcSet`, and its per-photo `sizes` means only a viewport that really draws a
+ * photo that wide — a 3:2 work on a 4K screen — selects it. A phone still picks
+ * `large`, and a Retina laptop picks `xlarge`.
  *
  * Photos whose source is exactly a variant's target size are still encoded:
  * the server keeps the object set fixed by design — a photo always has its
@@ -61,6 +71,7 @@ export type ImageVariantSpec = SquareVariantSpec | BoundedVariantSpec;
  * serializer never have to reason about which keys might be absent.
  */
 export const IMAGE_VARIANTS: readonly ImageVariantSpec[] = [
+  { key: "xxlarge", fit: "inside", max: 3000 },
   { key: "xlarge", fit: "inside", max: 2400 },
   { key: "square_lg", fit: "cover", width: 800, height: 800 },
   { key: "square_sm", fit: "cover", width: 400, height: 400 },
@@ -76,12 +87,12 @@ export const VARIANT_KEYS: readonly ImageVariantKey[] = IMAGE_VARIANTS.map(
  * The subset an image gets when it is attached as a *document* rather than as
  * a photo.
  *
- * Two of the five, and the two that documents actually use: `square_sm` renders
- * the list tile, `large` fills the preview modal. `square_lg`, `medium` and
- * `xlarge` exist for the public collection views, and a document never appears
- * there — it is refused to visitors by the proxy's document rule. Generating
- * them anyway would write up to three objects per image that nothing can ever
- * read.
+ * Two of the six, and the two that documents actually use: `square_sm` renders
+ * the list tile, `large` fills the preview modal. `xxlarge`, `xlarge`,
+ * `square_lg` and `medium` exist for the public collection views and the
+ * Collection PDF, and a document appears in neither — the proxy's document rule
+ * refuses it to a visitor, and the PDF prints photos alone. Generating them
+ * anyway would write up to four objects per image that nothing can ever read.
  *
  * A subset rather than a second table: the geometry stays defined once, and
  * the object-key algebra already permits the full key list, so narrowing the

@@ -158,7 +158,7 @@ export type ArtworkDocument = ArtworkDocumentFile | ArtworkDocumentImage;
 // Reads still go through `photoUrl`/`photoSrcSet` rather than indexing
 // `variants` by key.
 export type ImageVariantKey =
-  "xlarge" | "square_lg" | "square_sm" | "large" | "medium";
+  "xxlarge" | "xlarge" | "square_lg" | "square_sm" | "large" | "medium";
 
 // One generated derivative of an uploaded image.
 //

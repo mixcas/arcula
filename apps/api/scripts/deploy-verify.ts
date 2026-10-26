@@ -11,6 +11,7 @@
 // is a credential. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import { IMAGE_VARIANTS, variantSize } from "../src/media/variants";
 
 const base = (process.argv[2] ?? "").replace(/\/$/, "");
 if (!base) {
@@ -190,9 +191,18 @@ if (collectionId) {
     variants?: { key: string; width: number; height: number; size: number }[];
   };
   const variants = procBody.variants ?? [];
+  // The expected set comes from the recipe the encoder reads, so a variant
+  // added or renamed in the recipe propagates here instead of stranding the
+  // pass — the table-vs-output cross-check pipeline.test.ts makes on the
+  // encoder, aimed at the deployed runtime.
+  const expected = IMAGE_VARIANTS.map((spec) => {
+    const size = variantSize(spec, { width: W, height: H });
+    return [spec.key, size.width, size.height] as const;
+  });
+  const got = variants.map((v) => [v.key, v.width, v.height] as const);
   step(
     "process the variants (Sharp on the deploy target)",
-    proc.status === 200 && variants.length === 5,
+    proc.status === 200 && JSON.stringify(got) === JSON.stringify(expected),
     `${variants.length} variants in ${Date.now() - t0} ms`,
   );
   for (const v of variants) {

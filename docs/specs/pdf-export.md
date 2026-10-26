@@ -10,6 +10,9 @@ The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Collection**,
 
 The design record, in order:
 
+- Decision: [ADR-0006](../adr/0006-the-collection-pdf-prints-from-its-own-variant.md)
+  — the photo box, the 0.75 in margin, and why the export has its own
+  `xxlarge` variant.
 - Map: [#125 Collection PDF export](https://github.com/mixcas/arcula/issues/125).
 - Research: [#126 renderer viability](https://github.com/mixcas/arcula/issues/126)
   and [#127 fonts and the oblique Title](https://github.com/mixcas/arcula/issues/127).
@@ -189,22 +192,42 @@ successful export and one with failed images have the same page count.
 US Letter portrait, all values in points (`1 pt = 1/72 in`), origin at the
 page's top-left. Every page is **612 × 792 pt** (8.5 × 11 in).
 
-| Element                          | Value                                  |
-| -------------------------------- | -------------------------------------- |
-| Page                             | 612 × 792 pt                           |
-| Left and right margin            | 72 pt                                  |
-| Content width                    | 468 pt                                 |
-| Header baseline                  | 45.38 pt from the top                  |
-| Photo box                        | left 111 pt, top 73.5 pt, 390 × 519 pt |
-| Photo-page Title baseline        | 641.32 pt layout; ink about 640.12 pt  |
-| Photo-page right-column baseline | 641.32 pt from the top                 |
-| Photo-page Artist baseline       | 670.12 pt from the top                 |
-| Metadata columns                 | left 72 pt / right 324 pt              |
-| Metadata column width            | 216 pt                                 |
-| Grid first Title baseline        | 83.52 pt from the top                  |
-| Grid columns                     | 72 pt and 324 pt, 216 pt wide          |
-| Grid block pitch                 | 191.52 pt                              |
-| Grid `--` baseline               | Title baseline + 157.2 pt              |
+| Element                          | Value                               |
+| -------------------------------- | ----------------------------------- |
+| Page                             | 612 × 792 pt                        |
+| Left and right margin            | 54 pt                               |
+| Content width                    | 504 pt                              |
+| Header baseline                  | 45.38 pt from the top               |
+| Photo box                        | left 54 pt, top 60 pt, 504 × 580 pt |
+| Photo-page Title baseline        | 665 pt layout; ink about 663.8 pt   |
+| Photo-page right-column baseline | 665 pt from the top                 |
+| Photo-page Artist baseline       | 693.8 pt from the top               |
+| Metadata columns                 | left 54 pt / right 324 pt           |
+| Metadata column width            | 234 pt                              |
+| Grid first Title baseline        | 83.52 pt from the top               |
+| Grid columns                     | 54 pt and 324 pt, 234 pt wide       |
+| Grid block pitch                 | 191.52 pt                           |
+| Grid `--` baseline               | Title baseline + 157.2 pt           |
+
+Two rows moved off the template's own numbers and the rest did not. The
+**margin** is 0.75 in rather than 1 in, which gives the photo box 36 pt on each
+side; the **metadata band** starts 23.68 pt lower (665 rather than 641.32), which
+is what pays for the photo box's extra 61 pt of height. Both are the whole trade
+of that band: it is the only knob on the photo's size, and 665 is the last step
+that leaves a 3-line Title with every field present **29 pt** above the paper's
+edge (690 would leave 4 pt). The metadata columns widen from 216 to 234 pt so the
+gutter stays 36 pt across the wider content.
+
+The **photo box is the whole free rectangle, not a shape chosen for one
+orientation.** A photo is `contain` fitted, so the box's own aspect crops
+nothing: a wider box is free for every work narrower than it, and it is the only
+box a tall work can grow into. What a work actually prints at:
+
+| Work (`xxlarge`) | Prints at    | Bound by |
+| ---------------- | ------------ | -------- |
+| 3:4 portrait     | 435 × 580 pt | height   |
+| 1:1 square       | 504 × 504 pt | width    |
+| 3:2 landscape    | 504 × 336 pt | width    |
 
 React-PDF lays a line box out from its top, with the baseline at
 `fontSize × 1.06` inside it. A block that wants a baseline at `b` with type size
@@ -335,20 +358,26 @@ auto-sizing.
 
 ### Source
 
-Use the **`xlarge`** variant. `photoUrl(photo, "xlarge")` from
-`packages/shared/src/artworkPhotos.ts` gives that URL, with the `original` as the
-ladder's only fallback when the variant is absent. The original is never embedded
-directly, even when it is JPEG or PNG:
+The ladder is **`xxlarge` → `xlarge` → `original`**, walked by
+`scheduledPhotoSource` in `apps/web/src/components/pdf/photoPipeline.ts`.
 
-- it may be WebP (the API's variants are WebP and the original is whatever was
-  uploaded);
-- it may carry EXIF orientation, which the renderer does not apply;
-- it can be up to 10 MiB and arbitrarily large.
+- **`xxlarge`** (max 3000 px) is the export's own size, and the reason it
+  exists: the box is 504 × 580 pt, which at 300 dpi needs **2100 × 2417 px**, and
+  `xlarge`'s 2400 cap falls 17 px short of the height. Without it the largest
+  page would print 3 pt under its box.
+- **`xlarge`** (max 2400 px) is the fallback for a photo uploaded before
+  `xxlarge` existed. It prints the same picture, up to 3 pt shorter.
+- **`original`** is the last resort, and is never embedded directly, even when
+  it is JPEG or PNG:
 
-The `xlarge` variant is already oriented, and for an ordinary upload its pixels
-exceed the print box at 300 dpi. If it is absent, the ladder's `original` is the
-single fallback; if neither URL exists, the page is a placeholder. There is no
-second attempt at another variant when a chosen URL fails.
+  - it may be WebP (the API's variants are WebP and the original is whatever was
+    uploaded);
+  - it may carry EXIF orientation, which the renderer does not apply;
+  - it can be up to 10 MiB and arbitrarily large.
+
+Both variants are already oriented. If neither exists, the ladder's `original`
+is the single fallback; if there is no URL at all, the page is a placeholder.
+There is no second attempt at another variant when a chosen URL fails.
 
 ### Conversion
 
@@ -360,20 +389,26 @@ For each distinct scheduled photo, with at most **four** conversions in flight:
 
 1. `fetch(url, { credentials: "same-origin", signal })` — the same-origin grant
    cookie rides along. A non-`ok` response is a failure.
-2. `createImageBitmap(blob, { imageOrientation: "from-image" })`.
-3. Fit inside the print box at **300 dpi** without enlarging:
+2. Fit inside the print box at **300 dpi** without enlarging:
    `scale = min(1, boxW / width, boxH / height)`, rounded, at least 1 px.
-   The box is 390 × 519 pt = **1625 × 2163 px** at 300 dpi.
+   The box is 504 × 580 pt = **2100 × 2417 px** at 300 dpi.
+3. `createImageBitmap(blob, { imageOrientation: "from-image", resizeWidth,
+resizeHeight, resizeQuality: "high" })` — **decoded to the box**, not to the
+   source. The source's size is already on the wire (the variant row records its
+   encoded pixels, the photo its original's), so step 2 runs before the decode:
+   a 3000 px `xxlarge` never lands in memory whole, and the peak per conversion
+   is the box's 4.4 Mpx rather than the source's 6.8. A record with no dimensions
+   decodes at its own size and fits afterwards — the same picture, a larger peak.
 4. Paint white, then the bitmap, onto an `OffscreenCanvas`; fall back to a DOM
    `<canvas>` when `OffscreenCanvas` is unavailable. JPEG has no alpha, so the
    white ground is required or a transparent source turns black.
 5. Encode `image/jpeg` at **quality 0.9** and keep the `Blob`.
 
 The target box is the hard upper bound; never ask the canvas for more than
-1625 × 2163. `xlarge` at 2400 × 1800 / 1800 × 2400 already exceeds it. The
-converted JPEG keeps its own pixel size; on the page it is placed at its print
-size (`px × 72 / 300` pt), centred in the 390 × 519 pt box, capped at the box
-and never enlarged. This is `contain` with no upscaling: no crop, no distortion.
+2100 × 2417. `xxlarge` at 3000 × 2250 already exceeds it. The converted JPEG
+keeps its own pixel size; on the page it is placed at its print size
+(`px × 72 / 300` pt), centred in the 504 × 580 pt box, capped at the box and
+never enlarged. This is `contain` with no upscaling: no crop, no distortion.
 
 `ImageBitmap.close()` runs as soon as the JPEG is encoded. Converted blobs are
 released after `toBlob()` resolves (or on cancel/unmount); they are not kept for
@@ -384,7 +419,7 @@ a second generation.
 A failed fetch, decode or encode is **not** an export failure. That photo's page
 keeps its place in the plan and draws:
 
-- the same 390 × 519 pt box at left 111 / top 73.5;
+- the same 504 × 580 pt box at left 54 / top 60;
 - a 0.75 pt `#c9c9c9` border;
 - "Image unavailable" centred, body size, `#666666`.
 
@@ -610,24 +645,69 @@ const CollectionPdfPage = React.lazy(
 );
 ```
 
-The renderer is a separate chunk (about 494 kB gzip; see **Performance**), so it
+The renderer is a separate chunk (about 450 kB gzip; see **Performance**), so it
 must not be in the main bundle and must not be imported from any page that is
 not the PDF route. The `Suspense` fallback is a centred Mantine `Loader`.
 
 The page is app chrome, in the app's Mantine theme, never a skin. It reuses
 `CollectionLockScreen` and `PublicStateMessage`; it does not render `SkinHost`.
 
+### The shell and the bar
+
+Every state renders inside `ManageLayout`
+(`apps/web/src/components/manage/layout/ManageLayout.tsx`) — the `AppShell`
+every `/manage` page already uses — so the viewer has the app's fixed header
+rather than a second definition of it.
+
+- **The header is a slot.** The layout takes an optional `header` node that
+  defaults to `ManageNavBar`, so no `/manage` page changes; the viewer passes
+  its own bar instead of forking the shell.
+- **One height.** The layout exports `MANAGE_HEADER_HEIGHT` (60 px), which
+  configures the fixed header. It is the one number a body that fills the window
+  under the bar sizes against, so the preview writes no second 60.
+- **A fluid body.** The viewer passes a fluid container, so the shared lock
+  screen and state message keep their own measure instead of being boxed
+  twice.
+
+The bar is shaped like the header it replaces: the Collection's name on the
+left, in the wordmark's seat, as the page's one top-level heading (`h1`), with
+**Collection PDF** dimmed beneath it. The body carries no title block — the bar
+names the page. The bar's right-hand side holds whatever the export is doing,
+and the rule for what belongs there is one sentence: **the bar reports work in
+flight and the file that exists; the body carries the message and the call to
+action.** So `preparing` and `rendering` are the bar's alone, over an empty
+body, while `idle`, `cancelled`, `failed` and a failed load keep their copy and
+their buttons in the body and report nothing in the bar. A finished file on a
+desktop is reported there too, under **Preview, download and mobile**. The
+bar's view is `pdfBarView(state, run, mobile)` in
+`apps/web/src/components/pdf/pdfBarView.ts` — one pure function, so the rules
+are testable without a renderer, and the bar component renders its answer and
+owns no state, taking only the cancel handler that the one stoppable step needs.
+
+The bar names the Collection whenever a read disclosed it: a `ready` read, or
+the name a `locked` refusal carries
+([ADR-0005](../adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
+It says only **Collection PDF** when nothing did — `loading`, `invalid`,
+`notFound`, `private`, `error`, and a locked refusal with no usable name — and
+then has no subtitle, because there is no Collection to name. The name is a
+link to the Collection's canonical page — `/collection/` plus
+`collectionSlug(name, id)` from `packages/shared/src/slug.ts` — only when the
+read succeeded; a locked, private, missing or invalid Collection is named (or
+not) but is not a link.
+
 ### States
 
-| State      | What the viewer shows                                                     |
-| ---------- | ------------------------------------------------------------------------- |
-| `loading`  | centred `Loader`                                                          |
-| `invalid`  | `PublicStateMessage` with the invalid-link copy                           |
-| `notFound` | `PublicStateMessage` with the not-found copy                              |
-| `private`  | `PublicStateMessage` with the private copy                                |
-| `locked`   | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
-| `error`    | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
-| `ready`    | the generation controls below                                             |
+Every state renders under that one bar; only what sits in the body changes.
+
+| State      | The bar                                                | What the body shows                                                       |
+| ---------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `loading`  | **Collection PDF**                                     | centred `Loader`                                                          |
+| `invalid`  | **Collection PDF**                                     | `PublicStateMessage` with the invalid-link copy                           |
+| `notFound` | **Collection PDF**                                     | `PublicStateMessage` with the not-found copy                              |
+| `private`  | **Collection PDF**                                     | `PublicStateMessage` with the private copy                                |
+| `locked`   | the name from the refusal                              | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
+| `error`    | **Collection PDF**, and nothing of the failure         | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
+| `ready`    | the name, plus the work in flight or the finished file | nothing while work is in flight; otherwise the generation state's own     |
 
 On `ready` the export starts automatically, unless the large-export warning
 (below) needs an answer first. The viewer does not ask the reader to press
@@ -635,32 +715,62 @@ On `ready` the export starts automatically, unless the large-export warning
 
 ### Generation states
 
-| State       | What the viewer shows                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------- |
-| `preparing` | `Progress` and `Preparing photos {done} of {total}`; **Cancel** enabled                                   |
-| `rendering` | `Building PDF…`; **Cancel disabled** — the renderer is atomic and cannot be interrupted                   |
-| `done`      | the preview (desktop) or the mobile card, **Download**, **Open PDF**, and a `{pages} pages · {size}` line |
-| `cancelled` | `Export cancelled.` and a **Generate PDF** button                                                         |
-| `failed`    | `The PDF could not be generated.` and a **Retry** button                                                  |
+| State       | The bar                                                                                    | The body                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `preparing` | `Preparing photos {done} of {total}`, a progress line along the bar's edge, and **Cancel** | empty                                                                                                      |
+| `rendering` | `Building PDF…`, with no **Cancel** — the renderer is atomic and cannot be interrupted     | empty                                                                                                      |
+| `done`      | desktop: `{pages} pages · {size}`, **Download** and **Open PDF**; mobile: nothing          | desktop: the preview alone; mobile: the card's sentence, `{pages} pages · {size}` and the same two buttons |
+| `cancelled` | nothing                                                                                    | `Export cancelled.` and a **Generate PDF** button                                                          |
+| `failed`    | nothing                                                                                    | `The PDF could not be generated.` and a **Retry** button                                                   |
 
 Progress counts **distinct scheduled photos**. `done` includes failed photos;
-`total` is the number of distinct photos. With no photos, go straight to
-`rendering` with no `0 / 0` frame. Cancel during `preparing` aborts the current
-fetches, clears the work and produces no PDF; it does not leave a partial file.
+`total` is the number of distinct photos. The progress line's value is the
+fraction prepared — the same number the label counts — and 0 for a run with
+nothing scheduled, so the bar never prints `0 of 0`. With no photos the export
+goes straight to `rendering` with no progress frame at all. Cancel during
+`preparing` aborts the current fetches, clears the work and produces no PDF; it
+does not leave a partial file.
+
+The split is the bar's one rule, not a per-state choice: work in flight is
+reported where the export is, over a body that has nothing to say, and every
+state that asks the reader to act — `idle` before a start, `cancelled`, `failed`
+— is a message and a button together in the body, with the bar silent for it.
 
 The export is one `pdf(<CollectionPdf … />).toBlob()` call after all the
 preflight work. The result is held in memory and shown through a `blob:` URL.
 
 ### Preview, download and mobile
 
-- **Desktop** (not coarse pointer and wider than 700 px): an
-  `<iframe title="Collection PDF" src={blobUrl}>` fills the content area, with
-  **Download** and **Open PDF** above it.
-- **Mobile** (coarse pointer or `max-width: 700px`): no iframe — iOS's embedded
-  PDF view shows only the first page. Show a card that says the PDF is ready,
-  with **Open PDF** and **Download**.
+Two surfaces, and each one offers the actions exactly once.
+
+- **Desktop** (not coarse pointer and wider than 700 px): the bar carries
+  `{pages} pages · {size}`, **Download** and **Open PDF**, and the body is the
+  document and nothing else — an `iframe` titled **Collection PDF** and pointed
+  at the blob URL, filling the window under the fixed bar. (An empty Collection
+  keeps the one line that says it has no published artworks above the frame.)
+  Its height is the viewport less `MANAGE_HEADER_HEIGHT` and the body's own
+  `AppShell` padding, with a floor for short windows, so the page itself does
+  not scroll and the document scrolls inside its own frame. The pages-and-size
+  line that used to sit above the preview is gone.
+- **Mobile** (coarse pointer or `max-width: 700px`): once the file exists the
+  bar names the Collection and carries no actions; no iframe either, because
+  iOS's embedded PDF view shows only the first page. The card under the bar is
+  the phone's one action surface: it says the PDF is ready, repeats
+  `{pages} pages · {size}`, and holds **Open PDF** and **Download**. The
+  summary travels with the buttons it describes. **Work in flight has no
+  card**, so the bar reports it on a phone exactly as on a desktop: the label,
+  the line and the **Cancel** while photos are prepared, `Building PDF…` while
+  the renderer runs.
+- The bar and the card print the summary through one function in
+  `pdfBarView.ts`, `pdfFileSummary(pages, size)`, which wraps the byte
+  formatter: megabytes to two decimals, anything smaller rounded up to at least
+  one kB. One wording, one rounding.
+- A run is reported only by a `ready` read, so re-reading the Collection, or
+  restarting the export, drops whatever the previous run reported — its
+  progress or its file — with it.
 - **Download** is an `<a download={filename} href={blobUrl}>`; the blob URL is
-  same-origin.
+  same-origin. The filename is `collectionPdfFileName(name)` — **Download**
+  carries the exported file's own name.
 - **Open PDF** calls
   `window.open(blobUrl, "_blank", "noopener,noreferrer")`. This is the Safari
   blob path; it must be checked on iOS hardware once before release (a manual
@@ -719,30 +829,112 @@ labelled `PDF`** immediately after **View** in the left header group:
 
 ## Performance
 
-Two measurements, both from the prototype on the local stack, headless Chrome,
-four parallel conversions. The table is a **63-photo-page benchmark** on a
-23-work fixture (20 works with three photos, 3 with one):
+Every figure below was measured against the shipped geometry — the 504 × 580 pt
+box, the 2100 × 2417 px decode target and the `xxlarge` source — after it
+shipped (#149). None of it is inherited from the prototype.
 
-| Source        | dpi | Downloaded | Converted JPEGs |      PDF |    Prefetch |     Render | Peak JS heap |
-| ------------- | --: | ---------: | --------------: | -------: | ----------: | ---------: | -----------: |
-| `xlarge`      | 200 |    45.6 MB |         22.8 MB | 22.86 MB | 1.31–1.78 s | 136–143 ms |   111–115 MB |
-| original      | 200 |    64.6 MB |         23.8 MB | 23.85 MB |      1.99 s |     137 ms |       113 MB |
-| `xlarge`      | 300 |    45.6 MB |         41.5 MB | 41.55 MB | 1.53–1.98 s | 156–163 ms |   109–110 MB |
-| original      | 300 |    64.6 MB |         42.0 MB | 42.06 MB |      1.96 s |     159 ms |       122 MB |
-| `xlarge` q0.8 | 200 |    45.6 MB |         15.4 MB | 15.45 MB |      1.31 s |     131 ms |       113 MB |
+**The method, because a number without one decays into folklore.** The local
+stack (Postgres, SeaweedFS, the API on `:8000`), the web app's **production
+build** (`bun run build`, served by `vite preview`, so the react-pdf chunk is the
+shipped one), **headless Chrome for Testing 151.0.7922.34** with the HTTP cache
+disabled, on an Apple M5 Pro / 48 GB / macOS 26.6.2. One fresh browser per run,
+three runs per row, with no other build or browser running. Photos are converted
+by the shipped pipeline at the export's fixed **300 dpi**, with
+`PHOTO_CONCURRENCY` — four in flight. Prefetch is the viewer's own
+**`Preparing photos` → `Building PDF…`**; render is **`Building PDF…` → the
+finished file**. Both are stamped from transitions of the page's own rendered
+state (`document.body.innerText`), not inferred from the network. Downloaded
+bytes are CDP `Network.loadingFinished`'s `encodedDataLength` summed over the
+`/api/v1/media` requests; converted bytes are the size of every blob
+`OffscreenCanvas.convertToBlob` answered; the PDF is the last blob the route
+mints (`URL.createObjectURL`), which is the one its preview and download link
+carry. **Whole-browser RSS is the summed resident set of the browser's entire
+process tree** (`ps -axo pid,ppid,rss`, sampled every 100 ms), which is the
+number that matters — the JS heap under-reports by an order of magnitude; the
+heap column is CDP `Performance.getMetrics`' `JSHeapUsedSize`. **Idle** is the
+same browser parked on `/manage` — the app, no PDF chunk — allowed to settle for
+three seconds and then sampled for one more, the highest of those samples being
+the baseline. Every RSS figure below is a peak over the whole visit to the PDF
+route, so it includes the viewer itself.
 
-The seeded **Flores Solares** collection (24 live published works, 6 with
-photos, 14 used photos after the three-photo cap, 18 no-photo works) is the
-**17-page, 3.00 MB** sample at 300 dpi. Whole browser RSS is the number that
-matters, not the JS heap: idle ~972 MB; 63 photo pages at 300 dpi peak
-~1855 MB (+880 MB), ~1884 MB retained while the viewer holds the blob. The
-implementation must release converted blobs after `toBlob()` and revoke the blob
-URL, and the warning above gates the phone case. `xlarge` is the right source at
-both densities: at 300 dpi the original adds only 1.2 % to the PDF while
-downloading 42 % more and taking 30–50 % longer.
+The fixture is **23 works and 63 photo pages** — 20 works with three photos, 3
+with one — uploaded into a local Collection through the app's own stage →
+process → save routes, so every object is one the pipeline wrote. Its sources
+are 12 MP JPEGs in a 3:4 / 1:1 / 4:3 mix (21 photo pages each), so the box is
+exercised at both of its bounds: a 3:4 photo fills its height (1813 × 2417 px),
+a square and a landscape fill its width (2100 × 2100 and 2100 × 1575). Its 63
+`xxlarge` objects are 46.6 MB on the wire, ~740 kB each. A 30-photo-page fixture
+and a 24-work, 14-photo one (below) come from the same generator.
 
-The renderer chunk is **1.39 MB minified / 494.2 kB gzip**, separate from the
-main 409 kB gzip chunk. `bun run build` must keep it a separate chunk. There is
+| Source                  | dpi | Downloaded | Converted JPEGs |      PDF |    Prefetch |     Render |   Peak JS heap | Peak RSS over idle |
+| ----------------------- | --: | ---------: | --------------: | -------: | ----------: | ---------: | -------------: | -----------------: |
+| `xxlarge`               | 300 |    46.6 MB |        19.45 MB | 19.53 MB | 4.21–4.33 s | 108–116 ms | 18.06–26.61 MB |      +1179–1184 MB |
+| `xlarge` (no `xxlarge`) | 300 |    26.2 MB |        18.31 MB | 18.40 MB | 2.81–2.97 s | 111–116 ms | 26.57–31.81 MB |      +1145–1149 MB |
+
+The two rows are the same 63 pages through the two rungs a real collection
+walks. The second is the **fallback**: an identical fixture whose every photo's
+`xxlarge` record was removed after the upload, which is what a photo uploaded
+before #144 looks like. `original` is not a row: it is the ladder's last resort
+for a photo carrying neither variant (`scheduledPhotoSource`), so its cost is
+not bounded by the box and is not what this run measured.
+
+**What the ladder's two rungs cost.** The fallback is 44 % smaller on the wire
+(26.2 MB against 46.6 MB), 1.4 s faster to prefetch, and prints a PDF 6 %
+smaller — the same picture, a little smaller than the box, because `xlarge`
+stops at 2400 px where the box wants 2417. The peak is the same within 3 %. That
+is the decode-to-box cap doing its one job: what the peak holds does not follow
+the source, so a smaller source buys bandwidth and time and no memory. `xxlarge`
+is therefore the right source to read wherever it exists — the extra 20.4 MB
+across these 63 pages is what fills the box — and the `xlarge` row is the legacy
+path's price, not a cheaper export.
+
+**The peak, against the retired +880 MB.** The prototype reported ~1855 MB peak
+(+880 MB over a ~972 MB idle) for 63 photo pages at 300 dpi. Measured now, the
+same 63 pages peak at **2200–2203 MB, +1179–1184 MB over idle**, and settle at
+2099–2102 MB while the viewer holds the blob. So the peak did **not** fall, and
+the cap is not what decides it either way: one conversion holds a box, not a
+source — four of them, about 80 MB — while the visit's peak is the viewer's own
+floor plus the document. The floor is measurable on its own: a **one-page export
+with no photos peaks at 1517–1521 MB, +499 MB over the same idle**, and the
+photos then take it to ~+1.0 GB. Part of the gap to the retired figure is that
+floor, which the prototype's unrecorded method may not have counted; the rest is
+real. The claim the cap supports is therefore narrower than "the peak is flat":
+**the source's pixels never enter the peak, the box's do.**
+
+**The peak against the page count.** Four exports, same machine, same method:
+
+| Export                   | Peak RSS over idle |
+| ------------------------ | -----------------: |
+| 1 page, no photos        |        +499–500 MB |
+| 17 pages, 14 photo pages |      +1010–1037 MB |
+| 30 pages, 30 photo pages |      +1067–1095 MB |
+| 63 pages, 63 photo pages |      +1179–1184 MB |
+
+Above the first few photos the peak barely moves: going from 14 to 63 photo pages
+grows the PDF 4.5× (4.33 → 19.53 MB) for about 0.15 GB of peak. The steep step is
+below that, and this run cannot say whether it belongs to the photos or to the
+viewer, because its only photo-free export is also its only one-page one.
+
+**The 17-page sample.** A Collection of 24 live published works — 6 with photos,
+14 used photos after the three-photo cap, 18 with no photos — exports as
+**17 pages · 4.33 MB** at 300 dpi from `xxlarge`: 10.38 MB downloaded, 4.30 MB
+of converted JPEGs, 0.99–1.04 s of prefetch, 63–67 ms of render, and
++1010–1037 MB of peak RSS. Its 14 photo pages are below the warning's threshold,
+and indeed no warning appeared.
+
+**The warning's thresholds still hold.** The new peak gives no reason to move
+either number: above the first few photos the cost is small and nearly flat
+across the range they bracket, so the desktop's 30 is not sitting on a cliff.
+What this run cannot supply is a phone — it is a 48 GB desktop browser, and the
+phone is the case the warning exists for — so the mobile clause stays on the same
+reasoning that put it there. No ticket to move the thresholds is open.
+
+The implementation must release converted blobs after `toBlob()` and revoke the
+blob URL. Each run measured here ends holding one finished file and nothing else.
+
+The renderer chunk is **1.21 MB minified / 449.5 kB gzip**, still a separate
+chunk from the app's main 335.5 kB gzip one. Both are `bun run build`'s own
+report of the production build, which must keep the renderer separate. There is
 no server work and no file upload.
 
 ### Library pin and a known bug
@@ -793,8 +985,8 @@ five-per-grid, draft included). That is the acceptance bar.
 
 - `fitInsideBox` returns the source size untouched when it is smaller than the
   box, preserves aspect ratio when it is larger, rounds to at least 1 px, and
-  uses the 1625 × 2163 target at 300 dpi. Mutating the `min(1, …)` must fail the
-  no-enlarge test.
+  uses the 2100 × 2417 target at 300 dpi — the number `xxlarge`'s 3000 px exists
+  to reach. Mutating the `min(1, …)` must fail the no-enlarge test.
 - `fallbackCharacters` keeps distinct non-ASCII code points only, sorted;
   ASCII-only text returns an empty string; a mixed string returns the non-ASCII
   subset. `fallbackChunks` splits on code points, not UTF-16 units: 0 → no
@@ -833,8 +1025,15 @@ The subsetter itself is harfbuzz's behaviour; do not test glyph outlines.
 
 - Do not assert the rendered PDF's layout, page components, text positions or
   font names in jsdom. Those are the library and the template, not our logic.
-- The viewer has no new pure decision worth a component suite beyond what
+- The viewer's load has no pure decision worth a component suite beyond what
   `publicFailure` already covers; do not test the manage link's label or props.
+  The bar's wording per state — the name, the fallback title, the progress
+  label and its fraction, `Building PDF…`, the file's summary — is
+  `pdfBarView`'s own pure suite. The bar's one rendering check is that its
+  report appears exactly once: one **Download** with its filename and one
+  **Open PDF** for a finished file, a **Cancel** that calls the handler while
+  photos are being prepared and none while the renderer runs. A duplicate or a
+  missing control is invisible in review and obvious in a query.
 - **Visual acceptance**, once, against the template: generate the seeded
   collection at the defaults and compare the photo page and the grid page to
   `docs/templates/pdf/artwork-page.png` and `artworks-grid.png` at 100 %. Check
@@ -864,4 +1063,5 @@ The subsetter itself is harfbuzz's behaviour; do not test glyph outlines.
 - Additional fallback faces for emoji and scripts outside Noto Sans SC.
 - URL options for dpi, JPEG quality, typography or image source. The prototype's
   `?dpi=`, `?typography=`, `?source=` and `?quality=` flags are not shipped; the
-  only route is the production default: `xlarge`, 300 dpi, quality 0.9, 12/10 pt.
+  only route is the production default: `xxlarge` with `xlarge` as the
+  fallback, 300 dpi, quality 0.9, 12/10 pt.

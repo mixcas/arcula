@@ -4,6 +4,7 @@ import { Center, Loader } from "@mantine/core";
 import ProductPage from "./components/ProductPage";
 import LoginPage from "./components/auth/LoginPage";
 import SignUpPage from "./components/auth/SignUpPage";
+import ResetRequestPage from "./components/auth/ResetRequestPage";
 import ResetPasswordPage from "./components/auth/ResetPasswordPage";
 import InvitationPage from "./components/invitation/InvitationPage";
 import ManagePage from "./components/manage/ManagePage";
@@ -35,8 +36,11 @@ const App: React.FC = () => {
         <Route path="/" element={<ProductPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-        {/* The token in the path is what the reset mail's link carries;
-            an absent/expired token is the server's 400, not a route miss. */}
+        {/* Password reset is two routes: the bare path asks for the address
+            (the door on sign-in), and the token path is the form the mail's
+            link lands on. An absent/expired token is the server's 400, not a
+            route miss. */}
+        <Route path="/reset-password" element={<ResetRequestPage />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         {/* The mail's invitation link. The token is the path segment the
             preview, accept and decline calls all carry. */}
@@ -117,8 +121,12 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        {/* The optional final segment names the tab — general, public,
+            access, data — and a bare address is what /settings/general
+            looks like: the page's canonicalisation effect lands old links
+            there rather than a redirect route. */}
         <Route
-          path="/manage/collection/:collectionId/settings"
+          path="/manage/collection/:collectionId/settings/:tab?"
           element={
             <ProtectedRoute>
               <ManageLayout>
