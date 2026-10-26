@@ -672,9 +672,15 @@ rather than a second definition of it.
 The bar is shaped like the header it replaces: the Collection's name on the
 left, in the wordmark's seat, as the page's one top-level heading (`h1`), with
 **Collection PDF** dimmed beneath it. The body carries no title block — the bar
-names the page. The bar's right-hand side is empty in this shape: the export's
-own state, work in flight and the finished file, is still in the body, under
-**Generation states** and **Preview, download and mobile**.
+names the page. The bar's right-hand side holds the file that exists, and the
+rule for what belongs there is one sentence: **the bar reports the file that
+exists; the body carries the message and the call to action.** So `idle`,
+`cancelled` and `failed` keep their copy and their buttons in the body, and a
+finished file on a desktop is reported in the bar alone, under **Preview,
+download and mobile**. The bar's view is `pdfBarView(state, run, mobile)` in
+`apps/web/src/components/pdf/pdfBarView.ts` — one pure function, so the rules
+are testable without a renderer, and the bar component renders its answer and
+owns no state.
 
 The bar names the Collection whenever a read disclosed it: a `ready` read, or
 the name a `locked` refusal carries
@@ -691,15 +697,15 @@ not) but is not a link.
 
 Every state renders under that one bar; only what sits in the body changes.
 
-| State      | The bar                   | What the body shows                                                       |
-| ---------- | ------------------------- | ------------------------------------------------------------------------- |
-| `loading`  | **Collection PDF**        | centred `Loader`                                                          |
-| `invalid`  | **Collection PDF**        | `PublicStateMessage` with the invalid-link copy                           |
-| `notFound` | **Collection PDF**        | `PublicStateMessage` with the not-found copy                              |
-| `private`  | **Collection PDF**        | `PublicStateMessage` with the private copy                                |
-| `locked`   | the name from the refusal | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
-| `error`    | **Collection PDF**        | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
-| `ready`    | the name                  | the generation controls below                                             |
+| State      | The bar                                                | What the body shows                                                       |
+| ---------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `loading`  | **Collection PDF**                                     | centred `Loader`                                                          |
+| `invalid`  | **Collection PDF**                                     | `PublicStateMessage` with the invalid-link copy                           |
+| `notFound` | **Collection PDF**                                     | `PublicStateMessage` with the not-found copy                              |
+| `private`  | **Collection PDF**                                     | `PublicStateMessage` with the private copy                                |
+| `locked`   | the name from the refusal                              | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
+| `error`    | **Collection PDF**                                     | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
+| `ready`    | the name, plus the finished file's summary and buttons | the generation controls below                                             |
 
 On `ready` the export starts automatically, unless the large-export warning
 (below) needs an answer first. The viewer does not ask the reader to press
@@ -707,13 +713,13 @@ On `ready` the export starts automatically, unless the large-export warning
 
 ### Generation states
 
-| State       | What the viewer shows                                                                                     |
-| ----------- | --------------------------------------------------------------------------------------------------------- |
-| `preparing` | `Progress` and `Preparing photos {done} of {total}`; **Cancel** enabled                                   |
-| `rendering` | `Building PDF…`; **Cancel disabled** — the renderer is atomic and cannot be interrupted                   |
-| `done`      | the preview (desktop) or the mobile card, **Download**, **Open PDF**, and a `{pages} pages · {size}` line |
-| `cancelled` | `Export cancelled.` and a **Generate PDF** button                                                         |
-| `failed`    | `The PDF could not be generated.` and a **Retry** button                                                  |
+| State       | What the viewer shows                                                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preparing` | `Progress` and `Preparing photos {done} of {total}`; **Cancel** enabled                                                                                                                    |
+| `rendering` | `Building PDF…`; **Cancel disabled** — the renderer is atomic and cannot be interrupted                                                                                                    |
+| `done`      | desktop: `{pages} pages · {size}`, **Download** and **Open PDF** in the bar, the preview alone in the body; mobile: the card's sentence, `{pages} pages · {size}` and the same two buttons |
+| `cancelled` | `Export cancelled.` and a **Generate PDF** button                                                                                                                                          |
+| `failed`    | `The PDF could not be generated.` and a **Retry** button                                                                                                                                   |
 
 Progress counts **distinct scheduled photos**. `done` includes failed photos;
 `total` is the number of distinct photos. With no photos, go straight to
@@ -725,14 +731,32 @@ preflight work. The result is held in memory and shown through a `blob:` URL.
 
 ### Preview, download and mobile
 
-- **Desktop** (not coarse pointer and wider than 700 px): an
-  `<iframe title="Collection PDF" src={blobUrl}>` fills the content area, with
-  **Download** and **Open PDF** above it.
-- **Mobile** (coarse pointer or `max-width: 700px`): no iframe — iOS's embedded
-  PDF view shows only the first page. Show a card that says the PDF is ready,
-  with **Open PDF** and **Download**.
+Two surfaces, and each one offers the actions exactly once.
+
+- **Desktop** (not coarse pointer and wider than 700 px): the bar carries
+  `{pages} pages · {size}`, **Download** and **Open PDF**, and the body is the
+  document and nothing else — an `iframe` titled **Collection PDF** and pointed
+  at the blob URL, filling the window under the fixed bar. (An empty Collection
+  keeps the one line that says it has no published artworks above the frame.)
+  Its height is the viewport less `MANAGE_HEADER_HEIGHT` and the body's own
+  `AppShell` padding, with a floor for short windows, so the page itself does
+  not scroll and the document scrolls inside its own frame. The pages-and-size
+  line that used to sit above the preview is gone.
+- **Mobile** (coarse pointer or `max-width: 700px`): the bar names the
+  Collection and carries no actions; no iframe either, because iOS's embedded
+  PDF view shows only the first page. The card under the bar is the phone's one
+  action surface: it says the PDF is ready, repeats `{pages} pages · {size}`,
+  and holds **Open PDF** and **Download**. The summary travels with the buttons
+  it describes.
+- The bar and the card print the summary through one function in
+  `pdfBarView.ts`, `pdfFileSummary(pages, size)`, which wraps the byte
+  formatter: megabytes to two decimals, anything smaller rounded up to at least
+  one kB. One wording, one rounding.
+- A run is reported only by a `ready` read, so re-reading the Collection, or
+  restarting the export, drops the previous file's summary and buttons with it.
 - **Download** is an `<a download={filename} href={blobUrl}>`; the blob URL is
-  same-origin.
+  same-origin. The filename is `collectionPdfFileName(name)` — **Download**
+  carries the exported file's own name.
 - **Open PDF** calls
   `window.open(blobUrl, "_blank", "noopener,noreferrer")`. This is the Safari
   blob path; it must be checked on iOS hardware once before release (a manual
