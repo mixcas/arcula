@@ -645,7 +645,7 @@ const CollectionPdfPage = React.lazy(
 );
 ```
 
-The renderer is a separate chunk (about 494 kB gzip; see **Performance**), so it
+The renderer is a separate chunk (about 450 kB gzip; see **Performance**), so it
 must not be in the main bundle and must not be imported from any page that is
 not the PDF route. The `Suspense` fallback is a centred Mantine `Loader`.
 
@@ -829,40 +829,112 @@ labelled `PDF`** immediately after **View** in the left header group:
 
 ## Performance
 
-> **Stale — measured against the retired 390 × 519 pt box and the `xlarge`
-> source.** Every number below was taken before the photo box grew to
-> 504 × 580 pt and the export moved to `xxlarge` with a decode-to-box target, so
-> they describe the shape of the costs, not today's values. Expect the PDF to be
-> roughly a quarter larger (the converted area went from 3.5 to 4.4 Mpx) and the
-> peak to stay flat or fall (the decode is capped at the box). Re-running the
-> benchmark is tracked in #149; until then, do not quote these figures.
+Every figure below was measured against the shipped geometry — the 504 × 580 pt
+box, the 2100 × 2417 px decode target and the `xxlarge` source — after it
+shipped (#149). None of it is inherited from the prototype.
 
-Two measurements, both from the prototype on the local stack, headless Chrome,
-four parallel conversions. The table is a **63-photo-page benchmark** on a
-23-work fixture (20 works with three photos, 3 with one):
+**The method, because a number without one decays into folklore.** The local
+stack (Postgres, SeaweedFS, the API on `:8000`), the web app's **production
+build** (`bun run build`, served by `vite preview`, so the react-pdf chunk is the
+shipped one), **headless Chrome for Testing 151.0.7922.34** with the HTTP cache
+disabled, on an Apple M5 Pro / 48 GB / macOS 26.6.2. One fresh browser per run,
+three runs per row, with no other build or browser running. Photos are converted
+by the shipped pipeline at the export's fixed **300 dpi**, with
+`PHOTO_CONCURRENCY` — four in flight. Prefetch is the viewer's own
+**`Preparing photos` → `Building PDF…`**; render is **`Building PDF…` → the
+finished file**. Both are stamped from transitions of the page's own rendered
+state (`document.body.innerText`), not inferred from the network. Downloaded
+bytes are CDP `Network.loadingFinished`'s `encodedDataLength` summed over the
+`/api/v1/media` requests; converted bytes are the size of every blob
+`OffscreenCanvas.convertToBlob` answered; the PDF is the last blob the route
+mints (`URL.createObjectURL`), which is the one its preview and download link
+carry. **Whole-browser RSS is the summed resident set of the browser's entire
+process tree** (`ps -axo pid,ppid,rss`, sampled every 100 ms), which is the
+number that matters — the JS heap under-reports by an order of magnitude; the
+heap column is CDP `Performance.getMetrics`' `JSHeapUsedSize`. **Idle** is the
+same browser parked on `/manage` — the app, no PDF chunk — allowed to settle for
+three seconds and then sampled for one more, the highest of those samples being
+the baseline. Every RSS figure below is a peak over the whole visit to the PDF
+route, so it includes the viewer itself.
 
-| Source        | dpi | Downloaded | Converted JPEGs |      PDF |    Prefetch |     Render | Peak JS heap |
-| ------------- | --: | ---------: | --------------: | -------: | ----------: | ---------: | -----------: |
-| `xlarge`      | 200 |    45.6 MB |         22.8 MB | 22.86 MB | 1.31–1.78 s | 136–143 ms |   111–115 MB |
-| original      | 200 |    64.6 MB |         23.8 MB | 23.85 MB |      1.99 s |     137 ms |       113 MB |
-| `xlarge`      | 300 |    45.6 MB |         41.5 MB | 41.55 MB | 1.53–1.98 s | 156–163 ms |   109–110 MB |
-| original      | 300 |    64.6 MB |         42.0 MB | 42.06 MB |      1.96 s |     159 ms |       122 MB |
-| `xlarge` q0.8 | 200 |    45.6 MB |         15.4 MB | 15.45 MB |      1.31 s |     131 ms |       113 MB |
+The fixture is **23 works and 63 photo pages** — 20 works with three photos, 3
+with one — uploaded into a local Collection through the app's own stage →
+process → save routes, so every object is one the pipeline wrote. Its sources
+are 12 MP JPEGs in a 3:4 / 1:1 / 4:3 mix (21 photo pages each), so the box is
+exercised at both of its bounds: a 3:4 photo fills its height (1813 × 2417 px),
+a square and a landscape fill its width (2100 × 2100 and 2100 × 1575). Its 63
+`xxlarge` objects are 46.6 MB on the wire, ~740 kB each. A 30-photo-page fixture
+and a 24-work, 14-photo one (below) come from the same generator.
 
-The seeded **Flores Solares** collection (24 live published works, 6 with
-photos, 14 used photos after the three-photo cap, 18 no-photo works) is the
-**17-page, 3.00 MB** sample at 300 dpi. Whole browser RSS is the number that
-matters, not the JS heap: idle ~972 MB; 63 photo pages at 300 dpi peak
-~1855 MB (+880 MB), ~1884 MB retained while the viewer holds the blob. The
-implementation must release converted blobs after `toBlob()` and revoke the blob
-URL, and the warning above gates the phone case. On those measurements `xlarge`
-was the right source at both densities: at 300 dpi the original added only 1.2 %
-to the PDF while downloading 42 % more and taking 30–50 % longer — which is why
-the ladder now stops at a variant and never reaches for the original. The
-current source is `xxlarge`; see the note above the table.
+| Source                  | dpi | Downloaded | Converted JPEGs |      PDF |    Prefetch |     Render |   Peak JS heap | Peak RSS over idle |
+| ----------------------- | --: | ---------: | --------------: | -------: | ----------: | ---------: | -------------: | -----------------: |
+| `xxlarge`               | 300 |    46.6 MB |        19.45 MB | 19.53 MB | 4.21–4.33 s | 108–116 ms | 18.06–26.61 MB |      +1179–1184 MB |
+| `xlarge` (no `xxlarge`) | 300 |    26.2 MB |        18.31 MB | 18.40 MB | 2.81–2.97 s | 111–116 ms | 26.57–31.81 MB |      +1145–1149 MB |
 
-The renderer chunk is **1.39 MB minified / 494.2 kB gzip**, separate from the
-main 409 kB gzip chunk. `bun run build` must keep it a separate chunk. There is
+The two rows are the same 63 pages through the two rungs a real collection
+walks. The second is the **fallback**: an identical fixture whose every photo's
+`xxlarge` record was removed after the upload, which is what a photo uploaded
+before #144 looks like. `original` is not a row: it is the ladder's last resort
+for a photo carrying neither variant (`scheduledPhotoSource`), so its cost is
+not bounded by the box and is not what this run measured.
+
+**What the ladder's two rungs cost.** The fallback is 44 % smaller on the wire
+(26.2 MB against 46.6 MB), 1.4 s faster to prefetch, and prints a PDF 6 %
+smaller — the same picture, a little smaller than the box, because `xlarge`
+stops at 2400 px where the box wants 2417. The peak is the same within 3 %. That
+is the decode-to-box cap doing its one job: what the peak holds does not follow
+the source, so a smaller source buys bandwidth and time and no memory. `xxlarge`
+is therefore the right source to read wherever it exists — the extra 20.4 MB
+across these 63 pages is what fills the box — and the `xlarge` row is the legacy
+path's price, not a cheaper export.
+
+**The peak, against the retired +880 MB.** The prototype reported ~1855 MB peak
+(+880 MB over a ~972 MB idle) for 63 photo pages at 300 dpi. Measured now, the
+same 63 pages peak at **2200–2203 MB, +1179–1184 MB over idle**, and settle at
+2099–2102 MB while the viewer holds the blob. So the peak did **not** fall, and
+the cap is not what decides it either way: one conversion holds a box, not a
+source — four of them, about 80 MB — while the visit's peak is the viewer's own
+floor plus the document. The floor is measurable on its own: a **one-page export
+with no photos peaks at 1517–1521 MB, +499 MB over the same idle**, and the
+photos then take it to ~+1.0 GB. Part of the gap to the retired figure is that
+floor, which the prototype's unrecorded method may not have counted; the rest is
+real. The claim the cap supports is therefore narrower than "the peak is flat":
+**the source's pixels never enter the peak, the box's do.**
+
+**The peak against the page count.** Four exports, same machine, same method:
+
+| Export                   | Peak RSS over idle |
+| ------------------------ | -----------------: |
+| 1 page, no photos        |        +499–500 MB |
+| 17 pages, 14 photo pages |      +1010–1037 MB |
+| 30 pages, 30 photo pages |      +1067–1095 MB |
+| 63 pages, 63 photo pages |      +1179–1184 MB |
+
+Above the first few photos the peak barely moves: going from 14 to 63 photo pages
+grows the PDF 4.5× (4.33 → 19.53 MB) for about 0.15 GB of peak. The steep step is
+below that, and this run cannot say whether it belongs to the photos or to the
+viewer, because its only photo-free export is also its only one-page one.
+
+**The 17-page sample.** A Collection of 24 live published works — 6 with photos,
+14 used photos after the three-photo cap, 18 with no photos — exports as
+**17 pages · 4.33 MB** at 300 dpi from `xxlarge`: 10.38 MB downloaded, 4.30 MB
+of converted JPEGs, 0.99–1.04 s of prefetch, 63–67 ms of render, and
++1010–1037 MB of peak RSS. Its 14 photo pages are below the warning's threshold,
+and indeed no warning appeared.
+
+**The warning's thresholds still hold.** The new peak gives no reason to move
+either number: above the first few photos the cost is small and nearly flat
+across the range they bracket, so the desktop's 30 is not sitting on a cliff.
+What this run cannot supply is a phone — it is a 48 GB desktop browser, and the
+phone is the case the warning exists for — so the mobile clause stays on the same
+reasoning that put it there. No ticket to move the thresholds is open.
+
+The implementation must release converted blobs after `toBlob()` and revoke the
+blob URL. Each run measured here ends holding one finished file and nothing else.
+
+The renderer chunk is **1.21 MB minified / 449.5 kB gzip**, still a separate
+chunk from the app's main 335.5 kB gzip one. Both are `bun run build`'s own
+report of the production build, which must keep the renderer separate. There is
 no server work and no file upload.
 
 ### Library pin and a known bug

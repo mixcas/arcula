@@ -116,13 +116,15 @@ same picture at a larger peak, which is the correct degradation.
   seventy. The cap (`MAX_ARTWORK_PHOTOS`) is unchanged; the cost is storage and
   an encode at upload, and the sweep already treats the variant set as an
   enumeration rather than a literal.
-- **The PDF is roughly a quarter larger.** The converted area grew from 3.5 to
-  4.4 Mpx per photo page. The spec's **Performance** table is marked stale
-  rather than updated with guesses; re-running the benchmark is tracked
-  separately.
-- **The export's memory peak is flat or lower.** The decode is capped at the box,
-  so the larger source costs bandwidth rather than heap — the reason the fit
-  moved ahead of the decode in the same change rather than after it.
+- **The PDF is larger, and it is measured.** The converted area grew from 3.5 to
+  4.4 Mpx per photo page. The numbers are in the spec's **Performance** (#149)
+  rather than here, so they have one home.
+- **The memory peak did not fall; the source left it, the box stayed.** The
+  decode-to-box cap was expected to leave the peak flat or lower, and the
+  measurement says otherwise: what the cap buys is the narrower claim that the
+  source's pixels are not what the peak holds, since the fallback rung downloads
+  far less and peaks within noise of the first. The figures and their method are
+  in the spec's **Performance**.
 - **The slideshow's heaviest object is unchanged on ordinary screens.** A phone
   and a Retina laptop still pick `large` and `xlarge`; `xxlarge` is selected only
   where a photo is drawn wide enough to use it.
