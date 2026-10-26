@@ -1,239 +1,144 @@
-import React, { useState, useEffect } from "react";
+/**
+ * The collection's settings page: one read, four tabs, one save per tab.
+ *
+ * The tabs are addresses — `/settings/general`, `/settings/public`,
+ * `/settings/access`, `/settings/data` — and a bare or unknown segment
+ * canonicalises to `general` through the effect that already rewrites the
+ * collection's name-and-id in the address, so an old settings link lands on
+ * General rather than on a redirect route. The heading sits above the tab
+ * list, outside the panels; the panels are not kept mounted, so entering a tab
+ * fills it from the values the page last loaded or saved and leaving it drops
+ * what was typed — the Access tab consequently fetches nothing until it is
+ * reached.
+ *
+ * Each tab's Save writes only its own half of the PATCH. The decision is the
+ * pure fold in `collectionSettingsSave`, recomputed here on the way to the
+ * wire: a save leaves the member on the tab it saved from, re-canonicalises
+ * the name in the address in place, and confirms what was saved; a failure
+ * uses the same channel and leaves the form as it was.
+ */
+
+import React, { useEffect, useState } from "react";
 import {
-  Box,
-  Container,
-  Text,
-  TextInput,
-  Textarea,
-  Switch,
-  SegmentedControl,
-  PasswordInput,
-  Button,
-  Group,
-  Card,
-  Divider,
   Alert,
+  Button,
+  Container,
+  Group,
   Loader,
-  Select,
-  NumberInput,
+  Scroller,
+  Tabs,
+  Text,
 } from "@mantine/core";
-import { Link, useParams, useNavigate } from "react-router-dom";
-import { collectionService } from "../../services/collectionService";
-import { collectionSlug, parseId } from "@arcula/shared";
+import { notifications } from "@mantine/notifications";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  DEFAULT_SKIN_ID,
-  SKINS,
-  resolveSkin,
-  resolveSkinOptions,
-} from "@/skins/registry";
-import type { SkinOptionValue } from "@/skins/types";
-import type { CollectionUpdatePayload } from "@arcula/shared";
+  collectionSlug,
+  parseId,
+  type Collection,
+  type CollectionUpdatePayload,
+} from "@arcula/shared";
+import { collectionService } from "../../services/collectionService";
+import { resolveSkin, resolveSkinOptions } from "@/skins/registry";
+import GeneralTab from "./CollectionSettingsGeneralTab";
+import PublicTab from "./CollectionSettingsPublicTab";
+import DataTab from "./CollectionSettingsDataTab";
 import AccessCard from "./collection/AccessCard";
 import {
-  passwordControlMode,
-  resolvePasswordWrite,
-} from "./collectionPassword";
+  resolveGeneralSave,
+  resolvePublicSave,
+  type GeneralEditedValues,
+  type PublicEditedValues,
+} from "./collectionSettingsSave";
 
-/** Shallow equality over the option bag. Order does not matter, values do. */
-const optionsChanged = (
-  next: Record<string, SkinOptionValue>,
-  loaded: Record<string, SkinOptionValue>,
-): boolean => {
-  const keys = new Set([...Object.keys(next), ...Object.keys(loaded)]);
-  for (const key of keys) {
-    if (next[key] !== loaded[key]) {
-      return true;
-    }
-  }
-  return false;
+/** The four segments the address may carry; anything else is `general`. */
+const SETTINGS_TABS = ["general", "public", "access", "data"] as const;
+
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+const isSettingsTab = (value: string | undefined): value is SettingsTab =>
+  value !== undefined && (SETTINGS_TABS as readonly string[]).includes(value);
+
+const TAB_LABELS: Record<SettingsTab, string> = {
+  general: "General",
+  public: "Public view",
+  access: "Access",
+  data: "Data",
 };
 
 const CollectionSettingsPage: React.FC = () => {
-  const { collectionId: param } = useParams<{ collectionId: string }>();
+  const { collectionId: param, tab: tabParam } = useParams<{
+    collectionId: string;
+    tab?: string;
+  }>();
   // Routes carry "{slug}-{id}" but the API needs the id alone.
   const collectionId = parseId(param ?? "");
+  const activeTab: SettingsTab = isSettingsTab(tabParam) ? tabParam : "general";
   const navigate = useNavigate();
 
-  const [collectionName, setCollectionName] = useState("");
-  // The description as typed, and the one that was loaded. Kept apart for the
-  // same reason `loadedName` is (below): the save compares against the loaded
-  // value, and folding them into one field would make "changed" always true.
-  const [description, setDescription] = useState("");
-  const [loadedDescription, setLoadedDescription] = useState<string | null>(
-    null,
-  );
-  // The public/private default for a brand-new collection is public
-  // (collectionService.createCollection); until the fetch resolves nothing is
-  // rendered anyway (loading gate below), so this initial value only matters as
-  // the pre-fetch state that the loaded value always overrides.
-  const [isPublic, setIsPublic] = useState(true);
-  // Whether the collection already has a password, as the member read
-  // reports it. The hash never reaches the browser, so this one bit is all
-  // the form gets to know.
-  const [isPasswordProtected, setIsPasswordProtected] = useState(false);
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  // The two deliberate states beyond "show the fields": changing a password
-  // that is already set, and a removal waiting for Save.
-  const [editingPassword, setEditingPassword] = useState(false);
-  const [removingPassword, setRemovingPassword] = useState(false);
-
-  // The skin and its options, as loaded. Kept apart from the editable buffers
-  // below for the same reason `loadedName` is: the save compares against these,
-  // and rewriting them on every keystroke would make "changed" always true.
-  const [skin, setSkin] = useState(DEFAULT_SKIN_ID);
-  const [skinOptions, setSkinOptions] = useState<
-    Record<string, SkinOptionValue>
-  >({});
-  const [loadedSkin, setLoadedSkin] = useState<string | null>(null);
-  const [loadedSkinOptions, setLoadedSkinOptions] = useState<
-    Record<string, SkinOptionValue>
-  >({});
-
-  // The name as loaded, kept apart from `collectionName` above — that one is
-  // the editable buffer, and rewriting the URL from it would fire on every
-  // keystroke. Null until the fetch succeeds, which is also what stops the
-  // canonicalization below for a collection that could not be loaded.
-  const [loadedName, setLoadedName] = useState<string | null>(null);
-
+  // The one document the whole page works from: loaded on entry, re-stamped
+  // with the server's answer after each save, so a tab re-entered starts from
+  // what is actually stored. Null until the load resolves.
+  const [collection, setCollection] = useState<Collection | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  // Kept apart: a load failure means the form should not render, but a save
-  // failure must leave the user's input on screen (same split as
-  // ArtworkEditPage).
+  // Kept apart: a load failure means the page should not render, but a save
+  // failure must leave the user's input on screen — it does, because a failed
+  // save neither unmounts the panel nor moves the address.
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // How many stored option keys the selected skin no longer declares. Surfaced
-  // rather than silently dropped: an owner whose skin renamed an option would
-  // otherwise see the setting vanish with no explanation, and the only person
-  // who can decide what to do about it is them.
-  const [staleOptionCount, setStaleOptionCount] = useState(0);
 
   useEffect(() => {
     if (!collectionId) {
       return;
     }
-
+    let cancelled = false;
     const fetchCollection = async () => {
       try {
-        const collectionData =
-          await collectionService.getCollection(collectionId);
-        if (!collectionData) {
+        const data = await collectionService.getCollection(collectionId);
+        if (cancelled) {
+          return;
+        }
+        if (!data) {
           setLoadError("Collection not found");
         } else {
-          setCollectionName(collectionData.name ?? "");
-          setLoadedName(collectionData.name ?? "");
-          setDescription(collectionData.description ?? "");
-          setLoadedDescription(collectionData.description ?? "");
-          setIsPublic(Boolean(collectionData.isPublic));
-          setIsPasswordProtected(collectionData.isPasswordProtected === true);
-
-          // Resolved through the registry rather than stored raw, so the form
-          // shows the defaults for a collection written before `skin` existed
-          // and for a hand-edited value the selected skin does not declare —
-          // which is also what the save then compares against.
-          const resolved = resolveSkin(collectionData.skin);
-          setSkin(resolved.id);
-          setLoadedSkin(resolved.id);
-          const { options, dropped } = resolveSkinOptions(
-            resolved,
-            collectionData.skinOptions,
-          );
-          setSkinOptions(options);
-          setLoadedSkinOptions(options);
-          setStaleOptionCount(dropped.length);
+          setCollection(data);
+          setLoadError(null);
         }
       } catch (err) {
+        if (cancelled) {
+          return;
+        }
         console.error("Error fetching collection:", err);
         setLoadError("Failed to load collection settings. Please try again.");
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
-
     void fetchCollection();
+    return () => {
+      cancelled = true;
+    };
   }, [collectionId]);
 
   // Put the canonical "{slug}-{id}" in the address bar once the name is known,
-  // keeping this page's own /settings suffix. `replace` swaps the current
+  // keeping this page's own /settings/:tab segments. A bare address — and any
+  // address the tab segment does not name — is what /settings/general looks
+  // like, so the rewrite lands old and mistyped links on General, and a
+  // rename re-canonicalises the slug in place. `replace` swaps the current
   // history entry rather than adding one.
   useEffect(() => {
-    if (!param || loadedName === null) {
+    if (!param || !collection) {
       return;
     }
-    const canonical = collectionSlug(loadedName, collectionId);
-    if (canonical === param) {
+    const canonical = collectionSlug(collection.name, collectionId);
+    if (param === canonical && tabParam === activeTab) {
       return;
     }
-    void navigate(`/manage/collection/${canonical}/settings`, {
+    void navigate(`/manage/collection/${canonical}/settings/${activeTab}`, {
       replace: true,
     });
-  }, [param, loadedName, collectionId, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!collectionId) {
-      setError("Invalid collection id");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      const name = collectionName.trim();
-      // `skin`/`skinOptions`/`description` are sent only when they actually
-      // differ: the patch contract leaves an absent key alone, so a title-only
-      // save never rewrites the skin bag, and a no-op save never moves
-      // `updatedAt`.
-      //
-      // A blank description is sent as `null`, not as an empty string: the
-      // wire has no "clear" value other than `null`, and an absent key would
-      // leave the stored text in place.
-      const update: CollectionUpdatePayload = { name, isPublic };
-      const descriptionText = description.trim();
-      if (descriptionText !== (loadedDescription?.trim() ?? "")) {
-        update.description = descriptionText === "" ? null : descriptionText;
-      }
-      if (skin !== loadedSkin) {
-        update.skin = skin;
-      }
-      if (optionsChanged(skinOptions, loadedSkinOptions)) {
-        update.skinOptions = skinOptions;
-      }
-      // The password is the one field with a confirmation, and the
-      // confirmation is a client-side check only: `resolvePasswordWrite`
-      // answers what to send, and the payload never carries `confirm`.
-      const passwordWrite = resolvePasswordWrite({
-        isPublic,
-        isPasswordProtected,
-        editing: editingPassword,
-        removing: removingPassword,
-        password,
-        confirm: confirmPassword,
-      });
-      if (passwordWrite.kind === "error") {
-        setError(passwordWrite.message);
-        return;
-      }
-      if (passwordWrite.kind === "set") {
-        update.password = passwordWrite.password;
-      }
-      if (passwordWrite.kind === "remove") {
-        update.password = null;
-      }
-      await collectionService.updateCollection(collectionId, update);
-      // Build the slug from the name just saved, so the URL reflects the rename
-      // rather than carrying the old one.
-      void navigate(`/manage/collection/${collectionSlug(name, collectionId)}`);
-    } catch (err) {
-      console.error("Error updating collection:", err);
-      setError("Failed to save settings. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
+  }, [param, tabParam, activeTab, collection, collectionId, navigate]);
 
   if (!collectionId) {
     return <Alert color="red">Invalid collection id</Alert>;
@@ -247,322 +152,164 @@ const CollectionSettingsPage: React.FC = () => {
     return <Alert color="red">{loadError}</Alert>;
   }
 
-  const passwordMode = passwordControlMode({
-    isPublic,
-    isPasswordProtected,
-    editing: editingPassword,
-    removing: removingPassword,
-  });
+  // The load resolves to exactly one of a document and a load error before
+  // `loading` clears, so past the two gates above the document is the one the
+  // tabs and the save folds work from; this last check is the compiler's
+  // witness to that invariant. The loaded skin and bag are resolved through
+  // the registry rather than stored raw, which is also what a save compares
+  // against.
+  if (!collection) {
+    return <Loader />;
+  }
+  const loadedSkin = resolveSkin(collection.skin);
+  const { options: loadedOptions, dropped } = resolveSkinOptions(
+    loadedSkin,
+    collection.skinOptions,
+  );
+
+  /**
+   * The one write path. The payload is already the decision's answer, so here
+   * the page only moves it: no navigation on success, a notification naming
+   * what was saved, and the document re-stamped so the address and the tabs
+   * work from what the server now holds.
+   */
+  const save = async (payload: CollectionUpdatePayload, message: string) => {
+    setSaving(true);
+    try {
+      const saved = await collectionService.updateCollection(
+        collectionId,
+        payload,
+      );
+      setCollection(saved);
+      notifications.show({
+        color: "green",
+        title: "Saved",
+        message,
+      });
+    } catch (err) {
+      console.error("Error updating collection:", err);
+      notifications.show({
+        color: "red",
+        title: "Save failed",
+        message: "Failed to save settings. Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveGeneral = async (edited: GeneralEditedValues) => {
+    // The same fold the tab's disabled Save reads, over the document the page
+    // last loaded or saved. An error is a client-side refusal — the passwords
+    // do not match, the password is too short — and the notification is where
+    // the member is told why; the input stays on screen either way.
+    const decision = resolveGeneralSave(
+      {
+        name: collection.name,
+        description: collection.description ?? null,
+        isPublic: collection.isPublic === true,
+        isPasswordProtected: collection.isPasswordProtected === true,
+      },
+      edited,
+    );
+    if (decision.kind === "error") {
+      notifications.show({
+        color: "red",
+        title: "Save failed",
+        message: decision.message,
+      });
+      return;
+    }
+    // The tab keeps the Save off when the payload is empty; the same fact
+    // guarded here, so a Save that is ever offered has something to write.
+    if (Object.keys(decision.payload).length === 0) {
+      return;
+    }
+    await save(decision.payload, "General settings saved.");
+  };
+
+  const savePublic = async (edited: PublicEditedValues) => {
+    const payload = resolvePublicSave(
+      { skin: loadedSkin.id, skinOptions: loadedOptions },
+      edited,
+    );
+    if (Object.keys(payload).length === 0) {
+      return;
+    }
+    await save(payload, "Public view settings saved.");
+  };
 
   return (
     <Container size="xl">
-      <Text size="h2" mb="xl">
-        Collection Settings
-      </Text>
-
-      <Card shadow="sm" p="lg">
-        <form
-          onSubmit={(e) => {
-            void handleSubmit(e);
-          }}
+      <Group justify="space-between" align="center" mb="xl" gap="xl">
+        <Text size="h2">Collection Settings</Text>
+        {/* One obvious step, for every tab: back to the collection. */}
+        <Button
+          component={Link}
+          to={`/manage/collection/${param}`}
+          variant="outline"
         >
-          <TextInput
-            label="Collection Name"
-            placeholder="Name of your collection"
-            value={collectionName}
-            onChange={(e) => setCollectionName(e.target.value)}
-            required
-            mb="md"
+          Back to collection
+        </Button>
+      </Group>
+
+      {/*
+        Controlled: the tab in the address is the tab shown, and choosing
+        another is a navigation, not local state — which is what makes each
+        tab a real address and a refresh keep the member on it.
+        `keepMounted={false}` is the deliberate half of that: the inactive
+        panels unmount, so the Access card fetches nothing until its tab is
+        reached and a tab left mid-edit comes back clean.
+      */}
+      <Tabs
+        value={activeTab}
+        onChange={(value) => {
+          if (value === null) {
+            return;
+          }
+          void navigate(`/manage/collection/${param}/settings/${value}`);
+        }}
+        keepMounted={false}
+      >
+        <Tabs.List>
+          <Scroller>
+            {SETTINGS_TABS.map((tab) => (
+              <Tabs.Tab key={tab} value={tab}>
+                {TAB_LABELS[tab]}
+              </Tabs.Tab>
+            ))}
+          </Scroller>
+        </Tabs.List>
+
+        <Tabs.Panel value="general">
+          <GeneralTab
+            collection={collection}
+            saving={saving}
+            onSave={saveGeneral}
           />
+        </Tabs.Panel>
 
-          <Textarea
-            label="Description"
-            description="Shown on the public view's first artwork."
-            placeholder="Enter collection description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-            autosize
-            minRows={3}
-            maxRows={8}
-            mb="md"
+        <Tabs.Panel value="public">
+          <PublicTab
+            skin={loadedSkin.id}
+            skinOptions={loadedOptions}
+            staleOptionCount={dropped.length}
+            saving={saving}
+            onSave={savePublic}
           />
+        </Tabs.Panel>
 
-          <Divider mt="md" mb="md" />
+        {/* The card draws its own card, so the panel renders it directly;
+            keyed by id so another collection starts from a loading card
+            rather than the previous collection's members. */}
+        <Tabs.Panel value="access">
+          <AccessCard key={collectionId} collectionId={collectionId} />
+        </Tabs.Panel>
 
-          <Text size="h3" mb="md">
-            Privacy Settings
-          </Text>
-
-          <Text>Make Collection Public</Text>
-          <SegmentedControl
-            data={[
-              { label: "Private", value: "private" },
-              { label: "Public", value: "public" },
-            ]}
-            value={isPublic ? "public" : "private"}
-            onChange={(value) => {
-              const nextPublic = value === "public";
-              setIsPublic(nextPublic);
-              if (nextPublic) return;
-              // The password control disappears on a private collection.
-              // Drop any unsaved password intent with it, rather than
-              // applying a hidden Remove or a half-typed change on Save.
-              setEditingPassword(false);
-              setRemovingPassword(false);
-              setPassword("");
-              setConfirmPassword("");
-            }}
-            fullWidth
-            mb="md"
-          />
-
-          {/*
-            The password control, in the four states ADR-0005 names. A
-            private collection shows nothing: there is no visitor in front of
-            it to protect the works from. The confirmation is checked here and
-            never sent — the payload carries `password` alone.
-          */}
-          {passwordMode === "protected" && (
-            <Box mb="md">
-              <Text fw={600}>
-                Protected — the current password stays in effect
-              </Text>
-              <Group mt="xs">
-                <Button
-                  type="button"
-                  variant="light"
-                  onClick={() => {
-                    setPassword("");
-                    setConfirmPassword("");
-                    setEditingPassword(true);
-                    setRemovingPassword(false);
-                  }}
-                >
-                  Reset password
-                </Button>
-                <Button
-                  type="button"
-                  variant="subtle"
-                  color="red"
-                  onClick={() => {
-                    setEditingPassword(false);
-                    setRemovingPassword(true);
-                  }}
-                >
-                  Remove password
-                </Button>
-              </Group>
-            </Box>
-          )}
-
-          {passwordMode === "removing" && (
-            <Alert color="yellow" mb="md" title="The password will be removed">
-              <Text size="sm">
-                Anyone with the link will be able to read this collection again
-                as soon as the change is saved.
-              </Text>
-              <Button
-                type="button"
-                variant="subtle"
-                mt="xs"
-                onClick={() => setRemovingPassword(false)}
-              >
-                Cancel
-              </Button>
-            </Alert>
-          )}
-
-          {(passwordMode === "fields" || passwordMode === "editing") && (
-            <>
-              <PasswordInput
-                label="Password"
-                description="Visitors need this password to read the collection."
-                placeholder="At least 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-                mb="sm"
-              />
-              <PasswordInput
-                label="Confirm password"
-                placeholder="Type it again"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-                mb="sm"
-              />
-              {passwordMode === "editing" && (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  mb="md"
-                  onClick={() => {
-                    setPassword("");
-                    setConfirmPassword("");
-                    setEditingPassword(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              )}
-            </>
-          )}
-
-          <Divider mt="md" mb="md" />
-
-          <Text size="h3" mb="md">
-            Public View
-          </Text>
-
-          <Select
-            label="Skin"
-            description="How this collection's public pages are laid out and styled."
-            data={SKINS.map((entry) => ({
-              value: entry.id,
-              label: entry.label,
-            }))}
-            value={skin}
-            allowDeselect={false}
-            onChange={(value) => {
-              if (!value || value === skin) {
-                return;
-              }
-              // Switching skins resets the options to the new skin's defaults.
-              // Carrying the old skin's values across would write keys the new
-              // skin does not declare — which `resolveSkinOptions` would then
-              // drop again, reporting them as stale.
-              const next = resolveSkin(value);
-              setSkin(next.id);
-              setSkinOptions(resolveSkinOptions(next, undefined).options);
-            }}
-            mb="md"
-          />
-
-          {/*
-            The controls are generated from the selected skin's own option
-            vocabulary rather than hand-written per skin, which is why adding a
-            skin needs no change to this page. A skin with no options renders
-            nothing here.
-          */}
-          {resolveSkin(skin).options.map((spec) =>
-            spec.kind === "boolean" ? (
-              <Group key={spec.key} justify="space-between" mb="md">
-                <Box>
-                  <Text>{spec.label}</Text>
-                  {spec.description ? (
-                    <Text size="sm" c="dimmed">
-                      {spec.description}
-                    </Text>
-                  ) : null}
-                </Box>
-                <Switch
-                  checked={skinOptions[spec.key] === true}
-                  onChange={(e) =>
-                    setSkinOptions((current) => ({
-                      ...current,
-                      [spec.key]: e.currentTarget.checked,
-                    }))
-                  }
-                  aria-label={spec.label}
-                />
-              </Group>
-            ) : spec.kind === "number" ? (
-              <NumberInput
-                key={spec.key}
-                label={spec.label}
-                description={spec.description}
-                min={spec.min}
-                max={spec.max}
-                step={spec.step}
-                value={Number(skinOptions[spec.key] ?? spec.default)}
-                onChange={(value) =>
-                  setSkinOptions((current) => ({
-                    ...current,
-                    [spec.key]:
-                      typeof value === "number" ? value : spec.default,
-                  }))
-                }
-                mb="md"
-              />
-            ) : (
-              <TextInput
-                key={spec.key}
-                label={spec.label}
-                description={spec.description}
-                value={String(skinOptions[spec.key] ?? spec.default)}
-                onChange={(e) =>
-                  setSkinOptions((current) => ({
-                    ...current,
-                    [spec.key]: e.currentTarget.value,
-                  }))
-                }
-                mb="md"
-              />
-            ),
-          )}
-
-          {staleOptionCount > 0 ? (
-            <Alert color="yellow" mb="md" title="Unused options">
-              {staleOptionCount === 1
-                ? "One saved option is not used by this skin and will be dropped when you save."
-                : `${staleOptionCount} saved options are not used by this skin and will be dropped when you save.`}
-            </Alert>
-          ) : null}
-
-          {error ? (
-            <Alert color="red" mb="md">
-              {error}
-            </Alert>
-          ) : null}
-
-          <Group justify="center" mt="xl">
-            <Button type="submit" loading={saving}>
-              Save Settings
-            </Button>
-            <Button
-              component={Link}
-              to={`/manage/collection/${param}`}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-          </Group>
-        </form>
-      </Card>
-
-      <Divider my="xl" />
-
-      {/* The access card reads its role from the access document, not from
-          this page's collection read: a collaborator reaches this page too,
-          and whose view to render is an administrative question. Keyed by id
-          so another collection starts from a loading card rather than the
-          previous collection's members. */}
-      <AccessCard key={collectionId} collectionId={collectionId} />
-
-      <Divider my="xl" />
-
-      <Card shadow="sm" p="lg">
-        <Group
-          grow
-          justify="space-between"
-          align="center"
-          gap="xl"
-          wrap="nowrap"
-        >
-          <Box>
-            <Text fw={600}>Import from CSV</Text>
-            <Text size="sm" c="dimmed">
-              Add artworks in bulk from a comma-separated values file. The file
-              is parsed in this browser tab — nothing is uploaded until you
-              confirm the import.
-            </Text>
-          </Box>
-          <Button
-            component={Link}
-            to={`/manage/collection/${param}/import/csv`}
-          >
-            Import
-          </Button>
-        </Group>
-      </Card>
+        <Tabs.Panel value="data">
+          <DataTab collectionParam={param ?? ""} />
+        </Tabs.Panel>
+      </Tabs>
     </Container>
   );
 };

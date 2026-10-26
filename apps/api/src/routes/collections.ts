@@ -267,9 +267,11 @@ collectionRoutes.get("/collections/:collectionId", async (c) => {
 });
 
 // PATCH — any member: the owner or a collaborator, exactly as the settings
-// form shows it to both. Present sets (or, as null, clears); absent leaves
-// the column, which is what makes the settings form's "write only what
-// changed" payloads safe.
+// tabs show it to both. Every key is optional: present sets (or, as null,
+// clears), absent leaves the column, which is what makes each tab's "write
+// only what changed" payload safe. A body that names nothing writes nothing:
+// no column moves, and `updatedAt` is left alone, so "updated" continues to
+// mean something was.
 collectionRoutes.patch(
   "/collections/:collectionId",
   requireSession,
@@ -296,11 +298,16 @@ collectionRoutes.patch(
           ? null
           : await hashPassword(payload.password);
 
-    const set: Partial<typeof collectionsTable.$inferInsert> = {
-      name: payload.name,
-      isPublic: payload.isPublic,
-      updatedAt: new Date(),
-    };
+    // Build the update only from the keys the body carried: an absent key
+    // leaves its column alone, and a body that names nothing is a successful
+    // no-op that moves no column and no timestamp.
+    const set: Partial<typeof collectionsTable.$inferInsert> = {};
+    if (payload.name !== undefined) {
+      set.name = payload.name;
+    }
+    if (payload.isPublic !== undefined) {
+      set.isPublic = payload.isPublic;
+    }
     if (payload.description !== undefined) {
       set.description = payload.description ?? null;
     }
@@ -313,19 +320,22 @@ collectionRoutes.patch(
     if (passwordHash !== undefined) {
       set.passwordHash = passwordHash;
     }
-    await safeTx(async (tx) => {
-      await tx
-        .update(collectionsTable)
-        .set(set)
-        .where(eq(collectionsTable.id, collection.id));
-      if (passwordHash !== undefined) {
-        // Revocation, in the same transaction: setting and changing are one
-        // operation, and removing has nothing left to admit.
+    if (Object.keys(set).length > 0) {
+      set.updatedAt = new Date();
+      await safeTx(async (tx) => {
         await tx
-          .delete(grantsTable)
-          .where(eq(grantsTable.collectionId, collection.id));
-      }
-    });
+          .update(collectionsTable)
+          .set(set)
+          .where(eq(collectionsTable.id, collection.id));
+        if (passwordHash !== undefined) {
+          // Revocation, in the same transaction: setting and changing are one
+          // operation, and removing has nothing left to admit.
+          await tx
+            .delete(grantsTable)
+            .where(eq(grantsTable.collectionId, collection.id));
+        }
+      });
+    }
 
     const row = await loadCollection(collection.id);
     if (!row) {

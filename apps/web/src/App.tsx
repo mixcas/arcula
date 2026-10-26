@@ -117,8 +117,12 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        {/* The optional final segment names the tab — general, public,
+            access, data — and a bare address is what /settings/general
+            looks like: the page's canonicalisation effect lands old links
+            there rather than a redirect route. */}
         <Route
-          path="/manage/collection/:collectionId/settings"
+          path="/manage/collection/:collectionId/settings/:tab?"
           element={
             <ProtectedRoute>
               <ManageLayout>
