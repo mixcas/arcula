@@ -652,17 +652,54 @@ not the PDF route. The `Suspense` fallback is a centred Mantine `Loader`.
 The page is app chrome, in the app's Mantine theme, never a skin. It reuses
 `CollectionLockScreen` and `PublicStateMessage`; it does not render `SkinHost`.
 
+### The shell and the bar
+
+Every state renders inside `ManageLayout`
+(`apps/web/src/components/manage/layout/ManageLayout.tsx`) — the `AppShell`
+every `/manage` page already uses — so the viewer has the app's fixed header
+rather than a second definition of it.
+
+- **The header is a slot.** The layout takes an optional `header` node that
+  defaults to `ManageNavBar`, so no `/manage` page changes; the viewer passes
+  its own bar instead of forking the shell.
+- **One height.** The layout exports `MANAGE_HEADER_HEIGHT` (60 px), which
+  configures the fixed header. It is the one number a body that fills the window
+  under the bar sizes against, so the preview writes no second 60.
+- **A fluid body.** The viewer passes a fluid container, so the shared lock
+  screen and state message keep their own measure instead of being boxed
+  twice.
+
+The bar is shaped like the header it replaces: the Collection's name on the
+left, in the wordmark's seat, as the page's one top-level heading (`h1`), with
+**Collection PDF** dimmed beneath it. The body carries no title block — the bar
+names the page. The bar's right-hand side is empty in this shape: the export's
+own state, work in flight and the finished file, is still in the body, under
+**Generation states** and **Preview, download and mobile**.
+
+The bar names the Collection whenever a read disclosed it: a `ready` read, or
+the name a `locked` refusal carries
+([ADR-0005](../adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
+It says only **Collection PDF** when nothing did — `loading`, `invalid`,
+`notFound`, `private`, `error`, and a locked refusal with no usable name — and
+then has no subtitle, because there is no Collection to name. The name is a
+link to the Collection's canonical page — `/collection/` plus
+`collectionSlug(name, id)` from `packages/shared/src/slug.ts` — only when the
+read succeeded; a locked, private, missing or invalid Collection is named (or
+not) but is not a link.
+
 ### States
 
-| State      | What the viewer shows                                                     |
-| ---------- | ------------------------------------------------------------------------- |
-| `loading`  | centred `Loader`                                                          |
-| `invalid`  | `PublicStateMessage` with the invalid-link copy                           |
-| `notFound` | `PublicStateMessage` with the not-found copy                              |
-| `private`  | `PublicStateMessage` with the private copy                                |
-| `locked`   | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
-| `error`    | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
-| `ready`    | the generation controls below                                             |
+Every state renders under that one bar; only what sits in the body changes.
+
+| State      | The bar                   | What the body shows                                                       |
+| ---------- | ------------------------- | ------------------------------------------------------------------------- |
+| `loading`  | **Collection PDF**        | centred `Loader`                                                          |
+| `invalid`  | **Collection PDF**        | `PublicStateMessage` with the invalid-link copy                           |
+| `notFound` | **Collection PDF**        | `PublicStateMessage` with the not-found copy                              |
+| `private`  | **Collection PDF**        | `PublicStateMessage` with the private copy                                |
+| `locked`   | the name from the refusal | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
+| `error`    | **Collection PDF**        | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
+| `ready`    | the name                  | the generation controls below                                             |
 
 On `ready` the export starts automatically, unless the large-export warning
 (below) needs an answer first. The viewer does not ask the reader to press

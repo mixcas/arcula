@@ -6,6 +6,12 @@
  * the Artwork list only after it succeeds, and the lock screen restarts the
  * whole load — and therefore the export — after a successful unlock.
  *
+ * Every state renders inside the app's authenticated shell with the viewer's
+ * own bar in its header slot, so the page reads as part of the app in all of
+ * them and the bar names the Collection whenever a read disclosed it. The
+ * shell's container is fluid here: the shared states keep their own measure
+ * rather than being boxed twice.
+ *
  * The renderer is behind this lazy route (`App.tsx`), so it is a separate
  * chunk; nothing here imports a page that does not need it.
  */
@@ -28,7 +34,6 @@ import {
   Progress,
   Stack,
   Text,
-  Title,
 } from "@mantine/core";
 import { IconDownload, IconExternalLink } from "@tabler/icons-react";
 
@@ -38,6 +43,9 @@ import { parseId, type Artwork, type Collection } from "@arcula/shared";
 
 import CollectionLockScreen from "@/components/collection/CollectionLockScreen";
 import PublicStateMessage from "@/components/collection/PublicStateMessage";
+import ManageLayout from "@/components/manage/layout/ManageLayout";
+import CollectionPdfBar from "./CollectionPdfBar";
+import { pdfBarView } from "./pdfBarView";
 import {
   publicFailure,
   type PublicState,
@@ -431,18 +439,32 @@ const CollectionPdfPage: React.FC = () => {
     beginExport();
   }, [runKey, beginExport]);
 
+  /**
+   * The one shell every state renders in: the app's fixed header carrying the
+   * viewer's bar, and a fluid body so each state's own container decides its
+   * measure. The bar's name, subtitle and link are `pdfBarView`'s decision.
+   */
+  const shell = (body: React.ReactNode) => (
+    <ManageLayout
+      header={<CollectionPdfBar view={pdfBarView(effectiveState)} />}
+      containerProps={{ fluid: true }}
+    >
+      {body}
+    </ManageLayout>
+  );
+
   if (effectiveState.status === "locked") {
-    return (
+    return shell(
       <CollectionLockScreen
         collectionId={collectionId}
         collectionName={effectiveState.collectionName}
         onUnlocked={reload}
-      />
+      />,
     );
   }
 
   if (effectiveState.status !== "ready") {
-    return (
+    return shell(
       <>
         <PublicStateMessage status={effectiveState.status} />
         {effectiveState.status === "error" ? (
@@ -452,7 +474,7 @@ const CollectionPdfPage: React.FC = () => {
             </Button>
           </Container>
         ) : null}
-      </>
+      </>,
     );
   }
 
@@ -463,16 +485,10 @@ const CollectionPdfPage: React.FC = () => {
   const done = currentRun.status === "done" ? currentRun : null;
   const warningOpen = warningForKey === runKey && currentRun.status === "idle";
 
-  return (
+  return shell(
+    // The body has no title block: the bar names the page now.
     <Container size="lg" py="2rem">
       <Stack gap="lg">
-        <div>
-          <Title order={2}>{collection.name}</Title>
-          <Text size="sm" c="dimmed">
-            Collection PDF
-          </Text>
-        </div>
-
         {currentRun.status === "preparing" ? (
           <Stack gap="sm">
             <Progress
@@ -582,7 +598,7 @@ const CollectionPdfPage: React.FC = () => {
           </Group>
         </Stack>
       </Modal>
-    </Container>
+    </Container>,
   );
 };
 
