@@ -835,7 +835,7 @@ labelled `PDF`** immediately after **View** in the left header group:
 > they describe the shape of the costs, not today's values. Expect the PDF to be
 > roughly a quarter larger (the converted area went from 3.5 to 4.4 Mpx) and the
 > peak to stay flat or fall (the decode is capped at the box). Re-running the
-> benchmark is tracked separately; until then, do not quote these figures.
+> benchmark is tracked in #149; until then, do not quote these figures.
 
 Two measurements, both from the prototype on the local stack, headless Chrome,
 four parallel conversions. The table is a **63-photo-page benchmark** on a
