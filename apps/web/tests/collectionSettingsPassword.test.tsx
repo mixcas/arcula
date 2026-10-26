@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectionSlug, type Collection } from "@arcula/shared";
 
@@ -13,12 +13,22 @@ import { accessService } from "@/services/accessService";
 import { collectionService } from "@/services/collectionService";
 
 /**
- * The settings page's password wiring: the page actually asking the pure
- * decisions in `collectionPassword`. The decisions themselves are pinned by
- * `collectionPassword.test`; the behaviour only the page can get wrong is the
- * payload, so that is what this file asserts — a confirmation cannot leak
- * onto the wire, and an untouched Protected collection cannot send a password
- * key.
+ * The address, readable: a case can assert the address means what the tab
+ * shows. The probe reads the router's own state, not the tab control's
+ * rendering.
+ */
+const AddressProbe: React.FC = () => {
+  const location = useLocation();
+  return <div data-testid="address">{location.pathname}</div>;
+};
+
+/**
+ * The settings page's password wiring, on the General tab: the page actually
+ * asking the pure decisions in `collectionPassword`. The decisions themselves
+ * are pinned by `collectionPassword.test`; the behaviour only the page can get
+ * wrong is the payload, so that is what this file asserts — a confirmation
+ * cannot leak onto the wire, and an untouched Protected collection cannot
+ * send a password key.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -102,11 +112,18 @@ const renderPage = (loaded: Collection) => {
   });
   return render(
     <MantineProvider>
-      <MemoryRouter initialEntries={[`/manage/collection/${param}/settings`]}>
+      <MemoryRouter
+        initialEntries={[`/manage/collection/${param}/settings/general`]}
+      >
         <Routes>
           <Route
-            path="/manage/collection/:collectionId/settings"
-            element={<CollectionSettingsPage />}
+            path="/manage/collection/:collectionId/settings/:tab?"
+            element={
+              <>
+                <AddressProbe />
+                <CollectionSettingsPage />
+              </>
+            }
           />
           <Route
             path="/manage/collection/:collectionId"
@@ -119,9 +136,7 @@ const renderPage = (loaded: Collection) => {
 };
 
 const save = async () => {
-  await userEvent.click(
-    await screen.findByRole("button", { name: /save settings/i }),
-  );
+  await userEvent.click(await screen.findByRole("button", { name: /save/i }));
 };
 
 afterEach(() => {
@@ -147,16 +162,27 @@ describe("the settings page's password control", () => {
     const payload = updateCollection.mock.calls[0][1];
     expect(payload.password).toBe("long-enough");
     expect(payload).not.toHaveProperty("confirm");
+
+    // No navigation on success: the member is on the tab they saved from.
+    expect(screen.getByTestId("address")).toHaveTextContent(
+      /\/settings\/general$/,
+    );
   });
 
-  it("sends no password key when a Protected collection is untouched", async () => {
+  it("sends no password key when a Protected collection's password is untouched", async () => {
     renderPage(collection({ isPasswordProtected: true }));
 
-    await screen.findByLabelText(/collection name/i);
+    // A clean tab keeps its Save off, so the rename is what offers it —
+    // and the password's stored value is not what the save should carry.
+    const name = await screen.findByLabelText(/collection name/i);
+    expect(await screen.findByRole("button", { name: /save/i })).toBeDisabled();
+    await userEvent.clear(name);
+    await userEvent.type(name, "Renamed Flores");
     await save();
 
     await waitFor(() => expect(updateCollection).toHaveBeenCalledTimes(1));
     const payload = updateCollection.mock.calls[0][1];
+    expect(payload.name).toBe("Renamed Flores");
     expect(payload).not.toHaveProperty("password");
     expect(payload).not.toHaveProperty("confirm");
   });

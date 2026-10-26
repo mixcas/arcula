@@ -45,10 +45,13 @@ export const passwordSchema = z
   .min(8, "Password must be at least 8 characters");
 
 /**
- * PATCH /collections/{cid}. The settings form always sends `name` and
- * `isPublic` — they are the fields it cannot omit — and the rest only when
- * they differ from what it loaded, which is what makes absent-key-leave-alone
- * load-bearing here.
+ * PATCH /collections/{cid}. Every field is optional, and an absent key leaves
+ * the column alone: the settings tabs send only what that tab changed, so the
+ * contract no longer exempts any field from the rule that absent leaves alone.
+ * A save that names nothing is a valid, successful no-op — no column changes,
+ * and the record's timestamp is not moved. A present key validates as before:
+ * a name still trims and still cannot be blank, and neither field can be
+ * cleared.
  *
  * `password` follows the same contract, with the three meanings the settings
  * form needs: a string sets (or overwrites) it, `null` removes it, and an
@@ -56,8 +59,8 @@ export const passwordSchema = z
  * every password write revokes the collection's outstanding grants.
  */
 export const collectionUpdateSchema = z.object({
-  name: z.string().trim().min(1, "Collection name is required"),
-  isPublic: z.boolean(),
+  name: z.string().trim().min(1, "Collection name is required").optional(),
+  isPublic: z.boolean().optional(),
   description: clearableText,
   skin: clearableText,
   skinOptions: z
