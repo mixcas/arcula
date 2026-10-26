@@ -6,6 +6,7 @@ import {
   Text,
   Group,
   Alert,
+  Anchor,
 } from "@mantine/core";
 import { schemaResolver, useForm } from "@mantine/form";
 import { Link, useParams } from "react-router-dom";
@@ -21,23 +22,34 @@ import {
  *
  * The token comes from the URL and is not shown: it is neither an input
  * nor state, it is just part of the request, so a stale link fails with
- * the server's `INVALID_TOKEN` rather than doing anything surprising.
+ * the server's `INVALID_TOKEN` rather than doing anything surprising. A dead
+ * link is also the one failure with somewhere to go: the decision below says
+ * so, and the render turns it into a link to the reset request.
  */
 
-function mapResetError(err: Error): string {
+interface ResetFailure {
+  message: string;
+  /** A dead link can be recovered by asking for a new one. */
+  recoverable?: boolean;
+}
+
+function mapResetError(err: Error): ResetFailure {
   const code = (err as { code?: unknown }).code;
   if (code === "INVALID_TOKEN") {
-    return "This reset link is invalid or has expired. Request a new one.";
+    return {
+      message: "This reset link is invalid or has expired.",
+      recoverable: true,
+    };
   }
   if (code === "PASSWORD_TOO_SHORT") {
-    return "Password must be at least 8 characters.";
+    return { message: "Password must be at least 8 characters." };
   }
-  return "Could not reset the password. Please try again.";
+  return { message: "Could not reset the password. Please try again." };
 }
 
 const ResetPasswordPage: React.FC = () => {
   const { token = "" } = useParams<{ token: string }>();
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ResetFailure | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +64,7 @@ const ResetPasswordPage: React.FC = () => {
   });
 
   const handleReset = async (payload: { newPassword: string }) => {
-    setError(null);
+    setFailure(null);
     setLoading(true);
     try {
       const result = await authClient.resetPassword({
@@ -61,13 +73,15 @@ const ResetPasswordPage: React.FC = () => {
       });
       const failed = toAuthError(result, "Could not reset the password");
       if (failed) {
-        setError(mapResetError(failed));
+        setFailure(mapResetError(failed));
         return;
       }
       setDone(true);
     } catch (err) {
       console.error("Reset password error:", err);
-      setError("Could not reset the password. Please try again.");
+      setFailure({
+        message: "Could not reset the password. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
@@ -77,9 +91,18 @@ const ResetPasswordPage: React.FC = () => {
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
       <Text size="h2">Set a new password</Text>
 
-      {error && (
+      {failure && (
         <Alert mt="md" color="red">
-          {error}
+          {failure.message}
+          {failure.recoverable ? (
+            <>
+              {" "}
+              <Anchor component={Link} to="/reset-password">
+                Request a new one
+              </Anchor>
+              .
+            </>
+          ) : null}
         </Alert>
       )}
       {done ? (

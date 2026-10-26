@@ -7,7 +7,6 @@ import {
   Text,
   Group,
   Alert,
-  Anchor,
 } from "@mantine/core";
 import { schemaResolver, useForm } from "@mantine/form";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -27,10 +26,9 @@ import {
  * sign-up — the custom first/last fields ride the same body, so a fresh
  * account lands with its profile half set.
  *
- * The second mode on this page is the password-reset request: it asks for an
- * address only, because the answer is always the same sentence — if the
- * address has an account, a mail is on its way. The mail's link lands on
- * the reset form, a different page.
+ * This page is about signing up, and nothing else. A collector who has
+ * forgotten a password reaches the reset request from sign-in, the page that
+ * exists for them; see `ResetRequestPage`.
  */
 
 /**
@@ -54,12 +52,7 @@ function mapSignUpError(err: Error): string {
 }
 
 const SignUpPage: React.FC = () => {
-  const [mode, setMode] = useState<"signup" | "reset-request">("signup");
-  // Carried from the sign-up form when the visitor asks for a reset: the
-  // address they just typed is the one they mean.
-  const [resetEmail, setResetEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -106,97 +99,6 @@ const SignUpPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const requestReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    setLoading(true);
-    try {
-      const result = await authClient.requestPasswordReset({
-        email: resetEmail,
-      });
-      const failed = toAuthError(result, "Could not request a reset email");
-      if (failed) {
-        setError(
-          (failed as { code?: unknown }).code === "INVALID_EMAIL"
-            ? "Enter a valid email address."
-            : "Could not request a reset email. Please try again.",
-        );
-        return;
-      }
-      // The endpoint answers the same for a known and an unknown address
-      // (an enumeration-safe design on the server), so the notice must not
-      // confirm either way.
-      setNotice(
-        "If an account exists for that address, a reset email is on its way.",
-      );
-    } catch (err) {
-      console.error("Reset request error:", err);
-      setError("Could not request a reset email. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const switchToReset = () => {
-    setMode("reset-request");
-    // `getValues()`, not `form.values`: in uncontrolled mode the `values`
-    // property is a snapshot of the last render, and typing re-renders
-    // nothing (Mantine deliberately keeps the DOM in charge of the inputs).
-    // The live value is the internal ref `getValues()` reads — the same one
-    // the submit path validates and transforms.
-    setResetEmail(form.getValues().email);
-    setError(null);
-    setNotice(null);
-  };
-
-  if (mode === "reset-request") {
-    return (
-      <Container
-        size="sm"
-        style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
-      >
-        <Text size="h2">Reset your password</Text>
-
-        {error && (
-          <Alert mt="md" color="red">
-            {error}
-          </Alert>
-        )}
-        {notice && (
-          <Alert mt="md" color="green">
-            {notice}
-          </Alert>
-        )}
-
-        {!notice ? (
-          <form onSubmit={(e) => void requestReset(e)}>
-            <TextInput
-              label="Email"
-              placeholder="your@email.com"
-              value={resetEmail}
-              onChange={(e) => setResetEmail(e.target.value)}
-              required
-              type="email"
-              mt="md"
-            />
-            <Group mt="xl">
-              <Button type="submit" loading={loading}>
-                Send reset email
-              </Button>
-            </Group>
-          </form>
-        ) : null}
-
-        <Text mt="xl">
-          <Link to="/signup" state={crossLinkState}>
-            Back to sign up
-          </Link>
-        </Text>
-      </Container>
-    );
-  }
 
   return (
     <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
@@ -260,12 +162,6 @@ const SignUpPage: React.FC = () => {
           </Button>
         </Group>
       </form>
-
-      <Text mt="md">
-        <Anchor component="button" onClick={switchToReset} ta="left">
-          Forgot your password?
-        </Anchor>
-      </Text>
 
       <Text mt="xl">
         Already have an account?{" "}

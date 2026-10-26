@@ -7,10 +7,12 @@ import {
   Text,
   Group,
   Alert,
+  Anchor,
 } from "@mantine/core";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { returnPathFrom, returnStateFor } from "@/utils/returnPath";
+import { resetRequestStateFor } from "@/utils/resetRequest";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -93,6 +95,19 @@ const LoginPage: React.FC = () => {
           required
           mt="md"
         />
+
+        {/* The reset door sits beside the field a collector has just
+            mistyped, and carries whatever address is already typed. */}
+        <Group justify="flex-end" mt={6}>
+          <Anchor
+            component={Link}
+            to="/reset-password"
+            state={resetRequestStateFor(email)}
+            size="sm"
+          >
+            Forgot your password?
+          </Anchor>
+        </Group>
 
         <Group mt="xl">
           <Button type="submit" loading={loading}>
