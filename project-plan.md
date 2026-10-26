@@ -395,7 +395,8 @@ multiply, so this raises the cost of guessing without being a proof.
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
 
 - **Public** — `/` (product page), `/login`, `/signup`,
-  `/reset-password/:token`, `/invite/:token` (the invitation landing page, which
+  `/reset-password` (the request) and `/reset-password/:token` (the form the
+  mailed link lands on), `/invite/:token` (the invitation landing page, which
   shows the collection and invited email before sign-in), and the skin-rendered
   `/collection/:collectionId` and `/collection/:collectionId/artwork/:artworkId`.
 - **Protected** — everything under `/manage`: the dashboard, a collection and its
