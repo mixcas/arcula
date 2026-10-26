@@ -399,6 +399,45 @@ describe("Basicx — photographs", () => {
     );
   });
 
+  it("sizes the candidate choice from the photo's aspect, not the whole viewport", () => {
+    render();
+    const image = screen.getAllByAltText("Estudio en rojo")[0];
+    // 3000 x 2000 is 3:2 and the image is height-capped, so it is drawn at
+    // most 67vh wide. A flat `100vw` claims the full width and, multiplied by
+    // DPR, pushes a Retina laptop one size class above the pixels it shows.
+    expect(image).toHaveAttribute("sizes", "min(100vw, 67vh)");
+  });
+
+  it("offers xxlarge, and only a viewport that can use it selects it", () => {
+    render({
+      artworks: [
+        artwork({
+          photos: [
+            {
+              ...photo("p1", 0),
+              variants: [
+                {
+                  key: "xxlarge",
+                  url: "https://files.test/xxlarge/p1.webp",
+                  width: 3000,
+                  height: 2000,
+                  size: 900,
+                  contentType: "image/webp",
+                },
+                ...photo("p1", 0).variants,
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+    // Widest first: a 3:2 work drawn 3240 px wide on a 4K screen needs it.
+    expect(screen.getAllByAltText("Estudio en rojo")[0]).toHaveAttribute(
+      "srcset",
+      "https://files.test/xxlarge/p1.webp 3000w, https://files.test/xlarge/p1.webp 2400w, https://files.test/large/p1.webp 1200w",
+    );
+  });
+
   it("falls back to the original for a photo with no variants at all", () => {
     render({
       artworks: [

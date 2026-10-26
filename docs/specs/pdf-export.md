@@ -10,6 +10,9 @@ The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Collection**,
 
 The design record, in order:
 
+- Decision: [ADR-0006](../adr/0006-the-collection-pdf-prints-from-its-own-variant.md)
+  — the photo box, the 0.75 in margin, and why the export has its own
+  `xxlarge` variant.
 - Map: [#125 Collection PDF export](https://github.com/mixcas/arcula/issues/125).
 - Research: [#126 renderer viability](https://github.com/mixcas/arcula/issues/126)
   and [#127 fonts and the oblique Title](https://github.com/mixcas/arcula/issues/127).
@@ -189,22 +192,42 @@ successful export and one with failed images have the same page count.
 US Letter portrait, all values in points (`1 pt = 1/72 in`), origin at the
 page's top-left. Every page is **612 × 792 pt** (8.5 × 11 in).
 
-| Element                          | Value                                  |
-| -------------------------------- | -------------------------------------- |
-| Page                             | 612 × 792 pt                           |
-| Left and right margin            | 72 pt                                  |
-| Content width                    | 468 pt                                 |
-| Header baseline                  | 45.38 pt from the top                  |
-| Photo box                        | left 111 pt, top 73.5 pt, 390 × 519 pt |
-| Photo-page Title baseline        | 641.32 pt layout; ink about 640.12 pt  |
-| Photo-page right-column baseline | 641.32 pt from the top                 |
-| Photo-page Artist baseline       | 670.12 pt from the top                 |
-| Metadata columns                 | left 72 pt / right 324 pt              |
-| Metadata column width            | 216 pt                                 |
-| Grid first Title baseline        | 83.52 pt from the top                  |
-| Grid columns                     | 72 pt and 324 pt, 216 pt wide          |
-| Grid block pitch                 | 191.52 pt                              |
-| Grid `--` baseline               | Title baseline + 157.2 pt              |
+| Element                          | Value                               |
+| -------------------------------- | ----------------------------------- |
+| Page                             | 612 × 792 pt                        |
+| Left and right margin            | 54 pt                               |
+| Content width                    | 504 pt                              |
+| Header baseline                  | 45.38 pt from the top               |
+| Photo box                        | left 54 pt, top 60 pt, 504 × 580 pt |
+| Photo-page Title baseline        | 665 pt layout; ink about 663.8 pt   |
+| Photo-page right-column baseline | 665 pt from the top                 |
+| Photo-page Artist baseline       | 693.8 pt from the top               |
+| Metadata columns                 | left 54 pt / right 324 pt           |
+| Metadata column width            | 234 pt                              |
+| Grid first Title baseline        | 83.52 pt from the top               |
+| Grid columns                     | 54 pt and 324 pt, 234 pt wide       |
+| Grid block pitch                 | 191.52 pt                           |
+| Grid `--` baseline               | Title baseline + 157.2 pt           |
+
+Two rows moved off the template's own numbers and the rest did not. The
+**margin** is 0.75 in rather than 1 in, which gives the photo box 36 pt on each
+side; the **metadata band** starts 23.68 pt lower (665 rather than 641.32), which
+is what pays for the photo box's extra 61 pt of height. Both are the whole trade
+of that band: it is the only knob on the photo's size, and 665 is the last step
+that leaves a 3-line Title with every field present **29 pt** above the paper's
+edge (690 would leave 4 pt). The metadata columns widen from 216 to 234 pt so the
+gutter stays 36 pt across the wider content.
+
+The **photo box is the whole free rectangle, not a shape chosen for one
+orientation.** A photo is `contain` fitted, so the box's own aspect crops
+nothing: a wider box is free for every work narrower than it, and it is the only
+box a tall work can grow into. What a work actually prints at:
+
+| Work (`xxlarge`) | Prints at    | Bound by |
+| ---------------- | ------------ | -------- |
+| 3:4 portrait     | 435 × 580 pt | height   |
+| 1:1 square       | 504 × 504 pt | width    |
+| 3:2 landscape    | 504 × 336 pt | width    |
 
 React-PDF lays a line box out from its top, with the baseline at
 `fontSize × 1.06` inside it. A block that wants a baseline at `b` with type size
@@ -335,20 +358,26 @@ auto-sizing.
 
 ### Source
 
-Use the **`xlarge`** variant. `photoUrl(photo, "xlarge")` from
-`packages/shared/src/artworkPhotos.ts` gives that URL, with the `original` as the
-ladder's only fallback when the variant is absent. The original is never embedded
-directly, even when it is JPEG or PNG:
+The ladder is **`xxlarge` → `xlarge` → `original`**, walked by
+`scheduledPhotoSource` in `apps/web/src/components/pdf/photoPipeline.ts`.
 
-- it may be WebP (the API's variants are WebP and the original is whatever was
-  uploaded);
-- it may carry EXIF orientation, which the renderer does not apply;
-- it can be up to 10 MiB and arbitrarily large.
+- **`xxlarge`** (max 3000 px) is the export's own size, and the reason it
+  exists: the box is 504 × 580 pt, which at 300 dpi needs **2100 × 2417 px**, and
+  `xlarge`'s 2400 cap falls 17 px short of the height. Without it the largest
+  page would print 3 pt under its box.
+- **`xlarge`** (max 2400 px) is the fallback for a photo uploaded before
+  `xxlarge` existed. It prints the same picture, up to 3 pt shorter.
+- **`original`** is the last resort, and is never embedded directly, even when
+  it is JPEG or PNG:
 
-The `xlarge` variant is already oriented, and for an ordinary upload its pixels
-exceed the print box at 300 dpi. If it is absent, the ladder's `original` is the
-single fallback; if neither URL exists, the page is a placeholder. There is no
-second attempt at another variant when a chosen URL fails.
+  - it may be WebP (the API's variants are WebP and the original is whatever was
+    uploaded);
+  - it may carry EXIF orientation, which the renderer does not apply;
+  - it can be up to 10 MiB and arbitrarily large.
+
+Both variants are already oriented. If neither exists, the ladder's `original`
+is the single fallback; if there is no URL at all, the page is a placeholder.
+There is no second attempt at another variant when a chosen URL fails.
 
 ### Conversion
 
@@ -360,20 +389,26 @@ For each distinct scheduled photo, with at most **four** conversions in flight:
 
 1. `fetch(url, { credentials: "same-origin", signal })` — the same-origin grant
    cookie rides along. A non-`ok` response is a failure.
-2. `createImageBitmap(blob, { imageOrientation: "from-image" })`.
-3. Fit inside the print box at **300 dpi** without enlarging:
+2. Fit inside the print box at **300 dpi** without enlarging:
    `scale = min(1, boxW / width, boxH / height)`, rounded, at least 1 px.
-   The box is 390 × 519 pt = **1625 × 2163 px** at 300 dpi.
+   The box is 504 × 580 pt = **2100 × 2417 px** at 300 dpi.
+3. `createImageBitmap(blob, { imageOrientation: "from-image", resizeWidth,
+resizeHeight, resizeQuality: "high" })` — **decoded to the box**, not to the
+   source. The source's size is already on the wire (the variant row records its
+   encoded pixels, the photo its original's), so step 2 runs before the decode:
+   a 3000 px `xxlarge` never lands in memory whole, and the peak per conversion
+   is the box's 4.4 Mpx rather than the source's 6.8. A record with no dimensions
+   decodes at its own size and fits afterwards — the same picture, a larger peak.
 4. Paint white, then the bitmap, onto an `OffscreenCanvas`; fall back to a DOM
    `<canvas>` when `OffscreenCanvas` is unavailable. JPEG has no alpha, so the
    white ground is required or a transparent source turns black.
 5. Encode `image/jpeg` at **quality 0.9** and keep the `Blob`.
 
 The target box is the hard upper bound; never ask the canvas for more than
-1625 × 2163. `xlarge` at 2400 × 1800 / 1800 × 2400 already exceeds it. The
-converted JPEG keeps its own pixel size; on the page it is placed at its print
-size (`px × 72 / 300` pt), centred in the 390 × 519 pt box, capped at the box
-and never enlarged. This is `contain` with no upscaling: no crop, no distortion.
+2100 × 2417. `xxlarge` at 3000 × 2250 already exceeds it. The converted JPEG
+keeps its own pixel size; on the page it is placed at its print size
+(`px × 72 / 300` pt), centred in the 504 × 580 pt box, capped at the box and
+never enlarged. This is `contain` with no upscaling: no crop, no distortion.
 
 `ImageBitmap.close()` runs as soon as the JPEG is encoded. Converted blobs are
 released after `toBlob()` resolves (or on cancel/unmount); they are not kept for
@@ -384,7 +419,7 @@ a second generation.
 A failed fetch, decode or encode is **not** an export failure. That photo's page
 keeps its place in the plan and draws:
 
-- the same 390 × 519 pt box at left 111 / top 73.5;
+- the same 504 × 580 pt box at left 54 / top 60;
 - a 0.75 pt `#c9c9c9` border;
 - "Image unavailable" centred, body size, `#666666`.
 
@@ -719,6 +754,14 @@ labelled `PDF`** immediately after **View** in the left header group:
 
 ## Performance
 
+> **Stale — measured against the retired 390 × 519 pt box and the `xlarge`
+> source.** Every number below was taken before the photo box grew to
+> 504 × 580 pt and the export moved to `xxlarge` with a decode-to-box target, so
+> they describe the shape of the costs, not today's values. Expect the PDF to be
+> roughly a quarter larger (the converted area went from 3.5 to 4.4 Mpx) and the
+> peak to stay flat or fall (the decode is capped at the box). Re-running the
+> benchmark is tracked separately; until then, do not quote these figures.
+
 Two measurements, both from the prototype on the local stack, headless Chrome,
 four parallel conversions. The table is a **63-photo-page benchmark** on a
 23-work fixture (20 works with three photos, 3 with one):
@@ -737,9 +780,11 @@ photos, 14 used photos after the three-photo cap, 18 no-photo works) is the
 matters, not the JS heap: idle ~972 MB; 63 photo pages at 300 dpi peak
 ~1855 MB (+880 MB), ~1884 MB retained while the viewer holds the blob. The
 implementation must release converted blobs after `toBlob()` and revoke the blob
-URL, and the warning above gates the phone case. `xlarge` is the right source at
-both densities: at 300 dpi the original adds only 1.2 % to the PDF while
-downloading 42 % more and taking 30–50 % longer.
+URL, and the warning above gates the phone case. On those measurements `xlarge`
+was the right source at both densities: at 300 dpi the original added only 1.2 %
+to the PDF while downloading 42 % more and taking 30–50 % longer — which is why
+the ladder now stops at a variant and never reaches for the original. The
+current source is `xxlarge`; see the note above the table.
 
 The renderer chunk is **1.39 MB minified / 494.2 kB gzip**, separate from the
 main 409 kB gzip chunk. `bun run build` must keep it a separate chunk. There is
@@ -793,8 +838,8 @@ five-per-grid, draft included). That is the acceptance bar.
 
 - `fitInsideBox` returns the source size untouched when it is smaller than the
   box, preserves aspect ratio when it is larger, rounds to at least 1 px, and
-  uses the 1625 × 2163 target at 300 dpi. Mutating the `min(1, …)` must fail the
-  no-enlarge test.
+  uses the 2100 × 2417 target at 300 dpi — the number `xxlarge`'s 3000 px exists
+  to reach. Mutating the `min(1, …)` must fail the no-enlarge test.
 - `fallbackCharacters` keeps distinct non-ASCII code points only, sorted;
   ASCII-only text returns an empty string; a mixed string returns the non-ASCII
   subset. `fallbackChunks` splits on code points, not UTF-16 units: 0 → no
@@ -864,4 +909,5 @@ The subsetter itself is harfbuzz's behaviour; do not test glyph outlines.
 - Additional fallback faces for emoji and scripts outside Noto Sans SC.
 - URL options for dpi, JPEG quality, typography or image source. The prototype's
   `?dpi=`, `?typography=`, `?source=` and `?quality=` flags are not shipped; the
-  only route is the production default: `xlarge`, 300 dpi, quality 0.9, 12/10 pt.
+  only route is the production default: `xxlarge` with `xlarge` as the
+  fallback, 300 dpi, quality 0.9, 12/10 pt.

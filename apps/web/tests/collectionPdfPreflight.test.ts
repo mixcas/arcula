@@ -38,10 +38,19 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   ...overrides,
 });
 
+describe("PRINT_BOX_PX", () => {
+  it("is the 504 x 580 pt box at 300 dpi: 2100 x 2417 px", () => {
+    // The width is exact; the height rounds up from 2416.67. Both numbers are
+    // a correctness floor rather than a preference: the conversion caps here,
+    // and `xxlarge`'s 3000 px exists because 2417 is past `xlarge`'s 2400.
+    expect(PRINT_BOX_PX).toEqual({ width: 2100, height: 2417 });
+  });
+});
+
 describe("fitInsideBox", () => {
   it("never enlarges a source smaller than the box", () => {
     expect(
-      fitInsideBox({ width: 100, height: 50 }, { width: 1625, height: 2163 }),
+      fitInsideBox({ width: 100, height: 50 }, { width: 2100, height: 2417 }),
     ).toEqual({ width: 100, height: 50 });
   });
 
@@ -49,25 +58,36 @@ describe("fitInsideBox", () => {
     expect(
       fitInsideBox(
         { width: 3250, height: 2000 },
-        { width: 1625, height: 2163 },
+        { width: 2100, height: 2417 },
       ),
-    ).toEqual({ width: 1625, height: 1000 });
+    ).toEqual({ width: 2100, height: 1292 });
   });
 
   it("preserves the aspect ratio when the source is taller than the box", () => {
     expect(
       fitInsideBox(
         { width: 2000, height: 4326 },
-        { width: 1625, height: 2163 },
+        { width: 2100, height: 2417 },
       ),
-    ).toEqual({ width: 1000, height: 2163 });
+    ).toEqual({ width: 1117, height: 2417 });
   });
 
-  it("targets 1625 x 2163 px for a source exactly twice the print box", () => {
-    // The print box is 390 x 519 pt at 300 dpi.
-    expect(fitInsideBox({ width: 3250, height: 4326 }, PRINT_BOX_PX)).toEqual({
-      width: 1625,
-      height: 2163,
+  it("targets the box itself for a source exactly twice its size", () => {
+    expect(
+      fitInsideBox(
+        { width: PRINT_BOX_PX.width * 2, height: PRINT_BOX_PX.height * 2 },
+        PRINT_BOX_PX,
+      ),
+    ).toEqual({ width: 2100, height: 2417 });
+  });
+
+  it("fits the largest variant into the whole box", () => {
+    // `xxlarge` of a 3:4 upload: 2250 x 3000 px. The height binds, and the
+    // result is the box's height — which is what makes the largest photo page
+    // fill its box rather than stopping 3 pt short.
+    expect(fitInsideBox({ width: 2250, height: 3000 }, PRINT_BOX_PX)).toEqual({
+      width: 1813,
+      height: 2417,
     });
   });
 
@@ -81,45 +101,45 @@ describe("fitInsideBox", () => {
     expect(
       fitInsideBox(
         { width: 1000, height: 4000 },
-        { width: 1625, height: 2163 },
+        { width: 2100, height: 2417 },
       ),
-    ).toEqual({ width: 541, height: 2163 });
+    ).toEqual({ width: 604, height: 2417 });
   });
 });
 
 describe("printedSize", () => {
   it("converts pixels to points at 300 dpi", () => {
-    // 1625 px / 300 dpi = 5.4167 in = 390 pt.
-    expect(printedSize({ width: 1625, height: 1000 })).toEqual({
-      width: 390,
+    // 2100 px / 300 dpi = 7 in = 504 pt.
+    expect(printedSize({ width: 2100, height: 1000 })).toEqual({
+      width: 504,
       height: 240,
     });
   });
 
   it("keeps the converted photo's own pixel size, which may exceed the box", () => {
-    // 2163 px at 300 dpi is 519.12 pt; the box is the cap, not the source.
-    expect(printedSize(PRINT_BOX_PX).height).toBeCloseTo(519.12, 3);
+    // 2417 px at 300 dpi is 580.08 pt; the box is the cap, not the source.
+    expect(printedSize(PRINT_BOX_PX).height).toBeCloseTo(580.08, 3);
   });
 });
 
 describe("placeInPhotoBox", () => {
   it("centres a photo that is exactly the box", () => {
-    expect(placeInPhotoBox({ width: 390, height: 519 })).toEqual({
+    expect(placeInPhotoBox({ width: 504, height: 580 })).toEqual({
       left: PHOTO_PRINT_BOX.left,
       top: PHOTO_PRINT_BOX.top,
-      width: 390,
-      height: 519,
+      width: 504,
+      height: 580,
     });
   });
 
   it("centres a landscape photo vertically without stretching it", () => {
-    // 1625 x 1000 px is 390 x 240 pt: full width, 139.5 pt above and below.
-    const placement = placeInPhotoBox({ width: 390, height: 240 });
+    // 2100 x 1000 px is 504 x 240 pt: full width, 170 pt above and below.
+    const placement = placeInPhotoBox({ width: 504, height: 240 });
 
-    expect(placement.width).toBe(390);
+    expect(placement.width).toBe(504);
     expect(placement.height).toBe(240);
     expect(placement.left).toBe(PHOTO_PRINT_BOX.left);
-    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 139.5, 3);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 170, 3);
   });
 
   it("centres a small photo at its own size instead of enlarging it", () => {
@@ -128,14 +148,14 @@ describe("placeInPhotoBox", () => {
 
     expect(placement.width).toBe(120);
     expect(placement.height).toBe(120);
-    expect(placement.left).toBeCloseTo(PHOTO_PRINT_BOX.left + 135, 3);
-    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 199.5, 3);
+    expect(placement.left).toBeCloseTo(PHOTO_PRINT_BOX.left + 192, 3);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 230, 3);
   });
 
   it("caps a photo larger than the box instead of overflowing it", () => {
-    const placement = placeInPhotoBox({ width: 390, height: 519.12 });
+    const placement = placeInPhotoBox({ width: 504, height: 580.08 });
 
-    expect(placement.height).toBe(519);
+    expect(placement.height).toBe(580);
     expect(placement.top).toBe(PHOTO_PRINT_BOX.top);
   });
 });

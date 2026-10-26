@@ -45,10 +45,15 @@ Font.registerHyphenationCallback((word) => [word]);
 
 export const PDF_PAGE_HEIGHT = 792;
 
-const MARGIN = 72;
+/**
+ * The page's side margin: 0.75 in, which buys the photo box 36 pt on each side
+ * against the template's 1 in. The header follows it; the metadata columns keep
+ * their 36 pt gutter (54 → 288, 324 → 558).
+ */
+const MARGIN = 54;
 const CONTENT_WIDTH = 612 - MARGIN * 2;
 const RIGHT_COLUMN_LEFT = 324;
-const COLUMN_WIDTH = 216;
+const COLUMN_WIDTH = 234;
 
 const BODY = 12;
 const HEADER = 10;
@@ -56,7 +61,13 @@ const LINE = 16.27;
 const TITLE_RHYTHM = 30;
 
 const HEADER_BASELINE = 45.38;
-const PHOTO_METADATA_BASELINE = 641.32;
+/**
+ * Where the photo page's metadata starts. It is the photo box's other edge, so
+ * its distance from the box (12 pt above the Title's line box) is the whole
+ * trade: 665 leaves a 3-line Title with every field present 29 pt above the
+ * paper's edge, and 690 would put it 4 pt from it.
+ */
+const PHOTO_METADATA_BASELINE = 665;
 /** The measured Title → Artist baseline on a photo page. */
 const PHOTO_ARTIST_RHYTHM = 28.8;
 const GRID_FIRST_BASELINE = 83.52;

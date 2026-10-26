@@ -84,13 +84,35 @@ export const emblaDuration = (seconds: number): number =>
   seconds <= 0 ? 0 : Math.max(1, Math.round(seconds * 60));
 
 /**
+ * The width the browser should size its `srcSet` against, from the photo's own
+ * aspect.
+ *
+ * The image is capped in both axes — `maw="100%"` and `mah="100dvh"` — so the
+ * width it is actually drawn at is `min(100vw, viewportHeight × aspect)`. A
+ * flat `100vw` claims the full width even for a portrait drawn a third of it,
+ * and since the browser multiplies by DPR, a Retina laptop ends up choosing one
+ * size class too high for the pixels on screen. With the aspect in the string,
+ * the widest candidate is fetched only where a photo is really drawn that wide.
+ *
+ * `sizes` accepts any CSS length, `vh` and `min()` included; the two are the
+ * same unit the layout uses. A record with no dimensions falls back to `100vw`.
+ */
+export const slideSizes = (
+  photo: Pick<ArtworkPhoto, "width" | "height">,
+): string =>
+  photo.width > 0 && photo.height > 0
+    ? `min(100vw, ${Math.round((photo.height / photo.width) * 100)}vh)`
+    : "100vw";
+
+/**
  * One photo, sized to the spec: natural size, capped to fit the viewport.
  *
  * `src` is the `xlarge` variant with `photoUrl`'s fallback to the original, so
  * a photo uploaded before `xlarge` existed still renders. `srcSet` offers only
  * the variants this photo actually has, which is what makes that fallback
- * unnecessary in practice: a legacy photo offers `large` and the browser picks
- * it, a current one offers `xlarge` too.
+ * unnecessary in practice: a legacy photo offers `large`, a current one offers
+ * `xlarge` too, and `xxlarge` above both for the viewports `slideSizes` can
+ * actually put to use.
  *
  * `loading="lazy"` costs the first section nothing — a lazy image already in
  * the viewport loads immediately, and only the sections below the fold defer.
@@ -101,8 +123,8 @@ const SlideImage: React.FC<{ photo: ArtworkPhoto; alt: string }> = ({
 }) => (
   <Image
     src={photoUrl(photo, "xlarge") ?? undefined}
-    srcSet={photoSrcSet(photo, ["xlarge", "large"])}
-    sizes="100vw"
+    srcSet={photoSrcSet(photo, ["xxlarge", "xlarge", "large"])}
+    sizes={slideSizes(photo)}
     alt={alt}
     // Mantine's `fit` defaults to `cover`, which would crop. The box is already
     // the image's own aspect ratio, so this is belt-and-braces rather than

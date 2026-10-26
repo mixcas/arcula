@@ -20,12 +20,18 @@
 // form. The parser is what makes the proxy's per-request authz and the
 // sweep work from the key alone — nothing else is asked of a key.
 
-/** `original` plus the five photo variant keys. `media/variants.ts`
- *  (`IMAGE_VARIANTS`) carries the same five — `tests/pipeline.test.ts`
+/** `original` plus the six photo variant keys. `media/variants.ts`
+ *  (`IMAGE_VARIANTS`) carries the same six — `tests/pipeline.test.ts`
  *  cross-checks the two so they cannot drift. Exported for that
- *  cross-check and for callers that need the full key space. */
+ *  cross-check and for callers that need the full key space.
+ *
+ *  The order matters to `splitEntryAndKey` below, which strips the first
+ *  matching suffix: no key may be a suffixed neighbour of another. `_xlarge` is
+ *  not a suffix of `_xxlarge` — the character before `xlarge` there is `x`, not
+ *  `_` — and `_large` is not either, so `xxlarge` is unambiguous. */
 export const OBJECT_KEYS = [
   "original",
+  "xxlarge",
   "xlarge",
   "square_lg",
   "square_sm",

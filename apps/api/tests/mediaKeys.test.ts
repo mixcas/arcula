@@ -30,10 +30,11 @@ const CID = "col-1";
 const AID = "art-1";
 const ENTRY = "photo-abc";
 
-// All six: the original plus the five variant keys — the same set
+// All seven: the original plus the six variant keys — the same set
 // OBJECT_KEYS in keys.ts covers.
 const ALL_OBJECT_KEYS = [
   "original",
+  "xxlarge",
   "xlarge",
   "square_lg",
   "square_sm",

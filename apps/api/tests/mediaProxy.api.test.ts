@@ -580,8 +580,8 @@ describe("POST /collections/{cid}/maintenance/sweep", () => {
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(200);
-    // orph's original + five variants: six objects. Nothing else goes.
-    expect(await json(res)).toEqual({ swept: 6 });
+    // orph's original + six variants: seven objects. Nothing else goes.
+    expect(await json(res)).toEqual({ swept: 7 });
 
     expect(
       await listObjects(
@@ -600,7 +600,7 @@ describe("POST /collections/{cid}/maintenance/sweep", () => {
     // …and so did its final objects.
     expect(
       await listObjects(finalPhotoPrefix(owner.userId, cid, delWorkId, pC)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
 
     // Idempotent: a second sweep finds nothing to remove.
     const again = await req(
