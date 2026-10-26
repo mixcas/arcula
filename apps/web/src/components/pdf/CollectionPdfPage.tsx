@@ -6,6 +6,12 @@
  * the Artwork list only after it succeeds, and the lock screen restarts the
  * whole load — and therefore the export — after a successful unlock.
  *
+ * Every state renders inside the app's authenticated shell with the viewer's
+ * own bar in its header slot, so the page reads as part of the app in all of
+ * them and the bar names the Collection whenever a read disclosed it. The
+ * shell's container is fluid here: the shared states keep their own measure
+ * rather than being boxed twice.
+ *
  * The renderer is behind this lazy route (`App.tsx`), so it is a separate
  * chunk; nothing here imports a page that does not need it.
  */
@@ -22,15 +28,11 @@ import {
   Button,
   Container,
   Group,
-  Loader,
   Modal,
   Paper,
-  Progress,
   Stack,
   Text,
-  Title,
 } from "@mantine/core";
-import { IconDownload, IconExternalLink } from "@tabler/icons-react";
 
 import { artworkService } from "@/services/artworkService";
 import { collectionService } from "@/services/collectionService";
@@ -38,6 +40,12 @@ import { parseId, type Artwork, type Collection } from "@arcula/shared";
 
 import CollectionLockScreen from "@/components/collection/CollectionLockScreen";
 import PublicStateMessage from "@/components/collection/PublicStateMessage";
+import ManageLayout, {
+  MANAGE_HEADER_HEIGHT,
+} from "@/components/manage/layout/ManageLayout";
+import CollectionPdfBar from "./CollectionPdfBar";
+import PdfFileActions from "./PdfFileActions";
+import { pdfBarView, pdfFileSummary, type PdfBarRun } from "./pdfBarView";
 import {
   publicFailure,
   type PublicState,
@@ -58,24 +66,11 @@ interface ExportData {
 
 type LoadState = PublicState<ExportData>;
 
-type Run =
-  | { forKey: string; status: "idle" }
-  | {
-      forKey: string;
-      status: "preparing";
-      done: number;
-      total: number;
-    }
-  | { forKey: string; status: "rendering" }
-  | { forKey: string; status: "cancelled" }
-  | { forKey: string; status: "failed" }
-  | {
-      forKey: string;
-      status: "done";
-      url: string;
-      pages: number;
-      size: number;
-    };
+/**
+ * The export's own state: `PdfBarRun` plus the key that ties a run to the read
+ * it was started from, so a reload or a new Collection starts from idle.
+ */
+type Run = PdfBarRun & { forKey: string };
 
 const readCollection = async (collectionId: string): Promise<LoadState> => {
   const collection = await collectionService.getCollection(collectionId);
@@ -137,34 +132,19 @@ const readDeviceMemory = (): number | undefined => {
   return typeof value === "number" ? value : undefined;
 };
 
-const formatBytes = (bytes: number): string =>
-  bytes >= 1048576
-    ? `${(bytes / 1048576).toFixed(2)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+/**
+ * The floor a short window keeps: the preview never collapses to a strip, even
+ * where the window is smaller than the document would like.
+ */
+const PREVIEW_MIN_HEIGHT = 360;
 
-/** Download and Open PDF: the same two controls on desktop and mobile. */
-const PdfActions: React.FC<{ url: string; fileName: string }> = ({
-  url,
-  fileName,
-}) => (
-  <Group>
-    <Button
-      component="a"
-      href={url}
-      download={fileName}
-      leftSection={<IconDownload size={16} />}
-    >
-      Download
-    </Button>
-    <Button
-      variant="light"
-      leftSection={<IconExternalLink size={16} />}
-      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-    >
-      Open PDF
-    </Button>
-  </Group>
-);
+/**
+ * The preview's height: the window less the fixed bar and the body's own
+ * padding, so the page itself does not scroll and the document scrolls inside
+ * its frame. Both numbers come from the shell — `MANAGE_HEADER_HEIGHT` and the
+ * `AppShell`'s own padding variable — so no second 60 is written here.
+ */
+const PREVIEW_HEIGHT = `max(${PREVIEW_MIN_HEIGHT}px, calc(100dvh - ${MANAGE_HEADER_HEIGHT}px - 2 * var(--app-shell-padding)))`;
 
 const CollectionPdfPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
@@ -431,18 +411,39 @@ const CollectionPdfPage: React.FC = () => {
     beginExport();
   }, [runKey, beginExport]);
 
+  /**
+   * The one shell every state renders in: the app's fixed header carrying the
+   * viewer's bar, and a fluid body so each state's own container decides its
+   * measure. The bar's name, subtitle, link and report — the work in flight or
+   * the finished file — are `pdfBarView`'s decision over the load, the run and
+   * the layout; the Cancel beside a running export is this page's.
+   */
+  const shell = (body: React.ReactNode) => (
+    <ManageLayout
+      header={
+        <CollectionPdfBar
+          view={pdfBarView(effectiveState, currentRun, mobile)}
+          onCancel={cancelExport}
+        />
+      }
+      containerProps={{ fluid: true }}
+    >
+      {body}
+    </ManageLayout>
+  );
+
   if (effectiveState.status === "locked") {
-    return (
+    return shell(
       <CollectionLockScreen
         collectionId={collectionId}
         collectionName={effectiveState.collectionName}
         onUnlocked={reload}
-      />
+      />,
     );
   }
 
   if (effectiveState.status !== "ready") {
-    return (
+    return shell(
       <>
         <PublicStateMessage status={effectiveState.status} />
         {effectiveState.status === "error" ? (
@@ -452,7 +453,7 @@ const CollectionPdfPage: React.FC = () => {
             </Button>
           </Container>
         ) : null}
-      </>
+      </>,
     );
   }
 
@@ -462,51 +463,20 @@ const CollectionPdfPage: React.FC = () => {
   const fileName = collectionPdfFileName(collection.name);
   const done = currentRun.status === "done" ? currentRun : null;
   const warningOpen = warningForKey === runKey && currentRun.status === "idle";
+  // An empty Collection's PDF is a header alone; the line that says why is the
+  // same on both layouts, above the preview and inside the card.
+  const emptyNotice = empty ? (
+    <Text size="sm" c="dimmed">
+      This collection has no published artworks.
+    </Text>
+  ) : null;
 
-  return (
-    <Container size="lg" py="2rem">
+  return shell(
+    // The body has no title block — the bar names the page — and nothing at
+    // all while work is in flight: preparing and rendering are the bar's to
+    // report, and a running export is not a message to read or a step to take.
+    <Container>
       <Stack gap="lg">
-        <div>
-          <Title order={2}>{collection.name}</Title>
-          <Text size="sm" c="dimmed">
-            Collection PDF
-          </Text>
-        </div>
-
-        {currentRun.status === "preparing" ? (
-          <Stack gap="sm">
-            <Progress
-              value={
-                currentRun.total === 0
-                  ? 0
-                  : (currentRun.done / currentRun.total) * 100
-              }
-            />
-            <Group justify="space-between">
-              <Text>
-                Preparing photos {currentRun.done} of {currentRun.total}
-              </Text>
-              <Button variant="default" onClick={cancelExport}>
-                Cancel
-              </Button>
-            </Group>
-          </Stack>
-        ) : null}
-
-        {currentRun.status === "rendering" ? (
-          <Group justify="space-between">
-            <Group>
-              <Loader />
-              <Text>Building PDF…</Text>
-            </Group>
-            {/* The renderer is atomic: there is nothing to cancel that would
-                not leave a half-built document. */}
-            <Button variant="default" disabled>
-              Cancel
-            </Button>
-          </Group>
-        ) : null}
-
         {currentRun.status === "idle" ? (
           <Group>
             <Button onClick={startExport}>Generate PDF</Button>
@@ -528,38 +498,36 @@ const CollectionPdfPage: React.FC = () => {
         ) : null}
 
         {done ? (
-          <Stack gap="md">
-            <Text size="sm" c="dimmed">
-              {done.pages} pages · {formatBytes(done.size)}
-            </Text>
-
-            {empty ? (
-              <Text>This collection has no published artworks.</Text>
-            ) : null}
-
-            {mobile ? (
-              <Paper withBorder p="lg">
-                <Stack gap="md" align="flex-start">
-                  <Text fw={500}>Your PDF is ready.</Text>
-                  <PdfActions url={done.url} fileName={fileName} />
-                </Stack>
-              </Paper>
-            ) : (
-              <>
-                <PdfActions url={done.url} fileName={fileName} />
-                <iframe
-                  title="Collection PDF"
-                  src={done.url}
-                  style={{
-                    width: "100%",
-                    height: "80vh",
-                    border: "1px solid var(--mantine-color-gray-3)",
-                    borderRadius: 4,
-                  }}
-                />
-              </>
-            )}
-          </Stack>
+          // The bar carries the summary and the buttons on a desktop, so the
+          // body is the document and nothing else. On a phone the bar names the
+          // Collection alone and this card is the one place for both.
+          mobile ? (
+            <Paper withBorder p="lg">
+              <Stack gap="md" align="flex-start">
+                <Text fw={500}>Your PDF is ready.</Text>
+                <Text size="sm" c="dimmed">
+                  {pdfFileSummary(done.pages, done.size)}
+                </Text>
+                {emptyNotice}
+                <PdfFileActions url={done.url} fileName={fileName} />
+              </Stack>
+            </Paper>
+          ) : (
+            <Stack gap="xs" h={PREVIEW_HEIGHT}>
+              {emptyNotice}
+              <iframe
+                title="Collection PDF"
+                src={done.url}
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  width: "100%",
+                  border: "1px solid var(--mantine-color-gray-3)",
+                  borderRadius: 4,
+                }}
+              />
+            </Stack>
+          )
         ) : null}
       </Stack>
 
@@ -582,7 +550,7 @@ const CollectionPdfPage: React.FC = () => {
           </Group>
         </Stack>
       </Modal>
-    </Container>
+    </Container>,
   );
 };
 
