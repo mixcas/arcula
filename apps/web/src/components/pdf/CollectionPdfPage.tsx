@@ -23,7 +23,9 @@ import {
   Container,
   Group,
   Loader,
+  Modal,
   Paper,
+  Progress,
   Stack,
   Text,
   Title,
@@ -41,10 +43,13 @@ import {
   type PublicState,
 } from "@/components/collection/usePublicCollection";
 import { CollectionPdfAccessError } from "./collectionPdfAccess";
-import { buildCollectionPdfPlan } from "./collectionPdfPlan";
-import { collectionPdfFileName } from "./collectionPdfPreflight";
+import { buildCollectionPdfPlan, photoPageCount } from "./collectionPdfPlan";
+import {
+  collectionPdfFileName,
+  shouldWarnForLargeExport,
+} from "./collectionPdfPreflight";
 import { exportCollection } from "./exportCollection";
-import { isAbortError } from "./photoPipeline";
+import { isAbortError, scheduledPhotos } from "./photoPipeline";
 
 interface ExportData {
   collection: Collection;
@@ -55,7 +60,14 @@ type LoadState = PublicState<ExportData>;
 
 type Run =
   | { forKey: string; status: "idle" }
-  | { forKey: string; status: "generating" }
+  | {
+      forKey: string;
+      status: "preparing";
+      done: number;
+      total: number;
+    }
+  | { forKey: string; status: "rendering" }
+  | { forKey: string; status: "cancelled" }
   | { forKey: string; status: "failed" }
   | {
       forKey: string;
@@ -112,6 +124,19 @@ const useMobileLayout = (): boolean => {
   return mobile;
 };
 
+/**
+ * `navigator.deviceMemory`, absent on Safari/iOS.
+ *
+ * The memory clause cannot gate a phone there — which is why the predicate has
+ * a mobile-layout clause of its own — so this answers `undefined` rather than
+ * an invented value.
+ */
+const readDeviceMemory = (): number | undefined => {
+  const value = (navigator as Navigator & { deviceMemory?: unknown })
+    .deviceMemory;
+  return typeof value === "number" ? value : undefined;
+};
+
 const formatBytes = (bytes: number): string =>
   bytes >= 1048576
     ? `${(bytes / 1048576).toFixed(2)} MB`
@@ -153,6 +178,11 @@ const CollectionPdfPage: React.FC = () => {
   }>({ id: collectionId, state: { status: "loading" } });
   const [attempt, setAttempt] = useState(0);
   const [run, setRun] = useState<Run | null>(null);
+  /**
+   * The run key whose large-export warning is open. Cancel or dismissal clears
+   * it and starts nothing; Continue clears it and starts the ordinary export.
+   */
+  const [warningForKey, setWarningForKey] = useState<string | null>(null);
 
   // A load carries the id it answered for: navigating to another Collection
   // renders `loading` immediately rather than briefly exporting the old one.
@@ -163,6 +193,8 @@ const CollectionPdfPage: React.FC = () => {
 
   const urlRef = useRef<string | null>(null);
   const autoStartedRef = useRef<string | null>(null);
+  /** A run whose large-export warning was answered; it is never asked twice. */
+  const warningHandledRef = useRef<string | null>(null);
   /** Invalidates a result whose collection, run or component has gone away. */
   const exportIdRef = useRef(0);
   /** The run in flight, so a reload or an unmount can abort it. */
@@ -186,13 +218,20 @@ const CollectionPdfPage: React.FC = () => {
     abortRef.current = null;
   }, []);
 
-  const reload = useCallback(() => {
+  // A cancel, a reload, a new collection or an unmount all end a run the same
+  // way: invalidate its result, abort its fetches and release its file. The
+  // export id is bumped first so the rejected run lands nowhere.
+  const discardRun = useCallback(() => {
     exportIdRef.current += 1;
     abortRun();
     revokeUrl();
+  }, [abortRun, revokeUrl]);
+
+  const reload = useCallback(() => {
+    discardRun();
     setLoad({ id: collectionId, state: { status: "loading" } });
     setAttempt((value) => value + 1);
-  }, [collectionId, abortRun, revokeUrl]);
+  }, [collectionId, discardRun]);
 
   // The usual load: Collection first, Artwork list only after it succeeds.
   useEffect(() => {
@@ -213,35 +252,55 @@ const CollectionPdfPage: React.FC = () => {
     };
   }, [collectionId, attempt]);
 
-  // A new collection drops the previous document and its URL.
+  // A new collection drops the previous document, its URL and the run's
+  // warning bookkeeping: the same route and id can be visited again later.
   useEffect(() => {
-    exportIdRef.current += 1;
-    abortRun();
-    revokeUrl();
-  }, [collectionId, abortRun, revokeUrl]);
+    autoStartedRef.current = null;
+    warningHandledRef.current = null;
+    discardRun();
+  }, [collectionId, discardRun]);
 
   // The viewer's own unmount is the last place the blob URL can be released.
   useEffect(
     () => () => {
-      exportIdRef.current += 1;
-      abortRun();
-      revokeUrl();
+      discardRun();
     },
-    [abortRun, revokeUrl],
+    [discardRun],
   );
 
-  const startExport = useCallback(() => {
-    if (state.status !== "ready") {
+  // The ordinary render state is the load's, unless the URL has no id at all.
+  // The plan is derived once here so the warning, the progress total and the
+  // document all read the same pages.
+  const effectiveState: LoadState = useMemo(
+    () => (collectionId ? state : { status: "invalid" }),
+    [collectionId, state],
+  );
+  const plan = useMemo(
+    () =>
+      buildCollectionPdfPlan(
+        effectiveState.status === "ready" ? effectiveState.value.artworks : [],
+      ),
+    [effectiveState],
+  );
+
+  const beginExport = useCallback(() => {
+    if (state.status !== "ready" || effectiveState.status !== "ready") {
       return;
     }
-    exportIdRef.current += 1;
+    discardRun();
     const exportId = exportIdRef.current;
     const key = runKey;
-    abortRun();
-    revokeUrl();
     const controller = new AbortController();
     abortRef.current = controller;
-    setRun({ forKey: key, status: "generating" });
+
+    // A no-photo export has no progress to show: it goes straight to the
+    // renderer, never through a `0 of 0` frame.
+    const total = scheduledPhotos(plan).length;
+    setRun(
+      total === 0
+        ? { forKey: key, status: "rendering" }
+        : { forKey: key, status: "preparing", done: 0, total },
+    );
 
     /** The run is over, however it ended: stop calling its controller "in flight". */
     const settle = () => {
@@ -252,6 +311,20 @@ const CollectionPdfPage: React.FC = () => {
 
     void exportCollection(state.value.collection, state.value.artworks, {
       signal: controller.signal,
+      onProgress: (done, total) => {
+        if (exportIdRef.current !== exportId) {
+          return;
+        }
+        setRun({ forKey: key, status: "preparing", done, total });
+      },
+      // The renderer is atomic and cannot be interrupted: from here the
+      // viewer's Cancel is disabled.
+      onRendering: () => {
+        if (exportIdRef.current !== exportId) {
+          return;
+        }
+        setRun({ forKey: key, status: "rendering" });
+      },
     }).then(
       (result) => {
         settle();
@@ -289,15 +362,51 @@ const CollectionPdfPage: React.FC = () => {
         setRun({ forKey: key, status: "failed" });
       },
     );
-  }, [state, runKey, collectionId, abortRun, revokeUrl]);
+  }, [state, effectiveState, plan, runKey, collectionId, discardRun]);
 
-  // Ready starts generation on its own. Deferred by a tick because starting
-  // writes state, and React asks that an effect not do that synchronously.
+  /**
+   * The one entry point the control, the Retry and the automatic start use.
+   *
+   * The warning is asked here, before any prefetch — not only on the automatic
+   * path — so a click on Generate PDF during the tick before auto-start cannot
+   * skip a warning. A warning already open is never bypassed; Continue is the
+   * only way past it, and it calls `beginExport` directly.
+   */
+  const startExport = useCallback(() => {
+    if (state.status !== "ready" || warningForKey === runKey) {
+      return;
+    }
+    if (
+      warningHandledRef.current !== runKey &&
+      shouldWarnForLargeExport(photoPageCount(plan), readDeviceMemory(), mobile)
+    ) {
+      setWarningForKey(runKey);
+      return;
+    }
+    beginExport();
+  }, [state, warningForKey, runKey, plan, mobile, beginExport]);
+
+  /**
+   * Cancel during preparing: abort the fetches, drop every converted photo and
+   * produce no file. Bumping the export id is what makes the aborted run's
+   * rejection land nowhere instead of overwriting this state.
+   */
+  const cancelExport = useCallback(() => {
+    discardRun();
+    setRun({ forKey: runKey, status: "cancelled" });
+  }, [runKey, discardRun]);
+
+  // Ready starts generation on its own. The warning decision belongs to
+  // `startExport`, so this only schedules the ordinary call; a dismissed
+  // warning is remembered and leaves the viewer idle with Generate PDF.
   useEffect(() => {
     if (state.status !== "ready" || currentRun.status !== "idle") {
       return;
     }
     if (autoStartedRef.current === runKey) {
+      return;
+    }
+    if (warningHandledRef.current === runKey) {
       return;
     }
     autoStartedRef.current = runKey;
@@ -311,9 +420,16 @@ const CollectionPdfPage: React.FC = () => {
     };
   }, [state, currentRun.status, runKey, startExport]);
 
-  const effectiveState: LoadState = collectionId
-    ? state
-    : { status: "invalid" };
+  const dismissWarning = useCallback(() => {
+    warningHandledRef.current = runKey;
+    setWarningForKey(null);
+  }, [runKey]);
+
+  const continueAfterWarning = useCallback(() => {
+    warningHandledRef.current = runKey;
+    setWarningForKey(null);
+    beginExport();
+  }, [runKey, beginExport]);
 
   if (effectiveState.status === "locked") {
     return (
@@ -340,11 +456,12 @@ const CollectionPdfPage: React.FC = () => {
     );
   }
 
-  const { collection, artworks } = effectiveState.value;
-  const plan = buildCollectionPdfPlan(artworks);
+  const { collection } = effectiveState.value;
   const empty = plan.length === 1 && plan[0].kind === "empty";
+  const photoPages = photoPageCount(plan);
   const fileName = collectionPdfFileName(collection.name);
   const done = currentRun.status === "done" ? currentRun : null;
+  const warningOpen = warningForKey === runKey && currentRun.status === "idle";
 
   return (
     <Container size="lg" py="2rem">
@@ -356,10 +473,37 @@ const CollectionPdfPage: React.FC = () => {
           </Text>
         </div>
 
-        {currentRun.status === "generating" ? (
-          <Group justify="center" py="xl">
-            <Loader />
-            <Text>Building PDF…</Text>
+        {currentRun.status === "preparing" ? (
+          <Stack gap="sm">
+            <Progress
+              value={
+                currentRun.total === 0
+                  ? 0
+                  : (currentRun.done / currentRun.total) * 100
+              }
+            />
+            <Group justify="space-between">
+              <Text>
+                Preparing photos {currentRun.done} of {currentRun.total}
+              </Text>
+              <Button variant="default" onClick={cancelExport}>
+                Cancel
+              </Button>
+            </Group>
+          </Stack>
+        ) : null}
+
+        {currentRun.status === "rendering" ? (
+          <Group justify="space-between">
+            <Group>
+              <Loader />
+              <Text>Building PDF…</Text>
+            </Group>
+            {/* The renderer is atomic: there is nothing to cancel that would
+                not leave a half-built document. */}
+            <Button variant="default" disabled>
+              Cancel
+            </Button>
           </Group>
         ) : null}
 
@@ -367,6 +511,13 @@ const CollectionPdfPage: React.FC = () => {
           <Group>
             <Button onClick={startExport}>Generate PDF</Button>
           </Group>
+        ) : null}
+
+        {currentRun.status === "cancelled" ? (
+          <Stack gap="sm" align="flex-start">
+            <Text>Export cancelled.</Text>
+            <Button onClick={startExport}>Generate PDF</Button>
+          </Stack>
         ) : null}
 
         {currentRun.status === "failed" ? (
@@ -411,6 +562,26 @@ const CollectionPdfPage: React.FC = () => {
           </Stack>
         ) : null}
       </Stack>
+
+      <Modal
+        opened={warningOpen}
+        onClose={dismissWarning}
+        title="Large export"
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            This export has {photoPages} photo pages at 300 dpi and can use a
+            lot of memory on a small device.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={dismissWarning}>
+              Cancel
+            </Button>
+            <Button onClick={continueAfterWarning}>Continue</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Container>
   );
 };
