@@ -21,6 +21,8 @@ const ready: BarState = {
 
 const idle: PdfBarRun = { status: "idle" };
 
+const preparing: PdfBarRun = { status: "preparing", done: 3, total: 12 };
+
 const done: PdfBarRun = {
   status: "done",
   url: "blob:https://arcula.art/1c6f",
@@ -31,8 +33,8 @@ const done: PdfBarRun = {
 /**
  * The bar's rules, one per state: the Collection's name wherever a read
  * disclosed it, the fallback title where none did, a link only to a page that
- * exists, and the finished file's summary and actions in the bar on a desktop
- * alone (issues #146, #147).
+ * exists, the work in flight while it runs, and the finished file's summary and
+ * actions in the bar on a desktop alone (issues #146, #147, #148).
  */
 describe("pdfBarView", () => {
   it("names the Collection and links its page when the read succeeded", () => {
@@ -81,6 +83,43 @@ describe("pdfBarView", () => {
         detail: { kind: "none" },
       });
     }
+  });
+
+  it("reports the photos being prepared as a label and its fraction", () => {
+    expect(pdfBarView(ready, preparing, false).detail).toEqual({
+      kind: "progress",
+      label: "Preparing photos 3 of 12",
+      value: 25,
+    });
+  });
+
+  it("reports no count and a zero line when nothing was scheduled", () => {
+    // The page sends an export with no photos straight to `rendering`, so this
+    // is the guard behind the bar rather than a frame a reader reaches: a
+    // `0 of 0` would report work that does not exist, and dividing by the
+    // empty total would put NaN on the line.
+    expect(
+      pdfBarView(ready, { status: "preparing", done: 0, total: 0 }, false)
+        .detail,
+    ).toEqual({ kind: "progress", label: "Preparing photos…", value: 0 });
+  });
+
+  it("names the renderer, which has nothing to stop", () => {
+    expect(pdfBarView(ready, { status: "rendering" }, false).detail).toEqual({
+      kind: "rendering",
+      label: "Building PDF…",
+    });
+  });
+
+  it("keeps the work in flight on a phone, where only the file moves", () => {
+    // The card under the bar is the phone's surface for the finished file. A
+    // running export has no card: the bar is the whole story there.
+    expect(pdfBarView(ready, preparing, true).detail).toEqual(
+      pdfBarView(ready, preparing, false).detail,
+    );
+    expect(pdfBarView(ready, { status: "rendering" }, true).detail).toEqual(
+      pdfBarView(ready, { status: "rendering" }, false).detail,
+    );
   });
 
   it("reports the finished file on a desktop, named for download", () => {

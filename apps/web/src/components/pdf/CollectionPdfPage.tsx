@@ -28,10 +28,8 @@ import {
   Button,
   Container,
   Group,
-  Loader,
   Modal,
   Paper,
-  Progress,
   Stack,
   Text,
 } from "@mantine/core";
@@ -416,14 +414,16 @@ const CollectionPdfPage: React.FC = () => {
   /**
    * The one shell every state renders in: the app's fixed header carrying the
    * viewer's bar, and a fluid body so each state's own container decides its
-   * measure. The bar's name, subtitle, link and finished file are
-   * `pdfBarView`'s decision over the load, the run and the layout.
+   * measure. The bar's name, subtitle, link and report — the work in flight or
+   * the finished file — are `pdfBarView`'s decision over the load, the run and
+   * the layout; the Cancel beside a running export is this page's.
    */
   const shell = (body: React.ReactNode) => (
     <ManageLayout
       header={
         <CollectionPdfBar
           view={pdfBarView(effectiveState, currentRun, mobile)}
+          onCancel={cancelExport}
         />
       }
       containerProps={{ fluid: true }}
@@ -472,43 +472,11 @@ const CollectionPdfPage: React.FC = () => {
   ) : null;
 
   return shell(
-    // The body has no title block: the bar names the page now.
+    // The body has no title block — the bar names the page — and nothing at
+    // all while work is in flight: preparing and rendering are the bar's to
+    // report, and a running export is not a message to read or a step to take.
     <Container>
       <Stack gap="lg">
-        {currentRun.status === "preparing" ? (
-          <Stack gap="sm">
-            <Progress
-              value={
-                currentRun.total === 0
-                  ? 0
-                  : (currentRun.done / currentRun.total) * 100
-              }
-            />
-            <Group justify="space-between">
-              <Text>
-                Preparing photos {currentRun.done} of {currentRun.total}
-              </Text>
-              <Button variant="default" onClick={cancelExport}>
-                Cancel
-              </Button>
-            </Group>
-          </Stack>
-        ) : null}
-
-        {currentRun.status === "rendering" ? (
-          <Group justify="space-between">
-            <Group>
-              <Loader />
-              <Text>Building PDF…</Text>
-            </Group>
-            {/* The renderer is atomic: there is nothing to cancel that would
-                not leave a half-built document. */}
-            <Button variant="default" disabled>
-              Cancel
-            </Button>
-          </Group>
-        ) : null}
-
         {currentRun.status === "idle" ? (
           <Group>
             <Button onClick={startExport}>Generate PDF</Button>

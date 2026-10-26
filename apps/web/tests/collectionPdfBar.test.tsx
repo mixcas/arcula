@@ -2,20 +2,22 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import CollectionPdfBar from "@/components/pdf/CollectionPdfBar";
 import { pdfBarView } from "@/components/pdf/pdfBarView";
+import type { PdfBarView } from "@/components/pdf/pdfBarView";
+import type { PublicState } from "@/components/collection/usePublicCollection";
 
 /**
  * The bar's document structure, which no screenshot settles: the name is the
- * bar's one `h1`, it is an anchor only when a read gave it a page, and the
- * finished file's actions appear exactly once — the assertion that catches a
- * bar rendering them unconditionally, which review and screenshots miss.
- * Everything else about the bar — its wording per state — is `pdfBarView`'s
- * own suite.
+ * bar's one `h1`, it is an anchor only when a read gave it a page, each
+ * report the bar carries appears exactly once, and the work in flight is
+ * reported here rather than in the body — with the one Cancel that can stop
+ * it. What the bar says in each state is `pdfBarView`'s own suite.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -41,27 +43,26 @@ Object.defineProperty(window, "matchMedia", {
 
 afterEach(cleanup);
 
-const at = (element: React.ReactElement) =>
+type BarState = PublicState<{ collection: { id: string; name: string } }>;
+
+const ready: BarState = {
+  status: "ready",
+  value: { collection: { id: "collection-1", name: "Flores Solares" } },
+};
+
+const at = (view: PdfBarView, onCancel: () => void = () => undefined) =>
   render(
     <MantineProvider>
-      <MemoryRouter>{element}</MemoryRouter>
+      <MemoryRouter>
+        <CollectionPdfBar view={view} onCancel={onCancel} />
+      </MemoryRouter>
     </MantineProvider>,
   );
 
 describe("CollectionPdfBar", () => {
   it("renders a named Collection as its one h1, linked to its page", () => {
-    const view = pdfBarView(
-      {
-        status: "ready",
-        value: {
-          collection: { id: "collection-1", name: "Flores Solares" },
-        },
-      },
-      { status: "idle" },
-      false,
-    );
-
-    at(<CollectionPdfBar view={view} />);
+    const view = pdfBarView(ready, { status: "idle" }, false);
+    at(view);
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
@@ -76,20 +77,18 @@ describe("CollectionPdfBar", () => {
   });
 
   it("puts the finished file's summary and both actions in the bar", () => {
-    const view = pdfBarView(
-      {
-        status: "ready",
-        value: { collection: { id: "collection-1", name: "Flores Solares" } },
-      },
-      {
-        status: "done",
-        url: "blob:https://arcula.art/1c6f",
-        pages: 17,
-        size: 3 * 1048576,
-      },
-      false,
+    at(
+      pdfBarView(
+        ready,
+        {
+          status: "done",
+          url: "blob:https://arcula.art/1c6f",
+          pages: 17,
+          size: 3 * 1048576,
+        },
+        false,
+      ),
     );
-    at(<CollectionPdfBar view={view} />);
 
     const download = screen.getAllByRole("link", { name: /Download/ });
     expect(download).toHaveLength(1);
@@ -102,11 +101,35 @@ describe("CollectionPdfBar", () => {
     expect(screen.getAllByText("17 pages · 3.00 MB")).toHaveLength(1);
   });
 
+  it("puts the photos being prepared, their line and a Cancel in the bar", async () => {
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    at(
+      pdfBarView(ready, { status: "preparing", done: 3, total: 12 }, false),
+      onCancel,
+    );
+
+    // The line along the bar's edge, beside the label that counts the same
+    // photos.
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing to stop while the renderer runs", () => {
+    // The renderer is atomic: a Cancel here would abandon half a document.
+    at(pdfBarView(ready, { status: "rendering" }, false));
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("states a nameless page without a link", () => {
     // A locked, private, missing or invalid Collection is either unnamed or
     // has no page to go to; a dead anchor would look live and go nowhere.
     const view = pdfBarView({ status: "notFound" }, { status: "idle" }, false);
-    at(<CollectionPdfBar view={view} />);
+    at(view);
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(

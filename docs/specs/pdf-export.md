@@ -672,15 +672,17 @@ rather than a second definition of it.
 The bar is shaped like the header it replaces: the Collection's name on the
 left, in the wordmark's seat, as the page's one top-level heading (`h1`), with
 **Collection PDF** dimmed beneath it. The body carries no title block — the bar
-names the page. The bar's right-hand side holds the file that exists, and the
-rule for what belongs there is one sentence: **the bar reports the file that
-exists; the body carries the message and the call to action.** So `idle`,
-`cancelled` and `failed` keep their copy and their buttons in the body, and a
-finished file on a desktop is reported in the bar alone, under **Preview,
-download and mobile**. The bar's view is `pdfBarView(state, run, mobile)` in
+names the page. The bar's right-hand side holds whatever the export is doing,
+and the rule for what belongs there is one sentence: **the bar reports work in
+flight and the file that exists; the body carries the message and the call to
+action.** So `preparing` and `rendering` are the bar's alone, over an empty
+body, while `idle`, `cancelled`, `failed` and a failed load keep their copy and
+their buttons in the body and report nothing in the bar. A finished file on a
+desktop is reported there too, under **Preview, download and mobile**. The
+bar's view is `pdfBarView(state, run, mobile)` in
 `apps/web/src/components/pdf/pdfBarView.ts` — one pure function, so the rules
 are testable without a renderer, and the bar component renders its answer and
-owns no state.
+owns no state, taking only the cancel handler that the one stoppable step needs.
 
 The bar names the Collection whenever a read disclosed it: a `ready` read, or
 the name a `locked` refusal carries
@@ -704,8 +706,8 @@ Every state renders under that one bar; only what sits in the body changes.
 | `notFound` | **Collection PDF**                                     | `PublicStateMessage` with the not-found copy                              |
 | `private`  | **Collection PDF**                                     | `PublicStateMessage` with the private copy                                |
 | `locked`   | the name from the refusal                              | `CollectionLockScreen`; `onUnlocked` reloads and restarts the export      |
-| `error`    | **Collection PDF**                                     | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
-| `ready`    | the name, plus the finished file's summary and buttons | the generation controls below                                             |
+| `error`    | **Collection PDF**, and nothing of the failure         | `PublicStateMessage` (error) plus a **Retry** button that reruns the load |
+| `ready`    | the name, plus the work in flight or the finished file | nothing while work is in flight; otherwise the generation state's own     |
 
 On `ready` the export starts automatically, unless the large-export warning
 (below) needs an answer first. The viewer does not ask the reader to press
@@ -713,18 +715,26 @@ On `ready` the export starts automatically, unless the large-export warning
 
 ### Generation states
 
-| State       | What the viewer shows                                                                                                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `preparing` | `Progress` and `Preparing photos {done} of {total}`; **Cancel** enabled                                                                                                                    |
-| `rendering` | `Building PDF…`; **Cancel disabled** — the renderer is atomic and cannot be interrupted                                                                                                    |
-| `done`      | desktop: `{pages} pages · {size}`, **Download** and **Open PDF** in the bar, the preview alone in the body; mobile: the card's sentence, `{pages} pages · {size}` and the same two buttons |
-| `cancelled` | `Export cancelled.` and a **Generate PDF** button                                                                                                                                          |
-| `failed`    | `The PDF could not be generated.` and a **Retry** button                                                                                                                                   |
+| State       | The bar                                                                                    | The body                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `preparing` | `Preparing photos {done} of {total}`, a progress line along the bar's edge, and **Cancel** | empty                                                                                                      |
+| `rendering` | `Building PDF…`, with no **Cancel** — the renderer is atomic and cannot be interrupted     | empty                                                                                                      |
+| `done`      | desktop: `{pages} pages · {size}`, **Download** and **Open PDF**; mobile: nothing          | desktop: the preview alone; mobile: the card's sentence, `{pages} pages · {size}` and the same two buttons |
+| `cancelled` | nothing                                                                                    | `Export cancelled.` and a **Generate PDF** button                                                          |
+| `failed`    | nothing                                                                                    | `The PDF could not be generated.` and a **Retry** button                                                   |
 
 Progress counts **distinct scheduled photos**. `done` includes failed photos;
-`total` is the number of distinct photos. With no photos, go straight to
-`rendering` with no `0 / 0` frame. Cancel during `preparing` aborts the current
-fetches, clears the work and produces no PDF; it does not leave a partial file.
+`total` is the number of distinct photos. The progress line's value is the
+fraction prepared — the same number the label counts — and 0 for a run with
+nothing scheduled, so the bar never prints `0 of 0`. With no photos the export
+goes straight to `rendering` with no progress frame at all. Cancel during
+`preparing` aborts the current fetches, clears the work and produces no PDF; it
+does not leave a partial file.
+
+The split is the bar's one rule, not a per-state choice: work in flight is
+reported where the export is, over a body that has nothing to say, and every
+state that asks the reader to act — `idle` before a start, `cancelled`, `failed`
+— is a message and a button together in the body, with the bar silent for it.
 
 The export is one `pdf(<CollectionPdf … />).toBlob()` call after all the
 preflight work. The result is held in memory and shown through a `blob:` URL.
@@ -742,18 +752,22 @@ Two surfaces, and each one offers the actions exactly once.
   `AppShell` padding, with a floor for short windows, so the page itself does
   not scroll and the document scrolls inside its own frame. The pages-and-size
   line that used to sit above the preview is gone.
-- **Mobile** (coarse pointer or `max-width: 700px`): the bar names the
-  Collection and carries no actions; no iframe either, because iOS's embedded
-  PDF view shows only the first page. The card under the bar is the phone's one
-  action surface: it says the PDF is ready, repeats `{pages} pages · {size}`,
-  and holds **Open PDF** and **Download**. The summary travels with the buttons
-  it describes.
+- **Mobile** (coarse pointer or `max-width: 700px`): once the file exists the
+  bar names the Collection and carries no actions; no iframe either, because
+  iOS's embedded PDF view shows only the first page. The card under the bar is
+  the phone's one action surface: it says the PDF is ready, repeats
+  `{pages} pages · {size}`, and holds **Open PDF** and **Download**. The
+  summary travels with the buttons it describes. **Work in flight has no
+  card**, so the bar reports it on a phone exactly as on a desktop: the label,
+  the line and the **Cancel** while photos are prepared, `Building PDF…` while
+  the renderer runs.
 - The bar and the card print the summary through one function in
   `pdfBarView.ts`, `pdfFileSummary(pages, size)`, which wraps the byte
   formatter: megabytes to two decimals, anything smaller rounded up to at least
   one kB. One wording, one rounding.
 - A run is reported only by a `ready` read, so re-reading the Collection, or
-  restarting the export, drops the previous file's summary and buttons with it.
+  restarting the export, drops whatever the previous run reported — its
+  progress or its file — with it.
 - **Download** is an `<a download={filename} href={blobUrl}>`; the blob URL is
   same-origin. The filename is `collectionPdfFileName(name)` — **Download**
   carries the exported file's own name.
@@ -939,8 +953,15 @@ The subsetter itself is harfbuzz's behaviour; do not test glyph outlines.
 
 - Do not assert the rendered PDF's layout, page components, text positions or
   font names in jsdom. Those are the library and the template, not our logic.
-- The viewer has no new pure decision worth a component suite beyond what
+- The viewer's load has no pure decision worth a component suite beyond what
   `publicFailure` already covers; do not test the manage link's label or props.
+  The bar's wording per state — the name, the fallback title, the progress
+  label and its fraction, `Building PDF…`, the file's summary — is
+  `pdfBarView`'s own pure suite. The bar's one rendering check is that its
+  report appears exactly once: one **Download** with its filename and one
+  **Open PDF** for a finished file, a **Cancel** that calls the handler while
+  photos are being prepared and none while the renderer runs. A duplicate or a
+  missing control is invisible in review and obvious in a query.
 - **Visual acceptance**, once, against the template: generate the seeded
   collection at the defaults and compare the photo page and the grid page to
   `docs/templates/pdf/artwork-page.png` and `artworks-grid.png` at 100 %. Check
