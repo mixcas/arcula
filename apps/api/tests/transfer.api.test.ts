@@ -227,7 +227,7 @@ describe("POST /collections/{cid}/transfer", () => {
     expect(before.mediaNamespaceId).toBe(namespace);
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, entryOf(work))),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
 
     const res = await transferAs(cid, owner.cookies, mate.userId);
     expect(res.status).toBe(200);
@@ -281,7 +281,7 @@ describe("POST /collections/{cid}/transfer", () => {
     }
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, entryOf(work))),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     // Nothing was copied into a namespace named by the new owner: a transfer
     // that moved the namespace would leave these here.
     expect(
@@ -320,7 +320,7 @@ describe("POST /collections/{cid}/transfer", () => {
     ).toBe(200);
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, entryOf(work))),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(
       await listObjects(
         finalPhotoPrefix(owner.userId, cid, aid, entryOf(work)),

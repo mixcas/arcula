@@ -327,7 +327,7 @@ describe("POST …/photos/process", () => {
     aid = await makeArtwork(owner.userId, cid);
   });
 
-  it("generates all five variants into staging, in spec order", async () => {
+  it("generates all six variants into staging, in spec order", async () => {
     const bytes = await makeJpeg(400, 300);
     await stagePhoto(
       owner.cookies,
@@ -360,6 +360,7 @@ describe("POST …/photos/process", () => {
     // 400x300 source: the inside fits are all at source scale, the
     // squares cover the box.
     const expected: [string, number, number][] = [
+      ["xxlarge", 400, 300],
       ["xlarge", 400, 300],
       ["square_lg", 800, 800],
       ["square_sm", 400, 400],
@@ -380,7 +381,7 @@ describe("POST …/photos/process", () => {
     const staged = await listObjects(
       stagedVariantPrefix(owner.userId, cid, aid, "p-gen"),
     );
-    expect(staged).toHaveLength(5);
+    expect(staged).toHaveLength(6);
     expect(staged.every((k) => k.endsWith(".webp"))).toBe(true);
   });
 
@@ -393,10 +394,10 @@ describe("POST …/photos/process", () => {
       JSON.stringify({ entryId: "p-gen" }),
     );
     expect(res.status).toBe(200);
-    expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(5);
+    expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(6);
     expect(
       await listObjects(stagedVariantPrefix(owner.userId, cid, aid, "p-gen")),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
   });
 
   it("404s a never-staged entry", async () => {
@@ -533,13 +534,13 @@ describe("DELETE …/{population}/{entryId}", () => {
         .length +
         (await listObjects(stagedVariantPrefix(owner.userId, cid, aid, "gone")))
           .length,
-    ).toBe(6);
+    ).toBe(7);
 
     const res = await discardEntry(owner.cookies, cid, aid, "photos", "gone");
     expect(res.status).toBe(200);
     expect(
       (await json<{ entryId: string; deleted: number }>(res)).deleted,
-    ).toBe(6);
+    ).toBe(7);
     expect(
       await listObjects(stagedOriginalPrefix(owner.userId, cid, aid, "gone")),
     ).toHaveLength(0);
@@ -649,6 +650,6 @@ describe("re-staging replaces", () => {
       JSON.stringify({ entryId: "reswap" }),
     );
     expect(res.status).toBe(200);
-    expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(5);
+    expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(6);
   });
 });

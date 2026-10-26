@@ -293,7 +293,7 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     }
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, photo)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   it("changes only the membership: a public collection's works stay public, its documents do not", async () => {
@@ -430,11 +430,11 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     // …their prefix in the other collection survives…
     expect(
       await listObjects(stagedArtworkPrefix(mate.userId, second.cid, aid)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     // …and so does the owner's in the same collection.
     expect(
       await listObjects(stagedArtworkPrefix(owner.userId, first.cid, aid)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   it("still succeeds when the storage cleanup fails", async () => {

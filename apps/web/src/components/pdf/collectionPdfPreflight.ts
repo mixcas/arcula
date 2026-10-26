@@ -22,12 +22,21 @@ import {
 /** The density the print box is measured at. */
 export const PRINT_DPI = 300;
 
-/** The photo box on a photo page, in points, measured from the page's top-left. */
+/**
+ * The photo box on a photo page, in points, measured from the page's top-left.
+ *
+ * It is the whole rectangle the page leaves free rather than a shape chosen for
+ * one orientation: the box runs the full 504 pt content column (54 → 558), from
+ * just under the header to just above the metadata band. A photo is `contain`
+ * fitted, so the box's aspect never crops anything — a wider box is free for
+ * every work narrower than it, and it is the only box a 3:4 portrait can grow
+ * into. See `docs/specs/pdf-export.md`, **Page geometry**.
+ */
 export const PHOTO_PRINT_BOX = {
-  left: 111,
-  top: 73.5,
-  width: 390,
-  height: 519,
+  left: 54,
+  top: 60,
+  width: 504,
+  height: 580,
 } as const;
 
 export interface PixelSize {
@@ -36,11 +45,14 @@ export interface PixelSize {
 }
 
 /**
- * 390 × 519 pt at 300 dpi.
+ * 504 × 580 pt at 300 dpi.
  *
- * The height lands on a half pixel (519 pt is 2162.5 px) and rounds up, so a
- * photo converted into this box can print a hair taller than the box itself;
- * `placeInPhotoBox` caps that away.
+ * The width is exactly 2100 px (504 pt), but the height is 2416.67 px and
+ * rounds up, so a photo converted into this box can print a hair taller than the
+ * box itself; `placeInPhotoBox` caps that away. The height
+ * is also what makes `xxlarge` (`apps/api/src/media/variants.ts`) necessary:
+ * `xlarge`'s 2400 cap falls 17 px short of it, so the largest page would print
+ * 3 pt under its box.
  */
 export const PRINT_BOX_PX: PixelSize = {
   width: Math.round((PHOTO_PRINT_BOX.width * PRINT_DPI) / 72),

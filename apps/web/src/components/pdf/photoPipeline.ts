@@ -11,8 +11,9 @@
  * document:
  *
  * - **At most four conversions in flight.** Each one holds a decoded bitmap of
- *   up to 1625 × 2163 px, so the cap is what keeps a long collection from
- *   allocating a working set the browser cannot hold.
+ *   up to 2100 × 2417 px — the print box, because the decode is asked for the
+ *   box and not for the source — so the cap is what keeps a long collection
+ *   from allocating a working set the browser cannot hold.
  * - **A refused photo is not a placeholder until access is re-checked.** The
  *   media proxy answers an expired grant with `404`, so a 403/404 asks the
  *   Collection again (`collectionPdfAccess.ts`) and a lost grant re-locks
@@ -26,7 +27,7 @@
  * tested without a decoder or a canvas.
  */
 
-import { photoUrl, type ArtworkPhoto } from "@arcula/shared";
+import type { ArtworkPhoto } from "@arcula/shared";
 
 import {
   CollectionPdfAccessError,
@@ -49,15 +50,52 @@ const JPEG_QUALITY = 0.9;
 const WHITE = "#ffffff";
 
 /**
- * The photo's object: the `xlarge` variant, with the `original` as the ladder's
- * only fallback. The original is never embedded directly — it may be WebP, may
- * carry EXIF orientation and can be arbitrarily large — but a photo whose
- * variant is missing still has something to print.
+ * The variants the exporter walks, widest first: the print box's own size, then
+ * the slideshow's.
+ *
+ * `xxlarge` (3000 px) is what fills the 504 × 580 pt box at 2417 px; `xlarge`
+ * is there for a photo uploaded before it existed, and prints 3 pt under the
+ * box. The `original` is the ladder's last resort, never a first choice: it may
+ * be WebP, may carry EXIF orientation and can be arbitrarily large.
  */
-export const scheduledPhotoUrl = (photo: ArtworkPhoto | null): string | null =>
+export const PHOTO_SOURCE_KEYS = ["xxlarge", "xlarge"] as const;
+
+/** One readable object of a photo: where it is, and its own pixels. */
+export interface PhotoSource {
+  url: string;
+  /** The source's recorded pixels; `0` when the wire does not know them. */
+  pixels: PixelSize;
+}
+
+/**
+ * The photo's object, and the size the wire records for it.
+ *
+ * The size is what lets the decoder be asked for the box rather than for the
+ * source (see `convertPhoto`), so it is read here rather than at the call site.
+ * A variant's own record carries it; the `original` fallback carries the photo's.
+ */
+export const scheduledPhotoSource = (
+  photo: ArtworkPhoto | null,
+): PhotoSource | null => {
+  if (!photo) {
+    return null;
+  }
+  for (const key of PHOTO_SOURCE_KEYS) {
+    const variant = photo.variants?.find((entry) => entry.key === key);
+    if (variant?.url) {
+      return {
+        url: variant.url,
+        pixels: { width: variant.width, height: variant.height },
+      };
+    }
+  }
   // An empty string is a record with no object behind it, which is the same
   // situation as no record at all: both print the placeholder.
-  photoUrl(photo, "xlarge") || null;
+  const url = photo.original?.url;
+  return url
+    ? { url, pixels: { width: photo.width, height: photo.height } }
+    : null;
+};
 
 /**
  * The distinct photos the plan schedules, in document order.
@@ -131,7 +169,7 @@ export interface PhotoSurface {
 
 export interface PhotoConversionEnv {
   fetch(input: string, init: RequestInit): Promise<Response>;
-  decode(blob: Blob): Promise<PhotoBitmap>;
+  decode(blob: Blob, target?: PixelSize): Promise<PhotoBitmap>;
   surface(width: number, height: number): PhotoSurface;
 }
 
@@ -208,7 +246,23 @@ export const browserPhotoEnv: PhotoConversionEnv = {
   // The variant is written already oriented, but the ladder's fallback is the
   // original, which carries the uploader's EXIF orientation. Decoding "from
   // image" applies it, so a portrait phone photo is fitted as a portrait.
-  decode: (blob) => createImageBitmap(blob, { imageOrientation: "from-image" }),
+  //
+  // The resize is the memory bound: `xxlarge` is 3000 px on its long side, and
+  // four of those decoded whole is a working set the export's own large-export
+  // warning exists to avoid. Asked for the box directly, the decoder allocates
+  // the box — 2100 × 2417 px — and never the source. Orientation is applied
+  // before the resize, which is why `target` is measured in display pixels.
+  decode: (blob, target) =>
+    createImageBitmap(blob, {
+      imageOrientation: "from-image",
+      ...(target
+        ? {
+            resizeWidth: target.width,
+            resizeHeight: target.height,
+            resizeQuality: "high" as const,
+          }
+        : {}),
+    }),
   surface: browserSurface,
 };
 
@@ -226,14 +280,14 @@ export async function convertPhoto(
   signal?: AbortSignal,
   env: PhotoConversionEnv = browserPhotoEnv,
 ): Promise<ConvertedPhoto> {
-  const url = scheduledPhotoUrl(photo);
-  if (!url) {
+  const source = scheduledPhotoSource(photo);
+  if (!source) {
     // The ladder's end: no object to fetch and no second variant to try. No
     // read refused anything, so there is nothing to ask the Collection about.
     throw new Error("the photo has no object to fetch");
   }
 
-  const response = await env.fetch(url, {
+  const response = await env.fetch(source.url, {
     credentials: "same-origin",
     signal,
   });
@@ -244,14 +298,25 @@ export async function convertPhoto(
     throw new Error(`the photo answered ${response.status}`);
   }
 
-  const bitmap = await env.decode(await response.blob());
+  // The print box is the hard upper bound; a smaller source keeps its own
+  // pixels rather than being blown up to fill it. When the wire records the
+  // source's size the box is computed before the decode and handed to it, so
+  // the bitmap is never allocated at the source's size; a record that does not
+  // (a photo written before dimensions were kept) decodes at its own size and
+  // the fit happens after, which is the same picture at a larger peak.
+  const known =
+    source.pixels.width > 0 && source.pixels.height > 0
+      ? fitInsideBox(source.pixels, PRINT_BOX_PX)
+      : null;
+
+  const bitmap = await env.decode(await response.blob(), known ?? undefined);
   try {
-    // The print box is the hard upper bound; a smaller source keeps its own
-    // pixels rather than being blown up to fill it.
-    const pixels = fitInsideBox(
-      { width: bitmap.width, height: bitmap.height },
-      PRINT_BOX_PX,
-    );
+    const pixels =
+      known ??
+      fitInsideBox(
+        { width: bitmap.width, height: bitmap.height },
+        PRINT_BOX_PX,
+      );
     const surface = env.surface(pixels.width, pixels.height);
     surface.fill(WHITE);
     surface.draw(bitmap);

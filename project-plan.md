@@ -234,11 +234,14 @@ literal prefixes, so one rule expires every staged object everywhere.
    filename), and writes `staging/…/{entryId}.{ext}`. A decode gives the source
    dimensions. Re-staging the same entry id replaces it.
 2. **Process** — Sharp decodes once, applies the EXIF orientation, and encodes
-   every variant to WebP at quality 95. The variants: `xlarge` (max 2400, inside),
-   `square_lg` (800 cover), `square_sm` (400 cover), `large` (max 1200, inside),
-   `medium` (max 800, inside). A document image gets only `square_sm` and `large`
-   — the two a document actually renders with. A PDF has no variants; the
-   original is the whole entry.
+   every variant to WebP at quality 95. The variants: `xxlarge` (max 3000,
+   inside), `xlarge` (max 2400, inside), `square_lg` (800 cover), `square_sm`
+   (400 cover), `large` (max 1200, inside), `medium` (max 800, inside).
+   `xxlarge` is the Collection PDF's source — its photo box needs 2417 px at
+   300 dpi, past `xlarge`'s cap — and the widest `srcSet` candidate the
+   slideshow offers. A document image gets only `square_sm` and `large` — the
+   two a document actually renders with. A PDF has no variants; the original is
+   the whole entry.
 3. **Save** — one Postgres transaction writes the artwork fields, copies each
    entry's staged objects to their final keys, and upserts the rows; dropped
    entries lose their rows, and their final objects are deleted after commit.

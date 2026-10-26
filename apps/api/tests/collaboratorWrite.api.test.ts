@@ -232,7 +232,7 @@ describe("POST …/artworks — a collaborator's save", () => {
     });
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, p)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     // …and the uploader's staged objects are gone, as any save's are.
     expect(
       await listObjects(stagedOriginalPrefix(mate.userId, cid, aid, p)),
@@ -324,7 +324,7 @@ describe("PATCH …/artworks/{aid} — a collaborator's edit", () => {
     expect(body.userId).toBe(owner.userId);
     expect(
       await listObjects(finalPhotoPrefix(namespace, cid, aid, extra)),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
   });
 
   it("answers an edit of a tombstoned work, so a restore path can show it", async () => {
@@ -467,7 +467,7 @@ describe("staging as a collaborator", () => {
       photo,
     );
     expect(discarded.status).toBe(200);
-    expect((await json<{ deleted: number }>(discarded)).deleted).toBe(6);
+    expect((await json<{ deleted: number }>(discarded)).deleted).toBe(7);
     expect(
       await listObjects(stagedOriginalPrefix(mate.userId, cid, aid, photo)),
     ).toEqual([]);
@@ -585,8 +585,8 @@ describe("POST …/maintenance/sweep", () => {
       { cookies: sweptMate.cookies },
     );
     expect(res.status).toBe(200);
-    // The orphan's original and five variants; nothing else.
-    expect(await json(res)).toEqual({ swept: 6 });
+    // The orphan's original and six variants; nothing else.
+    expect(await json(res)).toEqual({ swept: 7 });
     expect(
       await listObjects(
         stagedOriginalPrefix(
@@ -620,7 +620,7 @@ describe("POST …/maintenance/sweep", () => {
       `${collectionPath(sweptCid)}/maintenance/sweep`,
       { cookies: sweepOwner.cookies },
     );
-    expect(await json(ownerSweep)).toEqual({ swept: 6 });
+    expect(await json(ownerSweep)).toEqual({ swept: 7 });
     expect(
       await listObjects(
         stagedOriginalPrefix(sweptMate.userId, sweptCid, savedArt, savedEntry),
