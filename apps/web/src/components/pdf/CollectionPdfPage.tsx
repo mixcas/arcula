@@ -487,7 +487,7 @@ const CollectionPdfPage: React.FC = () => {
 
   return shell(
     // The body has no title block: the bar names the page now.
-    <Container size="lg" py="2rem">
+    <Container>
       <Stack gap="lg">
         {currentRun.status === "preparing" ? (
           <Stack gap="sm">
