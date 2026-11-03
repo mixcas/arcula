@@ -15,6 +15,12 @@
 // The core tables keep the adapter's generated shape — do not
 // hand-roll deviations; if the adapter's documented schema changes, change it
 // here in one place and regenerate.
+//
+// Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
+// PostgREST roles' grants. The API connects as the table owner, which bypasses
+// RLS, so this is invisible to the product. Never add `FORCE ROW LEVEL
+// SECURITY`: it would subject the owner to the empty policy set and blank
+// every query.
 
 import { sql } from "drizzle-orm";
 import {
@@ -56,7 +62,7 @@ export const user = pgTable("user", {
   settings: jsonb("settings").$type<Record<string, unknown> | null>(),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
-});
+}).enableRLS();
 
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
@@ -69,7 +75,7 @@ export const session = pgTable("session", {
   expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
-});
+}).enableRLS();
 
 // The 1.7.7 core model, exactly: providerId/accountId, no method/type.
 // The adapter validates this at construction time (schema check), so a
@@ -94,7 +100,7 @@ export const account = pgTable("account", {
   password: text("password"),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
-});
+}).enableRLS();
 
 // Defined even though verification is gated off in beta: that is what makes
 // later enablement a config flip, not a schema change.
@@ -105,7 +111,7 @@ export const verification = pgTable("verification", {
   expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
-});
+}).enableRLS();
 
 // ---------------------------------------------------------------------------
 // Domain tables
@@ -141,7 +147,7 @@ export const collections = pgTable(
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [index("collections_user_id_idx").on(table.userId)],
-);
+).enableRLS();
 
 // Everyone with access except the owner. The owner is `collections.userId`
 // and is never duplicated here: one owner fact, one place.
@@ -157,7 +163,7 @@ export const collectionCollaborators = pgTable(
     // The dashboard list: the collections shared with one account.
     index("collection_collaborators_user_id_idx").on(table.userId),
   ],
-);
+).enableRLS();
 
 // The offer: one row per invitation, kept as history after it resolves.
 // Expiry is computed from `expiresAt`, never stored as a status.
@@ -189,7 +195,7 @@ export const collectionInvitations = pgTable(
       sql`"status" in ('pending', 'accepted', 'declined', 'revoked')`,
     ),
   ],
-);
+).enableRLS();
 
 // An Access grant: what a reader holds after entering a protected
 // collection's password. The row keeps the token's hash, never the token, so a
@@ -211,7 +217,7 @@ export const collectionAccessGrants = pgTable(
     // Revocation: deleting one collection's grants in a single statement.
     index("collection_access_grants_collection_id_idx").on(table.collectionId),
   ],
-);
+).enableRLS();
 
 // The unlock throttle's counter: one row per address, collection and window.
 // `attempts` counts failures, and a window lapses once its start is older than
@@ -231,7 +237,7 @@ export const collectionUnlockAttempts = pgTable(
   (table) => [
     primaryKey({ columns: [table.ip, table.collectionId, table.windowStart] }),
   ],
-);
+).enableRLS();
 
 // `photos`/`documents` are tables, not array columns. Money stays text —
 // the string that was typed, no float drift.
@@ -281,7 +287,7 @@ export const artworks = pgTable(
     index("artworks_collection_id_idx").on(table.collectionId),
     check("artworks_status_check", sql`"status" in ('draft', 'published')`),
   ],
-);
+).enableRLS();
 
 // The "array position is the truth" invariant, enforced by the database:
 // one unique (artworkId, order) per artwork, 0-based.
@@ -300,7 +306,7 @@ export const artworkPhotos = pgTable(
       table.order,
     ),
   ],
-);
+).enableRLS();
 
 // One variants table serves both populations (photo variants and
 // image-document variants). No separate `id`: a parent has at most one object
@@ -326,7 +332,7 @@ export const artworkPhotoVariants = pgTable(
       sql`"parentKind" in ('photo', 'document')`,
     ),
   ],
-);
+).enableRLS();
 
 // No `order` column: there is no sequence and no primary thumbnail for
 // documents, so there is nothing for an index to mean.
@@ -346,7 +352,7 @@ export const artworkDocuments = pgTable(
     index("artwork_documents_artwork_id_idx").on(table.artworkId),
     check("artwork_documents_kind_check", sql`"kind" in ('file', 'image')`),
   ],
-);
+).enableRLS();
 
 // The schema object drizzle-kit and the Better Auth adapter both read: table
 // name → table.
