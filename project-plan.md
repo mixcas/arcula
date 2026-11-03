@@ -102,7 +102,9 @@ a database without them still migrates. The API connects as the table **owner**
 and therefore bypasses RLS, which is what keeps every read and write working;
 replacing that connection with a non-owner role would need policies first.
 `FORCE ROW LEVEL SECURITY` must never be added: it would subject the owner to the
-empty policy set and blank every read.
+empty policy set and blank every read. The revoke reaches `postgres`'s default
+privileges only; `supabase_admin`'s survive, because default ACLs are
+per-grantor — accepted and written down in `packages/db/README.md` (#181).
 
 ### Auth (Better Auth core)
 
