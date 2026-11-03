@@ -95,6 +95,15 @@ The first-run order is in `infra/cdk/README.md`.
 Thirteen tables in Postgres with sharing and password protection, defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
+Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
+Supabase client roles' grants — `anon` and `authenticated`, on the tables, the
+sequences and the defaults for future tables — guarded on the role existing, so
+a database without them still migrates. The API connects as the table **owner**
+and therefore bypasses RLS, which is what keeps every read and write working;
+replacing that connection with a non-owner role would need policies first.
+`FORCE ROW LEVEL SECURITY` must never be added: it would subject the owner to the
+empty policy set and blank every read.
+
 ### Auth (Better Auth core)
 
 `user`, `session`, `account`, `verification`. `user` is extended with four typed
