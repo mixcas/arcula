@@ -84,6 +84,24 @@ because it would subject the owner to the empty policy set and blank every
 read. A table added by hand outside the schema is still open — RLS defaults to
 off — which is one reason the schema stays the single source of truth.
 
+The revoke reaches `postgres`'s defaults only, and that is **accepted, not
+overlooked** (#181). `ALTER DEFAULT PRIVILEGES` is per-grantor: a default ACL
+governs the objects _its own role_ creates. `0006_enable_rls` runs as `postgres`,
+which is not a member of `supabase_admin`, so the platform's second book of
+defaults survives on both hosted projects — `supabase_admin` keeps full grants
+for both client roles on tables and sequences it creates, and function `EXECUTE`
+survives from both grantors (Postgres grants it to `PUBLIC`; no `public`
+function exists today, and `0006` touches tables and sequences only by design).
+The residue is accepted because every table in the schema is created by
+`drizzle-kit migrate` as `postgres`, so the product's own path starts closed,
+and the surviving grants become reachable only with the Data API enabled **and**
+a table created in `public` by `supabase_admin` outside this schema. Closing it
+would be dashboard state, not repository state: the statements must run as
+`supabase_admin`, drizzle-kit cannot model a grant, and a fresh Supabase project
+starts with the defaults again — so nothing in the tree could keep that promise.
+Read `supabase_admin`'s rows in the post-deploy check as this known state rather
+than as a failed revoke; the measurement and the reasoning are on #181.
+
 The schema must stay **runtime-free**: no driver, no driver-specific types, no
 DOM. Node types are available to the package (its tests read the migration off
 disk) — the DOM-free guarantee is the `lib` array, and `@arcula/shared` is the
