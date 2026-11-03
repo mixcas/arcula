@@ -130,6 +130,9 @@ const NOT_NULL_SQL = readMigration("0004_media_namespace_not_null");
 // The committed schema-first migration for password protection.
 const PASSWORD_SQL = readMigration("0005_collection_passwords");
 
+// The committed lock-down: RLS on every table, the client grants revoked.
+const RLS_SQL = readMigration("0006_enable_rls");
+
 describe("the thirteen-table schema", () => {
   it("declares exactly the thirteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
@@ -687,5 +690,95 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(PASSWORD_SQL.replace(/timestamp with time zone/g, "")).not.toContain(
       "timestamp",
     );
+  });
+});
+
+describe("the committed lock-down migration (as it will actually be applied)", () => {
+  // The schema's own table names, which the committed migration must render
+  // one enablement per. Derived from the Drizzle object, so a table added there
+  // without regenerating shows up as a missing statement below.
+  const schemaTableNames = Object.values(schema).map(
+    (table) => getTableConfig(table as PgTable).name,
+  );
+
+  const enabledTableNames = [
+    ...RLS_SQL.matchAll(/ALTER TABLE "([^"]+)" ENABLE ROW LEVEL SECURITY;/g),
+  ].map((match) => match[1]);
+
+  // The hand-appended guard, isolated from the generated DDL above it: the
+  // `DO $$ … $$;` body is where every revoke must live.
+  const guardBlock = (): string => {
+    const start = RLS_SQL.indexOf("DO $$");
+    expect(start).toBeGreaterThan(-1);
+    const end = RLS_SQL.indexOf("$$;", start);
+    expect(end).toBeGreaterThan(start);
+    return RLS_SQL.slice(start, end);
+  };
+
+  // The statements between a role's `IF … THEN` and the `END IF;` that closes
+  // it. Bounding a revoke to this slice is the only assertion that proves it
+  // belongs to that role: ordered against the guard alone it could drift into
+  // the other branch, or past `END IF;` and out of the guard, and still sit
+  // after some existence check.
+  const roleBranch = (block: string, role: string): string => {
+    const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
+    const start = block.indexOf(guard);
+    expect(start).toBeGreaterThan(-1);
+    const open = start + guard.length;
+    const end = block.indexOf("END IF;", open);
+    expect(end).toBeGreaterThan(open);
+    return block.slice(open, end);
+  };
+
+  it("enables RLS on every table in the Drizzle object, with no table opted out", () => {
+    const disabled = Object.values(schema)
+      .filter((table) => !getTableConfig(table as PgTable).enableRLS)
+      .map((table) => getTableConfig(table as PgTable).name);
+    // All thirteen, not a sample: a new table is closed unless its declaration
+    // omits `enableRLS()`, which this turns red.
+    expect(disabled).toEqual([]);
+    expect(schemaTableNames).toHaveLength(13);
+  });
+
+  it("renders one enablement statement per table, matching the schema", () => {
+    expect(enabledTableNames).toEqual(expect.arrayContaining(schemaTableNames));
+    expect(enabledTableNames).toHaveLength(schemaTableNames.length);
+    expect(enabledTableNames).toHaveLength(13);
+  });
+
+  it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {
+    const block = guardBlock();
+    for (const role of ["anon", "authenticated"]) {
+      const branch = roleBranch(block, role);
+
+      const statements = [
+        `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role};`,
+        `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ${role};`,
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ${role};`,
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${role};`,
+      ];
+      for (const statement of statements) {
+        // Inside this role's own branch: local Postgres and CI have neither
+        // role, so an unguarded revoke would fail every `db:migrate`.
+        expect(branch).toContain(statement);
+      }
+      // All four, and no fifth statement smuggled in beside them.
+      expect(branch.match(/REVOKE ALL/g)).toHaveLength(4);
+    }
+
+    // No revoke escapes the guard: the block above is the only place one runs.
+    const outsideGuard =
+      RLS_SQL.slice(0, RLS_SQL.indexOf("DO $$")) +
+      RLS_SQL.slice(RLS_SQL.indexOf("$$;"));
+    expect(outsideGuard).not.toMatch(/REVOKE ALL/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    // The app connects as the owner, which bypasses RLS. FORCE would subject
+    // it to the empty policy set and blank every read in production. Comments
+    // are stripped first: the note above the block says why it is absent, and
+    // that sentence must not read as the statement itself.
+    const statements = RLS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
   });
 });

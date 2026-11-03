@@ -25,30 +25,41 @@ Layout:
   over a live driver, `drizzle-kit` reads it to generate migrations, and the
   tests assert its shape.
 - `migrations/` — generated SQL (`drizzle-kit generate --name init`),
-  committed. Hand edits are limited to two documented cases: a **data
+  committed. Hand edits are limited to three documented cases: a **data
   backfill** appended after generation, because drizzle-kit renders schema and
   never data (the `0001_artwork_status` migration's
   `UPDATE … SET "status" = 'draft'` from the retired per-work flag, and
   `0003_shared_collections`'s
-  `UPDATE … SET "mediaNamespaceId" = "userId"`), and the
+  `UPDATE … SET "mediaNamespaceId" = "userId"`), the
   **add-nullable → backfill → set-not-null** sequence for a column that cannot
-  be added `NOT NULL` on an existing table. The sharing schema splits it across
-  two migrations, one per release: `0003_shared_collections` creates the two
+  be added `NOT NULL` on an existing table, and a **grant revoke** that
+  drizzle-kit cannot render. The sharing schema splits the second across two
+  migrations, one per release: `0003_shared_collections` creates the two
   sharing tables, replaces the owner-list index and adds `mediaNamespaceId`
   nullable, backfilled from `userId`; `0004_media_namespace_not_null`
   backfills only the rows the old code wrote in between
   (`WHERE "mediaNamespaceId" IS NULL`, so a namespace the new code minted
   survives) and then sets the column `NOT NULL`. `0003` shipped alone, the
-  feature code followed, and `0004` tightened the column afterwards. Nothing
-  else is edited by hand. `0005_collection_passwords` is the contrast: it adds
+  feature code followed, and `0004` tightened the column afterwards.
+  `0005_collection_passwords` is the contrast: it adds
   `collections.passwordHash` nullable and creates the two password tables, and
   it needs **no** tightening step, because a collection without a password is
-  the normal state rather than a gap to backfill.
+  the normal state rather than a gap to backfill. `0006_enable_rls` is the
+  third hand edit: `enableRLS()` on each declaration makes drizzle-kit generate
+  the thirteen `ENABLE ROW LEVEL SECURITY` statements, but a **grant** lives in
+  Postgres's ACL, not in the schema declaration, so there is no schema-level
+  fact for it to render — the guarded `DO` block that revokes `anon` and
+  `authenticated` is appended by hand. The guard is deliberate: Supabase creates
+  those roles, while the local stack and CI have neither, so an unguarded
+  `REVOKE … FROM anon` would fail every `db:migrate` with `role "anon" does not
+exist`. Nothing else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
   index and the partial unique pending-invitation index, the
-  nullable → backfill → `NOT NULL` order, timestamptz, the defaults).
+  nullable → backfill → `NOT NULL` order, timestamptz, the defaults, and the
+  lock-down: RLS on all thirteen tables plus the guarded revoke and the absence
+  of `FORCE ROW LEVEL SECURITY`).
 
 Decisions the schema encodes: timestamptz everywhere a timestamp is stored;
 money as `text` (the string that was typed — no float drift); `deletedAt` NULL
@@ -65,6 +76,14 @@ salt and parameters in the string — there is no read-back and no default, and
 `collection_access_grants` keeps a grant's hash, never its token, with the
 collection indexed so a password change revokes in one statement.
 
+Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
+PostgREST roles' grants on what exists and on the defaults for what comes next.
+The API connects as the table **owner**, which bypasses RLS, so the lock-down is
+invisible to the product; `FORCE ROW LEVEL SECURITY` must never be added,
+because it would subject the owner to the empty policy set and blank every
+read. A table added by hand outside the schema is still open — RLS defaults to
+off — which is one reason the schema stays the single source of truth.
+
 The schema must stay **runtime-free**: no driver, no driver-specific types, no
 DOM. Node types are available to the package (its tests read the migration off
 disk) — the DOM-free guarantee is the `lib` array, and `@arcula/shared` is the
@@ -73,5 +92,6 @@ client-contract side of the same wall.
 Regenerating a migration: `cd packages/db && bunx drizzle-kit generate` (after
 sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
 `src/index.ts` and regenerate; the hand-added statements are the data backfill,
-appended with a comment saying what it reads, and — rarely — the
-add-nullable → backfill → set-not-null sequence above.
+appended with a comment saying what it reads, the
+add-nullable → backfill → set-not-null sequence above, and the guarded grant
+revoke in `0006_enable_rls`.
