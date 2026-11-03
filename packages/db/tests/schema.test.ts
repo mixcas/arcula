@@ -715,6 +715,21 @@ describe("the committed lock-down migration (as it will actually be applied)", (
     return RLS_SQL.slice(start, end);
   };
 
+  // The statements between a role's `IF … THEN` and the `END IF;` that closes
+  // it. Bounding a revoke to this slice is the only assertion that proves it
+  // belongs to that role: ordered against the guard alone it could drift into
+  // the other branch, or past `END IF;` and out of the guard, and still sit
+  // after some existence check.
+  const roleBranch = (block: string, role: string): string => {
+    const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
+    const start = block.indexOf(guard);
+    expect(start).toBeGreaterThan(-1);
+    const open = start + guard.length;
+    const end = block.indexOf("END IF;", open);
+    expect(end).toBeGreaterThan(open);
+    return block.slice(open, end);
+  };
+
   it("enables RLS on every table in the Drizzle object, with no table opted out", () => {
     const disabled = Object.values(schema)
       .filter((table) => !getTableConfig(table as PgTable).enableRLS)
@@ -734,10 +749,7 @@ describe("the committed lock-down migration (as it will actually be applied)", (
   it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {
     const block = guardBlock();
     for (const role of ["anon", "authenticated"]) {
-      const guard = block.indexOf(
-        `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`,
-      );
-      expect(guard).toBeGreaterThan(-1);
+      const branch = roleBranch(block, role);
 
       const statements = [
         `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role};`,
@@ -746,11 +758,12 @@ describe("the committed lock-down migration (as it will actually be applied)", (
         `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${role};`,
       ];
       for (const statement of statements) {
-        expect(block).toContain(statement);
-        // After the existence check: local Postgres and CI have neither role,
-        // so an unguarded revoke would fail every `db:migrate`.
-        expect(block.indexOf(statement)).toBeGreaterThan(guard);
+        // Inside this role's own branch: local Postgres and CI have neither
+        // role, so an unguarded revoke would fail every `db:migrate`.
+        expect(branch).toContain(statement);
       }
+      // All four, and no fifth statement smuggled in beside them.
+      expect(branch.match(/REVOKE ALL/g)).toHaveLength(4);
     }
 
     // No revoke escapes the guard: the block above is the only place one runs.

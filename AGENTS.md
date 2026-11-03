@@ -106,6 +106,11 @@ of a destructive migration (a dropped column or table, a tightened constraint)
 leaves the old code running against a schema that no longer matches it, and
 needs a compensating migration written by hand.
 
+Hand edits to a generated migration are deliberately few, and there are exactly
+three: a data backfill, the add-nullable → backfill → set-not-null sequence, and
+a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them and
+`0006_enable_rls` carries the third.
+
 **A schema change ships alone.** `scripts/deploy.sh` deploys the Lambda before
 it migrates, so a release carrying both a new table and the code that reads it
 would serve requests against a schema that is not there yet. Ship the migration
@@ -240,11 +245,14 @@ and transfer, which swaps the two membership rows and rewrites the owner.
 holds a grant's token hash and its expiry, and `collectionUnlockAttempts` is the
 unlock throttle's counter — `(ip, collectionId, windowStart)` with `attempts`,
 written and read by the unlock route alone.
-`packages/db/migrations/` is generated; hand edits are the documented exception:
-a data backfill appended to the generated file, and the add-nullable → backfill
-→ set-not-null sequence for a column that cannot be added `NOT NULL` on an
-existing table. The sharing schema is the worked example: the two migrations
-are described under **Sharing** below and in `packages/db/README.md`.
+`packages/db/migrations/` is generated; hand edits are the documented exception,
+and there are exactly three: a data backfill appended to the generated file, the
+add-nullable → backfill → set-not-null sequence for a column that cannot be
+added `NOT NULL` on an existing table, and a grant revoke drizzle-kit cannot
+model — it renders schema, never grants, so `0006_enable_rls` appends its
+guarded block by hand. The sharing schema is the worked example of the first
+two: those migrations are described under **Sharing** below and in
+`packages/db/README.md`; the third is in that README and `0006_enable_rls.sql`.
 
 **`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
 the custom domain; the apex and `www` are **separate** `DomainName` pairs that
