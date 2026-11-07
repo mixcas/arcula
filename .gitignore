@@ -33,3 +33,20 @@ apps/web/src/assets/*/*.map
 apps/web/public/*/*.map
 
 FULLSPEC.md
+
+# ==========================================
+# Graphify AI & Knowledge Graph Ignores
+# ==========================================
+# Catch-all for the main build output and submodules
+**/graphify-out/
+graphify-out/
+
+# Specific transient, cost, and local cache files
+graphify-out/cost.json
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/graph.html
+graphify-out/*.sig
+graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+graphify-out/20*/
+

@@ -521,6 +521,16 @@ restated here.
 
 ## Agent skills
 
+### GitHub CLI
+
+**Before every `gh` call, confirm the active account is `mixcas` and no other.**
+This machine is logged in to more than one GitHub account, and an inactive one
+being active would act as the wrong person against a public repository. Check
+with `gh auth status` and read the `Active account: true` line; if it is not
+`mixcas`, switch with `gh auth switch --user mixcas` before running the command.
+Never pass `--hostname` or a token env var to sidestep the check, and do not run
+a `gh` command whose side effects land on the wrong account.
+
 ### Issue tracker
 
 Issues live in GitHub Issues (`mixcas/arcula`), driven by the `gh` CLI. See
@@ -542,3 +552,44 @@ alternatives: two long-lived branches feeding two permanent environments, both
 environments sharing one AWS account and CDK bootstrap, the collection as the
 only visitor gate, and collections shared by membership. See
 `docs/agents/domain.md`.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+
+- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+# External docs — fetch on demand
+
+Use web fetch / browser / search tools to load these when implementing or
+debugging third-party behavior. Do not paste full upstream docs into the chat.
+
+## Index URLs (read these first)
+
+| Area    | llms.txt                     |
+| ------- | ---------------------------- |
+| Mantine | https://mantine.dev/llms.txt |
+| Hono    | https://hono.dev/llms.txt    |
+
+## Read order
+
+1. Fetch the **llms.txt** for the dependency that owns the question.
+2. Follow **only** links from that file (or obvious `/docs/*.md` siblings) for
+   depth.
+3. Prefer Markdown sources over scraping marketing HTML.
+4. If types exist locally (`node_modules`, stubs), use them **after** you know
+   which API surface applies (avoids guessing wrong symbols).
+
+## Scope
+
+- Questions about **our** repo layout → /graphify codebase search, not llms.txt.
+- Questions about **their** API/version/docs → use the table above.
