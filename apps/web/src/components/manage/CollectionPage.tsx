@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import debounce from "lodash/debounce";
 import {
   ActionIcon,
   Button,
@@ -32,6 +33,10 @@ import {
 } from "@arcula/shared";
 import ArtworksTable from "./collection/ArtworksTable";
 import type { Artwork, Collection } from "@arcula/shared";
+
+// Long enough to collect a word, short enough that the list feels live. The
+// debounce is the only reason typing does not issue a read per keystroke.
+const SEARCH_DEBOUNCE_MS = 300;
 
 const CollectionPage: React.FC = () => {
   const { collectionId: param } = useParams<{ collectionId: string }>();
@@ -180,9 +185,11 @@ const CollectionPage: React.FC = () => {
   }, [param, collection, navigate, location.search]);
 
   /**
-   * Write a query to the address and let the list follow it. Commits push a
-   * history entry (so Back returns to the previous search); clearing removes
-   * `q`. A query that breaks a cap is explained inline and never sent.
+   * Write a query to the address and let the list follow it. Live search
+   * replaces the current history entry — one entry per debounced pause would
+   * flood the Back stack — while the address still carries `q`, so reload,
+   * bookmark and share keep working. Clearing removes `q`. A query that breaks
+   * a cap is explained inline and never sent.
    */
   const commit = (raw: string) => {
     const next = raw.trim();
@@ -202,13 +209,36 @@ const CollectionPage: React.FC = () => {
     const params = new URLSearchParams(searchParams);
     if (next) params.set("q", next);
     else params.delete("q");
-    // An unchanged address is not a new history entry and needs no refetch
-    // (clearing uncommitted draft text is the common case).
+    // An unchanged address needs no refetch (clearing uncommitted draft text
+    // is the common case).
     if (params.toString() === searchParams.toString()) return;
-    setSearchParams(params);
+    setSearchParams(params, { replace: true });
   };
 
-  const clearSearch = () => commit("");
+  // Typing commits after a pause instead of on Enter. The timer is created
+  // once and reads the latest `commit` through a ref, so a render caused by the
+  // collection or the list does not reset the debounce clock; the cleanup
+  // cancels it on unmount.
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  const debouncedCommitRef = useRef<ReturnType<typeof debounce> | null>(null);
+  useEffect(() => {
+    const debounced = debounce((value: string) => {
+      commitRef.current(value);
+    }, SEARCH_DEBOUNCE_MS);
+    debouncedCommitRef.current = debounced;
+    return () => debounced.cancel();
+  }, []);
+
+  // The X clears the input, the address and any search still waiting on the
+  // debounce: cancelling first is what stops a pending commit from putting the
+  // query back a moment after the collector dropped it.
+  const clearSearch = () => {
+    debouncedCommitRef.current?.cancel();
+    commit("");
+  };
 
   if (loading) {
     return <Text>Loading collection...</Text>;
@@ -261,14 +291,10 @@ const CollectionPage: React.FC = () => {
           <TextInput
             value={inputValue}
             onChange={(event) => {
+              const next = event.currentTarget.value;
               setInlineError(null);
-              setDraft({ forQuery: query, text: event.currentTarget.value });
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit(inputValue);
-              }
+              setDraft({ forQuery: query, text: next });
+              debouncedCommitRef.current?.(next);
             }}
             placeholder="Search this collection"
             aria-label="Search this collection"

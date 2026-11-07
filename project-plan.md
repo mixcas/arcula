@@ -471,11 +471,12 @@ the signed-in account, each naming its collection and inviter and offering
 decline only — acceptance is the mailed link, and the card says so.
 
 The collection page's search is address state, not component state: `q` in the
-URL is the source of truth. Enter commits it, pushing a history entry so
-Back/Forward moves between searches; the X and an empty Enter clear it; and the
-canonical `{slug}-{id}` rewrite preserves it. The input mirrors the committed
-query on load and after Back/Forward without overwriting a draft still being
-typed, so a reload, a bookmark or a shared address lands on the same results.
+URL is the source of truth. The query is written as the collector types,
+debounced, replacing the current history entry so a live search does not fill
+the Back stack; the X clears it; and the canonical `{slug}-{id}` rewrite
+preserves it. The input mirrors the committed query on load and after
+Back/Forward without overwriting a draft still being typed, so a reload, a
+bookmark or a shared address lands on the same results.
 With a query active the count reads `Found X artworks` (`Found 1 artwork` in the
 singular); zero matches shows a no-results panel naming the query with a Clear
 search action, while a collection with no works and no query keeps the ordinary
@@ -487,8 +488,7 @@ selection, keeping the chosen sort. The return path is deliberately narrow: row
 Edit links and Add Artwork carry the active query, Cancel on either page returns
 to the same search, and a successful Add carries it into the new work's Edit
 page, whose canonical rewrite preserves it. Settings, Deleted, the public View
-links and the PDF do not carry it — `q` is inert on those pages — and browser
-Back still restores the search because the commit left the history entry.
+links and the PDF do not carry it — `q` is inert on those pages.
 
 The collection settings page is four tabs, each with its own save:
 **General** (name, description, public or private, and the password control),

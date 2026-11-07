@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -28,10 +29,10 @@ import type { Artwork, Collection } from "@arcula/shared";
 /**
  * The collection page's nav bar and its Collection search.
  *
- * The search lives in the address as `?q=…` and is the source of truth: Enter
- * commits, the X clears, and the list read follows the committed query. The
- * tests assert what a reader sees and what the page asks the service for —
- * where those controls take you, not how Mantine draws them.
+ * The search lives in the address as `?q=…` and is the source of truth: typing
+ * commits after a short pause, the X clears, and the list read follows the
+ * committed query. The tests assert what a reader sees and what the page asks
+ * the service for — where those controls take you, not how Mantine draws them.
  */
 
 (
@@ -308,13 +309,13 @@ describe("Collection search", () => {
     expect(await screen.findByText("Found 1 artwork")).toBeInTheDocument();
   });
 
-  it("commits on Enter, putting the query in the address and reading with it", async () => {
+  it("searches as the collector types, putting the query in the address and reading with it", async () => {
     getCollectionArtworks.mockResolvedValue([picasso]);
     renderPage();
     const input = await screen.findByRole("textbox");
 
     const user = userEvent.setup();
-    await user.type(input, "picasso blue{Enter}");
+    await user.type(input, "picasso blue");
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(
@@ -327,21 +328,6 @@ describe("Collection search", () => {
         "picasso blue",
       ),
     );
-  });
-
-  it("does not search on every keystroke", async () => {
-    renderPage();
-    const input = await screen.findByRole("textbox");
-
-    // Let the initial read settle before counting.
-    await waitFor(() => expect(getCollectionArtworks).toHaveBeenCalledTimes(1));
-
-    const user = userEvent.setup();
-    await user.type(input, "picasso");
-
-    // Typing is a draft until Enter; the committed query did not move.
-    expect(getCollectionArtworks).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("location").textContent).toBe(CANONICAL_PATH);
   });
 
   it("clears the query from the X, removing it from the address and refetching", async () => {
@@ -361,14 +347,13 @@ describe("Collection search", () => {
     );
   });
 
-  it("clears the query when Enter is pressed on an empty input", async () => {
+  it("clears the query when the input is emptied", async () => {
     getCollectionArtworks.mockResolvedValue([picasso]);
     renderPage(`${CANONICAL_PATH}?q=picasso`);
     const input = await screen.findByRole("textbox");
 
     const user = userEvent.setup();
     await user.clear(input);
-    await user.keyboard("{Enter}");
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(CANONICAL_PATH),
@@ -407,23 +392,6 @@ describe("Collection search", () => {
         COLLECTION_ID,
         "otro",
       ),
-    );
-  });
-
-  it("keeps a typed draft that has not been committed", async () => {
-    getCollectionArtworks.mockResolvedValue([picasso]);
-    renderPage(`${CANONICAL_PATH}?q=picasso`);
-    const input = await screen.findByRole("textbox");
-
-    const user = userEvent.setup();
-    await user.clear(input);
-
-    // The input is the draft, not a mirror: clearing it without Enter leaves
-    // the committed search alone until the user commits the clear.
-    expect(input).toHaveValue("");
-    expect(getCollectionArtworks).toHaveBeenLastCalledWith(
-      COLLECTION_ID,
-      "picasso",
     );
   });
 
@@ -524,7 +492,7 @@ describe("Collection search", () => {
     expect(await screen.findByText("Blue Nude")).toBeInTheDocument();
 
     const user = userEvent.setup();
-    await user.type(screen.getByRole("textbox"), "dali{Enter}");
+    await user.type(screen.getByRole("textbox"), "dali");
 
     expect(
       await screen.findByText("Failed to search artworks"),
@@ -584,13 +552,17 @@ describe("Collection search", () => {
     const input = await screen.findByRole("textbox");
     await waitFor(() => expect(getCollectionArtworks).toHaveBeenCalledTimes(1));
 
-    const user = userEvent.setup();
-    await user.type(
-      input,
-      "one two three four five six seven eight nine ten eleven{Enter}",
-    );
+    // One change carrying the whole over-cap query: each pause is a commit,
+    // and this is the one that must be explained rather than sent.
+    fireEvent.change(input, {
+      target: {
+        value: "one two three four five six seven eight nine ten eleven",
+      },
+    });
 
-    expect(screen.getByText("Use 10 words or fewer.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Use 10 words or fewer."),
+    ).toBeInTheDocument();
     // Explained instead of sent: no round trip, and no address change.
     expect(getCollectionArtworks).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("location").textContent).toBe(CANONICAL_PATH);
@@ -618,14 +590,14 @@ describe("Collection search", () => {
     const user = userEvent.setup();
     // Two commits in flight: the older answer must not overwrite the newer
     // one, however the network orders them.
-    await user.type(screen.getByRole("textbox"), "p{Enter}");
+    await user.type(screen.getByRole("textbox"), "p");
     await waitFor(() =>
       expect(getCollectionArtworks).toHaveBeenLastCalledWith(
         COLLECTION_ID,
         "p",
       ),
     );
-    await user.type(screen.getByRole("textbox"), "i{Enter}");
+    await user.type(screen.getByRole("textbox"), "i");
     await waitFor(() =>
       expect(getCollectionArtworks).toHaveBeenLastCalledWith(
         COLLECTION_ID,

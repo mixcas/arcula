@@ -31,6 +31,12 @@ skills-lock.json
 # upstream, so keep it out of Prettier.
 .agents/
 
+# OpenCode's installed skills and the graphify plugin are harness tooling, not
+# repo source: installed content we do not maintain here. Keep them out of
+# Prettier for the same reason as `.agents/`.
+.opencode/skills/
+.opencode/plugins/
+
 # Agent-harness artifacts (the llmstxt installer's CLAUDE.md and .llms/ state):
 # generated content, not repo source, regenerated whenever the installer runs.
 CLAUDE.md
