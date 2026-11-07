@@ -824,6 +824,148 @@ describe("ArtworksList", () => {
       expect(screen.queryByText(/No artworks match/)).toBeNull();
     });
 
+    describe("Select all", () => {
+      // More than two pages at the default 25: page 1 is "Art 01"…"Art 25",
+      // page 2 "Art 26"…"Art 50", and page 3 holds the last ten.
+      const threePages = () =>
+        Array.from({ length: 60 }, (_, i) =>
+          artwork({
+            id: `w${String(i).padStart(2, "0")}`,
+            title: `Art ${String(i + 1).padStart(2, "0")}`,
+          }),
+        );
+      const selectAll = () =>
+        screen.getByRole("button", { name: "Select all" });
+      const clearSelection = () =>
+        screen.getByRole("button", { name: "Clear selection" });
+      // Which cards are ticked, by the artwork each is named after — the only
+      // view of the shared selection a card gives.
+      const checkedNames = () =>
+        screen
+          .getAllByRole("checkbox")
+          .filter((box) => (box as HTMLInputElement).checked)
+          .map((box) => box.getAttribute("aria-label"));
+
+      it("selects the page it is on, not the collection", async () => {
+        const user = userEvent.setup();
+        startInGrid();
+        renderList({ artworks: threePages() });
+
+        await user.click(selectAll());
+
+        // Twenty-five cards on screen, twenty-five selected: the next page is
+        // not armed.
+        expect(screen.getByText(/25 selected/)).toBeTruthy();
+        expect(checkedNames()).toHaveLength(25);
+        // The same click, once the page is covered, is the way back.
+        expect(clearSelection()).toBeTruthy();
+
+        await user.click(clearSelection());
+
+        expect(screen.queryByText(/selected/)).toBeNull();
+        expect(checkedNames()).toHaveLength(0);
+        expect(selectAll()).toBeTruthy();
+      });
+
+      it("keeps an earlier page's picks when it clears the current one", async () => {
+        const user = userEvent.setup();
+        startInGrid();
+        renderList({ artworks: threePages() });
+
+        // Page 1: tick one card by hand, then select the rest of the page.
+        await user.click(
+          screen.getByRole("checkbox", { name: "Select Art 01" }),
+        );
+        expect(screen.getByText(/1 selected/)).toBeTruthy();
+        await user.click(selectAll());
+        expect(screen.getByText(/25 selected/)).toBeTruthy();
+        expect(clearSelection()).toBeTruthy();
+
+        await user.click(screen.getByRole("button", { name: "2" }));
+        await waitFor(() => expect(cardTitles()[0]).toBe("Art 26"));
+
+        // Page 2 is untouched by page 1's button, so it starts empty.
+        expect(selectAll()).toBeTruthy();
+        await user.click(selectAll());
+        expect(screen.getByText(/50 selected/)).toBeTruthy();
+
+        // Back on page 1, Clear selection takes page 1's twenty-five and
+        // leaves page 2's twenty-five picked.
+        await user.click(screen.getByRole("button", { name: "1" }));
+        await waitFor(() => expect(cardTitles()[0]).toBe("Art 01"));
+        await user.click(clearSelection());
+
+        expect(screen.getByText(/25 selected/)).toBeTruthy();
+      });
+
+      it("arms Delete selected with every page's picks and clears them on success", async () => {
+        const user = userEvent.setup();
+        startInGrid();
+        renderList({ artworks: threePages() });
+
+        await user.click(selectAll());
+        await user.click(screen.getByRole("button", { name: "2" }));
+        await waitFor(() => expect(cardTitles()[0]).toBe("Art 26"));
+        await user.click(selectAll());
+        expect(screen.getByText(/50 selected/)).toBeTruthy();
+
+        await user.click(
+          screen.getByRole("button", { name: "Delete selected" }),
+        );
+        const scope = within(await dialogEl());
+        // The dialog names the whole selection, not the page in view.
+        expect(scope.getByText(/50 artworks/)).toBeTruthy();
+        await user.click(scope.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() =>
+          expect(softDeleteMock).toHaveBeenCalledWith(
+            "collection1",
+            Array.from(
+              { length: 50 },
+              (_, i) => `w${String(i).padStart(2, "0")}`,
+            ),
+          ),
+        );
+        // Done: nothing stays picked on any page.
+        await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+        expect(checkedNames()).toHaveLength(0);
+      });
+
+      it("shares its picks with the Table's header checkbox in both directions", async () => {
+        const user = userEvent.setup();
+        startInGrid();
+        renderList({ artworks: threePages() });
+
+        await user.click(selectAll());
+        expect(screen.getByText(/25 selected/)).toBeTruthy();
+
+        // Table: the header checkbox reflects the Grid's page — it is the same
+        // selection, not a second one.
+        await user.click(screen.getByRole("radio", { name: "Table" }));
+        const header = screen.getAllByRole("checkbox")[0];
+        await waitFor(() => expect(header).toBeChecked());
+        expect(screen.getByText(/25 selected/)).toBeTruthy();
+
+        // And the header's clear is the Grid's too.
+        await user.click(header);
+        await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+
+        // Back in Grid, Select all is offered again.
+        await user.click(screen.getByRole("radio", { name: "Grid" }));
+        expect(selectAll()).toBeTruthy();
+      });
+
+      it("is Grid-only — the Table's header checkbox is its own Select all", () => {
+        renderList({ artworks: threePages() });
+
+        expect(screen.getByRole("table")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "Clear selection" }),
+        ).toBeNull();
+      });
+    });
+
     it("keeps the earlier cards under a failure, as the table does", () => {
       startInGrid();
       renderList({

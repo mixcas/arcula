@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Group, Pagination, Select, Stack, Text } from "@mantine/core";
+import {
+  Box,
+  Button,
+  Group,
+  Pagination,
+  Select,
+  Stack,
+  Text,
+} from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import type { Artwork } from "@arcula/shared";
 import ArtworkCard from "@/components/manage/collection/ArtworkCard";
@@ -130,6 +138,12 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   const columns = threeAcross ? 3 : twoAcross ? 2 : 1;
   const pageCount = Math.max(1, Math.ceil(totalRecords / recordsPerPage));
 
+  // The page's own ids, not the collection's: one click must not arm a delete
+  // of works the collector has not seen. "Every card selected" is a subset
+  // test, so a partial page still reads as Select all.
+  const pageIds = records.map((record) => record.id);
+  const pageSelected = pageIds.every((id) => selectedIds.includes(id));
+
   if (records.length === 0) {
     return (
       <div
@@ -204,15 +218,36 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
             comboboxProps={{ withinPortal: true }}
           />
         </Group>
-        <Pagination
-          value={page}
-          onChange={onPageChange}
-          total={pageCount}
-          // Not `sm`: below a threshold Mantine collapses the pager to a
-          // label + arrows, and a Grid needs its page numbers as one row of
-          // controls under the cards.
-          withEdges
-        />
+        <Group gap="sm" wrap="wrap">
+          {/*
+            A button has no checkbox state to invert, so it says what it will
+            do: Select all covers this page, and once it does the same button
+            becomes Clear selection and removes exactly this page's ids. Picks
+            made on other pages survive either direction.
+          */}
+          <Button
+            size="compact-sm"
+            variant="default"
+            onClick={() =>
+              onSelectionChange(
+                pageSelected
+                  ? selectedIds.filter((id) => !pageIds.includes(id))
+                  : [...new Set([...selectedIds, ...pageIds])],
+              )
+            }
+          >
+            {pageSelected ? "Clear selection" : "Select all"}
+          </Button>
+          <Pagination
+            value={page}
+            onChange={onPageChange}
+            total={pageCount}
+            // Not `sm`: below a threshold Mantine collapses the pager to a
+            // label + arrows, and a Grid needs its page numbers as one row of
+            // controls under the cards.
+            withEdges
+          />
+        </Group>
       </Group>
     </Stack>
   );
