@@ -102,7 +102,9 @@ a database without them still migrates. The API connects as the table **owner**
 and therefore bypasses RLS, which is what keeps every read and write working;
 replacing that connection with a non-owner role would need policies first.
 `FORCE ROW LEVEL SECURITY` must never be added: it would subject the owner to the
-empty policy set and blank every read.
+empty policy set and blank every read. The revoke reaches `postgres`'s default
+privileges only; `supabase_admin`'s survive, because default ACLs are
+per-grantor — accepted and written down in `packages/db/README.md` (#181).
 
 ### Auth (Better Auth core)
 
@@ -409,6 +411,24 @@ forwarding header is never trusted, because it is client-supplied. The identity
 is honest rather than complete: an address is shared behind a proxy and cheap to
 multiply, so this raises the cost of guessing without being a proof.
 
+The collection artwork list takes an optional member-only `q`. A present query
+is a member condition ahead of the visitor verdict — a missing collection is
+`404`, no session `401`, and a signed-in non-member (an Access grant holder
+included) `403` — and a query over 200 characters or 10 terms is `400
+validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
+stripped, lowercased), splits the query on punctuation and requires every term
+to appear somewhere in the joined text of the ten declared fields (title,
+artist name, serie, media, editions, date of creation, acquisition date, place
+of origin, provenance, notes); terms may match different fields, and a query
+that normalizes to no terms matches nothing. The acquisition date is searched in
+both its stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. Deleted
+works are never candidates and a member's drafts are. The filter runs in the API
+over the rows the list already reads, after the visibility verdict, so only
+matching works load their photos and documents; there is no SQL pushdown, no
+extension and no migration, and the list read remains the single seam to
+replace if collection sizes demand it. No matches is `200 []`, and an absent,
+empty or whitespace-only `q` leaves the list unchanged.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
@@ -449,6 +469,26 @@ work for a collaborator exactly as for the owner, because the server answers
 them by membership. Above that list sit the pending invitations addressed to
 the signed-in account, each naming its collection and inviter and offering
 decline only — acceptance is the mailed link, and the card says so.
+
+The collection page's search is address state, not component state: `q` in the
+URL is the source of truth. The query is written as the collector types,
+debounced, replacing the current history entry so a live search does not fill
+the Back stack; the X clears it; and the canonical `{slug}-{id}` rewrite
+preserves it. The input mirrors the committed query on load and after
+Back/Forward without overwriting a draft still being typed, so a reload, a
+bookmark or a shared address lands on the same results.
+With a query active the count reads `Found X artworks` (`Found 1 artwork` in the
+singular); zero matches shows a no-results panel naming the query with a Clear
+search action, while a collection with no works and no query keeps the ordinary
+empty-collection state. A list read in flight keeps the previous rows on screen
+under the fetching indicator, a stale answer is discarded, and a failure keeps
+those rows with an inline Alert and Retry; with no previous rows the Alert
+replaces the table. A new query resets the table to page 1 and clears the row
+selection, keeping the chosen sort. The return path is deliberately narrow: row
+Edit links and Add Artwork carry the active query, Cancel on either page returns
+to the same search, and a successful Add carries it into the new work's Edit
+page, whose canonical rewrite preserves it. Settings, Deleted, the public View
+links and the PDF do not carry it — `q` is inert on those pages.
 
 The collection settings page is four tabs, each with its own save:
 **General** (name, description, public or private, and the password control),

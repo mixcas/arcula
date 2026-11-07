@@ -14,7 +14,7 @@ import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArtworkEditPage from "@/components/manage/ArtworkEditPage";
@@ -126,16 +126,29 @@ const updateArtwork = vi.mocked(artworkService.updateArtwork);
 const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const renderPage = () =>
+/** The router's own location, so a navigation can be asserted. */
+const LocationProbe: React.FC = () => {
+  const location = useLocation();
+  return (
+    <div data-testid="location">
+      {location.pathname}
+      {location.search}
+    </div>
+  );
+};
+
+const renderPage = (artworkParam = ARTWORK_PARAM, search = "") =>
   render(
     <MantineProvider>
       <ModalsProvider>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}`,
+            `/manage/collection/${COLLECTION_PARAM}/artwork/${artworkParam}${search}`,
           ]}
         >
+          {/* Outside the routes, so it reports wherever the page lands. */}
+          <LocationProbe />
           <Routes>
             <Route
               path="/manage/collection/:collectionId/artwork/:artworkId"
@@ -146,6 +159,8 @@ const renderPage = () =>
       </ModalsProvider>
     </MantineProvider>,
   );
+
+const landedAt = () => screen.getByTestId("location").textContent;
 
 /** The PATCH body the page sent, once the save has landed. */
 const sentPatch = async (): Promise<ArtworkUpdatePayload> => {
@@ -334,6 +349,44 @@ describe("the Edit page — a deleted work", () => {
     });
     await waitFor(() =>
       expect(page.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+  });
+});
+
+/**
+ * The Edit page is one of the two pages a search can send the collector to, so
+ * it has to give the query back: the canonical address keeps it, and Cancel
+ * returns to the same results. `q` is inert here — the page never reads it as a
+ * filter — which is why carrying it is safe.
+ */
+describe("the Edit page — returning to the active search", () => {
+  it("keeps the query through the canonical rewrite and on Cancel", async () => {
+    // A bare id forces the rewrite, so the assertion below covers both the
+    // slug swap and the search it has to preserve.
+    renderPage(ARTWORK_ID, "?q=picasso");
+
+    await waitFor(() =>
+      expect(landedAt()).toBe(
+        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+      "href",
+      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+    );
+  });
+
+  it("keeps the address and Cancel empty when no search is active", async () => {
+    renderPage(ARTWORK_ID);
+
+    await waitFor(() =>
+      expect(landedAt()).toBe(
+        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}`,
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+      "href",
+      `/manage/collection/${COLLECTION_PARAM}`,
     );
   });
 });

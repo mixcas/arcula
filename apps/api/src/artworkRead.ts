@@ -11,12 +11,12 @@
 // — the Collection, the work and the viewer's membership row, loaded by
 // `authorize.ts`, plus the Access grant's validity, read off the request's
 // cookie by the route and handed in as a fact (a Protected Collection admits a
-// non-member only through it, ADR-0005). This module reports `not-found` or
-// `forbidden` and carries no HTTP code or framework type. The route owns the
-// wire codes. Only a list can answer `forbidden` — a Private Collection the
-// viewer is not a member of, a Protected one the visitor holds no grant for,
-// or the Deleted list asked for by a non-member — because that is the list's
-// existing wire, and the Collection read answers
+// non-member only through it, ADR-0005). This module reports `not-found`,
+// `unauthorized` or `forbidden` and carries no HTTP code or framework type.
+// The route owns the wire codes. Only a list can answer `forbidden` — a
+// Private Collection the viewer is not a member of, a Protected one the
+// visitor holds no grant for, or the Deleted list asked for by a non-member —
+// because that is the list's existing wire, and the Collection read answers
 // the same refusal so the two reads agree about who is inside; a single read
 // answers `not-found` for every refusal (a Private Collection included) so the
 // refusal discloses nothing.
@@ -28,6 +28,16 @@
 // photos are in `order`, documents by id, and the serializer groups Variants
 // by parent.
 //
+// The live list takes an optional **Collection search**: a present query is a
+// member-only condition checked ahead of the visitor verdict (a grant holder is
+// refused it even on a Protected collection), and the matching works are
+// selected here over the rows the list already read — no SQL pushdown, no
+// second read and no schema change. Deleted works are never candidates and a
+// member's drafts are; only the works that survive both the verdict and the
+// predicate load their photos and documents. The predicate itself is
+// `@arcula/shared`'s, so the API and the client share one field list and one
+// normalization.
+//
 // The save routes read their own work back through `readArtwork`, so a save
 // answers exactly what a read of the same work would.
 
@@ -38,7 +48,12 @@ import {
   artworkPhotoVariants as artworkPhotoVariantsTable,
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
-import type { ArtworkRead } from "@arcula/shared";
+import {
+  matchesArtworkSearch,
+  type ArtworkRead,
+  searchQueryOverflow,
+  type SearchQueryOverflow,
+} from "@arcula/shared";
 import { canSeeArtwork, canSeeCollection, isMember } from "./access";
 import {
   loadArtworkInCollection,
@@ -57,12 +72,22 @@ export type ArtworkReadResult =
 /**
  * What a list read answers: every visible work in order, or the one refusal
  * the list can make. A missing Collection is `not-found`; a Private
- * Collection the viewer does not own is `forbidden`.
+ * Collection the viewer does not own is `forbidden`. `unauthorized` is the
+ * search's own refusal: the member-only live list asked for by a caller with
+ * no session. `invalid-search` is a present query past the shared caps —
+ * checked after the access questions, so a missing collection, an anonymous
+ * caller or a non-member is refused for that reason rather than for their
+ * query.
  */
 export type ArtworkListResult =
   | { readonly status: "ok"; readonly artworks: ArtworkRead[] }
   | { readonly status: "forbidden" }
-  | { readonly status: "not-found" };
+  | { readonly status: "unauthorized" }
+  | { readonly status: "not-found" }
+  | {
+      readonly status: "invalid-search";
+      readonly overflow: SearchQueryOverflow;
+    };
 
 type ArtworkChildren = Pick<ArtworkJoined, "photos" | "documents" | "variants">;
 
@@ -196,6 +221,12 @@ type ArtworkListMode = "live" | "deleted";
  * hold no grant for, is `forbidden` (never `not-found` — the client maps it to
  * "private"), and a missing Collection is `not-found`.
  *
+ * A present `search` is the live list's member-only condition, checked before
+ * the visitor verdict: no session is `unauthorized`, a signed-in non-member
+ * (grant holder included) is `forbidden`. The predicate then filters the rows
+ * that survived the verdict, so a search can never widen what the viewer may
+ * see; only the surviving works load their children.
+ *
  * The rows are ordered by creation time (live) or deletion time, newest first
  * (deleted), and then id, so repeated reads agree. Children arrive from the
  * same three batched queries as the single read, and the verdict still runs
@@ -207,6 +238,7 @@ async function readArtworkListInMode(
   viewer: string | null,
   mode: ArtworkListMode,
   hasValidGrant = false,
+  search: string | null = null,
 ): Promise<ArtworkListResult> {
   const collection = await loadCollection(collectionId);
   if (!collection) return { status: "not-found" };
@@ -216,8 +248,21 @@ async function readArtworkListInMode(
     // Membership alone: a public collection's deleted works are still the
     // members' business, and a grant is not an invitation to them.
     if (!isMember(member)) return { status: "forbidden" };
+  } else if (search !== null) {
+    // The member-only condition first, so a grant holder is refused it even
+    // on a Protected collection rather than being challenged for a password.
+    if (viewer === null) return { status: "unauthorized" };
+    if (!isMember(member)) return { status: "forbidden" };
   } else if (!canSeeCollection(member, collection, hasValidGrant)) {
     return { status: "forbidden" };
+  }
+
+  // The caps are the query's own validity, so they are answered after the
+  // access questions: who may ask comes before what they asked. No rows load
+  // for a query that cannot be searched.
+  if (search !== null) {
+    const overflow = searchQueryOverflow(search);
+    if (overflow !== null) return { status: "invalid-search", overflow };
   }
 
   const rows = await db
@@ -247,9 +292,15 @@ async function readArtworkListInMode(
       asc(artworksTable.id),
     );
 
-  const works = rows.filter((row) =>
+  const visible = rows.filter((row) =>
     canSeeArtwork(member, collection, row, hasValidGrant),
   );
+  // The search runs after the verdict: it narrows what the viewer may see and
+  // can never add to it. A committed query with no terms matches nothing.
+  const works =
+    search === null
+      ? visible
+      : visible.filter((row) => matchesArtworkSearch(row, search));
   const artworkIds = works.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {
@@ -266,14 +317,34 @@ async function readArtworkListInMode(
   };
 }
 
-/** The live list: a member's every live work, a visitor's published ones. */
+/**
+ * The live list: a member's every live work, a visitor's published ones.
+ * A present `search` is member-only and filters the result.
+ */
 export function readArtworkList(
   collectionId: string,
   viewer: string | null,
   hasValidGrant = false,
+  search: string | null = null,
 ): Promise<ArtworkListResult> {
-  return readArtworkListInMode(collectionId, viewer, "live", hasValidGrant);
+  return readArtworkListInMode(
+    collectionId,
+    viewer,
+    "live",
+    hasValidGrant,
+    search,
+  );
 }
+
+/**
+ * The Deleted view's answer: the same read with two arms removed. It takes no
+ * search, so an invalid query cannot occur, and it sits behind a session, so
+ * there is no `unauthorized` arm to map.
+ */
+export type DeletedArtworkListResult = Extract<
+  ArtworkListResult,
+  { readonly status: "ok" | "forbidden" | "not-found" }
+>;
 
 /**
  * The Deleted view's list: every work of the collection that carries a
@@ -283,6 +354,12 @@ export function readArtworkList(
 export function readDeletedArtworkList(
   collectionId: string,
   viewer: string | null,
-): Promise<ArtworkListResult> {
-  return readArtworkListInMode(collectionId, viewer, "deleted");
+): Promise<DeletedArtworkListResult> {
+  // The cast states what the call site already guarantees: no search, and a
+  // caller the deleted route has resolved a session for.
+  return readArtworkListInMode(
+    collectionId,
+    viewer,
+    "deleted",
+  ) as Promise<DeletedArtworkListResult>;
 }
