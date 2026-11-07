@@ -67,6 +67,13 @@ A set of artworks recorded together and named by their owner. The unit that is
 shared with collaborators, tiered, and given a public page.
 _Avoid_: Catalogue, gallery, album, library
 
+**Collection search**:
+A member's query against the recorded fields of the works in one collection. It
+answers with the live works that match; drafts are included, deleted works never
+are. The query lives in the page's address, so a search can be linked and
+revisited.
+_Avoid_: Filter, find, lookup
+
 **Shared**:
 A collection whose owner has added collaborators. Distinct from **Public**,
 which is readable by visitors; neither implies the other.
@@ -203,14 +210,6 @@ for each of an artwork's photos, up to three, and a grid for the artworks that
 have none, ordered by artist then title. An export of the collection, never a
 second presentation of it.
 _Avoid_: Catalogue, catalogue PDF, portfolio
-
-**Collection search**:
-A member's query against the recorded fields of the works in one collection,
-answered with the matching live works — drafts included, deleted works never —
-in the collection's own order. Distinct from a filter, a find and a lookup: it
-asks across fields, every word must appear somewhere, and different words may
-match different fields.
-_Avoid_: Filter, find, lookup, global search
 
 ### Media
 
