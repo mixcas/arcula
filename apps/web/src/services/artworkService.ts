@@ -13,6 +13,7 @@
 
 import {
   artworkReadSchema,
+  artworkSearchSuffix,
   type Artwork,
   type ArtworkCreatePayload,
   type ArtworkImportOutcome,
@@ -35,10 +36,7 @@ export const artworkService = {
     query = "",
   ): Promise<Artwork[]> {
     const trimmed = query.trim();
-    const suffix =
-      trimmed === ""
-        ? ""
-        : `?${new URLSearchParams({ q: trimmed }).toString()}`;
+    const suffix = artworkSearchSuffix(trimmed);
     const rows = await apiRequest<unknown[]>(`${base(collectionId)}${suffix}`);
     return rows.map((row) => artworkReadSchema.parse(row));
   },

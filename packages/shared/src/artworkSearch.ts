@@ -114,6 +114,19 @@ function searchTerms(query: string): string[] {
 }
 
 /**
+ * The terms the caps count: whitespace-separated words, deliberately not the
+ * predicate's punctuation-separated terms. The cap is a product limit on what
+ * a person typed ("10 words"), so a hyphenated phrase is one word there even
+ * though matching splits it into several.
+ */
+function whitespaceTerms(query: string): string[] {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+}
+
+/**
  * True when the query is absent, empty or whitespace-only: "no search". A
  * punctuation-only query is deliberately not blank — see the module note.
  */
@@ -125,8 +138,21 @@ export const searchQueryOverflow = (
   query: string,
 ): SearchQueryOverflow | null => {
   if (query.length > MAX_SEARCH_QUERY_LENGTH) return "too-long";
-  if (searchTerms(query).length > MAX_SEARCH_TERMS) return "too-many-terms";
+  if (whitespaceTerms(query).length > MAX_SEARCH_TERMS) return "too-many-terms";
   return null;
+};
+
+/**
+ * The address suffix that carries a committed query from the collection page
+ * to the pages that return to it: `?q=…`, or "" when there is nothing to search
+ * for. Built from `q` alone — URLSearchParams does the encoding — so no other
+ * parameter can follow the user back.
+ */
+export const artworkSearchSuffix = (query: string): string => {
+  const trimmed = query.trim();
+  return trimmed === ""
+    ? ""
+    : `?${new URLSearchParams({ q: trimmed }).toString()}`;
 };
 
 /**

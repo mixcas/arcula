@@ -65,6 +65,8 @@ interface TableProps {
   searchQuery?: string;
   /** A list read is in flight, with the previous rows still on screen. */
   fetching?: boolean;
+  /** False until the first list read has answered, success or failure. */
+  listSettled?: boolean;
   /** The list read failed; the previous rows stay when there are any. */
   searchError?: string | null;
   onRetry?: () => void;
@@ -76,6 +78,7 @@ const TableTree: React.FC<TableProps> = ({
   onDeleted,
   searchQuery,
   fetching,
+  listSettled,
   searchError,
   onRetry,
   onClearSearch,
@@ -90,6 +93,7 @@ const TableTree: React.FC<TableProps> = ({
           onDeleted={onDeleted ?? vi.fn()}
           searchQuery={searchQuery}
           fetching={fetching}
+          listSettled={listSettled}
           searchError={searchError}
           onRetry={onRetry}
           onClearSearch={onClearSearch}
@@ -488,6 +492,24 @@ describe("ArtworksTable", () => {
     });
 
     expect(screen.getByText("Art 1")).toBeTruthy();
+    // And the read is visibly still running: dropping the `fetching` wiring
+    // would leave the old rows looking like this search's answer.
+    expect(screen.getByText("Updating results…")).toBeTruthy();
+  });
+
+  it("does not answer a search before the first list read settles", () => {
+    renderTable({
+      artworks: [],
+      searchQuery: "picasso",
+      listSettled: false,
+    });
+
+    // Neither published answer is known yet, with no request even in flight.
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+    expect(screen.getByText("Searching…")).toBeTruthy();
   });
 
   it("returns to page 1 when the query changes", async () => {
@@ -525,6 +547,29 @@ describe("ArtworksTable", () => {
     expect(
       screen.queryByRole("button", { name: "Delete selected" }),
     ).toBeNull();
+  });
+
+  it("starts at page 1 with no selection when a query returns to an earlier value", async () => {
+    const user = userEvent.setup();
+    const artworks = Array.from({ length: 30 }, (_, i) =>
+      artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
+    );
+    const { rerender } = renderTable({ artworks });
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
+    // [0] is the header's "select all"; the rest are the rows.
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
+
+    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
+
+    // Back to the first query: a new query transition, not a return to the
+    // page and selection it had under that value.
+    rerender(<TableTree artworks={artworks} />);
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
+    expect(screen.queryByText(/selected/)).toBeNull();
   });
 
   it("keeps the chosen sort when the query changes", async () => {

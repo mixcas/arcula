@@ -10,7 +10,7 @@ import {
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
 import ArtworkThumbnail from "@/components/manage/collection/ArtworkThumbnail";
-import { artworkSlug, parseId } from "@arcula/shared";
+import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
 // 25 first, so it is also the default: the state below is initialised from
@@ -45,6 +45,8 @@ interface ArtworksTableProps {
   searchQuery?: string;
   /** A list read is in flight. The previous rows stay on screen. */
   fetching?: boolean;
+  /** False until the first list read has answered, success or failure. */
+  listSettled?: boolean;
   /** The list read failed; the previous rows stay when there are any. */
   searchError?: string | null;
   /** Ask for the current query's list again, after a failure. */
@@ -79,6 +81,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   onDeleted,
   searchQuery = "",
   fetching = false,
+  listSettled = true,
   searchError = null,
   onRetry,
   onClearSearch,
@@ -88,20 +91,31 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   // Edit returns to the search it came from; View is the public page and
   // deliberately does not. Built from `q` alone and encoded, so the row link
   // cannot smuggle another parameter back to the collection.
-  const editSearchSuffix = queryKey
-    ? `?${new URLSearchParams({ q: queryKey }).toString()}`
-    : "";
+  const editSearchSuffix = artworkSearchSuffix(queryKey);
 
-  // Page and selection belong to the query they were made under. A committed
-  // query therefore starts at page 1 with nothing selected, derived here
-  // rather than reset in an effect (which the react-hooks rule flags): the
-  // stored value still carries the old query's key, so it is simply not read.
-  // The sort is deliberately outside this — searching must not reorder rows.
+  // A committed query is a fresh view: page 1, nothing selected. The token
+  // below is bumped on every transition, so A→B→A counts as two transitions
+  // rather than a return to the page and selection A had before. Adjusting
+  // state during render is React's supported pattern for state derived from
+  // props; an effect would paint the previous query's page first.
+  const [queryTransition, setQueryTransition] = useState({
+    query: queryKey,
+    token: 0,
+  });
+  let resetToken = queryTransition.token;
+  if (queryTransition.query !== queryKey) {
+    resetToken += 1;
+    setQueryTransition({ query: queryKey, token: resetToken });
+  }
+
+  // Page and selection belong to that transition. The stored value still
+  // carries the previous token, so it is simply not read. The sort is
+  // deliberately outside this — searching must not reorder rows.
   const [pageState, setPageState] = useState({
-    forQuery: queryKey,
+    forToken: resetToken,
     page: 1,
   });
-  const page = pageState.forQuery === queryKey ? pageState.page : 1;
+  const page = pageState.forToken === resetToken ? pageState.page : 1;
 
   const [recordsPerPage, setRecordsPerPage] = useState(
     RECORDS_PER_PAGE_OPTIONS[0],
@@ -112,14 +126,15 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   });
   // Selected rows are held as ids, not as record objects: a refetch after a
   // delete replaces every object, and a selection keyed by identity would then
-  // silently empty itself. Keyed by query for the same reason as the page.
+  // silently empty itself. Keyed by the transition for the same reason as the
+  // page.
   const [selection, setSelection] = useState({
-    forQuery: queryKey,
+    forToken: resetToken,
     ids: [] as string[],
   });
   const selectedIds = useMemo(
-    () => (selection.forQuery === queryKey ? selection.ids : []),
-    [selection, queryKey],
+    () => (selection.forToken === resetToken ? selection.ids : []),
+    [selection, resetToken],
   );
 
   const sortedArtworks = useMemo(() => {
@@ -197,7 +212,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         void artworkService
           .softDeleteArtworks(parseId(collectionParam), ids)
           .then(async () => {
-            setSelection({ forQuery: queryKey, ids: [] });
+            setSelection({ forToken: resetToken, ids: [] });
             modals.close(DELETE_MODAL_ID);
             await onDeleted();
             notifications.show({
@@ -331,10 +346,10 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
       },
     ],
     // confirmDelete is rebuilt every render; these are the values that change
-    // what it closes over — the collection in the delete route, and the query
-    // the cleared selection belongs to.
+    // what it closes over — the collection in the delete route, and the
+    // transition the cleared selection belongs to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [collectionParam, queryKey],
+    [collectionParam, resetToken],
   );
 
   const countLabel = searchActive
@@ -342,21 +357,45 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
     : `${artworks.length} artwork${artworks.length === 1 ? "" : "s"}`;
 
   // A completed search that matched nothing is its own answer, not an empty
-  // collection; while the first search is still running neither is known, so
+  // collection; while the first read is still running neither is known, so
   // the table keeps its searching empty state.
   const noResults =
-    searchActive && !fetching && artworks.length === 0 && !searchError;
+    listSettled &&
+    searchActive &&
+    !fetching &&
+    artworks.length === 0 &&
+    !searchError;
   // With no rows behind a failure there is nothing to keep, so the Alert
   // takes the table's place rather than sitting above an empty shell.
   const searchFailedWithoutRows = searchError !== null && artworks.length === 0;
+  // Before the first read answers, "no works" is not known: the page is
+  // loading. Only the answer afterwards may claim the collection is empty.
+  const emptyLabel = !listSettled
+    ? searchActive
+      ? "Searching…"
+      : "Loading artworks…"
+    : searchActive
+      ? "Searching…"
+      : "No artworks in this collection yet.";
 
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Text size="sm" c="dimmed">
-          {countLabel}
-          {selectedIds.length > 0 ? ` — ${selectedIds.length} selected` : ""}
-        </Text>
+        <Group gap="xs">
+          {listSettled ? (
+            <Text size="sm" c="dimmed">
+              {countLabel}
+              {selectedIds.length > 0
+                ? ` — ${selectedIds.length} selected`
+                : ""}
+            </Text>
+          ) : null}
+          {fetching && artworks.length > 0 ? (
+            <Text size="sm" c="dimmed">
+              Updating results…
+            </Text>
+          ) : null}
+        </Group>
         {selectedIds.length > 0 ? (
           <Button
             color="red"
@@ -403,7 +442,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
           selectedRecords={selectedRecords}
           onSelectedRecordsChange={(records) =>
             setSelection({
-              forQuery: queryKey,
+              forToken: resetToken,
               ids: records.map((record) => record.id),
             })
           }
@@ -412,11 +451,11 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
             setSortStatus(status);
             // A new column rarely leaves the current offset in range, and
             // landing on an empty page reads as a bug.
-            setPageState({ forQuery: queryKey, page: 1 });
+            setPageState({ forToken: resetToken, page: 1 });
           }}
           page={effectivePage}
           onPageChange={(next) =>
-            setPageState({ forQuery: queryKey, page: next })
+            setPageState({ forToken: resetToken, page: next })
           }
           totalRecords={sortedArtworks.length}
           recordsPerPage={recordsPerPage}
@@ -430,9 +469,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
           minHeight={200}
           emptyState={
             <Text p="xl" ta="center">
-              {searchActive
-                ? "Searching…"
-                : "No artworks in this collection yet."}
+              {emptyLabel}
             </Text>
           }
         />

@@ -21,7 +21,7 @@ import {
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
-import { artworkSlug, parseId } from "@arcula/shared";
+import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
 
 /**
  * The Add page is a single write: the form fields, the client-minted artwork
@@ -40,9 +40,7 @@ const ArtworkAddPage: React.FC = () => {
   // `q` alone — no other parameter belongs on either destination.
   const [searchParams] = useSearchParams();
   const search = (searchParams.get("q") ?? "").trim();
-  const searchSuffix = search
-    ? `?${new URLSearchParams({ q: search }).toString()}`
-    : "";
+  const searchSuffix = artworkSearchSuffix(search);
 
   // The artwork id, minted here. The staged entries are PUT under it while the
   // form is open, and the save creates the row with it — one id, decided once,

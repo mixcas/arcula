@@ -26,7 +26,7 @@ import {
   type ArtworkPayload,
 } from "@arcula/shared";
 import { toArtworkUpdate } from "@/schemas/artwork";
-import { artworkSlug, parseId } from "@arcula/shared";
+import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
 
 /**
  * The Edit save is one PATCH. The text fields come from `toArtworkUpdate`,
@@ -52,9 +52,7 @@ const ArtworkEditPage: React.FC = () => {
   // `q` alone, so nothing else in the address follows the user back.
   const [searchParams] = useSearchParams();
   const search = (searchParams.get("q") ?? "").trim();
-  const searchSuffix = search
-    ? `?${new URLSearchParams({ q: search }).toString()}`
-    : "";
+  const searchSuffix = artworkSearchSuffix(search);
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",

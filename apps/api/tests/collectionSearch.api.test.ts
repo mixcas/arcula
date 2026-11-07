@@ -379,6 +379,30 @@ describe("the member-only gate", () => {
       expect((await err(res)).code).toBe("not-found");
     }
   });
+
+  it("answers the access question before the query caps", async () => {
+    const overCap = Array.from({ length: 11 }, (_, i) => `nope${i}`).join(" ");
+
+    // A missing collection is the answer even when the query is also invalid:
+    // there is nothing to validate against.
+    for (const cookies of [owner.cookies, undefined]) {
+      const res = await req("GET", searchPath(overCap, uuid()), { cookies });
+      expect(res.status).toBe(404);
+    }
+
+    // An anonymous over-cap query is an identity refusal, not a validation
+    // one — the member facility is not usable from outside.
+    const anonymous = await req("GET", searchPath(overCap));
+    expect(anonymous.status).toBe(401);
+    expect((await err(anonymous)).code).toBe("unauthorized");
+
+    // A signed-in non-member is refused for the same reason before the caps.
+    const strangerRes = await req("GET", searchPath(overCap), {
+      cookies: stranger.cookies,
+    });
+    expect(strangerRes.status).toBe(403);
+    expect((await err(strangerRes)).code).toBe("forbidden");
+  });
 });
 
 describe("the shared caps", () => {

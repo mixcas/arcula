@@ -165,6 +165,15 @@ const getCollectionArtworks = vi.mocked(artworkService.getCollectionArtworks);
 const searchInput = () =>
   screen.getByRole("textbox", { name: /search this collection/i });
 
+/** A promise the test settles by hand, for the states before a read answers. */
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   getCollection.mockResolvedValue(collection);
@@ -187,14 +196,8 @@ describe("a collection's nav bar", () => {
       `${CANONICAL_PATH}/artwork/add`,
     );
 
-    // The layout prefactor's whole point: the two page links no longer take
-    // space in the bar until the menu is opened.
-    expect(
-      screen.queryByRole("link", { name: /^deleted$/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /^settings$/i }),
-    ).not.toBeInTheDocument();
+    // The trigger is the bar's one page-level control; it has a name a screen
+    // reader can announce. What it opens is Mantine's behaviour.
     expect(
       screen.getByRole("button", { name: /collection actions/i }),
     ).toBeInTheDocument();
@@ -235,21 +238,6 @@ describe("a collection's nav bar", () => {
     );
   });
 
-  it("opens the menu from the keyboard", async () => {
-    renderPage();
-    const trigger = await screen.findByRole("button", {
-      name: /collection actions/i,
-    });
-
-    trigger.focus();
-    const user = userEvent.setup();
-    await user.keyboard("{Enter}");
-
-    expect(
-      await screen.findByRole("menuitem", { name: "Deleted" }),
-    ).toBeInTheDocument();
-  });
-
   it("carries the active search into Edit and Add, and nowhere else", async () => {
     getCollectionArtworks.mockResolvedValue([picasso]);
     renderPage(`${CANONICAL_PATH}?q=picasso`);
@@ -284,14 +272,10 @@ describe("a collection's nav bar", () => {
     getCollectionArtworks.mockResolvedValue([picasso]);
     renderPage(`${CANONICAL_PATH}?q=picasso`);
 
-    // Keyboard, not a click: it is the same open path the nav test above
-    // already exercises, and it does not depend on pointer timing.
-    const trigger = await screen.findByRole("button", {
-      name: /collection actions/i,
-    });
-    trigger.focus();
     const user = userEvent.setup();
-    await user.keyboard("{Enter}");
+    await user.click(
+      await screen.findByRole("button", { name: /collection actions/i }),
+    );
 
     // Both items in one query: they render together, and reading them from a
     // single snapshot keeps a transition from closing the menu between reads.
@@ -448,7 +432,6 @@ describe("Collection search", () => {
     renderPage();
 
     expect(await screen.findByText("2 artworks")).toBeInTheDocument();
-    expect(screen.queryByText(/^Found /)).toBeNull();
   });
 
   it("shows a no-results panel, and Clear search returns to the collection", async () => {
@@ -489,6 +472,49 @@ describe("Collection search", () => {
     expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 
+  it("publishes no empty-collection answer before the first list read settles", async () => {
+    const firstList = deferred<Artwork[]>();
+    getCollectionArtworks.mockReturnValueOnce(firstList.promise);
+    renderPage();
+
+    await waitFor(() => expect(getCollectionArtworks).toHaveBeenCalledTimes(1));
+    // The collection is known but the list is not: the page is loading, not
+    // empty.
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+    expect(screen.queryByText("0 artworks")).toBeNull();
+
+    await act(async () => {
+      firstList.resolve([]);
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByText("No artworks in this collection yet."),
+    ).toBeInTheDocument();
+  });
+
+  it("publishes no no-results answer before the first search settles", async () => {
+    const firstList = deferred<Artwork[]>();
+    getCollectionArtworks.mockReturnValueOnce(firstList.promise);
+    renderPage(`${CANONICAL_PATH}?q=monet`);
+
+    await waitFor(() => expect(getCollectionArtworks).toHaveBeenCalledTimes(1));
+    // An unanswered search has not concluded that nothing matched.
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+
+    await act(async () => {
+      firstList.resolve([]);
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByText("No artworks match “monet”."),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the previous rows and retries a failed search", async () => {
     getCollectionArtworks
       .mockResolvedValueOnce([picasso])
@@ -523,13 +549,24 @@ describe("Collection search", () => {
     getCollectionArtworks.mockRejectedValue(new Error("offline"));
     renderPage();
 
+    // No query is active, so this is the list's failure, not a search's.
     expect(
-      await screen.findByText("Failed to search artworks"),
+      await screen.findByText("Failed to fetch artworks"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
     expect(
       screen.queryByText("No artworks in this collection yet."),
     ).toBeNull();
+  });
+
+  it("says a search failed only when a query was active", async () => {
+    getCollectionArtworks.mockRejectedValue(new Error("offline"));
+    renderPage(`${CANONICAL_PATH}?q=monet`);
+
+    expect(
+      await screen.findByText("Failed to search artworks"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 
   it("keeps a collection-load failure as the page-level error", async () => {

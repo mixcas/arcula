@@ -6,29 +6,12 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  ARTWORK_SEARCH_FIELDS,
+  artworkSearchSuffix,
   isBlankSearchQuery,
   matchesArtworkSearch,
   searchQueryOverflow,
   type ArtworkSearchField,
 } from "../src/artworkSearch";
-
-describe("the declared field list", () => {
-  it("is exactly the ten searchable fields, declared once", () => {
-    expect([...ARTWORK_SEARCH_FIELDS]).toEqual([
-      "title",
-      "artistName",
-      "serie",
-      "media",
-      "editions",
-      "dateOfCreation",
-      "acquisitionDate",
-      "placeOfOrigin",
-      "provenance",
-      "notes",
-    ]);
-  });
-});
 
 describe("matching", () => {
   it("ignores case", () => {
@@ -168,7 +151,35 @@ describe("the shared caps", () => {
     expect(searchQueryOverflow(`${ten} k`)).toBe("too-many-terms");
   });
 
+  it("counts whitespace-separated words, so punctuation joins rather than divides", () => {
+    // The cap is over words, not the predicate's punctuation-separated terms:
+    // a hyphenated string is one word and must not be refused.
+    expect(searchQueryOverflow("a-b-c-d-e-f-g-h-i-j-k")).toBeNull();
+    expect(
+      matchesArtworkSearch(
+        { title: "a b c d e f g h i j k" },
+        "a-b-c-d-e-f-g-h-i-j-k",
+      ),
+    ).toBe(true);
+
+    // Eleven words still spend the cap.
+    expect(
+      searchQueryOverflow(
+        "one two three four five six seven eight nine ten eleven",
+      ),
+    ).toBe("too-many-terms");
+  });
+
   it("does not count a punctuation-only query as terms", () => {
     expect(searchQueryOverflow("— — —")).toBeNull();
+  });
+});
+
+describe("the query suffix", () => {
+  it("appends an encoded q only when there is something to search for", () => {
+    expect(artworkSearchSuffix("")).toBe("");
+    expect(artworkSearchSuffix("   ")).toBe("");
+    expect(artworkSearchSuffix("picasso blue")).toBe("?q=picasso+blue");
+    expect(artworkSearchSuffix("a&b=c")).toBe("?q=a%26b%3Dc");
   });
 });

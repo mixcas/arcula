@@ -225,8 +225,10 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
 artworkImport, collection, invitation, document, user), `artworkPhotos.ts` (the
 `order` invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder),
-`caps.ts` (file caps + accepted types), `limits.ts` (the per-tier collection
-cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase both sides use),
+`artworkSearch.ts` (the ten-field Collection search predicate, its caps and the
+query suffix helper), `caps.ts` (file caps + accepted types), `limits.ts` (the
+per-tier collection cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
+both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
 card asks of a row), `slug.ts`, `types.ts`.
 

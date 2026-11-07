@@ -48,7 +48,12 @@ import {
   artworkPhotoVariants as artworkPhotoVariantsTable,
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
-import { matchesArtworkSearch, type ArtworkRead } from "@arcula/shared";
+import {
+  matchesArtworkSearch,
+  type ArtworkRead,
+  searchQueryOverflow,
+  type SearchQueryOverflow,
+} from "@arcula/shared";
 import { canSeeArtwork, canSeeCollection, isMember } from "./access";
 import {
   loadArtworkInCollection,
@@ -69,13 +74,20 @@ export type ArtworkReadResult =
  * the list can make. A missing Collection is `not-found`; a Private
  * Collection the viewer does not own is `forbidden`. `unauthorized` is the
  * search's own refusal: the member-only live list asked for by a caller with
- * no session.
+ * no session. `invalid-search` is a present query past the shared caps —
+ * checked after the access questions, so a missing collection, an anonymous
+ * caller or a non-member is refused for that reason rather than for their
+ * query.
  */
 export type ArtworkListResult =
   | { readonly status: "ok"; readonly artworks: ArtworkRead[] }
   | { readonly status: "forbidden" }
   | { readonly status: "unauthorized" }
-  | { readonly status: "not-found" };
+  | { readonly status: "not-found" }
+  | {
+      readonly status: "invalid-search";
+      readonly overflow: SearchQueryOverflow;
+    };
 
 type ArtworkChildren = Pick<ArtworkJoined, "photos" | "documents" | "variants">;
 
@@ -245,6 +257,14 @@ async function readArtworkListInMode(
     return { status: "forbidden" };
   }
 
+  // The caps are the query's own validity, so they are answered after the
+  // access questions: who may ask comes before what they asked. No rows load
+  // for a query that cannot be searched.
+  if (search !== null) {
+    const overflow = searchQueryOverflow(search);
+    if (overflow !== null) return { status: "invalid-search", overflow };
+  }
+
   const rows = await db
     .select()
     .from(artworksTable)
@@ -317,6 +337,16 @@ export function readArtworkList(
 }
 
 /**
+ * The Deleted view's answer: the same read with two arms removed. It takes no
+ * search, so an invalid query cannot occur, and it sits behind a session, so
+ * there is no `unauthorized` arm to map.
+ */
+export type DeletedArtworkListResult = Extract<
+  ArtworkListResult,
+  { readonly status: "ok" | "forbidden" | "not-found" }
+>;
+
+/**
  * The Deleted view's list: every work of the collection that carries a
  * deletion stamp, most recently deleted first. Member-only (ADR-0004) — the
  * owner and every collaborator see the same list, and nobody else sees one.
@@ -324,6 +354,12 @@ export function readArtworkList(
 export function readDeletedArtworkList(
   collectionId: string,
   viewer: string | null,
-): Promise<ArtworkListResult> {
-  return readArtworkListInMode(collectionId, viewer, "deleted");
+): Promise<DeletedArtworkListResult> {
+  // The cast states what the call site already guarantees: no search, and a
+  // caller the deleted route has resolved a session for.
+  return readArtworkListInMode(
+    collectionId,
+    viewer,
+    "deleted",
+  ) as Promise<DeletedArtworkListResult>;
 }

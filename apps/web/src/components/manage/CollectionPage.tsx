@@ -25,6 +25,7 @@ import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
 import {
   collectionSlug,
+  artworkSearchSuffix,
   MAX_SEARCH_QUERY_LENGTH,
   parseId,
   searchQueryOverflow,
@@ -48,9 +49,7 @@ const CollectionPage: React.FC = () => {
   // Only the two pages that return here carry the search. Built from `q`
   // alone, so an unrelated parameter can never leak into a page that does not
   // read it; URLSearchParams does the encoding.
-  const searchSuffix = query
-    ? `?${new URLSearchParams({ q: query }).toString()}`
-    : "";
+  const searchSuffix = artworkSearchSuffix(query);
 
   const [collection, setCollection] = useState<Collection | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
@@ -59,6 +58,10 @@ const CollectionPage: React.FC = () => {
   // A list read in flight, distinct from the first collection load: a search
   // keeps the table mounted, so the previous rows stay visible under it.
   const [fetching, setFetching] = useState(false);
+  // Whether the list has answered at all. Before its first answer the page is
+  // loading, not empty, so neither the empty-collection copy nor the
+  // no-results panel may claim anything.
+  const [listSettled, setListSettled] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
   // The typed value belongs to the query it was typed under. While they agree,
@@ -99,10 +102,18 @@ const CollectionPage: React.FC = () => {
         if (id !== requestId.current) return;
         console.error("Error fetching artworks:", err);
         // The previous rows are deliberately kept: a failed search is an
-        // inline answer, not an empty page.
-        setSearchError("Failed to search artworks");
+        // inline answer, not an empty page. The wording follows the read that
+        // failed — only a query is a search.
+        setSearchError(
+          search.trim() === ""
+            ? "Failed to fetch artworks"
+            : "Failed to search artworks",
+        );
       } finally {
-        if (id === requestId.current) setFetching(false);
+        if (id === requestId.current) {
+          setFetching(false);
+          setListSettled(true);
+        }
       }
     },
     [collectionId],
@@ -322,6 +333,7 @@ const CollectionPage: React.FC = () => {
         onDeleted={() => loadArtworks(query)}
         searchQuery={query}
         fetching={fetching}
+        listSettled={listSettled}
         searchError={searchError}
         onRetry={() => void loadArtworks(query)}
         onClearSearch={clearSearch}
