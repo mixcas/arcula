@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Text, Button, Group } from "@mantine/core";
+import { ActionIcon, Button, Group, Menu, Text } from "@mantine/core";
+import {
+  IconDotsVertical,
+  IconFolderCancel,
+  IconSettings,
+} from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { collectionService } from "@/services/collectionService";
 import { artworkService } from "@/services/artworkService";
@@ -98,8 +103,8 @@ const CollectionPage: React.FC = () => {
 
   return (
     <>
-      <Group justify="space-between" mb="xl">
-        <Group>
+      <Group justify="space-between" mb="xl" wrap="wrap">
+        <Group wrap="wrap">
           <Text size="h2">{collection.name}</Text>
           {/*
             Opens in a new tab, so the owner can check the public page and the
@@ -130,25 +135,44 @@ const CollectionPage: React.FC = () => {
             PDF
           </Button>
         </Group>
-        <Group>
+        <Group wrap="wrap">
           <Button
             component={Link}
             to={`/manage/collection/${param}/artwork/add`}
           >
             Add Artwork
           </Button>
-          {/* No count: a badge would mean fetching the deleted list on every
-              collection page load, which the view deliberately avoids. */}
-          <Button
-            component={Link}
-            to={`/manage/collection/${param}/deleted`}
-            variant="default"
-          >
-            Deleted
-          </Button>
-          <Button component={Link} to={`/manage/collection/${param}/settings`}>
-            Settings
-          </Button>
+          {/* The two page-level destinations live behind one trigger so the
+              bar has room for the title and Add Artwork on a narrow screen.
+              No count on Deleted: a badge would mean fetching the deleted
+              list on every collection page load, which the view avoids. */}
+          <Menu shadow="md" width={180} position="bottom-end">
+            <Menu.Target>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                aria-label="Collection actions"
+              >
+                <IconDotsVertical size={18} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                component={Link}
+                to={`/manage/collection/${param}/deleted`}
+                leftSection={<IconFolderCancel size={16} />}
+              >
+                Deleted
+              </Menu.Item>
+              <Menu.Item
+                component={Link}
+                to={`/manage/collection/${param}/settings`}
+                leftSection={<IconSettings size={16} />}
+              >
+                Settings
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
       </Group>
 
