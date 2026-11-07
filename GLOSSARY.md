@@ -204,6 +204,14 @@ have none, ordered by artist then title. An export of the collection, never a
 second presentation of it.
 _Avoid_: Catalogue, catalogue PDF, portfolio
 
+**Collection search**:
+A member's query against the recorded fields of the works in one collection,
+answered with the matching live works — drafts included, deleted works never —
+in the collection's own order. Distinct from a filter, a find and a lookup: it
+asks across fields, every word must appear somewhere, and different words may
+match different fields.
+_Avoid_: Filter, find, lookup, global search
+
 ### Media
 
 **Staged**:

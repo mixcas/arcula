@@ -549,6 +549,11 @@ collectionRoutes.get(
     if (read.status === "not-found") {
       throw new ApiError("not-found", "The collection does not exist");
     }
+    // Unreachable behind `requireSession`: only the live list's search asks
+    // this question. Handled so the union stays exhaustive.
+    if (read.status === "unauthorized") {
+      throw new ApiError("unauthorized", "Sign in to view this collection");
+    }
     if (read.status === "forbidden") {
       throw new ApiError(
         "forbidden",

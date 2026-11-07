@@ -189,7 +189,10 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   list — live, or the member-only Deleted one, most recently deleted first —
   loading the Collection and each child table once for the whole page (at most
   five queries, six for a collaborator's membership row) and returning ok,
-  not-found, or forbidden for the list. The verdict is
+  not-found, unauthorized or forbidden for the list. The live list also takes
+  an optional member-only search (`q`), refused ahead of the visitor verdict and
+  filtering the rows the list already read — drafts included, deleted works
+  never. The verdict is
   `access.ts`'s over rows the module loads through `authorize.ts`, with the
   request's grant validity handed in as a fact; the module carries no Hono type
   and the route owns the wire code. The save routes read their work back

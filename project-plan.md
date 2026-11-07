@@ -411,6 +411,24 @@ forwarding header is never trusted, because it is client-supplied. The identity
 is honest rather than complete: an address is shared behind a proxy and cheap to
 multiply, so this raises the cost of guessing without being a proof.
 
+The collection artwork list takes an optional member-only `q`. A present query
+is a member condition ahead of the visitor verdict — a missing collection is
+`404`, no session `401`, and a signed-in non-member (an Access grant holder
+included) `403` — and a query over 200 characters or 10 terms is `400
+validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
+stripped, lowercased), splits the query on punctuation and requires every term
+to appear somewhere in the joined text of the ten declared fields (title,
+artist name, serie, media, editions, date of creation, acquisition date, place
+of origin, provenance, notes); terms may match different fields, and a query
+that normalizes to no terms matches nothing. The acquisition date is searched in
+both its stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. Deleted
+works are never candidates and a member's drafts are. The filter runs in the API
+over the rows the list already reads, after the visibility verdict, so only
+matching works load their photos and documents; there is no SQL pushdown, no
+extension and no migration, and the list read remains the single seam to
+replace if collection sizes demand it. No matches is `200 []`, and an absent,
+empty or whitespace-only `q` leaves the list unchanged.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
