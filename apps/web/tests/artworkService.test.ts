@@ -31,7 +31,9 @@ const stubFetch = (answer: Response): Call[] => {
     "fetch",
     vi.fn((url: string | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
-      return Promise.resolve(answer);
+      // A Response body can be read once; every call gets its own clone so a
+      // test can make more than one request against one fixture.
+      return Promise.resolve(answer.clone());
     }),
   );
   return calls;
@@ -90,6 +92,49 @@ describe("the Deleted view's service calls", () => {
     expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
       artworkIds: ["a1", "a2"],
     });
+  });
+});
+
+describe("the collection list's search query", () => {
+  const wireArtwork = {
+    id: "a1",
+    userId: "u1",
+    title: "Blue Nude",
+    artistName: "Picasso",
+    documents: [],
+    photos: [],
+    collectionId: "c1",
+    status: "published",
+    deletedAt: null,
+    createdAt: { seconds: 1, nanoseconds: 0 },
+    updatedAt: { seconds: 1, nanoseconds: 0 },
+  };
+
+  it("appends q only when the query holds something", async () => {
+    const calls = stubFetch(ok([wireArtwork]));
+
+    await artworkService.getCollectionArtworks("c1");
+    await artworkService.getCollectionArtworks("c1", "");
+    await artworkService.getCollectionArtworks("c1", "   ");
+    await artworkService.getCollectionArtworks("c1", "picasso blue");
+
+    // The public collection page, the public artwork page and the PDF call it
+    // with no query at all, so the absent and blank forms have to stay the
+    // unadorned list URL.
+    expect(calls.map((call) => call.url)).toEqual([
+      "/api/v1/collections/c1/artworks",
+      "/api/v1/collections/c1/artworks",
+      "/api/v1/collections/c1/artworks",
+      "/api/v1/collections/c1/artworks?q=picasso+blue",
+    ]);
+  });
+
+  it("encodes the query rather than pasting it into the URL", async () => {
+    const calls = stubFetch(ok([]));
+
+    await artworkService.getCollectionArtworks("c1", "a&b");
+
+    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks?q=a%26b");
   });
 });
 

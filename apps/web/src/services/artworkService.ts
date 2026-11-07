@@ -13,6 +13,7 @@
 
 import {
   artworkReadSchema,
+  artworkSearchSuffix,
   type Artwork,
   type ArtworkCreatePayload,
   type ArtworkImportOutcome,
@@ -24,9 +25,19 @@ const base = (collectionId: string) =>
   `/api/v1/collections/${collectionId}/artworks`;
 
 export const artworkService = {
-  /** The collection's live works, for the owner's table. */
-  async getCollectionArtworks(collectionId: string): Promise<Artwork[]> {
-    const rows = await apiRequest<unknown[]>(base(collectionId));
+  /**
+   * The collection's live works. The optional `query` is a Collection search:
+   * a member-only condition on the same read, so the URL carries `q` only when
+   * there is something to search for. The public views and the PDF call this
+   * with no query at all.
+   */
+  async getCollectionArtworks(
+    collectionId: string,
+    query = "",
+  ): Promise<Artwork[]> {
+    const trimmed = query.trim();
+    const suffix = artworkSearchSuffix(trimmed);
+    const rows = await apiRequest<unknown[]>(`${base(collectionId)}${suffix}`);
     return rows.map((row) => artworkReadSchema.parse(row));
   },
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Alert, Badge, Button, Group, Stack, Text } from "@mantine/core";
+import { Alert, Badge, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { Link } from "react-router-dom";
@@ -10,7 +10,7 @@ import {
 } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
 import ArtworkThumbnail from "@/components/manage/collection/ArtworkThumbnail";
-import { artworkSlug, parseId } from "@arcula/shared";
+import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
 // 25 first, so it is also the default: the state below is initialised from
@@ -41,6 +41,18 @@ interface ArtworksTableProps {
   collectionParam: string;
   /** Refetch the list — called after a delete so the row disappears. */
   onDeleted: () => Promise<void> | void;
+  /** The committed Collection search; "" (the default) means no search. */
+  searchQuery?: string;
+  /** A list read is in flight. The previous rows stay on screen. */
+  fetching?: boolean;
+  /** False until the first list read has answered, success or failure. */
+  listSettled?: boolean;
+  /** The list read failed; the previous rows stay when there are any. */
+  searchError?: string | null;
+  /** Ask for the current query's list again, after a failure. */
+  onRetry?: () => void;
+  /** Leave the search: remove `q` and show the whole collection. */
+  onClearSearch?: () => void;
 }
 
 /**
@@ -67,8 +79,44 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   artworks,
   collectionParam,
   onDeleted,
+  searchQuery = "",
+  fetching = false,
+  listSettled = true,
+  searchError = null,
+  onRetry,
+  onClearSearch,
 }) => {
-  const [page, setPage] = useState(1);
+  const queryKey = searchQuery.trim();
+  const searchActive = queryKey !== "";
+  // Edit returns to the search it came from; View is the public page and
+  // deliberately does not. Built from `q` alone and encoded, so the row link
+  // cannot smuggle another parameter back to the collection.
+  const editSearchSuffix = artworkSearchSuffix(queryKey);
+
+  // A committed query is a fresh view: page 1, nothing selected. The token
+  // below is bumped on every transition, so A→B→A counts as two transitions
+  // rather than a return to the page and selection A had before. Adjusting
+  // state during render is React's supported pattern for state derived from
+  // props; an effect would paint the previous query's page first.
+  const [queryTransition, setQueryTransition] = useState({
+    query: queryKey,
+    token: 0,
+  });
+  let resetToken = queryTransition.token;
+  if (queryTransition.query !== queryKey) {
+    resetToken += 1;
+    setQueryTransition({ query: queryKey, token: resetToken });
+  }
+
+  // Page and selection belong to that transition. The stored value still
+  // carries the previous token, so it is simply not read. The sort is
+  // deliberately outside this — searching must not reorder rows.
+  const [pageState, setPageState] = useState({
+    forToken: resetToken,
+    page: 1,
+  });
+  const page = pageState.forToken === resetToken ? pageState.page : 1;
+
   const [recordsPerPage, setRecordsPerPage] = useState(
     RECORDS_PER_PAGE_OPTIONS[0],
   );
@@ -78,8 +126,16 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   });
   // Selected rows are held as ids, not as record objects: a refetch after a
   // delete replaces every object, and a selection keyed by identity would then
-  // silently empty itself.
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // silently empty itself. Keyed by the transition for the same reason as the
+  // page.
+  const [selection, setSelection] = useState({
+    forToken: resetToken,
+    ids: [] as string[],
+  });
+  const selectedIds = useMemo(
+    () => (selection.forToken === resetToken ? selection.ids : []),
+    [selection, resetToken],
+  );
 
   const sortedArtworks = useMemo(() => {
     const accessor = sortStatus.columnAccessor;
@@ -156,7 +212,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         void artworkService
           .softDeleteArtworks(parseId(collectionParam), ids)
           .then(async () => {
-            setSelectedIds([]);
+            setSelection({ forToken: resetToken, ids: [] });
             modals.close(DELETE_MODAL_ID);
             await onDeleted();
             notifications.show({
@@ -273,7 +329,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
               to={`/manage/collection/${collectionParam}/artwork/${artworkSlug(
                 artwork.title,
                 artwork.id,
-              )}`}
+              )}${editSearchSuffix}`}
             >
               Edit
             </Button>
@@ -289,19 +345,57 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         ),
       },
     ],
-    // confirmDelete is rebuilt every render; collectionParam is the only value
-    // that changes what it closes over.
+    // confirmDelete is rebuilt every render; these are the values that change
+    // what it closes over — the collection in the delete route, and the
+    // transition the cleared selection belongs to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [collectionParam],
+    [collectionParam, resetToken],
   );
+
+  const countLabel = searchActive
+    ? `Found ${artworks.length} artwork${artworks.length === 1 ? "" : "s"}`
+    : `${artworks.length} artwork${artworks.length === 1 ? "" : "s"}`;
+
+  // A completed search that matched nothing is its own answer, not an empty
+  // collection; while the first read is still running neither is known, so
+  // the table keeps its searching empty state.
+  const noResults =
+    listSettled &&
+    searchActive &&
+    !fetching &&
+    artworks.length === 0 &&
+    !searchError;
+  // With no rows behind a failure there is nothing to keep, so the Alert
+  // takes the table's place rather than sitting above an empty shell.
+  const searchFailedWithoutRows = searchError !== null && artworks.length === 0;
+  // Before the first read answers, "no works" is not known: the page is
+  // loading. Only the answer afterwards may claim the collection is empty.
+  const emptyLabel = !listSettled
+    ? searchActive
+      ? "Searching…"
+      : "Loading artworks…"
+    : searchActive
+      ? "Searching…"
+      : "No artworks in this collection yet.";
 
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        <Text size="sm" c="dimmed">
-          {artworks.length} artwork{artworks.length === 1 ? "" : "s"}
-          {selectedIds.length > 0 ? ` — ${selectedIds.length} selected` : ""}
-        </Text>
+        <Group gap="xs">
+          {listSettled ? (
+            <Text size="sm" c="dimmed">
+              {countLabel}
+              {selectedIds.length > 0
+                ? ` — ${selectedIds.length} selected`
+                : ""}
+            </Text>
+          ) : null}
+          {fetching && artworks.length > 0 ? (
+            <Text size="sm" c="dimmed">
+              Updating results…
+            </Text>
+          ) : null}
+        </Group>
         {selectedIds.length > 0 ? (
           <Button
             color="red"
@@ -318,38 +412,68 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         ) : null}
       </Group>
 
-      <DataTable<Artwork>
-        idAccessor="id"
-        records={pageRecords}
-        columns={columns}
-        selectedRecords={selectedRecords}
-        onSelectedRecordsChange={(records) =>
-          setSelectedIds(records.map((record) => record.id))
-        }
-        sortStatus={sortStatus}
-        onSortStatusChange={(status) => {
-          setSortStatus(status);
-          // A new column rarely leaves the current offset in range, and
-          // landing on an empty page reads as a bug.
-          setPage(1);
-        }}
-        page={effectivePage}
-        onPageChange={setPage}
-        totalRecords={sortedArtworks.length}
-        recordsPerPage={recordsPerPage}
-        onRecordsPerPageChange={setRecordsPerPage}
-        recordsPerPageOptions={RECORDS_PER_PAGE_OPTIONS}
-        recordsPerPageLabel="Artworks per page"
-        withTableBorder
-        highlightOnHover
-        striped={false}
-        minHeight={200}
-        emptyState={
-          <Text p="xl" ta="center">
-            No artworks in this collection yet.
-          </Text>
-        }
-      />
+      {searchError ? (
+        <Alert color="red" title="Could not load artworks">
+          <Group justify="space-between" wrap="wrap" gap="sm">
+            <Text size="sm">{searchError}</Text>
+            {onRetry ? (
+              <Button size="compact-sm" variant="default" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : null}
+          </Group>
+        </Alert>
+      ) : null}
+
+      {noResults ? (
+        <Paper p="xl" ta="center">
+          <Text>No artworks match “{queryKey}”.</Text>
+          <Button mt="md" variant="default" onClick={onClearSearch}>
+            Clear search
+          </Button>
+        </Paper>
+      ) : null}
+
+      {searchFailedWithoutRows || noResults ? null : (
+        <DataTable<Artwork>
+          idAccessor="id"
+          records={pageRecords}
+          columns={columns}
+          selectedRecords={selectedRecords}
+          onSelectedRecordsChange={(records) =>
+            setSelection({
+              forToken: resetToken,
+              ids: records.map((record) => record.id),
+            })
+          }
+          sortStatus={sortStatus}
+          onSortStatusChange={(status) => {
+            setSortStatus(status);
+            // A new column rarely leaves the current offset in range, and
+            // landing on an empty page reads as a bug.
+            setPageState({ forToken: resetToken, page: 1 });
+          }}
+          page={effectivePage}
+          onPageChange={(next) =>
+            setPageState({ forToken: resetToken, page: next })
+          }
+          totalRecords={sortedArtworks.length}
+          recordsPerPage={recordsPerPage}
+          onRecordsPerPageChange={setRecordsPerPage}
+          recordsPerPageOptions={RECORDS_PER_PAGE_OPTIONS}
+          recordsPerPageLabel="Artworks per page"
+          fetching={fetching}
+          withTableBorder
+          highlightOnHover
+          striped={false}
+          minHeight={200}
+          emptyState={
+            <Text p="xl" ta="center">
+              {emptyLabel}
+            </Text>
+          }
+        />
+      )}
     </Stack>
   );
 };
