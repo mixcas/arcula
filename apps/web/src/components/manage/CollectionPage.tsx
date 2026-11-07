@@ -31,7 +31,7 @@ import {
   parseId,
   searchQueryOverflow,
 } from "@arcula/shared";
-import ArtworksTable from "./collection/ArtworksTable";
+import ArtworksList from "./collection/ArtworksList";
 import type { Artwork, Collection } from "@arcula/shared";
 
 // Long enough to collect a word, short enough that the list feels live. The
@@ -353,7 +353,7 @@ const CollectionPage: React.FC = () => {
         </Group>
       </Group>
 
-      <ArtworksTable
+      <ArtworksList
         artworks={artworks}
         collectionParam={param ?? ""}
         onDeleted={() => loadArtworks(query)}

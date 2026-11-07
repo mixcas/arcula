@@ -15,7 +15,7 @@ import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ArtworksTable from "@/components/manage/collection/ArtworksTable";
+import ArtworksList from "@/components/manage/collection/ArtworksList";
 import { artworkService } from "@/services/artworkService";
 import type { Artwork } from "@arcula/shared";
 
@@ -56,9 +56,9 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   ...overrides,
 });
 
-const renderTable = (props: TableProps) => render(<TableTree {...props} />);
+const renderList = (props: ListProps) => render(<ListTree {...props} />);
 
-interface TableProps {
+interface ListProps {
   artworks: Artwork[];
   onDeleted?: () => Promise<void> | void;
   /** The committed Collection search; "" or absent means no search. */
@@ -73,7 +73,7 @@ interface TableProps {
   onClearSearch?: () => void;
 }
 
-const TableTree: React.FC<TableProps> = ({
+const ListTree: React.FC<ListProps> = ({
   artworks,
   onDeleted,
   searchQuery,
@@ -87,7 +87,7 @@ const TableTree: React.FC<TableProps> = ({
     <ModalsProvider>
       <Notifications />
       <MemoryRouter>
-        <ArtworksTable
+        <ArtworksList
           artworks={artworks}
           collectionParam="my-collection-collection1"
           onDeleted={onDeleted ?? vi.fn()}
@@ -121,7 +121,7 @@ const dialogEl = async () => {
   return found[found.length - 1];
 };
 
-describe("ArtworksTable", () => {
+describe("ArtworksList", () => {
   // Testing Library's automatic cleanup only registers itself when a global
   // `afterEach` exists, and this project runs vitest without globals. Without
   // this, every render stays in the document and the next test's queries match
@@ -167,25 +167,38 @@ describe("ArtworksTable", () => {
       artwork({ id: "a", title: "art 2" }),
       artwork({ id: "b", title: "Art 1" }),
     ];
-    renderTable({ artworks });
+    renderList({ artworks });
     expect(visibleTitles()).toEqual(["Art 1", "art 2", "Art 10"]);
   });
 
   it("re-sorts the whole dataset when another column is clicked", async () => {
     const user = userEvent.setup();
-    renderTable({
-      artworks: [
-        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
-        artwork({ id: "b", title: "Art 2", artistName: "abbey" }),
-        artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
-      ],
-    });
+    // Two pages of rows, so the offset a header click must clear is real: a
+    // reorder that left the page where it was would land on a slice of the new
+    // order rather than its first page.
+    const artworks = Array.from({ length: 30 }, (_, i) =>
+      artwork({
+        id: `w${String(i).padStart(2, "0")}`,
+        title: `Art ${String(i + 1).padStart(2, "0")}`,
+        // Reversed, so artist order is the exact inverse of title order.
+        artistName: `Artist ${String(30 - i).padStart(2, "0")}`,
+      }),
+    );
+    renderList({ artworks });
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
 
     await user.click(screen.getByText("Artist Name"));
 
-    // Artist order, not the title order the table started in.
+    // Artist order from its first page: not the title order the table started
+    // in, and not page 2 of it.
     await waitFor(() =>
-      expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
+      expect(visibleTitles().slice(0, 3)).toEqual([
+        "Art 30",
+        "Art 29",
+        "Art 28",
+      ]),
     );
   });
 
@@ -196,7 +209,7 @@ describe("ArtworksTable", () => {
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
-    renderTable({ artworks });
+    renderList({ artworks });
 
     // The first page holds 25 of the 30, and the count is over the whole set.
     expect(visibleTitles()).toHaveLength(25);
@@ -216,7 +229,7 @@ describe("ArtworksTable", () => {
   });
 
   it("defaults to 25 per page", () => {
-    renderTable({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+    renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
 
     // The size selector renders its own value as a button, so this asserts the
     // default *and* that 25 is offered. The two are coupled through
@@ -231,7 +244,7 @@ describe("ArtworksTable", () => {
   });
 
   it("marks a draft artwork in its title cell, and leaves a published one unmarked", () => {
-    renderTable({
+    renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1", status: "draft" }),
         artwork({ id: "b", title: "Art 2", status: "published" }),
@@ -245,7 +258,7 @@ describe("ArtworksTable", () => {
   });
 
   it("shows the first photo as a small square thumbnail, and nothing without one", () => {
-    renderTable({
+    renderList({
       artworks: [
         artwork({
           id: "a",
@@ -296,7 +309,7 @@ describe("ArtworksTable", () => {
   it("soft-deletes one artwork after confirmation and refetches", async () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
-    renderTable({
+    renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       onDeleted,
     });
@@ -338,7 +351,7 @@ describe("ArtworksTable", () => {
 
   it("cancelling the dialog deletes nothing and keeps the selection", async () => {
     const user = userEvent.setup();
-    renderTable({
+    renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1" }),
         artwork({ id: "b", title: "Art 2" }),
@@ -361,7 +374,7 @@ describe("ArtworksTable", () => {
 
   it("soft-deletes every selected row in one call", async () => {
     const user = userEvent.setup();
-    renderTable({
+    renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1" }),
         artwork({ id: "b", title: "Art 2" }),
@@ -391,7 +404,7 @@ describe("ArtworksTable", () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
     softDeleteMock.mockRejectedValue(new Error("offline"));
-    renderTable({
+    renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       onDeleted,
     });
@@ -414,7 +427,7 @@ describe("ArtworksTable", () => {
   });
 
   it("counts a search's matches and leaves the plain count alone", () => {
-    const { rerender } = renderTable({
+    const { rerender } = renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       searchQuery: "art",
     });
@@ -422,7 +435,7 @@ describe("ArtworksTable", () => {
     expect(screen.getByText("Found 1 artwork")).toBeTruthy();
 
     rerender(
-      <TableTree
+      <ListTree
         artworks={[
           artwork({ id: "a", title: "Art 1" }),
           artwork({ id: "b", title: "Art 2" }),
@@ -434,7 +447,7 @@ describe("ArtworksTable", () => {
 
     // No query: the collection's own count, which the page keeps today.
     rerender(
-      <TableTree
+      <ListTree
         artworks={[
           artwork({ id: "a", title: "Art 1" }),
           artwork({ id: "b", title: "Art 2" }),
@@ -447,7 +460,7 @@ describe("ArtworksTable", () => {
   it("shows the no-results panel instead of the empty-collection copy under a search", async () => {
     const user = userEvent.setup();
     const onClearSearch = vi.fn();
-    renderTable({
+    renderList({
       artworks: [],
       searchQuery: "picasso",
       fetching: false,
@@ -465,7 +478,7 @@ describe("ArtworksTable", () => {
   });
 
   it("keeps the empty-collection copy when no search is active", () => {
-    renderTable({ artworks: [] });
+    renderList({ artworks: [] });
 
     expect(
       screen.getByText("No artworks in this collection yet."),
@@ -474,7 +487,7 @@ describe("ArtworksTable", () => {
   });
 
   it("shows a searching state rather than a completed answer on the first search", () => {
-    renderTable({ artworks: [], searchQuery: "picasso", fetching: true });
+    renderList({ artworks: [], searchQuery: "picasso", fetching: true });
 
     // Neither answer is known yet, so neither published state may appear.
     expect(screen.queryByText(/No artworks match/)).toBeNull();
@@ -485,7 +498,7 @@ describe("ArtworksTable", () => {
   });
 
   it("keeps the previous rows visible while a new search is in flight", () => {
-    renderTable({
+    renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       searchQuery: "art",
       fetching: true,
@@ -498,7 +511,7 @@ describe("ArtworksTable", () => {
   });
 
   it("does not answer a search before the first list read settles", () => {
-    renderTable({
+    renderList({
       artworks: [],
       searchQuery: "picasso",
       listSettled: false,
@@ -517,12 +530,12 @@ describe("ArtworksTable", () => {
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
-    const { rerender } = renderTable({ artworks });
+    const { rerender } = renderList({ artworks });
 
     await user.click(screen.getByRole("button", { name: "2" }));
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
 
-    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    rerender(<ListTree artworks={artworks} searchQuery="art" />);
 
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
     expect(visibleTitles()).not.toContain("Art 26");
@@ -534,13 +547,13 @@ describe("ArtworksTable", () => {
       artwork({ id: "a", title: "Art 1" }),
       artwork({ id: "b", title: "Art 2" }),
     ];
-    const { rerender } = renderTable({ artworks });
+    const { rerender } = renderList({ artworks });
 
     // [0] is the header's "select all"; the rest are the rows.
     await user.click(screen.getAllByRole("checkbox")[1]);
     expect(screen.getByText(/1 selected/)).toBeTruthy();
 
-    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    rerender(<ListTree artworks={artworks} searchQuery="art" />);
 
     // Acting on rows the new result set does not show is what this prevents.
     await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
@@ -554,7 +567,7 @@ describe("ArtworksTable", () => {
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
-    const { rerender } = renderTable({ artworks });
+    const { rerender } = renderList({ artworks });
 
     await user.click(screen.getByRole("button", { name: "2" }));
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
@@ -562,12 +575,12 @@ describe("ArtworksTable", () => {
     await user.click(screen.getAllByRole("checkbox")[1]);
     expect(screen.getByText(/1 selected/)).toBeTruthy();
 
-    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    rerender(<ListTree artworks={artworks} searchQuery="art" />);
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
 
     // Back to the first query: a new query transition, not a return to the
     // page and selection it had under that value.
-    rerender(<TableTree artworks={artworks} />);
+    rerender(<ListTree artworks={artworks} />);
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
     expect(screen.queryByText(/selected/)).toBeNull();
   });
@@ -579,14 +592,14 @@ describe("ArtworksTable", () => {
       artwork({ id: "b", title: "Art 2", artistName: "abbey" }),
       artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
     ];
-    const { rerender } = renderTable({ artworks });
+    const { rerender } = renderList({ artworks });
 
     await user.click(screen.getByText("Artist Name"));
     await waitFor(() =>
       expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
     );
 
-    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    rerender(<ListTree artworks={artworks} searchQuery="art" />);
 
     // Searching must not reorder the rows being read; a reset would put these
     // back in title order.
@@ -598,7 +611,7 @@ describe("ArtworksTable", () => {
   it("keeps the previous rows and offers Retry when the search fails", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
-    renderTable({
+    renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       searchQuery: "art",
       searchError: "Failed to search artworks",
@@ -613,7 +626,7 @@ describe("ArtworksTable", () => {
   });
 
   it("replaces the table with the failure when there are no previous rows", () => {
-    renderTable({
+    renderList({
       artworks: [],
       searchQuery: "art",
       searchError: "Failed to search artworks",
