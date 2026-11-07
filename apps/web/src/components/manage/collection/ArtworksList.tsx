@@ -1,14 +1,24 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { artworkService } from "@/services/artworkService";
 import ArtworksTable from "@/components/manage/collection/ArtworksTable";
+import ArtworksGrid from "@/components/manage/collection/ArtworksGrid";
+import ArtworksViewToggle from "@/components/manage/collection/ArtworksViewToggle";
 import {
   RECORDS_PER_PAGE_OPTIONS,
   sortArtworks,
   type SortState,
 } from "@/components/manage/collection/artworksSort";
+import {
+  fromArtworksSort,
+  readUserSettings,
+  toArtworksSort,
+  writeArtworksSort,
+  writeArtworksView,
+  type ArtworksView,
+} from "@/userSettings";
 import { parseId } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
@@ -44,13 +54,13 @@ export interface ArtworksListProps {
  * The owner-facing artwork list: everything around the artworks themselves and
  * nothing about how they are drawn.
  *
- * It owns the count, the selection, the sort, the page and the page size, the
- * delete confirmation and the three states the collection page hands down
- * (fetching, not settled, failed) — so that a second presentation of the same
- * collection, added later, can be rendered from this one state instead of
- * keeping a parallel copy. `ArtworksTable` renders the page it is given.
+ * It owns the count, the selection, the sort, the page, the page size and the
+ * view, the delete confirmation and the three states the collection page hands
+ * down (fetching, not settled, failed) — so that the two presentations of the
+ * same collection share one state instead of keeping a parallel copy.
+ * `ArtworksTable` and `ArtworksGrid` render the page they are given.
  *
- * Three things about it are not obvious from the markup:
+ * Four things about it are not obvious from the markup:
  *
  * - **The sort and the page are separate from the query.** A committed query is
  *   a fresh view — page 1, nothing selected, and a token that makes A→B→A count
@@ -59,6 +69,11 @@ export interface ArtworksListProps {
  * - **Sorting happens over the whole set.** The page is sliced from the sorted
  *   result; sorting the visible page instead would merely reorder one page and
  *   leave the collection in a nonsense order.
+ * - **The view and the sort are remembered.** They are seeded from one browser
+ *   settings object and written back at the one point either sort control
+ *   changes them, so the Table's headers and the Grid's select cannot disagree.
+ *   Switching the view touches no other state, so the page, the selection and
+ *   the scroll position survive it.
  * - **Deleting is a soft delete.** `deletedAt` is stamped server-side and the
  *   record is kept, which is why the delete is one bulk request rather than a
  *   row-per-call and why it is reversible later.
@@ -104,10 +119,32 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
   const [recordsPerPage, setRecordsPerPage] = useState(
     RECORDS_PER_PAGE_OPTIONS[0],
   );
-  const [sort, setSort] = useState<SortState>({
-    field: "title",
-    direction: "asc",
-  });
+  // The view and the sort are remembered for every collection, in one browser
+  // key. They are seeded once from a `useState` initialiser rather than an
+  // effect: the first paint is then the remembered view, and a storage read
+  // that throws has already degraded to the defaults inside `readUserSettings`.
+  const [view, setView] = useState<ArtworksView>(
+    () => readUserSettings().artworksView,
+  );
+  const [sort, setSort] = useState<SortState>(() =>
+    fromArtworksSort(readUserSettings().artworksSort),
+  );
+
+  // Both controls write through here: the Grid's select, and the Table's
+  // headers. Persisting at the one write point is what keeps the two from
+  // silently disagreeing — there is no path that reorders one view only.
+  const changeSort = (next: SortState) => {
+    setSort(next);
+    writeArtworksSort(toArtworksSort(next));
+    // A new order rarely leaves the current offset in range, and landing on
+    // an empty page reads as a bug.
+    setPageState({ forToken: resetToken, page: 1 });
+  };
+
+  const changeView = (next: ArtworksView) => {
+    setView(next);
+    writeArtworksView(next);
+  };
   // Selected rows are held as ids, not as record objects: a refetch after a
   // delete replaces every object, and a selection keyed by identity would then
   // silently empty itself. Keyed by the transition for the same reason as the
@@ -216,11 +253,17 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
     });
   };
 
-  // The table and a future grid share one delete flow, so a row's Delete names
-  // the work it deletes and the parent owns the dialog — including which
-  // transition the cleared selection belongs to.
-  const confirmDeleteArtwork = (artwork: Artwork) =>
-    confirmDelete([artwork.id], `"${artwork.title}"`);
+  // The table and the grid share one delete flow, so a row's or a card's Delete
+  // names the work it deletes and the parent owns the dialog — including which
+  // transition the cleared selection belongs to. Stable across renders, so the
+  // views' memoised cells and cards are not rebuilt on every toolbar tick.
+  const confirmDeleteArtwork = useCallback(
+    (artwork: Artwork) => confirmDelete([artwork.id], `"${artwork.title}"`),
+    // `confirmDelete` closes over the transition token and `collectionParam`;
+    // both are captured fresh on the renders that matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resetToken, collectionParam],
+  );
 
   const countLabel = searchActive
     ? `Found ${artworks.length} artwork${artworks.length === 1 ? "" : "s"}`
@@ -250,7 +293,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
+      <Group justify="space-between" align="flex-start">
         <Group gap="xs">
           {listSettled ? (
             <Text size="sm" c="dimmed">
@@ -265,21 +308,25 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
               Updating results…
             </Text>
           ) : null}
+          {selectedIds.length > 0 ? (
+            <Button
+              color="red"
+              variant="light"
+              size="compact-sm"
+              onClick={() =>
+                confirmDelete(
+                  selectedIds,
+                  `${selectedIds.length} artwork${selectedIds.length === 1 ? "" : "s"}`,
+                )
+              }
+            >
+              Delete selected
+            </Button>
+          ) : null}
         </Group>
-        {selectedIds.length > 0 ? (
-          <Button
-            color="red"
-            variant="light"
-            onClick={() =>
-              confirmDelete(
-                selectedIds,
-                `${selectedIds.length} artwork${selectedIds.length === 1 ? "" : "s"}`,
-              )
-            }
-          >
-            Delete selected
-          </Button>
-        ) : null}
+        <Group gap="sm" wrap="nowrap">
+          <ArtworksViewToggle value={view} onChange={changeView} />
+        </Group>
       </Group>
 
       {searchError ? (
@@ -304,7 +351,27 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
         </Paper>
       ) : null}
 
-      {searchFailedWithoutRows || noResults ? null : (
+      {searchFailedWithoutRows || noResults ? null : view === "grid" ? (
+        <ArtworksGrid
+          records={pageRecords}
+          selectedIds={selectedIds}
+          onSelectionChange={(ids) =>
+            setSelection({ forToken: resetToken, ids })
+          }
+          collectionParam={collectionParam}
+          searchQuery={searchQuery}
+          onConfirmDeleteArtwork={confirmDeleteArtwork}
+          fetching={fetching}
+          emptyLabel={emptyLabel}
+          page={effectivePage}
+          onPageChange={(next) =>
+            setPageState({ forToken: resetToken, page: next })
+          }
+          totalRecords={sortedArtworks.length}
+          recordsPerPage={recordsPerPage}
+          onRecordsPerPageChange={setRecordsPerPage}
+        />
+      ) : (
         <ArtworksTable
           records={pageRecords}
           selectedRecords={selectedRecords}
@@ -312,12 +379,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
             setSelection({ forToken: resetToken, ids })
           }
           sort={sort}
-          onSortChange={(next) => {
-            setSort(next);
-            // A new column rarely leaves the current offset in range, and
-            // landing on an empty page reads as a bug.
-            setPageState({ forToken: resetToken, page: 1 });
-          }}
+          onSortChange={changeSort}
           page={effectivePage}
           onPageChange={(next) =>
             setPageState({ forToken: resetToken, page: next })

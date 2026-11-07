@@ -113,6 +113,12 @@ const visibleTitles = (): string[] =>
     .slice(1) // drop the header row
     .map((row) => row.textContent?.match(/art \d+/i)?.[0] ?? "");
 
+// Card order as rendered: the Grid's list items, each named by its title.
+const cardTitles = (): string[] =>
+  screen
+    .getAllByRole("listitem")
+    .map((item) => item.textContent?.match(/art \d+/i)?.[0] ?? "");
+
 // The confirm dialog element. Scoping queries to it is what disambiguates the
 // dialog's own "Delete" button from the per-row ones; the last one wins because
 // the dialog is mounted last.
@@ -131,6 +137,10 @@ describe("ArtworksList", () => {
   beforeEach(() => {
     softDeleteMock.mockReset();
     softDeleteMock.mockResolvedValue(undefined);
+    // The list reads its remembered view and sort from browser storage on
+    // mount, so a test that does not say what is stored must start from
+    // nothing — otherwise a previous test's Grid choice leaks into this one.
+    localStorage.clear();
     // jsdom has no matchMedia, which MantineProvider reads when resolving the
     // default color scheme on mount.
     //
@@ -641,5 +651,192 @@ describe("ArtworksList", () => {
       screen.queryByText("No artworks in this collection yet."),
     ).toBeNull();
     expect(screen.queryByText(/No artworks match/)).toBeNull();
+  });
+
+  describe("the Grid view", () => {
+    // Puts the list in the Grid as a returning visitor would find it, so a
+    // test is about the state that follows and not about toggling first.
+    const startInGrid = () =>
+      localStorage.setItem(
+        "arcula.userSettings",
+        JSON.stringify({
+          version: 1,
+          artworksView: "grid",
+          artworksSort: "title-asc",
+        }),
+      );
+
+    // The Grid segment of the icon-only toggle, by the name its tooltip and
+    // aria-label share.
+    const gridSegment = () => screen.getByRole("radio", { name: "Grid" });
+    const tableSegment = () => screen.getByRole("radio", { name: "Table" });
+
+    it("toggles to cards and remembers the choice", async () => {
+      const user = userEvent.setup();
+      const artworks = [
+        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
+        artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
+      ];
+      renderList({ artworks });
+
+      // Table is the default: a stored plan of "grid" is what this test
+      // changes, not what it starts from.
+      expect(screen.getByRole("table")).toBeTruthy();
+      expect(tableSegment()).toBeChecked();
+
+      await user.click(gridSegment());
+
+      // The cards carry the work's identity, in sorted order.
+      await waitFor(() => expect(screen.queryByRole("table")).toBeNull());
+      expect(cardTitles()).toEqual(["Art 1", "Art 2"]);
+      expect(gridSegment()).toBeChecked();
+
+      // Remembered for the next visit and the next collection: the one key
+      // holds the view, and the sort it did not touch keeps its value.
+      expect(
+        JSON.parse(localStorage.getItem("arcula.userSettings") ?? "null"),
+      ).toEqual({
+        version: 1,
+        artworksView: "grid",
+        artworksSort: "title-asc",
+      });
+    });
+
+    it("starts in the remembered view", () => {
+      startInGrid();
+      renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+      expect(gridSegment()).toBeChecked();
+      expect(screen.queryByRole("table")).toBeNull();
+      expect(cardTitles()).toEqual(["Art 1"]);
+    });
+
+    it("falls back to the table when the stored settings are corrupt", () => {
+      localStorage.setItem("arcula.userSettings", "{not json");
+      renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+      expect(screen.getByRole("table")).toBeTruthy();
+      expect(tableSegment()).toBeChecked();
+    });
+
+    it("keeps the page and the selection when the view is toggled", async () => {
+      const user = userEvent.setup();
+      const artworks = Array.from({ length: 30 }, (_, i) =>
+        artwork({
+          id: `w${i}`,
+          title: `Art ${String(i + 1).padStart(2, "0")}`,
+        }),
+      );
+      renderList({ artworks });
+
+      // [0] is the header's "select all"; the rest are the rows.
+      await user.click(screen.getAllByRole("checkbox")[1]);
+      await user.click(screen.getByRole("button", { name: "2" }));
+      await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
+
+      await user.click(gridSegment());
+
+      // The same selection and the same page slice — a toggle is a change of
+      // presentation only.
+      await waitFor(() => expect(cardTitles()).toHaveLength(5));
+      expect(cardTitles()[0]).toBe("Art 26");
+      expect(screen.getByText(/1 selected/)).toBeTruthy();
+    });
+
+    it("dims the cards rather than emptying them while a read is in flight", async () => {
+      startInGrid();
+      const { rerender } = renderList({
+        artworks: [artwork({ id: "a", title: "Art 1" })],
+      });
+
+      expect(screen.getByRole("list").getAttribute("aria-busy")).toBeNull();
+
+      rerender(
+        <ListTree
+          artworks={[artwork({ id: "a", title: "Art 1" })]}
+          searchQuery="art"
+          fetching
+        />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByRole("list").getAttribute("aria-busy")).toBe("true"),
+      );
+      expect(cardTitles()).toEqual(["Art 1"]);
+    });
+
+    it("pages the cards under the grid at the page size", async () => {
+      const user = userEvent.setup();
+      startInGrid();
+      // 30 works is two pages of the default 25; the second holds the rest.
+      const artworks = Array.from({ length: 30 }, (_, i) =>
+        artwork({
+          id: `w${i}`,
+          title: `Art ${String(i + 1).padStart(2, "0")}`,
+        }),
+      );
+      renderList({ artworks });
+
+      expect(cardTitles()).toHaveLength(25);
+
+      await user.click(screen.getByRole("button", { name: "2" }));
+
+      await waitFor(() =>
+        expect(cardTitles()).toEqual([
+          "Art 26",
+          "Art 27",
+          "Art 28",
+          "Art 29",
+          "Art 30",
+        ]),
+      );
+      // The Grid's pager is the same page state, not a second one: the count
+      // stays over the whole set.
+      expect(screen.getByText("30 artworks")).toBeTruthy();
+      expect(document.querySelector(".mantine-Pagination-root")).not.toBeNull();
+    });
+
+    it("shows the collection's own empty state, not a pager", () => {
+      startInGrid();
+      renderList({ artworks: [] });
+
+      expect(
+        screen.getByText("No artworks in this collection yet."),
+      ).toBeTruthy();
+      expect(screen.queryByRole("list")).toBeNull();
+      // No pager either: there is no page to move between.
+      expect(document.querySelector(".mantine-Pagination-root")).toBeNull();
+    });
+
+    it("keeps the failure above nothing as it does in the table", () => {
+      startInGrid();
+      const onRetry = vi.fn();
+      renderList({
+        artworks: [],
+        searchQuery: "art",
+        searchError: "Failed to search artworks",
+        onRetry,
+      });
+
+      expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+      // The Grid is replaced, not rendered empty beneath the alert.
+      expect(screen.queryByRole("list")).toBeNull();
+      expect(screen.queryByText(/No artworks match/)).toBeNull();
+    });
+
+    it("keeps the earlier cards under a failure, as the table does", () => {
+      startInGrid();
+      renderList({
+        artworks: [artwork({ id: "a", title: "Art 1" })],
+        searchQuery: "art",
+        searchError: "Failed to search artworks",
+        onRetry: vi.fn(),
+      });
+
+      // The alert says the read failed; the cards it could not replace stay,
+      // so a transient failure does not blank a collection being browsed.
+      expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+      expect(cardTitles()).toEqual(["Art 1"]);
+    });
   });
 });
