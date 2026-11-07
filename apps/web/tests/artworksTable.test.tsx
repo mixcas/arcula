@@ -56,24 +56,52 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   ...overrides,
 });
 
-const renderTable = (props: {
+const renderTable = (props: TableProps) => render(<TableTree {...props} />);
+
+interface TableProps {
   artworks: Artwork[];
   onDeleted?: () => Promise<void> | void;
-}) =>
-  render(
-    <MantineProvider>
-      <ModalsProvider>
-        <Notifications />
-        <MemoryRouter>
-          <ArtworksTable
-            artworks={props.artworks}
-            collectionParam="my-collection-collection1"
-            onDeleted={props.onDeleted ?? vi.fn()}
-          />
-        </MemoryRouter>
-      </ModalsProvider>
-    </MantineProvider>,
-  );
+  /** The committed Collection search; "" or absent means no search. */
+  searchQuery?: string;
+  /** A list read is in flight, with the previous rows still on screen. */
+  fetching?: boolean;
+  /** False until the first list read has answered, success or failure. */
+  listSettled?: boolean;
+  /** The list read failed; the previous rows stay when there are any. */
+  searchError?: string | null;
+  onRetry?: () => void;
+  onClearSearch?: () => void;
+}
+
+const TableTree: React.FC<TableProps> = ({
+  artworks,
+  onDeleted,
+  searchQuery,
+  fetching,
+  listSettled,
+  searchError,
+  onRetry,
+  onClearSearch,
+}) => (
+  <MantineProvider>
+    <ModalsProvider>
+      <Notifications />
+      <MemoryRouter>
+        <ArtworksTable
+          artworks={artworks}
+          collectionParam="my-collection-collection1"
+          onDeleted={onDeleted ?? vi.fn()}
+          searchQuery={searchQuery}
+          fetching={fetching}
+          listSettled={listSettled}
+          searchError={searchError}
+          onRetry={onRetry}
+          onClearSearch={onClearSearch}
+        />
+      </MemoryRouter>
+    </ModalsProvider>
+  </MantineProvider>
+);
 
 // Row order as rendered, one label per row. The datatable renders records
 // verbatim, so this is the only way to see what the caller-side sort/pagination
@@ -383,5 +411,222 @@ describe("ArtworksTable", () => {
       "Error deleting artworks:",
       expect.objectContaining({ message: "offline" }),
     );
+  });
+
+  it("counts a search's matches and leaves the plain count alone", () => {
+    const { rerender } = renderTable({
+      artworks: [artwork({ id: "a", title: "Art 1" })],
+      searchQuery: "art",
+    });
+    // Singular, because "Found 1 artworks" is how this reads when it is wrong.
+    expect(screen.getByText("Found 1 artwork")).toBeTruthy();
+
+    rerender(
+      <TableTree
+        artworks={[
+          artwork({ id: "a", title: "Art 1" }),
+          artwork({ id: "b", title: "Art 2" }),
+        ]}
+        searchQuery="art"
+      />,
+    );
+    expect(screen.getByText("Found 2 artworks")).toBeTruthy();
+
+    // No query: the collection's own count, which the page keeps today.
+    rerender(
+      <TableTree
+        artworks={[
+          artwork({ id: "a", title: "Art 1" }),
+          artwork({ id: "b", title: "Art 2" }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("2 artworks")).toBeTruthy();
+  });
+
+  it("shows the no-results panel instead of the empty-collection copy under a search", async () => {
+    const user = userEvent.setup();
+    const onClearSearch = vi.fn();
+    renderTable({
+      artworks: [],
+      searchQuery: "picasso",
+      fetching: false,
+      onClearSearch,
+    });
+
+    expect(screen.getByText("No artworks match “picasso”.")).toBeTruthy();
+    // A completed search that matched nothing is not an empty collection.
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(onClearSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the empty-collection copy when no search is active", () => {
+    renderTable({ artworks: [] });
+
+    expect(
+      screen.getByText("No artworks in this collection yet."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
+  });
+
+  it("shows a searching state rather than a completed answer on the first search", () => {
+    renderTable({ artworks: [], searchQuery: "picasso", fetching: true });
+
+    // Neither answer is known yet, so neither published state may appear.
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+    expect(screen.getByText("Searching…")).toBeTruthy();
+  });
+
+  it("keeps the previous rows visible while a new search is in flight", () => {
+    renderTable({
+      artworks: [artwork({ id: "a", title: "Art 1" })],
+      searchQuery: "art",
+      fetching: true,
+    });
+
+    expect(screen.getByText("Art 1")).toBeTruthy();
+    // And the read is visibly still running: dropping the `fetching` wiring
+    // would leave the old rows looking like this search's answer.
+    expect(screen.getByText("Updating results…")).toBeTruthy();
+  });
+
+  it("does not answer a search before the first list read settles", () => {
+    renderTable({
+      artworks: [],
+      searchQuery: "picasso",
+      listSettled: false,
+    });
+
+    // Neither published answer is known yet, with no request even in flight.
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+    expect(screen.getByText("Searching…")).toBeTruthy();
+  });
+
+  it("returns to page 1 when the query changes", async () => {
+    const user = userEvent.setup();
+    const artworks = Array.from({ length: 30 }, (_, i) =>
+      artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
+    );
+    const { rerender } = renderTable({ artworks });
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
+
+    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
+    expect(visibleTitles()).not.toContain("Art 26");
+  });
+
+  it("clears the row selection when the query changes", async () => {
+    const user = userEvent.setup();
+    const artworks = [
+      artwork({ id: "a", title: "Art 1" }),
+      artwork({ id: "b", title: "Art 2" }),
+    ];
+    const { rerender } = renderTable({ artworks });
+
+    // [0] is the header's "select all"; the rest are the rows.
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
+
+    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+
+    // Acting on rows the new result set does not show is what this prevents.
+    await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+    expect(
+      screen.queryByRole("button", { name: "Delete selected" }),
+    ).toBeNull();
+  });
+
+  it("starts at page 1 with no selection when a query returns to an earlier value", async () => {
+    const user = userEvent.setup();
+    const artworks = Array.from({ length: 30 }, (_, i) =>
+      artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
+    );
+    const { rerender } = renderTable({ artworks });
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
+    // [0] is the header's "select all"; the rest are the rows.
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
+
+    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
+
+    // Back to the first query: a new query transition, not a return to the
+    // page and selection it had under that value.
+    rerender(<TableTree artworks={artworks} />);
+    await waitFor(() => expect(visibleTitles()[0]).toBe("Art 01"));
+    expect(screen.queryByText(/selected/)).toBeNull();
+  });
+
+  it("keeps the chosen sort when the query changes", async () => {
+    const user = userEvent.setup();
+    const artworks = [
+      artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
+      artwork({ id: "b", title: "Art 2", artistName: "abbey" }),
+      artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
+    ];
+    const { rerender } = renderTable({ artworks });
+
+    await user.click(screen.getByText("Artist Name"));
+    await waitFor(() =>
+      expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
+    );
+
+    rerender(<TableTree artworks={artworks} searchQuery="art" />);
+
+    // Searching must not reorder the rows being read; a reset would put these
+    // back in title order.
+    await waitFor(() =>
+      expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
+    );
+  });
+
+  it("keeps the previous rows and offers Retry when the search fails", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    renderTable({
+      artworks: [artwork({ id: "a", title: "Art 1" })],
+      searchQuery: "art",
+      searchError: "Failed to search artworks",
+      onRetry,
+    });
+
+    expect(screen.getByText("Art 1")).toBeTruthy();
+    expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces the table with the failure when there are no previous rows", () => {
+    renderTable({
+      artworks: [],
+      searchQuery: "art",
+      searchError: "Failed to search artworks",
+      onRetry: vi.fn(),
+    });
+
+    expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    // No table answers, and no state is invented in its place.
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(
+      screen.queryByText("No artworks in this collection yet."),
+    ).toBeNull();
+    expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 });

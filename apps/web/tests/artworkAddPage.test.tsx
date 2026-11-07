@@ -135,14 +135,14 @@ const LocationProbe: React.FC = () => {
   );
 };
 
-const renderPage = () =>
+const renderPage = (search = "") =>
   render(
     <MantineProvider>
       <ModalsProvider>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/add`,
+            `/manage/collection/${COLLECTION_PARAM}/artwork/add${search}`,
           ]}
         >
           {/* Outside the routes, so it reports wherever the page lands — the Add
@@ -206,6 +206,11 @@ describe("the Add page — the single write", () => {
     commits.documents = [{ entryId: "d1", name: "report.pdf" }];
     const user = userEvent.setup();
     renderPage();
+    // No search was active, so Cancel is the collection's plain address.
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+      "href",
+      `/manage/collection/${COLLECTION_PARAM}`,
+    );
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
@@ -226,6 +231,23 @@ describe("the Add page — the single write", () => {
     // neither reorders nor re-names them.
     expect(body.photos).toEqual(commits.photos);
     expect(body.documents).toEqual(commits.documents);
+  });
+
+  it("carries the active search through Cancel and the new work's page", async () => {
+    const user = userEvent.setup();
+    renderPage("?q=picasso");
+
+    // Cancel returns to the search the user left, not to the whole collection.
+    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+      "href",
+      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+    );
+
+    await save(user);
+
+    // The new work's Edit page carries it too, so its own Cancel still
+    // returns to that search.
+    await waitFor(() => expect(landedAt()).toBe(`${editPath()}?q=picasso`));
   });
 
   it("lets the owner send a new work as a draft", async () => {

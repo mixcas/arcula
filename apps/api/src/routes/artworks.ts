@@ -34,9 +34,12 @@ import {
 import {
   MAX_ARTWORK_DOCUMENTS,
   MAX_ARTWORK_PHOTOS,
+  MAX_SEARCH_QUERY_LENGTH,
+  MAX_SEARCH_TERMS,
   UPDATABLE_TEXT_FIELDS,
   artworkCreateSchema,
   artworkUpdateSchema,
+  isBlankSearchQuery,
   type ArtworkCreatePayload,
   type ArtworkRead,
   type ArtworkUpdatePayload,
@@ -116,24 +119,45 @@ artworkRoutes.get(
 
 // GET list — member: every live work; non-member: the published ones; a
 // private collection, or a protected one the visitor holds no grant for: 403
-// (never 404 — the client maps the refusal to "private").
+// (never 404 — the client maps the refusal to "private"). An optional `q` is
+// the member-only Collection search. Its questions are answered in order:
+// a missing collection is 404, no session is 401, a signed-in non-member —
+// grant holder included — is 403, and only then is a query past the shared
+// caps a validation error attributed to `q`. Absent, empty or whitespace-only
+// leaves the list exactly as it was.
 artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
   const session = await resolveSession(c);
   const collectionId = param(c, "collectionId");
+  const rawQuery = c.req.query("q");
+  const search =
+    rawQuery !== undefined && !isBlankSearchQuery(rawQuery) ? rawQuery : null;
   const hasValidGrant = await grantHeld(c, collectionId);
   const read = await readArtworkList(
     collectionId,
     session?.user.id ?? null,
     hasValidGrant,
+    search,
   );
   if (read.status === "not-found") {
     throw new ApiError("not-found", "The collection does not exist");
+  }
+  if (read.status === "unauthorized") {
+    throw new ApiError("unauthorized", "Sign in to search this collection");
   }
   if (read.status === "forbidden") {
     throw new ApiError(
       "forbidden",
       "You do not have access to this collection",
     );
+  }
+  // The access questions came first; the query's own caps answer only for a
+  // caller who may search at all.
+  if (read.status === "invalid-search") {
+    const message =
+      read.overflow === "too-long"
+        ? `Search is limited to ${MAX_SEARCH_QUERY_LENGTH} characters`
+        : `Search is limited to ${MAX_SEARCH_TERMS} words`;
+    throw new ApiError("validation", message, { fields: { q: message } });
   }
   return c.json(read.artworks);
 });
