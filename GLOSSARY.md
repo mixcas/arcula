@@ -211,6 +211,14 @@ have none, ordered by artist then title. An export of the collection, never a
 second presentation of it.
 _Avoid_: Catalogue, catalogue PDF, portfolio
 
+**Artworks manage view**:
+How an owner or a collaborator browses a collection's artworks on its manage
+page: as a **Table**, for scanning the recorded fields, or as a **Grid** of
+photo cards, for recognising the works by their images. A manage-page
+presentation only — never how a visitor sees the collection, which is a skin's
+business.
+_Avoid_: Layout, list mode, display mode
+
 ### Media
 
 **Staged**:

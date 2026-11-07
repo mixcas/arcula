@@ -11,7 +11,10 @@ import {
   RECORDS_PER_PAGE_OPTIONS,
   type SortState,
 } from "@/components/manage/collection/artworksSort";
-import { artworkSlug, artworkSearchSuffix } from "@arcula/shared";
+import {
+  manageArtworkEditHref,
+  publicArtworkHref,
+} from "@/services/artworkLinks";
 import type { Artwork } from "@arcula/shared";
 
 export interface ArtworksTableProps {
@@ -77,9 +80,8 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   emptyLabel,
 }) => {
   // Edit returns to the search it came from; View is the public page and
-  // deliberately does not. Built from `q` alone and encoded, so the row link
-  // cannot smuggle another parameter back to the collection.
-  const editSearchSuffix = artworkSearchSuffix(searchQuery.trim());
+  // deliberately does not. Both addresses come from `artworkLinks`, so the
+  // Grid's cards and these rows cannot compose them differently.
 
   // The datatable addresses its columns by accessor; the list's sort names the
   // field. Memoised on the shared state, so the datatable sees a new status
@@ -169,10 +171,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
               size="compact-xs"
               variant="default"
               component="a"
-              href={`/collection/${collectionParam}/artwork/${artworkSlug(
-                artwork.title,
-                artwork.id,
-              )}`}
+              href={publicArtworkHref(collectionParam, artwork)}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -182,10 +181,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
               size="compact-xs"
               variant="default"
               component={Link}
-              to={`/manage/collection/${collectionParam}/artwork/${artworkSlug(
-                artwork.title,
-                artwork.id,
-              )}${editSearchSuffix}`}
+              to={manageArtworkEditHref(collectionParam, artwork, searchQuery)}
             >
               Edit
             </Button>
@@ -201,7 +197,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         ),
       },
     ],
-    [collectionParam, editSearchSuffix, onConfirmDeleteArtwork],
+    [collectionParam, searchQuery, onConfirmDeleteArtwork],
   );
 
   return (

@@ -7,8 +7,6 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  ASPECT_MAX,
-  ASPECT_MIN,
   artworkCardSpan,
   artworkCardAspect,
 } from "@/components/manage/collection/artworkCardGeometry";
@@ -26,14 +24,14 @@ describe("artworkCardAspect", () => {
 
   it("flattens a panorama to the widest reserved box", () => {
     // A 4:1 panorama would reserve a 2 px-tall strip; the card clamps it to the
-    // 2:1 floor and crops the sides with object-fit: cover.
-    expect(artworkCardAspect(4000, 1000)).toBe(ASPECT_MIN);
-    expect(ASPECT_MIN).toBe(0.5);
+    // band's floor and crops the sides with object-fit: cover. The value is
+    // spelled here rather than read off `ASPECT_MIN`, so the band is a product
+    // choice this test holds rather than a constant compared with itself.
+    expect(artworkCardAspect(4000, 1000)).toBe(0.5);
   });
 
   it("crops a tall portrait to the tallest reserved box", () => {
-    expect(artworkCardAspect(400, 2000)).toBe(ASPECT_MAX);
-    expect(ASPECT_MAX).toBe(1.4);
+    expect(artworkCardAspect(400, 2000)).toBe(1.4);
   });
 
   it("answers the square fallback for a size it cannot use", () => {

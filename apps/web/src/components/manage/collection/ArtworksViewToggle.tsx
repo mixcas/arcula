@@ -28,9 +28,11 @@ const ArtworksViewToggle: React.FC<ArtworksViewToggleProps> = ({
     size="xs"
     value={value}
     onChange={(next) => {
-      // The control's generic is `string`; only the two values it was given
-      // can come back, so this narrows rather than casts.
-      onChange(next === "grid" ? "grid" : "table");
+      // The control's generic is `string`. Mantine only reports the two values
+      // it was given, but a report of anything else is ignored rather than
+      // coerced to "table": coercing would silently change the view for an
+      // input this component does not understand.
+      if (next === "table" || next === "grid") onChange(next);
     }}
     role="radiogroup"
     aria-label="Artworks manage view"

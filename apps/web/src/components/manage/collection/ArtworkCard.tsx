@@ -1,14 +1,13 @@
 import React, { useMemo } from "react";
 import { Badge, Box, Button, Card, Checkbox, Group, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
-import {
-  artworkSlug,
-  artworkSearchSuffix,
-  primaryPhoto,
-  primaryPhotoUrl,
-} from "@arcula/shared";
+import { primaryPhoto, primaryPhotoUrl } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 import { artworkCardAspect } from "@/components/manage/collection/artworkCardGeometry";
+import {
+  manageArtworkEditHref,
+  publicArtworkHref,
+} from "@/services/artworkLinks";
 
 export interface ArtworkCardProps {
   artwork: Artwork;
@@ -70,14 +69,8 @@ const ArtworkCard: React.FC<ArtworkCardProps> = ({
     return { src, aspect };
   }, [artwork]);
 
-  const href = `/collection/${collectionParam}/artwork/${artworkSlug(
-    artwork.title,
-    artwork.id,
-  )}`;
-  const editTo = `/manage/collection/${collectionParam}/artwork/${artworkSlug(
-    artwork.title,
-    artwork.id,
-  )}${artworkSearchSuffix(searchQuery.trim())}`;
+  const href = publicArtworkHref(collectionParam, artwork);
+  const editTo = manageArtworkEditHref(collectionParam, artwork, searchQuery);
 
   return (
     <Card

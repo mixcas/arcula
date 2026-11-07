@@ -1,5 +1,13 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Button, Group, Paper, Stack, Text } from "@mantine/core";
+import React, { useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  Text,
+} from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { artworkService } from "@/services/artworkService";
@@ -29,6 +37,16 @@ import type { Artwork } from "@arcula/shared";
 // rather than on the row that opens it, because a row delete and a bulk delete
 // are the same dialog and the same write.
 const DELETE_MODAL_ID = "delete-artworks";
+
+// Exactly the four orders the Grid's select offers, in the settings' own
+// spelling, so the select writes what is remembered without a second
+// vocabulary.
+const SORT_OPTIONS = [
+  { value: "title-asc", label: "Title A-Z" },
+  { value: "title-desc", label: "Title Z-A" },
+  { value: "artist-asc", label: "Artist Name A-Z" },
+  { value: "artist-desc", label: "Artist Name Z-A" },
+] as const;
 
 export interface ArtworksListProps {
   artworks: Artwork[];
@@ -184,6 +202,15 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
     [sortedArtworks, effectivePage, recordsPerPage],
   );
 
+  // The page's own ids and whether they are all picked: both the Select all
+  // button above and its label read this, so the two cannot disagree.
+  const pageIds = useMemo(
+    () => pageRecords.map((record) => record.id),
+    [pageRecords],
+  );
+  const pageFullySelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+
   // Asks for confirmation, then runs the delete. The modals manager closes the
   // dialog the moment Confirm is clicked and does not await whatever onConfirm
   // returns, so the pending state and the close are driven by hand here:
@@ -255,15 +282,12 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
 
   // The table and the grid share one delete flow, so a row's or a card's Delete
   // names the work it deletes and the parent owns the dialog — including which
-  // transition the cleared selection belongs to. Stable across renders, so the
-  // views' memoised cells and cards are not rebuilt on every toolbar tick.
-  const confirmDeleteArtwork = useCallback(
-    (artwork: Artwork) => confirmDelete([artwork.id], `"${artwork.title}"`),
-    // `confirmDelete` closes over the transition token and `collectionParam`;
-    // both are captured fresh on the renders that matter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resetToken, collectionParam],
-  );
+  // transition the cleared selection belongs to. A plain function: it closes
+  // over the render's transition token and collection param, and nothing on
+  // the views is memoised on it (the Table's `columns` memo is rebuilt when it
+  // changes, which is deliberate — its rows must name the current collection).
+  const confirmDeleteArtwork = (artwork: Artwork) =>
+    confirmDelete([artwork.id], `"${artwork.title}"`);
 
   const countLabel = searchActive
     ? `Found ${artworks.length} artwork${artworks.length === 1 ? "" : "s"}`
@@ -293,8 +317,8 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <Group gap="xs">
+      <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+        <Group gap="xs" wrap="wrap">
           {listSettled ? (
             <Text size="sm" c="dimmed">
               {countLabel}
@@ -324,7 +348,60 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
             </Button>
           ) : null}
         </Group>
-        <Group gap="sm" wrap="nowrap">
+        <Group gap="sm" wrap="wrap">
+          {/*
+            The Grid has no sortable headers and no header checkbox, so the
+            four orders and the page-wide select get controls here. They read
+            and write the list's single sort and selection — the same ones the
+            Table's headers write — which is what keeps the two views from
+            silently disagreeing when the collector toggles. In the Table both
+            disappear: its header carries the sort and its checkbox the page.
+          */}
+          {view === "grid" ? (
+            <>
+              <Select
+                aria-label="Sort"
+                data={SORT_OPTIONS}
+                value={toArtworksSort(sort)}
+                onChange={(value) => {
+                  if (value !== null) changeSort(fromArtworksSort(value));
+                }}
+                w={180}
+                size="xs"
+                allowDeselect={false}
+                comboboxProps={{ withinPortal: true }}
+              />
+              {/*
+                A button has no checkbox state to invert, so it says what it
+                will do: Select all covers this page, and once it does the
+                same button becomes Clear selection and removes exactly this
+                page's ids. Hidden when the page has no cards, because there
+                is nothing on the page to select. Picks made on other pages
+                survive either direction.
+              */}
+              {pageRecords.length > 0 ? (
+                <Button
+                  size="compact-sm"
+                  variant="default"
+                  // The page's own ids, not the collection's: one click must
+                  // not arm a delete of works the collector has not seen.
+                  // "Every card selected" is a subset test, so a partial page
+                  // still reads as Select all, and Clear selection removes
+                  // exactly the page's ids.
+                  onClick={() =>
+                    setSelection({
+                      forToken: resetToken,
+                      ids: pageFullySelected
+                        ? selectedIds.filter((id) => !pageIds.includes(id))
+                        : [...new Set([...selectedIds, ...pageIds])],
+                    })
+                  }
+                >
+                  {pageFullySelected ? "Clear selection" : "Select all"}
+                </Button>
+              ) : null}
+            </>
+          ) : null}
           <ArtworksViewToggle value={view} onChange={changeView} />
         </Group>
       </Group>
@@ -363,8 +440,6 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
           emptyLabel={emptyLabel}
-          sort={sort}
-          onSortChange={changeSort}
           page={effectivePage}
           onPageChange={(next) =>
             setPageState({ forToken: resetToken, page: next })

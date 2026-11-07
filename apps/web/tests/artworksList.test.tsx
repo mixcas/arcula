@@ -238,21 +238,6 @@ describe("ArtworksList", () => {
     );
   });
 
-  it("defaults to 25 per page", () => {
-    renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
-
-    // The size selector renders its own value as a button, so this asserts the
-    // default *and* that 25 is offered. The two are coupled through
-    // `RECORDS_PER_PAGE_OPTIONS[0]`, so a reordering would silently change the
-    // page size every collection opens at.
-    expect(screen.getByRole("button", { name: "25" })).toBeTruthy();
-    // 10 is gone on purpose: a 10-row page reads as empty next to a 50-row one,
-    // and the options only exist in the dropdown. Rather than fight Mantine's
-    // portalled Select to enumerate them, the pagination test above pins the
-    // *effect* of the default (25 of 30 on the first page) and this pins the
-    // label; together they fail if the array is reordered or 10 is re-added.
-  });
-
   it("marks a draft artwork in its title cell, and leaves a published one unmarked", () => {
     renderList({
       artworks: [
@@ -477,6 +462,8 @@ describe("ArtworksList", () => {
       onClearSearch,
     });
 
+    // The quoted search term is the state under test; Clear search is a live
+    // action, not a caption.
     expect(screen.getByText("No artworks match “picasso”.")).toBeTruthy();
     // A completed search that matched nothing is not an empty collection.
     expect(
@@ -793,7 +780,9 @@ describe("ArtworksList", () => {
       // The Grid's pager is the same page state, not a second one: the count
       // stays over the whole set.
       expect(screen.getByText("30 artworks")).toBeTruthy();
-      expect(document.querySelector(".mantine-Pagination-root")).not.toBeNull();
+      // And there is a way to page: the pager's next page is reachable from
+      // the Grid exactly as from the Table.
+      expect(screen.getByRole("button", { name: "2" })).toBeTruthy();
     });
 
     it("shows the collection's own empty state, not a pager", () => {
@@ -805,7 +794,26 @@ describe("ArtworksList", () => {
       ).toBeTruthy();
       expect(screen.queryByRole("list")).toBeNull();
       // No pager either: there is no page to move between.
-      expect(document.querySelector(".mantine-Pagination-root")).toBeNull();
+      expect(screen.queryByRole("button", { name: "2" })).toBeNull();
+    });
+
+    it("offers the per-page control on an empty page", () => {
+      startInGrid();
+      // Nothing to page, so the pager is meaningless — but the page size is
+      // still a choice the collector makes here, and hiding it on an empty
+      // collection would leave the control unreachable exactly when a search
+      // emptied the page.
+      renderList({ artworks: [] });
+      expect(
+        screen.getByText("No artworks in this collection yet."),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "2" })).toBeNull();
+
+      // Exactly one, not one per view: the per-page control moved out of the
+      // cards' footer and back in without being duplicated.
+      expect(
+        screen.getAllByRole("combobox", { name: "Artworks per page" }),
+      ).toHaveLength(1);
     });
 
     it("keeps the failure above nothing as it does in the table", () => {
@@ -841,22 +849,48 @@ describe("ArtworksList", () => {
     const options = (label: string) =>
       sortRows().filter((option) => option.textContent === label);
     const sortBox = () => screen.getByRole("combobox", { name: "Sort" });
+    // The one row above the cards: the count, the delete button, the Grid's
+    // controls and always the view toggle. Found by the toggle's group name,
+    // which is the only one the toolbar is guaranteed to carry.
+    const toolbarEl = () =>
+      screen.getByRole("radiogroup", { name: "Artworks manage view" })
+        .parentElement?.parentElement ?? document.body;
     const openSort = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(sortBox());
       await waitFor(() =>
         expect(sortBox().getAttribute("aria-expanded")).toBe("true"),
       );
     };
+    // Every option the Sort select offers, walked in the order the menu lists
+    // them, each with the card order choosing it produces. Reads the menu
+    // rather than a copy list, then proves each row is wired to a sort.
+    const sortChoices = async (user: ReturnType<typeof userEvent.setup>) => {
+      await openSort(user);
+      const labels = sortRows().map((option) => option.textContent ?? "");
+      // Picking the current value changes nothing, so it would close the menu
+      // without re-reporting; every option still has to be picked, so each is
+      // picked and its order read before the next opens the menu again.
+      const choices: { label: string; order: string[] }[] = [];
+      for (const label of labels) {
+        await user.click(options(label)[0]);
+        await waitFor(() => expect(sortBox()).toHaveValue(label));
+        choices.push({ label, order: cardTitles() });
+        await openSort(user);
+      }
+      // The menu is left open by the walk; the caller's own opening closes it
+      // rather than reopening what is already showing.
+      return choices;
+    };
 
     it("offers the four sorts and writes the one shared state", async () => {
       const user = userEvent.setup();
       startInGrid();
-      // Artist order is the exact inverse of title order, so a sort that did
-      // not change is impossible to mistake for one that did.
+      // The default sort's card order is the same on every fixture, so the
+      // order each option produces is the test.
       const artworks = [
-        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
-        artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
-        artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
+        artwork({ id: "a", title: "Art 1", artistName: "Abbey" }),
+        artwork({ id: "b", title: "Art 2", artistName: "Caillebotte" }),
+        artwork({ id: "c", title: "Art 3", artistName: "Braque" }),
       ];
       renderList({ artworks });
 
@@ -864,20 +898,24 @@ describe("ArtworksList", () => {
       expect(cardTitles()).toEqual(["Art 1", "Art 2", "Art 3"]);
       expect(sortBox()).toHaveValue("Title A-Z");
 
-      await openSort(user);
-      // Exactly the four sorts, in order.
-      const optionNames = sortRows().map((option) => option.textContent);
-      expect(optionNames).toEqual([
-        "Title A-Z",
-        "Title Z-A",
-        "Artist Name A-Z",
-        "Artist Name Z-A",
+      // Every offered option, by the visible order it produces. This is the
+      // proof that the four labels exist *and* each is wired to its own sort:
+      // a label that was copy only, or two labels sharing one order, fails
+      // here. Spelled here, not read off the component, so the expectation is
+      // independent of the labels' own list.
+      expect(await sortChoices(user)).toEqual([
+        { label: "Title A-Z", order: ["Art 1", "Art 2", "Art 3"] },
+        { label: "Title Z-A", order: ["Art 3", "Art 2", "Art 1"] },
+        { label: "Artist Name A-Z", order: ["Art 1", "Art 3", "Art 2"] },
+        { label: "Artist Name Z-A", order: ["Art 2", "Art 3", "Art 1"] },
       ]);
-      await user.click(options("Artist Name Z-A")[0]);
 
+      // The select still holds the last choice, and the choice is written.
+      await user.click(options("Artist Name Z-A")[0]);
       await waitFor(() =>
-        expect(cardTitles()).toEqual(["Art 3", "Art 1", "Art 2"]),
+        expect(cardTitles()).toEqual(["Art 2", "Art 3", "Art 1"]),
       );
+      expect(sortBox()).toHaveValue("Artist Name Z-A");
       // Written at the one point either control changes the sort, so the next
       // collection — and the Table, if the collector switches back — opens on
       // it too.
@@ -990,6 +1028,29 @@ describe("ArtworksList", () => {
 
       expect(screen.getByRole("table")).toBeTruthy();
       expect(screen.queryByRole("combobox", { name: "Sort" })).toBeNull();
+    });
+
+    it("keeps the Sort select, Select all and the toggle above the cards in one toolbar", () => {
+      startInGrid();
+      renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+      const toolbar = toolbarEl();
+      expect(
+        within(toolbar).getByRole("combobox", { name: "Sort" }),
+      ).toBeTruthy();
+      expect(
+        within(toolbar).getByRole("button", { name: "Select all" }),
+      ).toBeTruthy();
+      expect(within(toolbar).getByRole("radio", { name: "Grid" })).toBeTruthy();
+      // The per-page control stays under the cards, not in the toolbar.
+      expect(
+        within(toolbar).queryByRole("combobox", {
+          name: "Artworks per page",
+        }),
+      ).toBeNull();
+      expect(
+        screen.getAllByRole("combobox", { name: "Artworks per page" }).at(-1),
+      ).toBeTruthy();
     });
 
     describe("Select all", () => {

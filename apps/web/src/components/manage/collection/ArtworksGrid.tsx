@@ -1,22 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Box,
-  Button,
-  Group,
-  Pagination,
-  Select,
-  Stack,
-  Text,
-} from "@mantine/core";
+import { Box, Pagination, Select, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import type { Artwork } from "@arcula/shared";
 import ArtworkCard from "@/components/manage/collection/ArtworkCard";
 import { artworkCardSpan } from "@/components/manage/collection/artworkCardGeometry";
-import {
-  RECORDS_PER_PAGE_OPTIONS,
-  type SortState,
-} from "@/components/manage/collection/artworksSort";
-import { fromArtworksSort, toArtworksSort } from "@/userSettings";
+import { RECORDS_PER_PAGE_OPTIONS } from "@/components/manage/collection/artworksSort";
 
 /**
  * The masonry unit. One grid row is this tall plus the 1 px gap, and a card asks
@@ -43,24 +31,12 @@ export interface ArtworksGridProps {
   fetching?: boolean;
   /** What to say when this page has no cards, in whichever state that is. */
   emptyLabel: React.ReactNode;
-  /** The list's shared sort, which the Table's headers write too. */
-  sort: SortState;
-  onSortChange: (sort: SortState) => void;
   page: number;
   onPageChange: (page: number) => void;
   totalRecords: number;
   recordsPerPage: number;
   onRecordsPerPageChange: (recordsPerPage: number) => void;
 }
-
-// Exactly the four orders the Grid offers, in the settings' own spelling, so
-// the select writes what is remembered without a second vocabulary.
-const SORT_OPTIONS = [
-  { value: "title-asc", label: "Title A-Z" },
-  { value: "title-desc", label: "Title Z-A" },
-  { value: "artist-asc", label: "Artist Name A-Z" },
-  { value: "artist-desc", label: "Artist Name Z-A" },
-] as const;
 
 /**
  * One offset per card, measured from the row unit.
@@ -139,8 +115,6 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   onConfirmDeleteArtwork,
   fetching = false,
   emptyLabel,
-  sort,
-  onSortChange,
   page,
   onPageChange,
   totalRecords,
@@ -156,19 +130,55 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   const columns = threeAcross ? 3 : twoAcross ? 2 : 1;
   const pageCount = Math.max(1, Math.ceil(totalRecords / recordsPerPage));
 
-  // The page's own ids, not the collection's: one click must not arm a delete
-  // of works the collector has not seen. "Every card selected" is a subset
-  // test, so a partial page still reads as Select all.
-  const pageIds = records.map((record) => record.id);
-  const pageSelected = pageIds.every((id) => selectedIds.includes(id));
+  // The per-page control sits under the cards in the Grid as the footer holds
+  // it in the Table, so both views offer the same page size in the same place.
+  // It stays on an empty page too: the pager is meaningless with one page, but
+  // the page size is still the collector's choice.
+  const perPageControl = (
+    <>
+      <Text size="sm" c="dimmed">
+        Artworks per page
+      </Text>
+      <Select
+        aria-label="Artworks per page"
+        data={RECORDS_PER_PAGE_OPTIONS.map((option) => ({
+          value: String(option),
+          label: String(option),
+        }))}
+        value={String(recordsPerPage)}
+        onChange={(value) => {
+          if (value !== null) onRecordsPerPageChange(Number(value));
+        }}
+        w={80}
+        size="xs"
+        allowDeselect={false}
+        comboboxProps={{ withinPortal: true }}
+      />
+    </>
+  );
 
   if (records.length === 0) {
     return (
-      <div
-        style={{ padding: "var(--mantine-spacing-xl)", textAlign: "center" }}
-      >
-        {emptyLabel}
-      </div>
+      <Stack gap="md">
+        <div
+          style={{
+            padding: "var(--mantine-spacing-xl)",
+            textAlign: "center",
+          }}
+        >
+          {emptyLabel}
+        </div>
+        {/* No pager: one page has nothing to move between. */}
+        <Box
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--mantine-spacing-xs)",
+          }}
+        >
+          {perPageControl}
+        </Box>
+      </Stack>
     );
   }
 
@@ -177,7 +187,10 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
       <Box style={{ position: "relative" }}>
         {/* A dimmed, not emptied, frame while a read is in flight: `aria-busy`
             tells a screen reader the content is being replaced while the
-            reader keeps looking at the cards that were there. */}
+            reader keeps looking at the cards that were there. This is the
+            Grid's answer alone — the Table keeps the datatable's own
+            `fetching` overlay, and the two are deliberately not restyled to
+            match. */}
         <ul
           aria-busy={fetching || undefined}
           style={{
@@ -215,77 +228,34 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
         </ul>
       </Box>
 
-      <Group justify="space-between" wrap="wrap" gap="sm">
-        <Group gap="xs">
-          {/*
-            The Grid has no sortable headers, so the four orders get one
-            control here. It reads and writes the list's single sort state —
-            the same one the Table's Title and Artist Name headers write — which
-            is what keeps the two views from silently disagreeing when the
-            collector toggles.
-          */}
-          <Select
-            aria-label="Sort"
-            data={SORT_OPTIONS}
-            value={toArtworksSort(sort)}
-            onChange={(value) => {
-              if (value !== null) onSortChange(fromArtworksSort(value));
-            }}
-            w={180}
-            size="xs"
-            allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
-          />
-          <Text size="sm" c="dimmed">
-            Artworks per page
-          </Text>
-          <Select
-            aria-label="Artworks per page"
-            data={RECORDS_PER_PAGE_OPTIONS.map((option) => ({
-              value: String(option),
-              label: String(option),
-            }))}
-            value={String(recordsPerPage)}
-            onChange={(value) => {
-              if (value !== null) onRecordsPerPageChange(Number(value));
-            }}
-            w={80}
-            size="xs"
-            allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
-          />
-        </Group>
-        <Group gap="sm" wrap="wrap">
-          {/*
-            A button has no checkbox state to invert, so it says what it will
-            do: Select all covers this page, and once it does the same button
-            becomes Clear selection and removes exactly this page's ids. Picks
-            made on other pages survive either direction.
-          */}
-          <Button
-            size="compact-sm"
-            variant="default"
-            onClick={() =>
-              onSelectionChange(
-                pageSelected
-                  ? selectedIds.filter((id) => !pageIds.includes(id))
-                  : [...new Set([...selectedIds, ...pageIds])],
-              )
-            }
-          >
-            {pageSelected ? "Clear selection" : "Select all"}
-          </Button>
-          <Pagination
-            value={page}
-            onChange={onPageChange}
-            total={pageCount}
-            // Not `sm`: below a threshold Mantine collapses the pager to a
-            // label + arrows, and a Grid needs its page numbers as one row of
-            // controls under the cards.
-            withEdges
-          />
-        </Group>
-      </Group>
+      <Box
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "var(--mantine-spacing-sm)",
+        }}
+      >
+        <Box
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--mantine-spacing-xs)",
+          }}
+        >
+          {perPageControl}
+        </Box>
+        <Pagination
+          value={page}
+          onChange={onPageChange}
+          total={pageCount}
+          // Not `sm`: below a threshold Mantine collapses the pager to a
+          // label + arrows, and a Grid needs its page numbers as one row of
+          // controls under the cards.
+          withEdges
+        />
+      </Box>
     </Stack>
   );
 };
