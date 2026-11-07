@@ -249,6 +249,62 @@ describe("a collection's nav bar", () => {
       await screen.findByRole("menuitem", { name: "Deleted" }),
     ).toBeInTheDocument();
   });
+
+  it("carries the active search into Edit and Add, and nowhere else", async () => {
+    getCollectionArtworks.mockResolvedValue([picasso]);
+    renderPage(`${CANONICAL_PATH}?q=picasso`);
+
+    // The two member destinations that return to this list carry the query, so
+    // Cancel on either page lands back on the same results.
+    expect(await screen.findByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      `${CANONICAL_PATH}/artwork/blue-nude-a1?q=picasso`,
+    );
+    expect(screen.getByRole("link", { name: /add artwork/i })).toHaveAttribute(
+      "href",
+      `${CANONICAL_PATH}/artwork/add?q=picasso`,
+    );
+
+    // The public page and the PDF have no search of their own: a query there
+    // would be a filter the visitor's page cannot show. "View" is both the
+    // collection's address and the row's public work, in that order.
+    const views = screen.getAllByRole("link", { name: "View" });
+    expect(views[0]).toHaveAttribute("href", `/collection/${COLLECTION_PARAM}`);
+    expect(views[1]).toHaveAttribute(
+      "href",
+      `/collection/${COLLECTION_PARAM}/artwork/blue-nude-a1`,
+    );
+    expect(screen.getByRole("link", { name: "PDF" })).toHaveAttribute(
+      "href",
+      `/collection/${COLLECTION_PARAM}/pdf`,
+    );
+  });
+
+  it("leaves the search out of the Deleted and Settings destinations", async () => {
+    getCollectionArtworks.mockResolvedValue([picasso]);
+    renderPage(`${CANONICAL_PATH}?q=picasso`);
+
+    // Keyboard, not a click: it is the same open path the nav test above
+    // already exercises, and it does not depend on pointer timing.
+    const trigger = await screen.findByRole("button", {
+      name: /collection actions/i,
+    });
+    trigger.focus();
+    const user = userEvent.setup();
+    await user.keyboard("{Enter}");
+
+    // Both items in one query: they render together, and reading them from a
+    // single snapshot keeps a transition from closing the menu between reads.
+    const hrefs = (await screen.findAllByRole("menuitem")).map((item) =>
+      item.getAttribute("href"),
+    );
+    // Those pages do not search; carrying `q` would pretend they do. Back
+    // still restores the results because the commit left a history entry.
+    expect(hrefs).toEqual([
+      `${CANONICAL_PATH}/deleted`,
+      `${CANONICAL_PATH}/settings`,
+    ]);
+  });
 });
 
 describe("Collection search", () => {

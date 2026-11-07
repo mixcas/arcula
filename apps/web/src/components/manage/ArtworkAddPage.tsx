@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Alert, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
@@ -35,6 +35,14 @@ const ArtworkAddPage: React.FC = () => {
   // The route carries "{slug}-{id}"; the API needs the bare id.
   const collectionId = parseId(param ?? "");
   const navigate = useNavigate();
+  // Add is reached from a search result set; the query travels with the page
+  // so Cancel returns to it and the new work's Edit page keeps it. Built from
+  // `q` alone — no other parameter belongs on either destination.
+  const [searchParams] = useSearchParams();
+  const search = (searchParams.get("q") ?? "").trim();
+  const searchSuffix = search
+    ? `?${new URLSearchParams({ q: search }).toString()}`
+    : "";
 
   // The artwork id, minted here. The staged entries are PUT under it while the
   // form is open, and the save creates the row with it — one id, decided once,
@@ -111,7 +119,7 @@ const ArtworkAddPage: React.FC = () => {
               `/manage/collection/${param ?? ""}/artwork/${artworkSlug(
                 created.title,
                 created.id,
-              )}`,
+              )}${searchSuffix}`,
             );
           } catch (err) {
             console.error("Error creating artwork:", err);
@@ -144,7 +152,7 @@ const ArtworkAddPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Artwork"
           submitting={form.submitting}
-          cancelTo={`/manage/collection/${param ?? ""}`}
+          cancelTo={`/manage/collection/${param ?? ""}${searchSuffix}`}
         />
       </form>
     </>

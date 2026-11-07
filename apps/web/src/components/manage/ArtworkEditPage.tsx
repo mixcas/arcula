@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Button, Loader, Text } from "@mantine/core";
 import { useForm, schemaResolver } from "@mantine/form";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
@@ -41,6 +46,15 @@ const ArtworkEditPage: React.FC = () => {
   const collectionId = parseId(collectionParam ?? "");
   const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
+  const location = useLocation();
+  // Edit can be opened from a search result set. The query is inert on this
+  // page, but Cancel has to return to the results it came from — built from
+  // `q` alone, so nothing else in the address follows the user back.
+  const [searchParams] = useSearchParams();
+  const search = (searchParams.get("q") ?? "").trim();
+  const searchSuffix = search
+    ? `?${new URLSearchParams({ q: search }).toString()}`
+    : "";
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
@@ -152,12 +166,22 @@ const ArtworkEditPage: React.FC = () => {
       return;
     }
     void navigate(
-      `/manage/collection/${collectionParam}/artwork/${canonical}`,
       {
-        replace: true,
+        pathname: `/manage/collection/${collectionParam}/artwork/${canonical}`,
+        // The search came in on the address and must survive the rewrite, or
+        // Cancel would lose the result set a moment after the page loaded.
+        search: location.search,
       },
+      { replace: true },
     );
-  }, [artworkParam, collectionParam, artworkId, loadedTitle, navigate]);
+  }, [
+    artworkParam,
+    collectionParam,
+    artworkId,
+    loadedTitle,
+    navigate,
+    location.search,
+  ]);
 
   // One POST, and the page's own state is the whole response: it does not
   // refetch the work (it already holds it), does not re-initialise the form
@@ -292,7 +316,7 @@ const ArtworkEditPage: React.FC = () => {
           submitLabel="Save Changes"
           submitting={form.submitting}
           submitDisabled={isDeleted}
-          cancelTo={`/manage/collection/${collectionParam ?? ""}`}
+          cancelTo={`/manage/collection/${collectionParam ?? ""}${searchSuffix}`}
         />
       </form>
     </>

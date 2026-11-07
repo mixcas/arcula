@@ -45,6 +45,12 @@ const CollectionPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = (searchParams.get("q") ?? "").trim();
   const searchActive = query !== "";
+  // Only the two pages that return here carry the search. Built from `q`
+  // alone, so an unrelated parameter can never leak into a page that does not
+  // read it; URLSearchParams does the encoding.
+  const searchSuffix = query
+    ? `?${new URLSearchParams({ q: query }).toString()}`
+    : "";
 
   const [collection, setCollection] = useState<Collection | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
@@ -272,7 +278,7 @@ const CollectionPage: React.FC = () => {
           />
           <Button
             component={Link}
-            to={`/manage/collection/${param}/artwork/add`}
+            to={`/manage/collection/${param}/artwork/add${searchSuffix}`}
           >
             Add Artwork
           </Button>

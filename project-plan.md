@@ -470,6 +470,26 @@ them by membership. Above that list sit the pending invitations addressed to
 the signed-in account, each naming its collection and inviter and offering
 decline only — acceptance is the mailed link, and the card says so.
 
+The collection page's search is address state, not component state: `q` in the
+URL is the source of truth. Enter commits it, pushing a history entry so
+Back/Forward moves between searches; the X and an empty Enter clear it; and the
+canonical `{slug}-{id}` rewrite preserves it. The input mirrors the committed
+query on load and after Back/Forward without overwriting a draft still being
+typed, so a reload, a bookmark or a shared address lands on the same results.
+With a query active the count reads `Found X artworks` (`Found 1 artwork` in the
+singular); zero matches shows a no-results panel naming the query with a Clear
+search action, while a collection with no works and no query keeps the ordinary
+empty-collection state. A list read in flight keeps the previous rows on screen
+under the fetching indicator, a stale answer is discarded, and a failure keeps
+those rows with an inline Alert and Retry; with no previous rows the Alert
+replaces the table. A new query resets the table to page 1 and clears the row
+selection, keeping the chosen sort. The return path is deliberately narrow: row
+Edit links and Add Artwork carry the active query, Cancel on either page returns
+to the same search, and a successful Add carries it into the new work's Edit
+page, whose canonical rewrite preserves it. Settings, Deleted, the public View
+links and the PDF do not carry it — `q` is inert on those pages — and browser
+Back still restores the search because the commit left the history entry.
+
 The collection settings page is four tabs, each with its own save:
 **General** (name, description, public or private, and the password control),
 **Public view** (the skin and the options the selected skin declares, with the

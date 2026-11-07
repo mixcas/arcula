@@ -85,6 +85,12 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
 }) => {
   const queryKey = searchQuery.trim();
   const searchActive = queryKey !== "";
+  // Edit returns to the search it came from; View is the public page and
+  // deliberately does not. Built from `q` alone and encoded, so the row link
+  // cannot smuggle another parameter back to the collection.
+  const editSearchSuffix = queryKey
+    ? `?${new URLSearchParams({ q: queryKey }).toString()}`
+    : "";
 
   // Page and selection belong to the query they were made under. A committed
   // query therefore starts at page 1 with nothing selected, derived here
@@ -308,7 +314,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
               to={`/manage/collection/${collectionParam}/artwork/${artworkSlug(
                 artwork.title,
                 artwork.id,
-              )}`}
+              )}${editSearchSuffix}`}
             >
               Edit
             </Button>
