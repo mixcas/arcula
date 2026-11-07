@@ -12,7 +12,11 @@ import { useMediaQuery } from "@mantine/hooks";
 import type { Artwork } from "@arcula/shared";
 import ArtworkCard from "@/components/manage/collection/ArtworkCard";
 import { artworkCardSpan } from "@/components/manage/collection/artworkCardGeometry";
-import { RECORDS_PER_PAGE_OPTIONS } from "@/components/manage/collection/artworksSort";
+import {
+  RECORDS_PER_PAGE_OPTIONS,
+  type SortState,
+} from "@/components/manage/collection/artworksSort";
+import { fromArtworksSort, toArtworksSort } from "@/userSettings";
 
 /**
  * The masonry unit. One grid row is this tall plus the 1 px gap, and a card asks
@@ -39,12 +43,24 @@ export interface ArtworksGridProps {
   fetching?: boolean;
   /** What to say when this page has no cards, in whichever state that is. */
   emptyLabel: React.ReactNode;
+  /** The list's shared sort, which the Table's headers write too. */
+  sort: SortState;
+  onSortChange: (sort: SortState) => void;
   page: number;
   onPageChange: (page: number) => void;
   totalRecords: number;
   recordsPerPage: number;
   onRecordsPerPageChange: (recordsPerPage: number) => void;
 }
+
+// Exactly the four orders the Grid offers, in the settings' own spelling, so
+// the select writes what is remembered without a second vocabulary.
+const SORT_OPTIONS = [
+  { value: "title-asc", label: "Title A-Z" },
+  { value: "title-desc", label: "Title Z-A" },
+  { value: "artist-asc", label: "Artist Name A-Z" },
+  { value: "artist-desc", label: "Artist Name Z-A" },
+] as const;
 
 /**
  * One offset per card, measured from the row unit.
@@ -123,6 +139,8 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   onConfirmDeleteArtwork,
   fetching = false,
   emptyLabel,
+  sort,
+  onSortChange,
   page,
   onPageChange,
   totalRecords,
@@ -199,6 +217,25 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
 
       <Group justify="space-between" wrap="wrap" gap="sm">
         <Group gap="xs">
+          {/*
+            The Grid has no sortable headers, so the four orders get one
+            control here. It reads and writes the list's single sort state —
+            the same one the Table's Title and Artist Name headers write — which
+            is what keeps the two views from silently disagreeing when the
+            collector toggles.
+          */}
+          <Select
+            aria-label="Sort"
+            data={SORT_OPTIONS}
+            value={toArtworksSort(sort)}
+            onChange={(value) => {
+              if (value !== null) onSortChange(fromArtworksSort(value));
+            }}
+            w={180}
+            size="xs"
+            allowDeselect={false}
+            comboboxProps={{ withinPortal: true }}
+          />
           <Text size="sm" c="dimmed">
             Artworks per page
           </Text>

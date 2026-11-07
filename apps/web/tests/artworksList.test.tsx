@@ -824,6 +824,174 @@ describe("ArtworksList", () => {
       expect(screen.queryByText(/No artworks match/)).toBeNull();
     });
 
+    // Mantine's Select is a readonly combobox whose options live in a portal,
+    // outside `screen`'s base element: it is opened, the option is clicked by
+    // its label, and the visible value is read back off the input.
+    // jsdom computes no accessible name for the option rows, so they are found
+    // by their visible text rather than by role and name, and `hidden` is
+    // needed because the portal is the only thing that renders them. Mantine
+    // keeps both dropdowns mounted and names neither list by its input, so the
+    // portal holds the per-page Select's "25" and "50" too whatever is open;
+    // the sort rows are the ones that are not page sizes.
+    const PAGE_SIZES = ["25", "50"];
+    const sortRows = () =>
+      screen
+        .queryAllByRole("option", { hidden: true })
+        .filter((option) => !PAGE_SIZES.includes(option.textContent ?? ""));
+    const options = (label: string) =>
+      sortRows().filter((option) => option.textContent === label);
+    const sortBox = () => screen.getByRole("combobox", { name: "Sort" });
+    const openSort = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(sortBox());
+      await waitFor(() =>
+        expect(sortBox().getAttribute("aria-expanded")).toBe("true"),
+      );
+    };
+
+    it("offers the four sorts and writes the one shared state", async () => {
+      const user = userEvent.setup();
+      startInGrid();
+      // Artist order is the exact inverse of title order, so a sort that did
+      // not change is impossible to mistake for one that did.
+      const artworks = [
+        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
+        artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
+        artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
+      ];
+      renderList({ artworks });
+
+      // The Grid shows the same Title A-Z order the Table was left in.
+      expect(cardTitles()).toEqual(["Art 1", "Art 2", "Art 3"]);
+      expect(sortBox()).toHaveValue("Title A-Z");
+
+      await openSort(user);
+      // Exactly the four sorts, in order.
+      const optionNames = sortRows().map((option) => option.textContent);
+      expect(optionNames).toEqual([
+        "Title A-Z",
+        "Title Z-A",
+        "Artist Name A-Z",
+        "Artist Name Z-A",
+      ]);
+      await user.click(options("Artist Name Z-A")[0]);
+
+      await waitFor(() =>
+        expect(cardTitles()).toEqual(["Art 3", "Art 1", "Art 2"]),
+      );
+      // Written at the one point either control changes the sort, so the next
+      // collection — and the Table, if the collector switches back — opens on
+      // it too.
+      expect(
+        JSON.parse(localStorage.getItem("arcula.userSettings") ?? "null"),
+      ).toEqual({
+        version: 1,
+        artworksView: "grid",
+        artworksSort: "artist-desc",
+      });
+    });
+
+    it("and the Table's headers are the same control", async () => {
+      const user = userEvent.setup();
+      const artworks = [
+        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
+        artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
+        artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
+      ];
+      const { rerender } = renderList({ artworks });
+      // The Table starts Title A-Z, so clicking Artist Name sorts ascending.
+      await user.click(screen.getByText("Artist Name"));
+      await waitFor(() =>
+        expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
+      );
+
+      rerender(<ListTree artworks={artworks} />);
+      await user.click(screen.getByRole("radio", { name: "Grid" }));
+
+      // The Grid opens in the Table's order and says so in its select.
+      await waitFor(() =>
+        expect(cardTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
+      );
+      expect(sortBox()).toHaveValue("Artist Name A-Z");
+    });
+
+    it("opens on the remembered sort, and resets to Title A-Z when the store is corrupt", () => {
+      localStorage.setItem(
+        "arcula.userSettings",
+        JSON.stringify({
+          version: 1,
+          artworksView: "grid",
+          artworksSort: "artist-desc",
+        }),
+      );
+      const artworks = [
+        artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
+        artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
+      ];
+      const { unmount } = renderList({ artworks });
+
+      expect(sortBox()).toHaveValue("Artist Name Z-A");
+      expect(cardTitles()).toEqual(["Art 1", "Art 2"]);
+      unmount();
+
+      startInGrid();
+      localStorage.setItem("arcula.userSettings", "{not json");
+      // The parser fills what it cannot read from the defaults and keeps a
+      // valid view, so this is a corrupt *sort* in a remembered Grid.
+      localStorage.setItem(
+        "arcula.userSettings",
+        JSON.stringify({
+          version: 1,
+          artworksView: "grid",
+          artworksSort: "nope",
+        }),
+      );
+      renderList({ artworks });
+
+      expect(sortBox()).toHaveValue("Title A-Z");
+      expect(cardTitles()).toEqual(["Art 1", "Art 2"]);
+    });
+
+    it("returns to page 1 on a sort change, and keeps the sort across a search", async () => {
+      const user = userEvent.setup();
+      startInGrid();
+      // Title and artist order are inverses, so page 1 of the artist sort is
+      // page 3 of the title sort: landing there would not be page 1.
+      const artworks = Array.from({ length: 60 }, (_, i) =>
+        artwork({
+          id: `w${String(i).padStart(2, "0")}`,
+          title: `Art ${String(i + 1).padStart(2, "0")}`,
+          artistName: `Artist ${String(60 - i).padStart(2, "0")}`,
+        }),
+      );
+      const { rerender } = renderList({ artworks });
+
+      await user.click(screen.getByRole("button", { name: "3" }));
+      await waitFor(() => expect(cardTitles()[0]).toBe("Art 51"));
+
+      await openSort(user);
+      await user.click(options("Artist Name A-Z")[0]);
+      await waitFor(() => expect(cardTitles()[0]).toBe("Art 60"));
+
+      // A search is a fresh view of the same order: the sort survives it.
+      rerender(<ListTree artworks={artworks} searchQuery="art" />);
+      await waitFor(() => expect(cardTitles()[0]).toBe("Art 60"));
+      expect(sortBox()).toHaveValue("Artist Name A-Z");
+
+      // And a sort made while a search is in force is that sort, not a
+      // fallback to the default: the query changes nothing about the choice.
+      await openSort(user);
+      await user.click(options("Title Z-A")[0]);
+      await waitFor(() => expect(cardTitles()[0]).toBe("Art 60"));
+      expect(sortBox()).toHaveValue("Title Z-A");
+    });
+
+    it("does not show a Sort select in the Table", () => {
+      renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+      expect(screen.getByRole("table")).toBeTruthy();
+      expect(screen.queryByRole("combobox", { name: "Sort" })).toBeNull();
+    });
+
     describe("Select all", () => {
       // More than two pages at the default 25: page 1 is "Art 01"…"Art 25",
       // page 2 "Art 26"…"Art 50", and page 3 holds the last ten.

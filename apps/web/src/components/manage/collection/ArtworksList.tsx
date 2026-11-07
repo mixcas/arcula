@@ -363,6 +363,8 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
           emptyLabel={emptyLabel}
+          sort={sort}
+          onSortChange={changeSort}
           page={effectivePage}
           onPageChange={(next) =>
             setPageState({ forToken: resetToken, page: next })
