@@ -192,7 +192,12 @@ _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:
 The readable name in a collection's or artwork's address, alongside the id.
-It is cosmetic: only the id is ever looked up.
+It is cosmetic: only the id is ever looked up, and a rename changes the address.
+The id is the identity: short, opaque and hyphen-free — a route recovers it by
+cutting at the last hyphen, so a hyphen inside it would break the address. Ids
+minted before the short form are longer and permanent; both lengths live in the
+tree on purpose
+([ADR-0007](docs/adr/0007-ids-are-ten-base62-characters.md)).
 _Avoid_: Path, permalink
 
 **Skin**:
