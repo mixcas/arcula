@@ -1,9 +1,11 @@
-// A fresh row id: a UUID with its hyphens removed.
+// The API's row ids are the shared mint's, re-exported so every call site —
+// collections, a collection's media namespace, CSV-imported artworks,
+// invitations — keeps importing one `mintId` while the shape has exactly one
+// owner (`@arcula/shared`).
 //
-// The hyphen-free shape is load-bearing, not cosmetic. Routes carry the id in
-// a `{urlizedName}-{id}` segment, and the client recovers it by cutting at the
-// LAST hyphen (`parseId` in `packages/shared`) — a hyphenated id would put that
-// cut inside the id itself and the recovered "id" would be its last segment.
-// The client mints the same shape for the artwork ids it supplies, so both
-// sides of a route segment obey one rule.
-export const mintId = (): string => crypto.randomUUID().replace(/-/g, "");
+// Ten base62 characters, never a hyphen: routes carry the id in a
+// `{urlizedName}-{id}` segment and recover it by cutting at the last hyphen,
+// and the id is also a final media object key's segment. Ids minted before the
+// shared mint existed keep their 32-character hex shape; they are primary keys
+// and key segments, so they are never rewritten.
+export { mintId } from "@arcula/shared";
