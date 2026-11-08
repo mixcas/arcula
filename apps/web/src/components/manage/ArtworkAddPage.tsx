@@ -21,7 +21,12 @@ import {
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
-import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
+import {
+  artworkSlug,
+  artworkSearchSuffix,
+  mintId,
+  parseId,
+} from "@arcula/shared";
 
 /**
  * The Add page is a single write: the form fields, the client-minted artwork
@@ -42,16 +47,13 @@ const ArtworkAddPage: React.FC = () => {
   const search = (searchParams.get("q") ?? "").trim();
   const searchSuffix = artworkSearchSuffix(search);
 
-  // The artwork id, minted here. The staged entries are PUT under it while the
-  // form is open, and the save creates the row with it — one id, decided once,
-  // so staging and the row can never name different artworks.
-  //
-  // Hyphen-free on purpose: the edit link this save lands on is
-  // `{title}-{id}`, and the route recovers the id by cutting at the LAST
-  // hyphen. A hyphenated id would put that cut inside the id, and the page
-  // would arrive at its own work under the wrong name. The API mints its own
-  // ids the same way, so both halves of the segment obey one rule.
-  const [artworkId] = useState(() => crypto.randomUUID().replace(/-/g, ""));
+  // The artwork id comes from the shared mint — the same one the API uses for
+  // its rows — so the browser and the server cannot drift on the shape. The
+  // staged entries are PUT under it while the form is open, and the save
+  // creates the row with it: one id, decided once, so staging and the row can
+  // never name different artworks. It is hyphen-free, which the edit link
+  // `{title}-{id}` depends on: the route cuts at the last hyphen.
+  const [artworkId] = useState(() => mintId());
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
