@@ -20,7 +20,7 @@ import {
 // What every reader that cannot get a real answer lands on.
 const DEFAULTS = {
   version: 1,
-  artworksView: "table",
+  artworksView: "grid",
   artworksSort: "title-asc",
 };
 

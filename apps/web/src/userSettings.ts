@@ -9,7 +9,7 @@
 // hand-edited value, a torn write, a private-mode browser that throws — and a
 // preference is not worth a broken page, so every input that is not exactly our
 // object answers a complete settings object with the defaults. That is also the
-// reset story: clearing browser storage returns Table sorted Title A-Z.
+// reset story: clearing browser storage returns Grid sorted Title A-Z.
 //
 // No React and no Hono: the list reads once on mount and writes on each change,
 // which is all the cross-tab or reactive behaviour a preference needs.
@@ -36,7 +36,7 @@ export const STORAGE_KEY = "arcula.userSettings";
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   version: 1,
-  artworksView: "table",
+  artworksView: "grid",
   artworksSort: "title-asc",
 };
 
