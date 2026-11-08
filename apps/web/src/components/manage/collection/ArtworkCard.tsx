@@ -122,7 +122,15 @@ const ArtworkCard: React.FC<ArtworkCardProps> = ({
         />
       </Box>
 
-      <Box p="md">
+      <Box
+        p="md"
+        // With a photo the checkbox sits over the image; with none it sits over
+        // the body's own top-right corner, so the title keeps clear of it rather
+        // than wrapping underneath a control it cannot be read behind. 52 is
+        // the box's own footprint — a 12 px offset, a 28 px checkbox and a
+        // little air — not a spacing step.
+        pr={image ? undefined : 52}
+      >
         <Group gap="xs" wrap="wrap" align="center">
           <Text fw={500} style={{ overflowWrap: "anywhere" }}>
             {artwork.title}

@@ -44,13 +44,16 @@ export const artworkCardAspect = (width: number, height: number): number => {
  * How many masonry rows a card of `height` px occupies, given one row unit of
  * `rowUnit` px.
  *
- * The grid lays its rows out with a 1 px gap, so a row is `rowUnit + 1` tall and
- * a card needs its height rounded up to the next whole row. A card that has not
- * been measured (jsdom, a hidden tab, the frame before the ResizeObserver
- * answers) spans one row rather than none: `span 0` would remove it.
+ * The measured height is the card **plus the space under it** (the Grid's
+ * vertical rhythm is the item's own padding, not a `row-gap`, so that the gap
+ * is inside what the observer reports — see `ArtworksGrid`). So a row is
+ * exactly `rowUnit` tall here and the height is rounded up to the next whole
+ * one. A card that has not been measured (jsdom, a hidden tab, the frame before
+ * the ResizeObserver answers) spans one row rather than none: `span 0` would
+ * remove it.
  */
 export const artworkCardSpan = (height: number, rowUnit: number): number => {
   if (!Number.isFinite(height) || height <= 0) return 1;
   if (!Number.isFinite(rowUnit) || rowUnit <= 0) return 1;
-  return Math.max(1, Math.ceil(height / (rowUnit + 1)));
+  return Math.max(1, Math.ceil(height / rowUnit));
 };

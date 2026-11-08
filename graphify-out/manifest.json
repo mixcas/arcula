@@ -1896,16 +1896,16 @@
     "semantic_hash": "cddd814ea5a10f4570b65a139999706f"
   },
   "apps/web/src/components/manage/collection/ArtworkCard.tsx": {
-    "mtime": 1794097546.4433422,
-    "seen": 1794098396.246887,
-    "ast_hash": "8d0872333e4e877d0fffc6873b8233d1",
-    "semantic_hash": "8d0872333e4e877d0fffc6873b8233d1"
+    "mtime": 1794099450.2325616,
+    "seen": 1794099502.050594,
+    "ast_hash": "a419e2728142b0f2402596bdee6d5c6d",
+    "semantic_hash": ""
   },
   "apps/web/src/components/manage/collection/ArtworksGrid.tsx": {
-    "mtime": 1794097546.4434354,
-    "seen": 1794098396.246902,
-    "ast_hash": "b5423882b8f10f3b5f922f83b4175907",
-    "semantic_hash": "b5423882b8f10f3b5f922f83b4175907"
+    "mtime": 1794099370.8104267,
+    "seen": 1794099502.050596,
+    "ast_hash": "c578c157bba10f5c6f27c0deef7a479e",
+    "semantic_hash": ""
   },
   "apps/web/src/components/manage/collection/ArtworksList.tsx": {
     "mtime": 1794097546.4435372,
@@ -1920,10 +1920,10 @@
     "semantic_hash": "a6996dd8e568cd79f26c07dd7168371d"
   },
   "apps/web/src/components/manage/collection/artworkCardGeometry.ts": {
-    "mtime": 1794097546.4440014,
-    "seen": 1794098396.246932,
-    "ast_hash": "cb727c8e16a94e1eeda1f1a4eca5ad28",
-    "semantic_hash": "cb727c8e16a94e1eeda1f1a4eca5ad28"
+    "mtime": 1794099370.8105316,
+    "seen": 1794099502.0505989,
+    "ast_hash": "5e353057ac56de408c72d2b87f388897",
+    "semantic_hash": ""
   },
   "apps/web/src/components/manage/collection/artworksSort.ts": {
     "mtime": 1794097546.4440496,
@@ -1944,10 +1944,10 @@
     "semantic_hash": "972f0182c8dbaaa4d4d22e217c7087df"
   },
   "apps/web/tests/artworkCardGeometry.test.ts": {
-    "mtime": 1794097546.4442575,
-    "seen": 1794098396.247602,
-    "ast_hash": "70ce397c10f565442b7e93ba59c2e282",
-    "semantic_hash": "70ce397c10f565442b7e93ba59c2e282"
+    "mtime": 1794099275.8109338,
+    "seen": 1794099502.050637,
+    "ast_hash": "c0fdd43e273b4b15924bcc5f8331f17b",
+    "semantic_hash": ""
   },
   "apps/web/tests/artworksList.test.tsx": {
     "mtime": 1794097546.4445128,
@@ -2160,10 +2160,10 @@
     "semantic_hash": "f96e5e8a4eef8e8f55eec10f4ee544d1"
   },
   "AGENTS.md": {
-    "mtime": 1794098526.569434,
-    "seen": 1794098798.305669,
-    "ast_hash": "6375365ab6ab941b580a3ae81a5d7042",
-    "semantic_hash": "6375365ab6ab941b580a3ae81a5d7042"
+    "mtime": 1794099252.1079502,
+    "seen": 1794099502.050713,
+    "ast_hash": "90ced9b55e40911658bbb64d9106988c",
+    "semantic_hash": ""
   },
   "CLAUDE.md": {
     "mtime": 1792374719.0895813,
@@ -2172,8 +2172,8 @@
     "semantic_hash": "675bef57c4a5e6de81a4720b43429a1e"
   },
   "GLOSSARY.md": {
-    "mtime": 1794097550.0735447,
-    "seen": 1794098396.248616,
+    "mtime": 1794099159.3182282,
+    "seen": 1794099502.050714,
     "ast_hash": "6de0f5e9945d924b4072001bf17ecd90",
     "semantic_hash": "6de0f5e9945d924b4072001bf17ecd90"
   },
@@ -2224,5 +2224,17 @@
     "seen": 1794098396.248822,
     "ast_hash": "23d712a36340596fe5c7c1702ff5a105",
     "semantic_hash": "23d712a36340596fe5c7c1702ff5a105"
+  },
+  "apps/api/src/assets/fonts/OFL.txt": {
+    "mtime": 1792963209.8522696,
+    "seen": 1794099502.050716,
+    "ast_hash": "9e6561baca2756628871baf0c1e23539",
+    "semantic_hash": ""
+  },
+  "apps/web/public/fonts/OFL.txt": {
+    "mtime": 1792963209.8543947,
+    "seen": 1794099502.0507169,
+    "ast_hash": "716fe5fdcd175ba6cfa7d55905ef4a30",
+    "semantic_hash": ""
   }
 }

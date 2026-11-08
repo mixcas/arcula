@@ -46,12 +46,13 @@ describe("artworkCardAspect", () => {
 
 describe("artworkCardSpan", () => {
   it("spans the rows its height covers, rounded up", () => {
-    // 300 px of card over an 8 px unit (so 9 px per row with the 1 px gap):
-    // 34 rows covers 306 px, 33 only 297.
-    expect(artworkCardSpan(300, 8)).toBe(34);
+    // 300 px of card over an 8 px unit (the height already includes the space
+    // under the card, so a row is exactly the unit): 38 rows cover 304 px, 37
+    // only 296.
+    expect(artworkCardSpan(300, 8)).toBe(38);
     // Exactly on a boundary is that many rows, not one more.
-    expect(artworkCardSpan(306, 8)).toBe(34);
-    expect(artworkCardSpan(307, 8)).toBe(35);
+    expect(artworkCardSpan(304, 8)).toBe(38);
+    expect(artworkCardSpan(305, 8)).toBe(39);
   });
 
   it("answers one row for a card that has not been measured", () => {

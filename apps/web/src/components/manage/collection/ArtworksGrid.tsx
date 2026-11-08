@@ -7,11 +7,16 @@ import { artworkCardSpan } from "@/components/manage/collection/artworkCardGeome
 import { RECORDS_PER_PAGE_OPTIONS } from "@/components/manage/collection/artworksSort";
 
 /**
- * The masonry unit. One grid row is this tall plus the 1 px gap, and a card asks
- * for as many rows as its measured height needs (`artworkCardSpan`). A smaller
- * unit follows the content more closely at the cost of more rows; 8 px keeps a
- * fifty-card page's row count in the low thousands, which every engine lays out
- * without noticing.
+ * The masonry unit. A card asks for as many rows as its measured height needs
+ * (`artworkCardSpan`). A smaller unit follows the content more closely at the
+ * cost of more rows; 8 px keeps a fifty-card page's row count in the low
+ * thousands, which every engine lays out without noticing.
+ *
+ * The vertical space between cards is **not** a `row-gap`: it is the item's own
+ * `padding-bottom`, so the height the observer reports already includes it and
+ * one row is exactly `ROW_UNIT_PX`. With a row gap instead, the arithmetic would
+ * need the gap's pixels as a JS constant, and the theme's spacing scale is
+ * rem-based CSS the Grid cannot read.
  */
 const ROW_UNIT_PX = 8;
 
@@ -41,6 +46,18 @@ export interface ArtworksGridProps {
 /**
  * One offset per card, measured from the row unit.
  *
+ * Two details make this arithmetic stable rather than self-defeating:
+ *
+ * - **The item is measured, and it is not stretched.** A grid item defaults to
+ *   `align-items: stretch`, which pins the `li` to its row's height; a
+ *   measurement of that box would read one row (8 px), ask for one row, and stay
+ *   there forever — every card collapsed into a pile. The list sets
+ *   `alignItems: "start"` so the item keeps its content height, and the span
+ *   then only sizes the *track* under it.
+ * - **The gap is inside the measurement.** The item carries its own
+ *   `padding-bottom`, so the reported height includes the space under the card
+ *   and no gap constant has to be guessed in JS.
+ *
  * The measurement is on an effect rather than a callback ref: React 19 treats a
  * callback ref's return value as a cleanup function, and a `ResizeObserver` is
  * not a function, so returning one from a ref would throw on mount.
@@ -57,6 +74,10 @@ const useMeasuredSpan = (): [React.RefObject<HTMLLIElement | null>, number] => {
     const Observer = globalThis.ResizeObserver;
     if (!element || typeof Observer !== "function") return;
     const measure = () => {
+      // `offsetHeight` is the item's content plus its own bottom padding — the
+      // card and the rhythm under it — because the item is not stretched to its
+      // track. `scrollHeight` is the fallback for a frame in which the item is
+      // still constrained.
       const next = artworkCardSpan(
         element.offsetHeight || element.scrollHeight,
         ROW_UNIT_PX,
@@ -66,9 +87,11 @@ const useMeasuredSpan = (): [React.RefObject<HTMLLIElement | null>, number] => {
     measure();
     // The observer reports again on a resize and when the card's content
     // changes (a wrapped title, an image that landed), which is what settles
-    // the first paint's reserved height into the real one.
+    // the first paint's reserved height into the real one. It watches the card,
+    // not the item: the item's height is derived from what this sets.
+    const card = element.firstElementChild ?? element;
     const observer = new Observer(measure);
-    observer.observe(element);
+    observer.observe(card);
     return () => observer.disconnect();
   }, []);
 
@@ -86,7 +109,17 @@ const ArtworkCardItem: React.FC<{
 }> = (props) => {
   const [ref, span] = useMeasuredSpan();
   return (
-    <li ref={ref} style={{ gridRowEnd: `span ${span}`, minWidth: 0 }}>
+    <li
+      ref={ref}
+      style={{
+        gridRowEnd: `span ${span}`,
+        minWidth: 0,
+        // The rhythm between cards, inside the measured box (see ROW_UNIT_PX
+        // above). The last card in a column keeps it too, which is the same
+        // margin a CSS `gap` would leave under the grid.
+        paddingBottom: "var(--mantine-spacing-md)",
+      }}
+    >
       <ArtworkCard {...props} />
     </li>
   );
@@ -200,7 +233,13 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
             display: "grid",
             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
             gridAutoRows: `${ROW_UNIT_PX}px`,
-            gap: "1px var(--mantine-spacing-md)",
+            // Rows have no gap: the vertical rhythm is each item's own
+            // bottom padding, so a measured card carries its spacing with it.
+            // `alignItems: start` is load-bearing — stretching the items to
+            // their tracks would make every card measure one row tall.
+            rowGap: 0,
+            columnGap: "var(--mantine-spacing-md)",
+            alignItems: "start",
             opacity: fetching ? 0.5 : 1,
             transition: "opacity 150ms ease",
           }}
