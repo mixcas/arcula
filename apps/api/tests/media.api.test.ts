@@ -56,7 +56,7 @@ describe("POST …/photos/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "photo-1",
+      "photo1",
       new File([bytes], "scan.jpg", { type: "image/jpeg" }),
     );
     expect(res.status).toBe(200);
@@ -69,7 +69,7 @@ describe("POST …/photos/stage", () => {
       contentType: string;
       url: string;
     }>(res);
-    expect(body.entryId).toBe("photo-1");
+    expect(body.entryId).toBe("photo1");
     expect(body.name).toBe("scan.jpg");
     expect({ width: body.width, height: body.height }).toEqual({
       width: 400,
@@ -80,14 +80,14 @@ describe("POST …/photos/stage", () => {
     // mediaUrl percent-encodes the key; the proxy decodes it via
     // c.req.query, so assert the decoded key is exactly the staged one.
     expect(new URL(body.url, API).searchParams.get("key")).toBe(
-      stagingOriginalKey(owner.userId, cid, aid, "photo-1", "jpg"),
+      stagingOriginalKey(owner.userId, cid, aid, "photo1", "jpg"),
     );
 
     const originals = await listObjects(
-      stagedOriginalPrefix(owner.userId, cid, aid, "photo-1"),
+      stagedOriginalPrefix(owner.userId, cid, aid, "photo1"),
     );
     expect(originals).toHaveLength(1);
-    expect(originals[0].endsWith("photo-1.jpg")).toBe(true);
+    expect(originals[0].endsWith("photo1.jpg")).toBe(true);
   });
 
   it("rejects an unaccepted type before anything is stored", async () => {
@@ -95,7 +95,7 @@ describe("POST …/photos/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "photo-svg",
+      "photosvg",
       new File([new Uint8Array(10)], "evil.svg", { type: "image/svg+xml" }),
     );
     expect(res.status).toBe(400);
@@ -104,7 +104,7 @@ describe("POST …/photos/stage", () => {
     expect(body.error.fields).toBeDefined();
     expect(
       await listObjects(
-        stagedOriginalPrefix(owner.userId, cid, aid, "photo-svg"),
+        stagedOriginalPrefix(owner.userId, cid, aid, "photosvg"),
       ),
     ).toHaveLength(0);
   });
@@ -116,7 +116,7 @@ describe("POST …/photos/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "photo-big",
+      "photobig",
       new File([new Uint8Array(MAX_IMAGE_BYTES + 1)], "big.jpg", {
         type: "image/jpeg",
       }),
@@ -132,7 +132,7 @@ describe("POST …/photos/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "photo-bad",
+      "photobad",
       new File([new Uint8Array(512)], "not-image.jpg", { type: "image/jpeg" }),
     );
     expect(res.status).toBe(400);
@@ -174,7 +174,7 @@ describe("POST …/photos/stage", () => {
       stranger.cookies,
       cid,
       aid,
-      "photo-x",
+      "photox",
       new File([bytes], "x.jpg", { type: "image/jpeg" }),
     );
     expect(strangerRes.status).toBe(403);
@@ -236,7 +236,7 @@ describe("POST …/documents/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "doc-pdf",
+      "docpdf",
       new File([PDF], "condition-report.pdf", { type: "application/pdf" }),
     );
     expect(res.status).toBe(200);
@@ -250,9 +250,9 @@ describe("POST …/documents/stage", () => {
     expect(body.height).toBeNull();
     expect(body.contentType).toBe("application/pdf");
     const originals = await listObjects(
-      stagedOriginalPrefix(owner.userId, cid, aid, "doc-pdf"),
+      stagedOriginalPrefix(owner.userId, cid, aid, "docpdf"),
     );
-    expect(originals[0].endsWith("doc-pdf.pdf")).toBe(true);
+    expect(originals[0].endsWith("docpdf.pdf")).toBe(true);
   });
 
   it("answers dimensions for an image document", async () => {
@@ -261,7 +261,7 @@ describe("POST …/documents/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "doc-img",
+      "docimg",
       new File([bytes], "plate.png", { type: "image/png" }),
     );
     // The declared type names the extension; the bytes are what the
@@ -280,7 +280,7 @@ describe("POST …/documents/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "doc-cap",
+      "doccap",
       new File([atCap], "cap.pdf", { type: "application/pdf" }),
     );
     expect(ok.status).toBe(200);
@@ -289,7 +289,7 @@ describe("POST …/documents/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "doc-over",
+      "docover",
       new File([new Uint8Array(MAX_DOCUMENT_BYTES + 1)], "over.pdf", {
         type: "application/pdf",
       }),
@@ -305,7 +305,7 @@ describe("POST …/documents/stage", () => {
       owner.cookies,
       cid,
       aid,
-      "doc-svg",
+      "docsvg",
       new File([new Uint8Array(10)], "a.svg", { type: "image/svg+xml" }),
     );
     expect(res.status).toBe(400);
@@ -333,7 +333,7 @@ describe("POST …/photos/process", () => {
       owner.cookies,
       cid,
       aid,
-      "p-gen",
+      "pgen",
       new File([bytes], "a.jpg", { type: "image/jpeg" }),
     );
 
@@ -342,7 +342,7 @@ describe("POST …/photos/process", () => {
       cid,
       aid,
       "photos",
-      JSON.stringify({ entryId: "p-gen" }),
+      JSON.stringify({ entryId: "pgen" }),
     );
     expect(res.status).toBe(200);
     const body = await json<{
@@ -356,7 +356,7 @@ describe("POST …/photos/process", () => {
         contentType: string;
       }[];
     }>(res);
-    expect(body.entryId).toBe("p-gen");
+    expect(body.entryId).toBe("pgen");
     // 400x300 source: the inside fits are all at source scale, the
     // squares cover the box.
     const expected: [string, number, number][] = [
@@ -373,13 +373,13 @@ describe("POST …/photos/process", () => {
     for (const v of body.variants) {
       expect(v.contentType).toBe("image/webp");
       expect(new URL(v.url, API).searchParams.get("key")).toBe(
-        stagingVariantKey(owner.userId, cid, aid, "p-gen", v.key, "webp"),
+        stagingVariantKey(owner.userId, cid, aid, "pgen", v.key, "webp"),
       );
       expect(v.size).toBeGreaterThan(0);
     }
 
     const staged = await listObjects(
-      stagedVariantPrefix(owner.userId, cid, aid, "p-gen"),
+      stagedVariantPrefix(owner.userId, cid, aid, "pgen"),
     );
     expect(staged).toHaveLength(6);
     expect(staged.every((k) => k.endsWith(".webp"))).toBe(true);
@@ -391,12 +391,12 @@ describe("POST …/photos/process", () => {
       cid,
       aid,
       "photos",
-      JSON.stringify({ entryId: "p-gen" }),
+      JSON.stringify({ entryId: "pgen" }),
     );
     expect(res.status).toBe(200);
     expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(6);
     expect(
-      await listObjects(stagedVariantPrefix(owner.userId, cid, aid, "p-gen")),
+      await listObjects(stagedVariantPrefix(owner.userId, cid, aid, "pgen")),
     ).toHaveLength(6);
   });
 
@@ -416,14 +416,14 @@ describe("POST …/photos/process", () => {
 
   it("400s an undecodable staged original", async () => {
     // Seed the staged object directly: stage would have refused it.
-    const key = `staging/${owner.userId}/${cid}/${aid}/p-bad.jpg`;
+    const key = `staging/${owner.userId}/${cid}/${aid}/pbad.jpg`;
     await putObject(key, new Uint8Array(256), "image/jpeg");
     const res = await processEntry(
       owner.cookies,
       cid,
       aid,
       "photos",
-      JSON.stringify({ entryId: "p-bad" }),
+      JSON.stringify({ entryId: "pbad" }),
     );
     expect(res.status).toBe(400);
     expect(
@@ -460,7 +460,7 @@ describe("POST …/documents/process", () => {
       owner.cookies,
       cid,
       aid,
-      "d-img",
+      "dimg",
       new File([bytes], "plate.jpg", { type: "image/jpeg" }),
     );
     const res = await processEntry(
@@ -468,7 +468,7 @@ describe("POST …/documents/process", () => {
       cid,
       aid,
       "documents",
-      JSON.stringify({ entryId: "d-img" }),
+      JSON.stringify({ entryId: "dimg" }),
     );
     expect(res.status).toBe(200);
     const body = await json<{ variants: { key: string }[] }>(res);
@@ -483,7 +483,7 @@ describe("POST …/documents/process", () => {
       owner.cookies,
       cid,
       aid,
-      "d-pdf",
+      "dpdf",
       new File([PDF], "r.pdf", { type: "application/pdf" }),
     );
     const res = await processEntry(
@@ -491,7 +491,7 @@ describe("POST …/documents/process", () => {
       cid,
       aid,
       "documents",
-      JSON.stringify({ entryId: "d-pdf" }),
+      JSON.stringify({ entryId: "dpdf" }),
     );
     expect(res.status).toBe(200);
     expect((await json<{ variants: unknown[] }>(res)).variants).toEqual([]);
@@ -556,7 +556,7 @@ describe("DELETE …/{population}/{entryId}", () => {
 
   it("does not sweep a sibling entry whose id starts with this one's", async () => {
     const bytes = await makeJpeg(300, 200);
-    for (const entryId of ["abc", "abc_d"]) {
+    for (const entryId of ["abc", "abcd"]) {
       await stagePhoto(
         owner.cookies,
         cid,
@@ -570,7 +570,7 @@ describe("DELETE …/{population}/{entryId}", () => {
       await listObjects(stagedOriginalPrefix(owner.userId, cid, aid, "abc")),
     ).toHaveLength(0);
     expect(
-      await listObjects(stagedOriginalPrefix(owner.userId, cid, aid, "abc_d")),
+      await listObjects(stagedOriginalPrefix(owner.userId, cid, aid, "abcd")),
     ).toHaveLength(1);
   });
 

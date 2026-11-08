@@ -31,7 +31,7 @@ import {
 } from "./helpers/fixtures";
 
 const RUN = Math.random().toString(36).slice(2, 10);
-const entry = (label: string): string => `${label}-${RUN}`;
+const entry = (label: string): string => `${label.replace(/-/g, "")}${RUN}`;
 
 const pA = entry("media-a");
 const pB = entry("media-b");

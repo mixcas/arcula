@@ -45,10 +45,10 @@ import {
 } from "../media/pipeline";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
 
-// Ids are client-minted and become key segments: letters, digits, dash,
-// underscore — nothing that could carry a path separator or a dot. The
-// shared MINTED_ID_RE is the single owner of that character set (also
-// the save payloads').
+// Ids are client-minted and become key segments: letters and digits only —
+// nothing that could carry a path separator, a dot or a hyphen (the route
+// parser cuts at the last hyphen). The shared MINTED_ID_RE is the single owner
+// of that character set (also the save payloads').
 
 /** A validation failure with the failed fields, per the error envelope. */
 function invalid(message: string, fields?: Record<string, string>) {

@@ -38,7 +38,8 @@ import {
 } from "./helpers/fixtures";
 
 const RUN = Math.random().toString(36).slice(2, 10);
-const entry = (label: string): string => `${label}-${RUN}`;
+// Hyphen-free: an entry id is a key segment under MINTED_ID_RE.
+const entry = (label: string): string => `${label.replace(/-/g, "")}${RUN}`;
 
 type Account = { email: string; cookies: string; userId: string };
 

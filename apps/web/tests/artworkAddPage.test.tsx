@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ArtworkAddPage from "@/components/manage/ArtworkAddPage";
 import { artworkService } from "@/services/artworkService";
 import { ApiRequestError } from "@/services/api";
-import type { Artwork } from "@arcula/shared";
+import { MINTED_ID_SHAPE_RE, type Artwork } from "@arcula/shared";
 
 /**
  * The Add page is now one write: the form fields, the client-minted artwork
@@ -217,11 +217,11 @@ describe("the Add page — the single write", () => {
     expect(createArtwork).toHaveBeenCalledTimes(1);
     const [collectionId, body] = createArtwork.mock.calls[0];
     expect(collectionId).toBe(COLLECTION_ID);
-    // The id the hook staged under: minted by the page on mount, and
-    // hyphen-free — the redirect below lands on `{title}-{id}`, and the route
-    // recovers the id by cutting at the last hyphen, which would land inside a
-    // hyphenated one.
-    expect(body.artworkId).toMatch(/^[0-9a-f]{32}$/);
+    // The id the page staged under: minted from the shared contract — the
+    // same mint the API uses — and ten base62 characters, never a hyphen. The
+    // redirect below lands on `{title}-{id}`, and the route recovers the id by
+    // cutting at the last hyphen.
+    expect(body.artworkId).toMatch(MINTED_ID_SHAPE_RE);
     expect(body.title).toBe("Estudio en rojo");
     expect(body.artistName).toBe("María López");
     // A work the owner did not say otherwise about goes in front of the

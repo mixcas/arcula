@@ -34,6 +34,11 @@ name, never a subpath:
   days), `INVITATION_RESEND_COOLDOWN_MS` (one minute), `timestampMillis`, and
   the two questions the owner's access card asks of a row,
   `invitationLapsed` and `invitationResendWaitMs`.
+- `ids.ts` — the one id mint both sides use: `ID_LENGTH` (ten), the base62
+  `ID_ALPHABET`, `MINTED_ID_SHAPE_RE` and `mintId`. Sampling is unbiased and
+  throws rather than degrading when the platform has no secure source. Ids
+  minted before this module keep their 32-character hex shape; both lengths
+  coexist ([ADR-0007](../../docs/adr/0007-ids-are-ten-base62-characters.md)).
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
 - `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.

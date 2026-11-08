@@ -175,11 +175,11 @@ beforeAll(async () => {
   await protect(cid, PASSWORD);
 
   workId = uuid();
-  const photo = await stagePhoto(workId, `gate-photo-${workId}`);
+  const photo = await stagePhoto(workId, `gatephoto${workId}`);
   const document = await stage(
     "documents",
     workId,
-    `gate-doc-${workId}`,
+    `gatedoc${workId}`,
     new File([new TextEncoder().encode("%PDF-1.4 (test)")], "report.pdf", {
       type: "application/pdf",
     }),
@@ -187,7 +187,7 @@ beforeAll(async () => {
   await createWork(workId, "published", [photo], [document]);
 
   draftId = uuid();
-  const draftPhoto = await stagePhoto(draftId, `gate-draft-${draftId}`);
+  const draftPhoto = await stagePhoto(draftId, `gatedraft${draftId}`);
   await createWork(draftId, "draft", [draftPhoto]);
 
   const published = await ownerRead(workId);
