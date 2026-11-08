@@ -143,6 +143,13 @@ const PREVIEW_MIN_HEIGHT = 360;
  * padding, so the page itself does not scroll and the document scrolls inside
  * its frame. Both numbers come from the shell — `MANAGE_HEADER_HEIGHT` and the
  * `AppShell`'s own padding variable — so no second 60 is written here.
+ *
+ * It is applied through `style`, never the `h` prop: Mantine parses style-prop
+ * values and rewrites every number as a length, so the `2 *` below arrives at
+ * the browser as `calc(2px …) * var(…)`. That product is invalid, the whole
+ * `max()` with it, and a preview with no height is the iframe's default 150 px
+ * — the strip this page used to show. A `style` value is passed through as
+ * written.
  */
 const PREVIEW_HEIGHT = `max(${PREVIEW_MIN_HEIGHT}px, calc(100dvh - ${MANAGE_HEADER_HEIGHT}px - 2 * var(--app-shell-padding)))`;
 
@@ -513,7 +520,7 @@ const CollectionPdfPage: React.FC = () => {
               </Stack>
             </Paper>
           ) : (
-            <Stack gap="xs" h={PREVIEW_HEIGHT}>
+            <Stack gap="xs" style={{ height: PREVIEW_HEIGHT }}>
               {emptyNotice}
               <iframe
                 title="Collection PDF"
