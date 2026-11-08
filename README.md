@@ -234,6 +234,15 @@ consequences worth knowing:
   local Postgres
 - `seaweedfs` and `mailpit` via Homebrew (the S3 stand-in and the mail catcher)
 
+```bash
+brew install colima docker docker-compose seaweedfs mailpit
+colima start            # the Docker daemon — a Linux VM, so it must be started
+                        # after every reboot
+```
+
+SeaweedFS and Mailpit run as native binaries, not containers — only Postgres
+needs Docker.
+
 ### Installation
 
 ```bash
@@ -283,19 +292,76 @@ Never commit real secrets. `infra/cdk/.env` (which holds the production
 
 ### Run it
 
+On a fresh database, apply the migration and seed the owner account first:
+
+```bash
+bun run stack:up      # Postgres, SeaweedFS, Mailpit
+bun run db:migrate
+bun run db:seed
+```
+
+Then start the app:
+
 ```bash
 bun run dev
 ```
 
-That brings up the local stack (Postgres, SeaweedFS, Mailpit), applies nothing,
-and starts the API on [localhost:8000](http://localhost:8000) and the web app on
-[localhost:3000](http://localhost:3000). On a fresh database, apply the migration
-and seed the owner account first:
+`dev` runs `stack:up` again (it is idempotent — services already up are left
+alone) and then starts the API on [localhost:8000](http://localhost:8000) and
+the web app on [localhost:3000](http://localhost:3000). Sign in with the
+`SEED_EMAIL` / `SEED_PASSWORD` from `.env`.
 
-```bash
-bun run db:migrate
-bun run db:seed
-```
+### The local stack
+
+`bun run stack:up` starts three services and `bun run stack:down` stops them.
+Both are safe to re-run, and both take a list of service names to act on that
+subset only (`sh scripts/stack-up.sh s3 mailpit`):
+
+| Service    | Role             | Runs as                     | Address                  |
+| ---------- | ---------------- | --------------------------- | ------------------------ |
+| `postgres` | the database     | `docker-compose`, colima VM | `:5432`                  |
+| `s3`       | object storage   | native SeaweedFS binary     | `:9000` (S3 API)         |
+| `mailpit`  | the mail catcher | Homebrew service            | `:1025` SMTP, `:8025` UI |
+
+- **Postgres is the only service that needs Docker.** Its container is defined
+  in `docker-compose.yml`, keeps its data in the `postgres-data` volume, and
+  collides with any other Postgres already holding `:5432`.
+- **Any mail the app sends is caught by Mailpit** — open
+  [localhost:8025](http://localhost:8025) to read password resets, address
+  verifications and invitations. Nothing leaves the machine.
+- **A missing Docker socket means colima is stopped.** That is the most common
+  first failure:
+
+  ```
+  failed to connect to the docker API at unix:///Users/…/.colima/default/docker.sock
+  ```
+
+  Start it with `colima start`, then re-run. To have it start at login instead:
+  `brew services start colima`. If it reports running but the socket is still
+  missing, the VM is stale — `colima stop && colima delete && colima start`
+  recreates it (and the `postgres-data` volume with it), after which migrate and
+  seed again.
+
+- **`ECONNREFUSED` from the API means Postgres is not published on `:5432`**,
+  not that the credentials are wrong. If `stack:up` says `postgres: already up`
+  but every query is refused, the container came back from a saved state with
+  its port mapping missing — `docker-compose up -d --force-recreate postgres`
+  rebuilds the mapping and keeps the `postgres-data` volume, so the data stays.
+- **A recreated volume is an empty database.** If the tables are gone
+  (`/api` login fails with `relation "user" does not exist`), the volume was
+  replaced — recreated by `colima delete`, or swapped for a worktree's
+  differently-named project volume. Recover with `bun run db:migrate` then
+  `bun run db:seed`; nothing can bring back rows that lived in the old volume.
+- **SeaweedFS binds a LAN address at start.** If the machine changes networks
+  (a laptop that moved), storage calls fail with nothing pointing at the cause.
+  Restart just that service: `pkill -f "weed server"` then
+  `sh scripts/stack-up.sh s3`.
+- **State lives in `.stack/`** (SeaweedFS data, pid files, logs) and is
+  gitignored. Logs for a service that will not come up are in `.stack/logs/`.
+- **`stack:down` keeps data.** It stops the containers and processes but leaves
+  the volumes and `.stack/`. `bun run db:reset` is what wipes the tables and the
+  objects, then migrates and seeds again — a clean slate in one command. It
+  starts Postgres and SeaweedFS itself.
 
 ## Scripts
 

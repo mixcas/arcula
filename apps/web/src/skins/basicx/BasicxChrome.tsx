@@ -68,7 +68,7 @@ interface BasicxChromeProps {
   artwork: FooterArtwork | null;
   /**
    * The collection description, already trimmed. Blank means the footer's
-   * right slot renders the spacer and nothing else.
+   * left slot renders the artwork and nothing else.
    */
   description: string;
   /**
@@ -86,7 +86,7 @@ interface BasicxChromeProps {
 
 const LINK_COLOR = "rgba(0, 0, 0, 0.85)";
 const DIM_COLOR = "rgba(0, 0, 0, 0.4)";
-/** How far the description may stretch into the viewport from the right. */
+/** How far the description may stretch into the viewport from the left. */
 const DESCRIPTION_MAX_WIDTH_REM = "22rem";
 
 const BasicxChrome: React.FC<BasicxChromeProps> = ({
@@ -181,11 +181,17 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
     </Box>
 
     {/*
-      Footer: the artwork in view as two stacked lines — the title bold on top
-      and the artist beneath it, dimmer because it is the quieter of the two —
-      against the collection description, pinned to the bottom-right of the
-      same bar. The title links to the artwork's own public view, which is what
-      makes the homepage a way into its works rather than only a way past them.
+      Footer: the collection description pinned to the bottom-left of the bar,
+      against the artwork in view on the bottom-right — two stacked lines, the
+      title bold on top and the artist beneath it, dimmer because it is the
+      quieter of the two. The title links to the artwork's own public view,
+      which is what makes the homepage a way into its works rather than only a
+      way past them.
+
+      The description is rendered first so it takes the left slot and the
+      artwork the right. Without a description the row has one child, and
+      `space-between` would leave it in the left slot, so the row right-aligns
+      instead and the artwork keeps the bottom-right corner either way.
 
       Padding is 1rem at the sides, 1.7rem above, 1rem below.
     */}
@@ -200,8 +206,48 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
       pb="md"
       style={{ zIndex: 2, pointerEvents: "none" }}
     >
-      <Group justify="space-between" align="flex-end" gap="xl">
-        <Stack gap={0}>
+      <Group
+        justify={description.length === 0 ? "flex-end" : "space-between"}
+        align="flex-end"
+        gap="xl"
+      >
+        {/*
+          The description, when the collection has one, in the left slot.
+          Fades out in place: `visibility` transitions as a discrete step that
+          stays `visible` until the end of the duration, so the text is
+          readable while it fades and gone (not selectable, not announced)
+          after it. The copy survives in the DOM at opacity 0 so hiding is not
+          a remount — and it never comes back, because `BasicxSkin` feeds its
+          visibility from monotonic state (the farthest artwork reached, the
+          highest photo index). `aria-hidden` is applied immediately rather
+          than when the fade ends.
+        */}
+        {description.length === 0 ? null : (
+          <Box
+            style={{
+              opacity: descriptionVisible ? 1 : 0,
+              visibility: descriptionVisible ? "visible" : "hidden",
+              transition: `opacity ${descriptionFadeMs}ms, visibility ${descriptionFadeMs}ms`,
+              maxWidth: DESCRIPTION_MAX_WIDTH_REM,
+              textAlign: "left",
+              overflowWrap: "anywhere",
+            }}
+            aria-hidden={!descriptionVisible}
+            px="sm"
+          >
+            <Text
+              size="bodycopy"
+              fw={450}
+              lh={1.2}
+              c={DIM_COLOR}
+              style={{ whiteSpace: "pre-line" }}
+            >
+              {description}
+            </Text>
+          </Box>
+        )}
+
+        <Stack gap={0} align="flex-end">
           {/* A non-breaking space on each line holds its height until the first
               section reports itself, so the bar does not jump as it fills in. */}
           {/*
@@ -237,41 +283,6 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
             {artwork?.artistName ?? "\u00A0"}
           </Text>
         </Stack>
-
-        {/*
-          The description, when the collection has one. Fades out in place:
-          `visibility` transitions as a discrete step that stays `visible`
-          until the end of the duration, so the text is readable while it fades
-          and gone (not selectable, not announced) after it. The copy survives
-          in the DOM at opacity 0 so hiding is not a remount — and it never
-          comes back, because `BasicxSkin` feeds its visibility from monotonic
-          state (the farthest artwork reached, the highest photo index). 
-          `aria-hidden` is applied immediately rather than when the fade ends.
-        */}
-        {description.length === 0 ? null : (
-          <Box
-            style={{
-              opacity: descriptionVisible ? 1 : 0,
-              visibility: descriptionVisible ? "visible" : "hidden",
-              transition: `opacity ${descriptionFadeMs}ms, visibility ${descriptionFadeMs}ms`,
-              maxWidth: DESCRIPTION_MAX_WIDTH_REM,
-              textAlign: "right",
-              overflowWrap: "anywhere",
-            }}
-            aria-hidden={!descriptionVisible}
-            px="sm"
-          >
-            <Text
-              size="bodycopy"
-              fw={450}
-              lh={1.2}
-              c={DIM_COLOR}
-              style={{ whiteSpace: "pre-line" }}
-            >
-              {description}
-            </Text>
-          </Box>
-        )}
       </Group>
     </Box>
   </>

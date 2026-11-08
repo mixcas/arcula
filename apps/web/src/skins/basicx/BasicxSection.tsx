@@ -88,11 +88,23 @@ export const emblaDuration = (seconds: number): number =>
  * aspect.
  *
  * The image is capped in both axes — `maw="100%"` and `mah="100dvh"` — so the
- * width it is actually drawn at is `min(100vw, viewportHeight × aspect)`. A
- * flat `100vw` claims the full width even for a portrait drawn a third of it,
- * and since the browser multiplies by DPR, a Retina laptop ends up choosing one
- * size class too high for the pixels on screen. With the aspect in the string,
- * the widest candidate is fetched only where a photo is really drawn that wide.
+ * width it is actually drawn at is `min(100vw, viewportHeight × aspect)` for
+ * `aspect = width / height`. A flat `100vw` claims the full width even for a
+ * portrait drawn a third of it, and since the browser multiplies by DPR, a
+ * Retina laptop ends up choosing one size class too high for the pixels on
+ * screen. With the aspect in the string, the widest candidate is fetched only
+ * where a photo is really drawn that wide.
+ *
+ * The aspect goes in as `width / height`, and the other way round is not a
+ * near-miss but the bug this string had: a 1500 × 1022 landscape on a 1440 × 900
+ * viewport claimed `68vh` instead of `147vh`. `sizes` is not only a hint for
+ * fetching — the browser divides the chosen candidate's pixel width by the
+ * density it derives from `sizes` and that quotient becomes the image's
+ * *intrinsic* size. So an under-claim is not merely a wasted fetch: the photo
+ * was drawn 612px wide instead of filling the viewport's height, at `width:
+ * auto` and with nothing in CSS to clamp it back up. Over-claiming is harmless
+ * by comparison (the two caps clamp it), which is why the rounding is a plain
+ * `Math.round` rather than something that must not overshoot.
  *
  * `sizes` accepts any CSS length, `vh` and `min()` included; the two are the
  * same unit the layout uses. A record with no dimensions falls back to `100vw`.
@@ -101,7 +113,7 @@ export const slideSizes = (
   photo: Pick<ArtworkPhoto, "width" | "height">,
 ): string =>
   photo.width > 0 && photo.height > 0
-    ? `min(100vw, ${Math.round((photo.height / photo.width) * 100)}vh)`
+    ? `min(100vw, ${Math.round((photo.width / photo.height) * 100)}vh)`
     : "100vw";
 
 /**

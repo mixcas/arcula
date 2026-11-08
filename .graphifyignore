@@ -1,0 +1,31 @@
+# Exclusions for the knowledge graph (gitignore syntax; wins over .gitignore).
+# The graph covers the product: apps/, packages/, docs/, infra/, scripts/, and
+# the root-level documents and workspace manifests. Everything below is
+# process, harness, vendored or generated — read it directly, do not query it.
+
+# CI and the agent harness.
+/.github/
+/.llms/
+/.opencode/
+/.agents/
+/.claude/
+
+# Vendored dependencies and generated output.
+/functions/
+/dist/
+graphify-out/
+
+# Root files that configure the repo or the harness, not the product.
+/LICENSE
+/bun.lock
+/skills-lock.json
+/opencode.jsonc
+/.bun-version
+/.dockerignore
+/.gitignore
+/.prettierignore
+/.env
+/.env.*
+
+# Local stack state.
+/.stack/

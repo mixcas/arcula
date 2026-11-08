@@ -1,7 +1,7 @@
 /**
  * When the collection description is dismissed on Basicx's home view.
  *
- * The description sits bottom-right in the fixed footer while the visitor is
+ * The description sits bottom-left in the fixed footer while the visitor is
  * on the very first photo of the *first* artwork. Two things dismiss it, and
  * once dismissed it never comes back for the visit:
  *
