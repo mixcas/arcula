@@ -9,7 +9,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { basicxSkin } from "@/skins/basicx";
-import { emblaDuration } from "@/skins/basicx/BasicxSection";
+import { emblaDuration, slideSizes } from "@/skins/basicx/BasicxSection";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
 import type { Artwork, Collection, ImageVariantKey } from "@arcula/shared";
@@ -214,6 +214,42 @@ describe("emblaDuration", () => {
   });
 });
 
+describe("Basicx — the photo's claimed width", () => {
+  /**
+   * The direction of the aspect, which is what this function got wrong.
+   *
+   * The section caps the image on both axes, so the width it is drawn at is the
+   * aspect (`width / height`) times the viewport height. Writing the reciprocal
+   * looks like the same shape of formula and answers a plausible number — so
+   * nothing in a screenshot of a *portrait* distinguishes the two, and a
+   * landscape came out a fraction of the viewport wide with no CSS to blame.
+   *
+   * Not folded into the rendered case below: that one pins the value on the
+   * `<img>` (the wiring), and a photo whose aspect is the other way round is the
+   * half of the rule it cannot express.
+   */
+  it("claims more than the viewport's height for a landscape", () => {
+    // 3:2 drawn height-capped is 1.5 × the viewport height — taller than the
+    // viewport is wide, so `min()` resolves to the width on an ordinary screen
+    // and the photo is as wide as it can be.
+    expect(slideSizes({ width: 3000, height: 2000 })).toBe("min(100vw, 150vh)");
+  });
+
+  it("claims less than the viewport's width for a portrait", () => {
+    // 2:3 drawn height-capped is two thirds of the viewport height — which is
+    // narrower than the viewport, so the `vh` term is the one that binds and
+    // the candidate choice follows the photo rather than the screen.
+    expect(slideSizes({ width: 2000, height: 3000 })).toBe("min(100vw, 67vh)");
+  });
+
+  it("falls back to the whole viewport without dimensions", () => {
+    // A record written before the pipeline recorded sizes: there is no aspect
+    // to claim, and `0 / 0` would be a `NaNvh` the browser ignores, leaving the
+    // srcset to guess.
+    expect(slideSizes({ width: 0, height: 0 })).toBe("100vw");
+  });
+});
+
 describe("Basicx — the section per artwork", () => {
   it("renders one fullscreen section per artwork", () => {
     render({
@@ -402,10 +438,13 @@ describe("Basicx — photographs", () => {
   it("sizes the candidate choice from the photo's aspect, not the whole viewport", () => {
     render();
     const image = screen.getAllByAltText("Estudio en rojo")[0];
-    // 3000 x 2000 is 3:2 and the image is height-capped, so it is drawn at
-    // most 67vh wide. A flat `100vw` claims the full width and, multiplied by
-    // DPR, pushes a Retina laptop one size class above the pixels it shows.
-    expect(image).toHaveAttribute("sizes", "min(100vw, 67vh)");
+    // 3000 x 2000 is 3:2 and the image is height-capped, so it is drawn
+    // 150vh wide — the aspect times the viewport's *height*. A flat `100vw`
+    // claims the full width and, multiplied by DPR, pushes a Retina laptop one
+    // size class above the pixels it shows; the reciprocal (67vh here) claims
+    // the image is smaller than it is, which shrinks it rather than merely
+    // fetching badly. See `slideSizes`.
+    expect(image).toHaveAttribute("sizes", "min(100vw, 150vh)");
   });
 
   it("offers xxlarge, and only a viewport that can use it selects it", () => {
