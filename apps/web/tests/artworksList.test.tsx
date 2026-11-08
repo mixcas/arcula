@@ -58,6 +58,19 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
 
 const renderList = (props: ListProps) => render(<ListTree {...props} />);
 
+// What a collector who has not chosen a view gets. The Grid is the default, so
+// a test about the Table — the second view since that default moved — has to
+// ask for it.
+const startInTable = () =>
+  localStorage.setItem(
+    "arcula.userSettings",
+    JSON.stringify({
+      version: 1,
+      artworksView: "table",
+      artworksSort: "title-asc",
+    }),
+  );
+
 interface ListProps {
   artworks: Artwork[];
   onDeleted?: () => Promise<void> | void;
@@ -172,6 +185,7 @@ describe("ArtworksList", () => {
     // Deliberately unsorted input, with "art 2" before "Art 10" so a plain
     // lexicographic sort would put 10 first, and mixed case to prove the
     // collation is not byte order.
+    startInTable();
     const artworks = [
       artwork({ id: "c", title: "Art 10" }),
       artwork({ id: "a", title: "art 2" }),
@@ -186,6 +200,7 @@ describe("ArtworksList", () => {
     // Two pages of rows, so the offset a header click must clear is real: a
     // reorder that left the page where it was would land on a slice of the new
     // order rather than its first page.
+    startInTable();
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({
         id: `w${String(i).padStart(2, "0")}`,
@@ -216,6 +231,7 @@ describe("ArtworksList", () => {
     const user = userEvent.setup();
     // 30 rows against a 25-row page: the fixture has to be larger than the
     // page for pagination to be observable at all, and 25 is the default now.
+    startInTable();
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
@@ -239,6 +255,7 @@ describe("ArtworksList", () => {
   });
 
   it("marks a draft artwork in its title cell, and leaves a published one unmarked", () => {
+    startInTable();
     renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1", status: "draft" }),
@@ -253,6 +270,7 @@ describe("ArtworksList", () => {
   });
 
   it("shows the first photo as a small square thumbnail, and nothing without one", () => {
+    startInTable();
     renderList({
       artworks: [
         artwork({
@@ -304,6 +322,7 @@ describe("ArtworksList", () => {
   it("soft-deletes one artwork after confirmation and refetches", async () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
+    startInTable();
     renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       onDeleted,
@@ -344,8 +363,34 @@ describe("ArtworksList", () => {
     expect(await screen.findByText(/artwork was removed/)).toBeTruthy();
   });
 
+  it("soft-deletes a single card from the grid, which is the default view", async () => {
+    const user = userEvent.setup();
+    const onDeleted = vi.fn();
+    renderList({
+      artworks: [artwork({ id: "a", title: "Art 1" })],
+      onDeleted,
+    });
+
+    // No stored choice: the cards are what a collector opens the collection to.
+    expect(screen.queryByRole("table")).toBeNull();
+    const view = screen.getByRole("link", { name: "View" });
+    expect(view.getAttribute("href")).toBe(
+      "/collection/my-collection-collection1/artwork/art-1-a",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const scope = within(await dialogEl());
+    await user.click(scope.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a"]),
+    );
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+  });
+
   it("cancelling the dialog deletes nothing and keeps the selection", async () => {
     const user = userEvent.setup();
+    startInTable();
     renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1" }),
@@ -369,6 +414,7 @@ describe("ArtworksList", () => {
 
   it("soft-deletes every selected row in one call", async () => {
     const user = userEvent.setup();
+    startInTable();
     renderList({
       artworks: [
         artwork({ id: "a", title: "Art 1" }),
@@ -399,6 +445,7 @@ describe("ArtworksList", () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
     softDeleteMock.mockRejectedValue(new Error("offline"));
+    startInTable();
     renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       onDeleted,
@@ -524,6 +571,7 @@ describe("ArtworksList", () => {
 
   it("returns to page 1 when the query changes", async () => {
     const user = userEvent.setup();
+    startInTable();
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
@@ -540,6 +588,7 @@ describe("ArtworksList", () => {
 
   it("clears the row selection when the query changes", async () => {
     const user = userEvent.setup();
+    startInTable();
     const artworks = [
       artwork({ id: "a", title: "Art 1" }),
       artwork({ id: "b", title: "Art 2" }),
@@ -561,6 +610,7 @@ describe("ArtworksList", () => {
 
   it("starts at page 1 with no selection when a query returns to an earlier value", async () => {
     const user = userEvent.setup();
+    startInTable();
     const artworks = Array.from({ length: 30 }, (_, i) =>
       artwork({ id: `w${i}`, title: `Art ${String(i + 1).padStart(2, "0")}` }),
     );
@@ -584,6 +634,7 @@ describe("ArtworksList", () => {
 
   it("keeps the chosen sort when the query changes", async () => {
     const user = userEvent.setup();
+    startInTable();
     const artworks = [
       artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
       artwork({ id: "b", title: "Art 2", artistName: "abbey" }),
@@ -658,7 +709,7 @@ describe("ArtworksList", () => {
     const gridSegment = () => screen.getByRole("radio", { name: "Grid" });
     const tableSegment = () => screen.getByRole("radio", { name: "Table" });
 
-    it("toggles to cards and remembers the choice", async () => {
+    it("toggles to the table and remembers the choice", async () => {
       const user = userEvent.setup();
       const artworks = [
         artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
@@ -666,17 +717,16 @@ describe("ArtworksList", () => {
       ];
       renderList({ artworks });
 
-      // Table is the default: a stored plan of "grid" is what this test
-      // changes, not what it starts from.
-      expect(screen.getByRole("table")).toBeTruthy();
-      expect(tableSegment()).toBeChecked();
-
-      await user.click(gridSegment());
-
-      // The cards carry the work's identity, in sorted order.
-      await waitFor(() => expect(screen.queryByRole("table")).toBeNull());
+      // Grid is the default: nothing stored is what this test starts from.
       expect(cardTitles()).toEqual(["Art 1", "Art 2"]);
       expect(gridSegment()).toBeChecked();
+
+      await user.click(tableSegment());
+
+      // The rows carry the work's identity, in sorted order.
+      await waitFor(() => expect(screen.queryByRole("list")).toBeNull());
+      expect(visibleTitles()).toEqual(["Art 1", "Art 2"]);
+      expect(tableSegment()).toBeChecked();
 
       // Remembered for the next visit and the next collection: the one key
       // holds the view, and the sort it did not touch keeps its value.
@@ -684,7 +734,7 @@ describe("ArtworksList", () => {
         JSON.parse(localStorage.getItem("arcula.userSettings") ?? "null"),
       ).toEqual({
         version: 1,
-        artworksView: "grid",
+        artworksView: "table",
         artworksSort: "title-asc",
       });
     });
@@ -702,12 +752,15 @@ describe("ArtworksList", () => {
       localStorage.setItem("arcula.userSettings", "{not json");
       renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
 
-      expect(screen.getByRole("table")).toBeTruthy();
-      expect(tableSegment()).toBeChecked();
+      // The Grid is the default, so corrupt storage lands there rather than on
+      // the Table.
+      expect(screen.getByRole("list")).toBeTruthy();
+      expect(gridSegment()).toBeChecked();
     });
 
     it("keeps the page and the selection when the view is toggled", async () => {
       const user = userEvent.setup();
+      startInTable();
       const artworks = Array.from({ length: 30 }, (_, i) =>
         artwork({
           id: `w${i}`,
@@ -930,6 +983,7 @@ describe("ArtworksList", () => {
 
     it("and the Table's headers are the same control", async () => {
       const user = userEvent.setup();
+      startInTable();
       const artworks = [
         artwork({ id: "a", title: "Art 1", artistName: "Braque" }),
         artwork({ id: "b", title: "Art 2", artistName: "Abbey" }),
@@ -1024,6 +1078,7 @@ describe("ArtworksList", () => {
     });
 
     it("does not show a Sort select in the Table", () => {
+      startInTable();
       renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
 
       expect(screen.getByRole("table")).toBeTruthy();
@@ -1185,6 +1240,7 @@ describe("ArtworksList", () => {
       });
 
       it("is Grid-only — the Table's header checkbox is its own Select all", () => {
+        startInTable();
         renderList({ artworks: threePages() });
 
         expect(screen.getByRole("table")).toBeTruthy();

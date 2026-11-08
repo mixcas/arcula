@@ -106,7 +106,10 @@ async function stageAndProcess(
   artworkId: string,
   file: File,
 ): Promise<StageOutcome<DocumentEntry>> {
-  const entryId = crypto.randomUUID();
+  // An entry id is an object-key segment and the shared MINTED_ID_RE refuses
+  // a hyphen (a route recovers an id by cutting at the last one), so the
+  // UUID's hyphens come off before it reaches the wire.
+  const entryId = crypto.randomUUID().replace(/-/g, "");
   try {
     const staged = await mediaService.stageDocument(
       collectionId,

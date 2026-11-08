@@ -22,8 +22,8 @@ import { freshUser, json, req, uuid } from "./helpers/api";
 import { makeJpeg, processEntry, stagePhoto } from "./helpers/fixtures";
 
 const RUN = Math.random().toString(36).slice(2, 10);
-const pKeep = `keep-${RUN}`;
-const pDrop = `drop-${RUN}`;
+const pKeep = `keep${RUN}`;
+const pDrop = `drop${RUN}`;
 
 let owner: Awaited<ReturnType<typeof freshUser>>;
 let successor: Awaited<ReturnType<typeof freshUser>>;

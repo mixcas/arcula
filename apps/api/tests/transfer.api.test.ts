@@ -48,7 +48,7 @@ import {
 } from "./helpers/mailpit";
 
 const RUN = Math.random().toString(36).slice(2, 10);
-const entry = (label: string): string => `${label}-${RUN}`;
+const entry = (label: string): string => `${label.replace(/-/g, "")}${RUN}`;
 
 type Account = { email: string; cookies: string; userId: string };
 
@@ -176,8 +176,8 @@ async function savedWork(
   const aid = uuid();
   // Globally unique across calls: entry ids are primary keys, and this helper
   // runs once per collection.
-  const photo = `${entry("transfer-photo")}-${uuid().slice(0, 8)}`;
-  const doc = `${entry("transfer-doc")}-${uuid().slice(0, 8)}`;
+  const photo = `${entry("transfer-photo")}${uuid().slice(0, 8)}`;
+  const doc = `${entry("transfer-doc")}${uuid().slice(0, 8)}`;
   await stageAndProcess(account, cid, aid, "photos", photo);
   await stageAndProcess(account, cid, aid, "documents", doc);
   const saved = await req("POST", listPath(cid), {

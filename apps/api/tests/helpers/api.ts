@@ -13,7 +13,10 @@ import { app } from "../../src/app";
 export const API = "http://localhost:8000";
 export const ORIGIN = "http://localhost:3000"; // CORS_ORIGINS / trustedOrigins
 
-export const uuid = () => crypto.randomUUID();
+// A random id for rows and payloads. Hyphen-free: an id is a route segment
+// and an object-key segment, so the shared MINTED_ID_RE refuses a hyphen — the
+// route parser cuts at the last one.
+export const uuid = () => crypto.randomUUID().replace(/-/g, "");
 
 export interface ReqOpts {
   cookies?: string;
