@@ -20,9 +20,10 @@
 //
 // Writer access: every route below that changes a collection or its works —
 // the settings, the import, the batch delete, the restore and the sweep — is
-// open to any member, the owner or a collaborator (ADR-0004). The cap still
-// counts OWNED collections: creating one is the caller's own, and a shared
-// collection does not consume their slot.
+// open to any member, the owner or a collaborator (ADR-0004); the delete is
+// the one that is the owner's alone. The cap still counts OWNED collections
+// that are live: creating one is the caller's own, a shared collection does
+// not consume their slot, and a deleted one frees it.
 
 import {
   and,
