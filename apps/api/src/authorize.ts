@@ -26,7 +26,7 @@
 // collection's owner (ADR-0004), and a row's own id must not admit anyone the
 // membership does not.
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import {
@@ -57,6 +57,17 @@ import { resolveSession } from "./session";
 export type CollectionRow = typeof collectionsTable.$inferSelect;
 export type ArtworkRow = typeof artworksTable.$inferSelect;
 
+/**
+ * The one loading point, and therefore the one place a deleted collection
+ * stops: a stamped row is not a collection any more, so every consumer of
+ * this loader — the settings read and write, the artwork reads, the media
+ * proxy, the invitation preview and acceptance, the unlock route, the access
+ * view — answers not-found for the owner exactly as for a stranger.
+ *
+ * The four raw collection queries that bypass this loader (both dashboard
+ * lists, the tier-cap count and the invitee's inbox) carry their own
+ * `deletedAt IS NULL` filter.
+ */
 export const loadCollection = async (
   collectionId: string,
 ): Promise<CollectionRow | null> =>
@@ -64,7 +75,12 @@ export const loadCollection = async (
     await db
       .select()
       .from(collectionsTable)
-      .where(eq(collectionsTable.id, collectionId))
+      .where(
+        and(
+          eq(collectionsTable.id, collectionId),
+          isNull(collectionsTable.deletedAt),
+        ),
+      )
   )[0] ?? null;
 
 /**

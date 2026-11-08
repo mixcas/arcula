@@ -18,6 +18,8 @@
 //   final document — the owner and collaborators ONLY. Documents are never
 //                    public; the proxy 403s everyone else so a future UI that
 //                    forgot to hide them renders a 403 rather than a leak.
+//                    A deleted collection's document is 404: nothing holds
+//                    it any more.
 //   staged object  — the uploader's in-progress work: a session, the key's
 //                    own uploader segment, and membership of the collection
 //                    the entry was staged under. No row exists yet, so there
@@ -131,12 +133,22 @@ mediaRoutes.get("/media", async (c) => {
   if (parsed.population === "documents") {
     // Never public, members only — and the refusal is a 403, not a 404:
     // the key names a row, and the point of the split is that a
-    // forgotten-to-hide UI fails closed.
+    // forgotten-to-hide UI fails closed. A deleted collection is the one
+    // exception: there is no collection to hold a document, so the key names
+    // nothing that exists (the same not-found the photo branch answers).
     cacheControl = PRIVATE_CACHE;
     const collection = await loadCollection(parsed.collectionId);
-    const membership = collection
-      ? await loadMembership(parsed.collectionId, collection, viewer)
-      : null;
+    if (!collection) {
+      throw new ApiError(
+        "not-found",
+        "The object key does not name a stored object",
+      );
+    }
+    const membership = await loadMembership(
+      parsed.collectionId,
+      collection,
+      viewer,
+    );
     if (!canReadArtworkDocuments(membership)) {
       throw new ApiError(
         "forbidden",

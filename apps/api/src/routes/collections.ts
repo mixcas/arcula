@@ -4,6 +4,7 @@
 //   POST   /collections                              create (cap check first)
 //   GET    /collections/{cid}                        one collection
 //   PATCH  /collections/{cid}                        update
+//   DELETE /collections/{cid}                        delete (owner only)
 //   POST   /collections/{cid}/unlock                 the lock screen's password attempt
 //   POST   /collections/{cid}/import/csv             the CSV import's bulk write
 //   GET    /collections/{cid}/deleted-artworks       the Deleted view's list
@@ -11,8 +12,11 @@
 //   POST   /collections/{cid}/artworks/bulk-restore  the batch restore
 //   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
 //
-// Collections are never deleted (there is no trash for them in this model),
-// so the cap check counts every collection the owner has.
+// A collection is deleted by its owner alone, and the stamp is the whole
+// record: `deletedAt` makes the loader refuse the row, so every address that
+// named it answers not-found. Nothing cascades — the works, their media and
+// the collaborator rows stay — and the cap counts only live collections, so a
+// delete frees its slot immediately.
 //
 // Writer access: every route below that changes a collection or its works —
 // the settings, the import, the batch delete, the restore and the sweep — is
@@ -37,6 +41,7 @@ import {
   artworks as artworksTable,
   collectionAccessGrants as grantsTable,
   collectionCollaborators as collectionCollaboratorsTable,
+  collectionInvitations as collectionInvitationsTable,
   collectionUnlockAttempts as unlockAttemptsTable,
   collections as collectionsTable,
   user as userTable,
@@ -66,6 +71,7 @@ import {
   loadCollection,
   requireMemberArtwork,
   requireMemberCollection,
+  requireOwnerCollection,
   requireReadableCollection,
 } from "../authorize";
 import { CLIENT_ADDRESS_HEADER, clientAddress } from "../clientAddress";
@@ -157,6 +163,7 @@ collectionRoutes.get("/collections", async (c) => {
         and(
           eq(collectionsTable.isPublic, true),
           isNull(collectionsTable.passwordHash),
+          isNull(collectionsTable.deletedAt),
         ),
       )
       .orderBy(asc(collectionsTable.name));
@@ -183,9 +190,12 @@ collectionRoutes.get("/collections", async (c) => {
       ),
     )
     .where(
-      or(
-        eq(collectionsTable.userId, userId),
-        eq(collectionCollaboratorsTable.userId, userId),
+      and(
+        isNull(collectionsTable.deletedAt),
+        or(
+          eq(collectionsTable.userId, userId),
+          eq(collectionCollaboratorsTable.userId, userId),
+        ),
       ),
     )
     .orderBy(asc(collectionsTable.name));
@@ -222,7 +232,13 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
   const owned = await db
     .select({ id: collectionsTable.id })
     .from(collectionsTable)
-    .where(eq(collectionsTable.userId, user.id));
+    .where(
+      and(
+        eq(collectionsTable.userId, user.id),
+        // A deleted collection frees its slot the moment it is stamped.
+        isNull(collectionsTable.deletedAt),
+      ),
+    );
   if (owned.length >= limit) {
     throw new ApiError(
       "limit-reached",
@@ -345,6 +361,55 @@ collectionRoutes.patch(
       );
     }
     return c.json(serializeCollection(row, { audience: "member" }));
+  },
+);
+
+// DELETE — owner-only. One transaction stamps `deletedAt`/`updatedAt`,
+// withdraws the collection's pending invitations (resolved history stays the
+// history it is) and closes its Access grants, so nothing can observe a
+// deleted collection that still holds a live offer or a valid grant.
+//
+// The update is guarded on `deletedAt IS NULL` as well as the loader's
+// refusal: two deletes racing get one stamp, and the loser answers not-found
+// rather than moving the timestamp twice. Nothing else is written — that is
+// what keeps the operator's restore to clearing one column.
+collectionRoutes.delete(
+  "/collections/:collectionId",
+  requireSession,
+  async (c) => {
+    const collection = await requireOwnerCollection(
+      c,
+      param(c, "collectionId"),
+    );
+    const now = new Date();
+    await safeTx(async (tx) => {
+      const stamped = await tx
+        .update(collectionsTable)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(collectionsTable.id, collection.id),
+            isNull(collectionsTable.deletedAt),
+          ),
+        )
+        .returning({ id: collectionsTable.id });
+      if (stamped.length === 0) {
+        throw new ApiError("not-found", "The collection does not exist");
+      }
+      await tx
+        .update(collectionInvitationsTable)
+        .set({ status: "revoked", resolvedAt: now })
+        .where(
+          and(
+            eq(collectionInvitationsTable.collectionId, collection.id),
+            eq(collectionInvitationsTable.status, "pending"),
+          ),
+        );
+      await tx
+        .delete(grantsTable)
+        .where(eq(grantsTable.collectionId, collection.id));
+    });
+    return c.body(null, 204);
   },
 );
 
