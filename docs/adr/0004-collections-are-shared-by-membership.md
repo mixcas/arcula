@@ -63,7 +63,9 @@ consumed and unknown tokens all answer one `not-found`.
 removes and transfers; a collaborator sees who else has access but not the
 pending invitations. A collaborator may edit every artwork, import, upload, and
 change every setting — including public/private — and may leave. The owner
-cannot leave without transferring, because collections are never deleted.
+cannot leave without transferring: a deletion ends the collection for everyone
+rather than moving one person out of it, so it is not leaving and not an
+alternative to transfer ([ADR-0008](0008-a-collection-is-deleted-by-its-owner.md)).
 Removing a collaborator or leaving takes effect immediately; saved works stay,
 unsaved uploads do not.
 
@@ -193,3 +195,12 @@ a 60-second cooldown. No rate limiter ships in v1.
   acceptance of a transfer, invitation rate limiting, a collaborator cap, and
   account deletion. They are listed in `project-plan.md` under _What is not
   built_.
+
+**Amended by [ADR-0008](0008-a-collection-is-deleted-by-its-owner.md):** a
+collection can now be deleted, by its owner alone, and an operator can restore
+it by clearing one column. The clause above that the owner must transfer before
+leaving therefore no longer rests on collections being permanent. Deletion is
+not leaving and not an alternative to transfer: it ends the collection for
+everyone rather than moving one person out of it. Everything else here stands —
+a collaborator who leaves keeps the collection alive, and only the owner may
+delete.
