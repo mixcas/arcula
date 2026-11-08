@@ -230,7 +230,9 @@ query suffix helper), `caps.ts` (file caps + accepted types), `limits.ts` (the
 per-tier collection cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
 both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
-card asks of a row), `slug.ts`, `types.ts`.
+card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
+`MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),
+`slug.ts`, `types.ts`.
 
 **`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;
