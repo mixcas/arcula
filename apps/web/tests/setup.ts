@@ -62,6 +62,20 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   };
 }
 
+// jsdom implements no other scroll method either, but a *combobox's dropdown*
+// is where it bites: Mantine's Select scrolls the highlighted option into view
+// when the list opens, in an effect, so jsdom turns opening a Select into
+// `items[index]?.scrollIntoView is not a function`. This does not let the test
+// assert on scrolling — nothing has a scroll range in a layout-less document.
+// It only gives the method its contract so the dropdown opens. Guarded for the
+// Node-environment files.
+if (
+  typeof Element !== "undefined" &&
+  typeof Element.prototype.scrollIntoView !== "function"
+) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // jsdom implements no FontFaceSet. Mantine's autosizing Textarea subscribes to
 // `document.fonts`' `loadingdone` on mount to re-measure when a webfont lands;
 // with no font API the subscription is the mount itself throwing. There is no

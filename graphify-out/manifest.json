@@ -60,10 +60,10 @@
     "semantic_hash": "411e43c97acc3550790d89954fb2e67d"
   },
   "apps/api/src/artworkRead.ts": {
-    "mtime": 1792702875.4884508,
-    "seen": 1794025732.160021,
-    "ast_hash": "aa65f388c84b2f37312f947eaead688b",
-    "semantic_hash": "aa65f388c84b2f37312f947eaead688b"
+    "mtime": 1794078527.0765193,
+    "seen": 1794098396.245397,
+    "ast_hash": "2bd9b90f799a259b7b87bea787d86301",
+    "semantic_hash": "2bd9b90f799a259b7b87bea787d86301"
   },
   "apps/api/src/auth.ts": {
     "mtime": 1792696987.2521663,
@@ -264,10 +264,10 @@
     "semantic_hash": "f4bac853b9b8742b01729d79fbfaf0cc"
   },
   "apps/api/src/routes/artworks.ts": {
-    "mtime": 1792696987.2544317,
-    "seen": 1794025732.160037,
-    "ast_hash": "32e828b9518a281662aff2be51a5c0fc",
-    "semantic_hash": "32e828b9518a281662aff2be51a5c0fc"
+    "mtime": 1794078527.0767617,
+    "seen": 1794098396.245794,
+    "ast_hash": "ba0a53b5b8f94c1fa409a92647c393e5",
+    "semantic_hash": "ba0a53b5b8f94c1fa409a92647c393e5"
   },
   "apps/api/src/routes/collections.ts": {
     "mtime": 1793295925.6438303,
@@ -738,22 +738,22 @@
     "semantic_hash": "55c0dc548639b011c76bcf711500414b"
   },
   "apps/web/src/components/manage/ArtworkAddPage.tsx": {
-    "mtime": 1792374719.102124,
-    "seen": 1794025732.160074,
-    "ast_hash": "aa71bda42d1e0d7b536dc6eb308714d7",
-    "semantic_hash": "aa71bda42d1e0d7b536dc6eb308714d7"
+    "mtime": 1794078527.0774498,
+    "seen": 1794098396.2467,
+    "ast_hash": "3b6a9b48b4c35790ead9ec176a518e48",
+    "semantic_hash": "3b6a9b48b4c35790ead9ec176a518e48"
   },
   "apps/web/src/components/manage/ArtworkEditPage.tsx": {
-    "mtime": 1792702875.489507,
-    "seen": 1794025732.160074,
-    "ast_hash": "4d060c62e7d27da0541819acad3d5d03",
-    "semantic_hash": "4d060c62e7d27da0541819acad3d5d03"
+    "mtime": 1794078527.0776756,
+    "seen": 1794098396.2467,
+    "ast_hash": "17488fd9adc52396c9483e8c38e78dfd",
+    "semantic_hash": "17488fd9adc52396c9483e8c38e78dfd"
   },
   "apps/web/src/components/manage/CollectionPage.tsx": {
-    "mtime": 1792963209.8548791,
-    "seen": 1794025732.160075,
-    "ast_hash": "f5d4600f3ee9dfdebe7df43389f7dca1",
-    "semantic_hash": "f5d4600f3ee9dfdebe7df43389f7dca1"
+    "mtime": 1794097546.4431424,
+    "seen": 1794098396.246701,
+    "ast_hash": "347baed22cf1595a39706cd686de7c39",
+    "semantic_hash": "347baed22cf1595a39706cd686de7c39"
   },
   "apps/web/src/components/manage/CollectionSettingsDataTab.tsx": {
     "mtime": 1793295925.64823,
@@ -846,10 +846,10 @@
     "semantic_hash": "d796a6fefa31b47a875ef1eca25165de"
   },
   "apps/web/src/components/manage/collection/ArtworksTable.tsx": {
-    "mtime": 1792702875.490221,
-    "seen": 1794025732.1600819,
-    "ast_hash": "e527172f60d86cc82dcd0423ec97fb44",
-    "semantic_hash": "e527172f60d86cc82dcd0423ec97fb44"
+    "mtime": 1794097546.4438481,
+    "seen": 1794098396.246903,
+    "ast_hash": "2f298d4375f6e75e02da032915331f97",
+    "semantic_hash": "2f298d4375f6e75e02da032915331f97"
   },
   "apps/web/src/components/manage/collection/DeletedArtworksPage.tsx": {
     "mtime": 1792702875.490348,
@@ -1044,10 +1044,10 @@
     "semantic_hash": "5e7c850418f469a7b0df9b21d67b6208"
   },
   "apps/web/src/services/artworkService.ts": {
-    "mtime": 1792702875.4904907,
-    "seen": 1794025732.160098,
-    "ast_hash": "e37dd353c7a2529eab96b268c2eb0792",
-    "semantic_hash": "e37dd353c7a2529eab96b268c2eb0792"
+    "mtime": 1794078527.0783513,
+    "seen": 1794098396.247324,
+    "ast_hash": "340779196b5c5ad5c4ac4130aafc8cc6",
+    "semantic_hash": "340779196b5c5ad5c4ac4130aafc8cc6"
   },
   "apps/web/src/services/collectionService.ts": {
     "mtime": 1792696987.2606661,
@@ -1134,10 +1134,10 @@
     "semantic_hash": "5f351d29bfeb2ce5f312d21fb2fd4da7"
   },
   "apps/web/src/theme.ts": {
-    "mtime": 1792374719.1082616,
-    "seen": 1794025732.160105,
-    "ast_hash": "ce847f233e282bf9e194e6e8a89acf21",
-    "semantic_hash": "ce847f233e282bf9e194e6e8a89acf21"
+    "mtime": 1794078807.4847121,
+    "seen": 1794098396.247496,
+    "ast_hash": "31667d228360500b396600507c8943a7",
+    "semantic_hash": "31667d228360500b396600507c8943a7"
   },
   "apps/web/src/utils/artworkDocuments.ts": {
     "mtime": 1792374719.1084213,
@@ -1194,10 +1194,10 @@
     "semantic_hash": "f5e0248f0fe51471f9b750331adb0af6"
   },
   "apps/web/tests/artworkAddPage.test.tsx": {
-    "mtime": 1792451732.4605136,
-    "seen": 1794025732.16011,
-    "ast_hash": "e54e152f2f2062c9d09c15fffa24d3e3",
-    "semantic_hash": "e54e152f2f2062c9d09c15fffa24d3e3"
+    "mtime": 1794078527.0786738,
+    "seen": 1794098396.2476008,
+    "ast_hash": "cd713da59aa2c72447ee7e735375954e",
+    "semantic_hash": "cd713da59aa2c72447ee7e735375954e"
   },
   "apps/web/tests/artworkDocuments.test.ts": {
     "mtime": 1792374719.1089575,
@@ -1206,22 +1206,16 @@
     "semantic_hash": "b555f50de1c4757951f91228f9ffc4d6"
   },
   "apps/web/tests/artworkEditPage.test.tsx": {
-    "mtime": 1792702875.4907954,
-    "seen": 1794025732.1601112,
-    "ast_hash": "6a3aca65bef2b1d4b1a681e356b73546",
-    "semantic_hash": "6a3aca65bef2b1d4b1a681e356b73546"
+    "mtime": 1794078527.0789073,
+    "seen": 1794098396.247613,
+    "ast_hash": "6442b2265ea6ce3c4523c0f054eb441c",
+    "semantic_hash": "6442b2265ea6ce3c4523c0f054eb441c"
   },
   "apps/web/tests/artworkService.test.ts": {
-    "mtime": 1792702875.490963,
-    "seen": 1794025732.1601112,
-    "ast_hash": "316031cabc2077fd657979b138baf4f3",
-    "semantic_hash": "316031cabc2077fd657979b138baf4f3"
-  },
-  "apps/web/tests/artworksTable.test.tsx": {
-    "mtime": 1792702875.491183,
-    "seen": 1794025732.1601121,
-    "ast_hash": "02ad0abd646fa54c9cb376872f877dce",
-    "semantic_hash": "02ad0abd646fa54c9cb376872f877dce"
+    "mtime": 1794078527.0791812,
+    "seen": 1794098396.247614,
+    "ast_hash": "f8b3b3da52e55b2576d5125a1dde6090",
+    "semantic_hash": "f8b3b3da52e55b2576d5125a1dde6090"
   },
   "apps/web/tests/authUser.test.ts": {
     "mtime": 1792374719.109334,
@@ -1434,10 +1428,10 @@
     "semantic_hash": "ba628b22ca74cb041e684a89830082d3"
   },
   "apps/web/tests/setup.ts": {
-    "mtime": 1792696987.2622566,
-    "seen": 1794025732.160129,
-    "ast_hash": "9b68a2d66d4be3e010c4d7cd864fa660",
-    "semantic_hash": "9b68a2d66d4be3e010c4d7cd864fa660"
+    "mtime": 1794097546.4448137,
+    "seen": 1794098396.247992,
+    "ast_hash": "c6454fa1c6c22c4844e342ab6c236f3f",
+    "semantic_hash": "c6454fa1c6c22c4844e342ab6c236f3f"
   },
   "apps/web/tests/signupPage.test.tsx": {
     "mtime": 1793295925.6556983,
@@ -1650,10 +1644,10 @@
     "semantic_hash": "35bf7472fdb7c64cbf1ce68e0d62a406"
   },
   "packages/shared/src/index.ts": {
-    "mtime": 1793295920.496712,
-    "seen": 1794025732.1601448,
-    "ast_hash": "1ab88845d0019f638901a8b7bd0aba1f",
-    "semantic_hash": "1ab88845d0019f638901a8b7bd0aba1f"
+    "mtime": 1794078527.0801523,
+    "seen": 1794098396.248408,
+    "ast_hash": "7934e7292e3696ada84f6e83d9e91d27",
+    "semantic_hash": "7934e7292e3696ada84f6e83d9e91d27"
   },
   "packages/shared/src/invitationTime.ts": {
     "mtime": 1792696987.2642539,
@@ -1894,5 +1888,353 @@
     "seen": 1794025732.160164,
     "ast_hash": "75e1b8b048cb3c3e9c1dad133df9da8f",
     "semantic_hash": "75e1b8b048cb3c3e9c1dad133df9da8f"
+  },
+  "apps/api/tests/collectionSearch.api.test.ts": {
+    "mtime": 1794078527.0771165,
+    "seen": 1794098396.2460248,
+    "ast_hash": "cddd814ea5a10f4570b65a139999706f",
+    "semantic_hash": "cddd814ea5a10f4570b65a139999706f"
+  },
+  "apps/web/src/components/manage/collection/ArtworkCard.tsx": {
+    "mtime": 1794099450.2325616,
+    "seen": 1794099502.050594,
+    "ast_hash": "a419e2728142b0f2402596bdee6d5c6d",
+    "semantic_hash": ""
+  },
+  "apps/web/src/components/manage/collection/ArtworksGrid.tsx": {
+    "mtime": 1794099370.8104267,
+    "seen": 1794099502.050596,
+    "ast_hash": "c578c157bba10f5c6f27c0deef7a479e",
+    "semantic_hash": ""
+  },
+  "apps/web/src/components/manage/collection/ArtworksList.tsx": {
+    "mtime": 1794097546.4435372,
+    "seen": 1794098396.246902,
+    "ast_hash": "bc8d17aa2e3f7077ef46c0013ee2038d",
+    "semantic_hash": "bc8d17aa2e3f7077ef46c0013ee2038d"
+  },
+  "apps/web/src/components/manage/collection/ArtworksViewToggle.tsx": {
+    "mtime": 1794097546.4439297,
+    "seen": 1794098396.246903,
+    "ast_hash": "a6996dd8e568cd79f26c07dd7168371d",
+    "semantic_hash": "a6996dd8e568cd79f26c07dd7168371d"
+  },
+  "apps/web/src/components/manage/collection/artworkCardGeometry.ts": {
+    "mtime": 1794099370.8105316,
+    "seen": 1794099502.0505989,
+    "ast_hash": "5e353057ac56de408c72d2b87f388897",
+    "semantic_hash": ""
+  },
+  "apps/web/src/components/manage/collection/artworksSort.ts": {
+    "mtime": 1794097546.4440496,
+    "seen": 1794098396.246932,
+    "ast_hash": "fe61c07567631511b18e9841b085a716",
+    "semantic_hash": "fe61c07567631511b18e9841b085a716"
+  },
+  "apps/web/src/services/artworkLinks.ts": {
+    "mtime": 1794097546.4441206,
+    "seen": 1794098396.247324,
+    "ast_hash": "19e3b9f827b32e6d077bf1f1fc941764",
+    "semantic_hash": "19e3b9f827b32e6d077bf1f1fc941764"
+  },
+  "apps/web/src/userSettings.ts": {
+    "mtime": 1794097546.4441893,
+    "seen": 1794098396.2474968,
+    "ast_hash": "972f0182c8dbaaa4d4d22e217c7087df",
+    "semantic_hash": "972f0182c8dbaaa4d4d22e217c7087df"
+  },
+  "apps/web/tests/artworkCardGeometry.test.ts": {
+    "mtime": 1794099275.8109338,
+    "seen": 1794099502.050637,
+    "ast_hash": "c0fdd43e273b4b15924bcc5f8331f17b",
+    "semantic_hash": ""
+  },
+  "apps/web/tests/artworksList.test.tsx": {
+    "mtime": 1794097546.4445128,
+    "seen": 1794098396.247614,
+    "ast_hash": "ac931f555db3d3c6937cd4d4dbad5dfe",
+    "semantic_hash": "ac931f555db3d3c6937cd4d4dbad5dfe"
+  },
+  "apps/web/tests/artworksSort.test.ts": {
+    "mtime": 1794097546.4446068,
+    "seen": 1794098396.2476149,
+    "ast_hash": "0e930beae2b7cd4406e3f753d74dcae9",
+    "semantic_hash": "0e930beae2b7cd4406e3f753d74dcae9"
+  },
+  "apps/web/tests/collectionPage.test.tsx": {
+    "mtime": 1794078527.0796175,
+    "seen": 1794098396.247648,
+    "ast_hash": "d79ffba080cca78c6b0f8ded327527be",
+    "semantic_hash": "d79ffba080cca78c6b0f8ded327527be"
+  },
+  "apps/web/tests/userSettings.test.ts": {
+    "mtime": 1794097546.4448795,
+    "seen": 1794098396.24806,
+    "ast_hash": "49889a82ed971f6eed3966563c5020b9",
+    "semantic_hash": "49889a82ed971f6eed3966563c5020b9"
+  },
+  "docker-compose.yml": {
+    "mtime": 1792374719.1133955,
+    "seen": 1794098396.248107,
+    "ast_hash": "b610243a6df7d719eb0af1f0c35edcbf",
+    "semantic_hash": "b610243a6df7d719eb0af1f0c35edcbf"
+  },
+  "eslint.config.mjs": {
+    "mtime": 1792387899.171265,
+    "seen": 1794098396.248107,
+    "ast_hash": "a6ee9e82de52ee26f42b28ac5aa625c9",
+    "semantic_hash": "a6ee9e82de52ee26f42b28ac5aa625c9"
+  },
+  "infra/cdk/cdk.json": {
+    "mtime": 1792374719.1140938,
+    "seen": 1794098396.2481081,
+    "ast_hash": "9e67490a4c3f97d509c31be3a5771cd4",
+    "semantic_hash": "9e67490a4c3f97d509c31be3a5771cd4"
+  },
+  "infra/cdk/package.json": {
+    "mtime": 1792388275.356085,
+    "seen": 1794098396.248109,
+    "ast_hash": "068bea21d332536621f785376975e2d8",
+    "semantic_hash": "068bea21d332536621f785376975e2d8"
+  },
+  "infra/cdk/src/arcula-stack.ts": {
+    "mtime": 1792696987.2630248,
+    "seen": 1794098396.248109,
+    "ast_hash": "f12882db6e068a89565eb627dd9041e0",
+    "semantic_hash": "f12882db6e068a89565eb627dd9041e0"
+  },
+  "infra/cdk/src/environments.ts": {
+    "mtime": 1792388299.1092772,
+    "seen": 1794098396.24811,
+    "ast_hash": "aad1cd71c970e64b55e69b2310f49144",
+    "semantic_hash": "aad1cd71c970e64b55e69b2310f49144"
+  },
+  "infra/cdk/src/main.ts": {
+    "mtime": 1792387609.4680738,
+    "seen": 1794098396.248111,
+    "ast_hash": "c77a0059938626860525b12b81b19377",
+    "semantic_hash": "c77a0059938626860525b12b81b19377"
+  },
+  "infra/cdk/tests/arcula-stack.test.ts": {
+    "mtime": 1792388269.3563004,
+    "seen": 1794098396.248115,
+    "ast_hash": "6309e854f4915c2dee5b3eda891c5f01",
+    "semantic_hash": "6309e854f4915c2dee5b3eda891c5f01"
+  },
+  "infra/cdk/tsconfig.build.json": {
+    "mtime": 1792387692.7622342,
+    "seen": 1794098396.248116,
+    "ast_hash": "6dc498ed9c48535bb86b9b77ab71e138",
+    "semantic_hash": "6dc498ed9c48535bb86b9b77ab71e138"
+  },
+  "infra/cdk/tsconfig.json": {
+    "mtime": 1792387899.1710677,
+    "seen": 1794098396.248117,
+    "ast_hash": "5179d7ab2607380a5553f4e7cb277d9d",
+    "semantic_hash": "5179d7ab2607380a5553f4e7cb277d9d"
+  },
+  "infra/cdk/vitest.config.mts": {
+    "mtime": 1792387692.762217,
+    "seen": 1794098396.248117,
+    "ast_hash": "5dd2d70e42324fdf8b89c12a8c58137f",
+    "semantic_hash": "5dd2d70e42324fdf8b89c12a8c58137f"
+  },
+  "package.json": {
+    "mtime": 1792387899.1720386,
+    "seen": 1794098396.248118,
+    "ast_hash": "fdf95f601c9ec5ba0deb5247dcb41bf6",
+    "semantic_hash": "fdf95f601c9ec5ba0deb5247dcb41bf6"
+  },
+  "packages/shared/src/artworkSearch.ts": {
+    "mtime": 1794078527.0799527,
+    "seen": 1794098396.2483861,
+    "ast_hash": "1549052af4da5244decaed897ee77c4f",
+    "semantic_hash": "1549052af4da5244decaed897ee77c4f"
+  },
+  "packages/shared/tests/artworkSearch.test.ts": {
+    "mtime": 1794078527.0803685,
+    "seen": 1794098396.248554,
+    "ast_hash": "a3179050c2c4ba3f4482e5ee161f256f",
+    "semantic_hash": "a3179050c2c4ba3f4482e5ee161f256f"
+  },
+  "scripts/build-lambda.sh": {
+    "mtime": 1792963209.8663657,
+    "seen": 1794098396.248606,
+    "ast_hash": "ab2a1e131f7a7aeb46d6bcfae10778c8",
+    "semantic_hash": "ab2a1e131f7a7aeb46d6bcfae10778c8"
+  },
+  "scripts/deploy-dev.sh": {
+    "mtime": 1792390204.3155293,
+    "seen": 1794098396.248606,
+    "ast_hash": "7d4648ea38a74ce14929fb88264ace06",
+    "semantic_hash": "7d4648ea38a74ce14929fb88264ace06"
+  },
+  "scripts/deploy-prod.sh": {
+    "mtime": 1792390204.3156395,
+    "seen": 1794098396.248607,
+    "ast_hash": "251dcddb55a9b58f1592cc8871334547",
+    "semantic_hash": "251dcddb55a9b58f1592cc8871334547"
+  },
+  "scripts/deploy.sh": {
+    "mtime": 1792696987.2651565,
+    "seen": 1794098396.248607,
+    "ast_hash": "e2afef67fcb74a39463e880a88bba198",
+    "semantic_hash": "e2afef67fcb74a39463e880a88bba198"
+  },
+  "scripts/ensure-api.sh": {
+    "mtime": 1792374719.1189234,
+    "seen": 1794098396.248608,
+    "ast_hash": "959123ecf49bd7633c287096ea646a1c",
+    "semantic_hash": "959123ecf49bd7633c287096ea646a1c"
+  },
+  "scripts/environment.sh": {
+    "mtime": 1792390204.3158307,
+    "seen": 1794098396.248608,
+    "ast_hash": "99287683c65d63883f6efa3f5d467a55",
+    "semantic_hash": "99287683c65d63883f6efa3f5d467a55"
+  },
+  "scripts/lambda-env-to-dotenv.mjs": {
+    "mtime": 1792390204.3159716,
+    "seen": 1794098396.248609,
+    "ast_hash": "eec589343f6a619ae9e4f65ea02a7a03",
+    "semantic_hash": "eec589343f6a619ae9e4f65ea02a7a03"
+  },
+  "scripts/lambda-smoke.mjs": {
+    "mtime": 1792374719.1192987,
+    "seen": 1794098396.248609,
+    "ast_hash": "3d239390b7feff4803dd6f938f3d10d6",
+    "semantic_hash": "3d239390b7feff4803dd6f938f3d10d6"
+  },
+  "scripts/port-open.js": {
+    "mtime": 1792374719.1193614,
+    "seen": 1794098396.24861,
+    "ast_hash": "ab763e9c514572a72d9f4b74a5b82a4e",
+    "semantic_hash": "ab763e9c514572a72d9f4b74a5b82a4e"
+  },
+  "scripts/provision-cert.mjs": {
+    "mtime": 1792434874.4849563,
+    "seen": 1794098396.24861,
+    "ast_hash": "01b140b07c2ca95a6284e58f44f71640",
+    "semantic_hash": "01b140b07c2ca95a6284e58f44f71640"
+  },
+  "scripts/provision-oidc.mjs": {
+    "mtime": 1792437150.2529697,
+    "seen": 1794098396.248611,
+    "ast_hash": "4ec3984b3ee71a7d8b76a6ecca5b65ab",
+    "semantic_hash": "4ec3984b3ee71a7d8b76a6ecca5b65ab"
+  },
+  "scripts/reset-dev.sh": {
+    "mtime": 1792390204.316264,
+    "seen": 1794098396.248611,
+    "ast_hash": "81738503c2244f29bcd11acdae3606b4",
+    "semantic_hash": "81738503c2244f29bcd11acdae3606b4"
+  },
+  "scripts/services.sh": {
+    "mtime": 1792374719.1195168,
+    "seen": 1794098396.2486122,
+    "ast_hash": "3f9497464b85259c2ac868cf3e0025ef",
+    "semantic_hash": "3f9497464b85259c2ac868cf3e0025ef"
+  },
+  "scripts/setup-dev.sh": {
+    "mtime": 1792696987.2652836,
+    "seen": 1794098396.2486122,
+    "ast_hash": "057a653b38522ba5e49cc600b5872fd1",
+    "semantic_hash": "057a653b38522ba5e49cc600b5872fd1"
+  },
+  "scripts/stack-down.sh": {
+    "mtime": 1792374719.1196542,
+    "seen": 1794098396.248613,
+    "ast_hash": "3eac2223862698310d165b9da27b2850",
+    "semantic_hash": "3eac2223862698310d165b9da27b2850"
+  },
+  "scripts/stack-up.sh": {
+    "mtime": 1792374719.119794,
+    "seen": 1794098396.248613,
+    "ast_hash": "cb82282cb7bb5eab0d4fbaaf7e76e8c1",
+    "semantic_hash": "cb82282cb7bb5eab0d4fbaaf7e76e8c1"
+  },
+  "scripts/write-env-file.sh": {
+    "mtime": 1792696987.2653806,
+    "seen": 1794098396.2486138,
+    "ast_hash": "f96e5e8a4eef8e8f55eec10f4ee544d1",
+    "semantic_hash": "f96e5e8a4eef8e8f55eec10f4ee544d1"
+  },
+  "AGENTS.md": {
+    "mtime": 1794099252.1079502,
+    "seen": 1794099502.050713,
+    "ast_hash": "90ced9b55e40911658bbb64d9106988c",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1792374719.0895813,
+    "seen": 1794098396.248615,
+    "ast_hash": "675bef57c4a5e6de81a4720b43429a1e",
+    "semantic_hash": "675bef57c4a5e6de81a4720b43429a1e"
+  },
+  "GLOSSARY.md": {
+    "mtime": 1794099159.3182282,
+    "seen": 1794099502.050714,
+    "ast_hash": "6de0f5e9945d924b4072001bf17ecd90",
+    "semantic_hash": "6de0f5e9945d924b4072001bf17ecd90"
+  },
+  "README.md": {
+    "mtime": 1792702875.487991,
+    "seen": 1794098396.248616,
+    "ast_hash": "060d0cbc73b3f379d956eec25bb02288",
+    "semantic_hash": "060d0cbc73b3f379d956eec25bb02288"
+  },
+  "docs/specs/artworks-manage-view.md": {
+    "mtime": 1794097546.4449582,
+    "seen": 1794098396.248745,
+    "ast_hash": "baa53a16d841b5a13af93cc9588dcd4a",
+    "semantic_hash": "baa53a16d841b5a13af93cc9588dcd4a"
+  },
+  "infra/cdk/README.md": {
+    "mtime": 1792696987.2628598,
+    "seen": 1794098396.248756,
+    "ast_hash": "11bf2350aaaf61f030422ce2676f3f17",
+    "semantic_hash": "11bf2350aaaf61f030422ce2676f3f17"
+  },
+  "project-plan.md": {
+    "mtime": 1794078527.0806541,
+    "seen": 1794098396.248776,
+    "ast_hash": "0aa3e33254d98e500f055b5b381fcc44",
+    "semantic_hash": "0aa3e33254d98e500f055b5b381fcc44"
+  },
+  "apps/web/public/apple-touch-icon.png": {
+    "mtime": 1792374719.0988746,
+    "seen": 1794098396.2487879,
+    "ast_hash": "1b4f219a1b4547fe32e4c293b2f9f505",
+    "semantic_hash": "1b4f219a1b4547fe32e4c293b2f9f505"
+  },
+  "apps/web/public/favicon-32.png": {
+    "mtime": 1792374719.0989268,
+    "seen": 1794098396.2488,
+    "ast_hash": "99115c818b8ab57766bbc891f537aef8",
+    "semantic_hash": "99115c818b8ab57766bbc891f537aef8"
+  },
+  "apps/web/public/icon-192.png": {
+    "mtime": 1792374719.0991118,
+    "seen": 1794098396.248811,
+    "ast_hash": "88df33d8a8c2b3f43e832b59bae92437",
+    "semantic_hash": "88df33d8a8c2b3f43e832b59bae92437"
+  },
+  "apps/web/public/icon-maskable-512.png": {
+    "mtime": 1792374719.0993285,
+    "seen": 1794098396.248822,
+    "ast_hash": "23d712a36340596fe5c7c1702ff5a105",
+    "semantic_hash": "23d712a36340596fe5c7c1702ff5a105"
+  },
+  "apps/api/src/assets/fonts/OFL.txt": {
+    "mtime": 1792963209.8522696,
+    "seen": 1794099502.050716,
+    "ast_hash": "9e6561baca2756628871baf0c1e23539",
+    "semantic_hash": ""
+  },
+  "apps/web/public/fonts/OFL.txt": {
+    "mtime": 1792963209.8543947,
+    "seen": 1794099502.0507169,
+    "ast_hash": "716fe5fdcd175ba6cfa7d55905ef4a30",
+    "semantic_hash": ""
   }
 }
