@@ -206,12 +206,18 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
 // ---------------------------------------------------------------------------
 
 /**
- * A client-minted id: letters, digits, dash, underscore; nothing that could
- * carry a dot or a path separator. It is what an object-key segment must be,
- * and entry ids and artwork ids are both minted under it — the stage routes
- * apply the same rule to the ids they accept (one regex, shared).
+ * A client-minted id: letters and digits only. It is what an object-key
+ * segment and a `{urlizedName}-{id}` route segment must be, and entry ids and
+ * artwork ids are both minted under it — the stage routes apply the same rule
+ * to the ids they accept (one regex, shared).
+ *
+ * A hyphen is excluded because `parseId` recovers a route's id by cutting at
+ * the LAST hyphen: an id containing one would put that cut inside the id. The
+ * string is still bounded at 64 characters, and the 32-character hex ids
+ * minted before the shared mint existed pass, so no existing row needs a
+ * compatibility branch.
  */
-export const MINTED_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const MINTED_ID_RE = /^[A-Za-z0-9]{1,64}$/;
 
 /** One staged entry in a save payload. `name` is metadata only — never in a path. */
 export const stagedEntrySchema = z.object({

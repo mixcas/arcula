@@ -43,9 +43,10 @@ import {
 } from "./helpers/fixtures";
 
 // Entry ids are global primary keys, and the stack persists across runs: each
-// run gets its own id namespace, exactly as save.api.test.ts does.
+// run gets its own id namespace, exactly as save.api.test.ts does. Hyphen-free,
+// because an entry id is a key segment under MINTED_ID_RE.
 const RUN = Math.random().toString(36).slice(2, 10);
-const entry = (label: string): string => `${label}-${RUN}`;
+const entry = (label: string): string => `${label.replace(/-/g, "")}${RUN}`;
 
 type Account = { cookies: string; userId: string };
 

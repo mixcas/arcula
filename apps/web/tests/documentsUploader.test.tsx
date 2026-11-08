@@ -160,9 +160,9 @@ const fileInput = (): HTMLInputElement => {
 /**
  * Every entry id that passed through the stage mock, in arrival order.
  *
- * The ids are minted by the hook with `crypto.randomUUID`, so a test cannot
- * predict them; capturing them is what makes the discard assertions name the
- * exact object the server is being asked to drop.
+ * The ids are minted by the hook with `crypto.randomUUID` and its hyphens
+ * removed, so a test cannot predict them; capturing them is what makes the
+ * discard assertions name the exact object the server is being asked to drop.
  */
 let stagedDocumentIds: string[];
 

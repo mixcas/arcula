@@ -38,7 +38,7 @@ import {
 // exactly the collision the save routes refuse, and a leaked row from
 // an earlier run would skew the very shapes these tests assert.
 const RUN = Math.random().toString(36).slice(2, 10);
-const entry = (label: string): string => `${label}-${RUN}`;
+const entry = (label: string): string => `${label.replace(/-/g, "")}${RUN}`;
 
 const pOne = entry("p-one");
 const pShape = entry("p-shape");
@@ -526,7 +526,7 @@ describe("POST …/artworks", () => {
 
   it("refuses more photos than the cap", async () => {
     const photos = Array.from({ length: MAX_ARTWORK_PHOTOS + 1 }, (_, i) => ({
-      entryId: `p-${i}`,
+      entryId: `p${i}`,
       name: `p${i}.jpg`,
     }));
     const res = await createArtwork({
