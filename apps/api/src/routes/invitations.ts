@@ -33,7 +33,7 @@
 // failure answers `emailSent: false` and leaves the offer pending, so the
 // owner can resend without re-entering the address.
 
-import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import {
   collectionCollaborators as collectionCollaboratorsTable,
   collectionInvitations as collectionInvitationsTable,
@@ -531,6 +531,10 @@ invitationRoutes.get("/me/invitations", requireSession, async (c) => {
         sql`lower(${collectionInvitationsTable.email}) = ${normalizeEmail(user.email)}`,
         eq(collectionInvitationsTable.status, "pending"),
         gt(collectionInvitationsTable.expiresAt, new Date()),
+        // A deleted collection has no live offers. The delete's transaction
+        // already withdrew them; this filter is the defence for any row
+        // written by a path that did not go through the owner check.
+        isNull(collectionsTable.deletedAt),
       ),
     )
     .orderBy(desc(collectionInvitationsTable.createdAt));

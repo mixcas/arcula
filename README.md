@@ -77,7 +77,8 @@ Early, and honest about what is missing:
 | Restore a soft-deleted artwork              | Working (the collection's Deleted view)                       |
 | CSV import of artworks                      | Working                                                       |
 | Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)                 |
-| Delete a collection, export, search         | Not implemented (see the roadmap)                             |
+| Delete a collection                         | Working (owner-only, Collection Settings → Data)              |
+| Export and search                           | Not implemented (see the roadmap)                             |
 
 ### How access control works
 
@@ -491,7 +492,6 @@ Roughly in order of how much they matter:
 
 - Purge and a retention window for soft-deleted artworks (the Deleted view
   restores them)
-- Delete for collections
 - Export, so you are never locked in
 - Search and filtering, once there are enough works for it to matter
 - Account tiers and billing — this is what turns the per-tier collection cap

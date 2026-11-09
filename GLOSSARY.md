@@ -184,10 +184,14 @@ part of the collection.
 _Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
-Taken out of the collection as far as its owner and collaborators are
-concerned: it leaves every live list, and it can be brought back. The record and
-its media are not destroyed. The **Deleted** view is a collection's list of its
-deleted works, most recently deleted first, where one or several are restored.
+Taken out of use without its record being destroyed. An artwork is Deleted when
+a member stamps it: it leaves every live list and keeps its bytes, and any
+member restores it from the collection's **Deleted** view, most recently deleted
+first. A collection is Deleted when its owner deletes it: it leaves every list and
+every collaborator's dashboard, and every address that named it answers
+not-found, for everyone including the owner; only an operator's database update
+restores it — the app offers no restore for a collection. Both senses keep the
+record, its works and their media; the difference is who may bring it back.
 _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:

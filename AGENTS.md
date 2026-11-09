@@ -301,9 +301,10 @@ resends, revokes, removes and transfers, and cannot leave without transferring.
 `GET /collections/:id/access` is member-readable: the owner and collaborators
 see who has access, while the pending offers are the owner's alone.
 `GET /collections` returns owned and shared rows together, each with `role` and
-a shared row with `ownerName`; the tier cap counts owned collections only. The
-visitor rule is unchanged: a collaborator is never a visitor, and the
-collection remains the visitor's only gate
+a shared row with `ownerName`; the tier cap counts owned live collections only,
+so deleting a collection frees the slot. The visitor rule is unchanged: a
+collaborator is never a visitor, and the collection remains the visitor's only
+gate
 ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
 
 `collection_invitations` carries the offer: one pending row per collection and

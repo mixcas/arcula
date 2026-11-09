@@ -27,24 +27,24 @@ media pipeline, and — in production — serving the built SPA.
 
 `/api/v1/*` is the resource API, all under the error envelope:
 
-| Method            | Path                                                                |
-| ----------------- | ------------------------------------------------------------------- |
-| `GET` / `PATCH`   | `/me`                                                               |
-| `GET`             | `/media?key=` — the object proxy (re-checks visibility per request) |
-| `GET` / `POST`    | `/collections`                                                      |
-| `GET` / `PATCH`   | `/collections/:collectionId`                                        |
-| `POST`            | `/collections/:collectionId/unlock`                                 |
-| `POST`            | `/collections/:collectionId/import/csv`                             |
-| `GET`             | `/collections/:collectionId/deleted-artworks`                       |
-| `POST`            | `/collections/:collectionId/artworks/bulk-delete`                   |
-| `POST`            | `/collections/:collectionId/artworks/bulk-restore`                  |
-| `POST`            | `/collections/:collectionId/artworks/:artworkId/restore`            |
-| `POST`            | `/collections/:collectionId/maintenance/sweep`                      |
-| `GET` / `POST`    | `/collections/:collectionId/artworks`                               |
-| `GET` / `PATCH`   | `/collections/:collectionId/artworks/:artworkId`                    |
-| `POST`            | `…/artworks/:artworkId/photos/stage` · `…/process`                  |
-| `DELETE`          | `…/artworks/:artworkId/photos/:entryId`                             |
-| `POST` / `DELETE` | the same three under `/documents`                                   |
+| Method                     | Path                                                                |
+| -------------------------- | ------------------------------------------------------------------- |
+| `GET` / `PATCH`            | `/me`                                                               |
+| `GET`                      | `/media?key=` — the object proxy (re-checks visibility per request) |
+| `GET` / `POST`             | `/collections`                                                      |
+| `GET` / `PATCH` / `DELETE` | `/collections/:collectionId`                                        |
+| `POST`                     | `/collections/:collectionId/unlock`                                 |
+| `POST`                     | `/collections/:collectionId/import/csv`                             |
+| `GET`                      | `/collections/:collectionId/deleted-artworks`                       |
+| `POST`                     | `/collections/:collectionId/artworks/bulk-delete`                   |
+| `POST`                     | `/collections/:collectionId/artworks/bulk-restore`                  |
+| `POST`                     | `/collections/:collectionId/artworks/:artworkId/restore`            |
+| `POST`                     | `/collections/:collectionId/maintenance/sweep`                      |
+| `GET` / `POST`             | `/collections/:collectionId/artworks`                               |
+| `GET` / `PATCH`            | `/collections/:collectionId/artworks/:artworkId`                    |
+| `POST`                     | `…/artworks/:artworkId/photos/stage` · `…/process`                  |
+| `DELETE`                   | `…/artworks/:artworkId/photos/:entryId`                             |
+| `POST` / `DELETE`          | the same three under `/documents`                                   |
 
 A save is one Postgres transaction: the field write, the per-entry S3 copy
 (staged → final) and the row upserts, then the row deletes for dropped entries.
@@ -75,12 +75,13 @@ for every read, and every write path asks the same membership question through
 `requireMemberCollection` / `requireMemberArtwork`: a collaborator changes every
 setting (public/private included), creates, edits, imports, bulk-deletes,
 restores and sweeps exactly as the owner does, while a non-member gets `403`
-and a missing collection `404`. Only the access-administration routes below stay owner-only. A save
-records `artworks.userId` as the collection's owner, never the session user:
+and a missing collection `404`. Only deleting the collection and the
+access-administration routes below stay owner-only. A save records
+`artworks.userId` as the collection's owner, never the session user:
 it is a mirror, not an authorization fact. `GET /collections` returns owned
 and shared collections together, name-ordered, each row with `role` and — on
 a shared row — the owner's display name as `ownerName`; the public list keeps
-its shape, and the dashboard's cap counter counts owned collections only.
+its shape, and the dashboard's cap counter counts owned live collections only.
 Final media keys use the collection's fixed `mediaNamespaceId`, staging is per
 uploader, and the proxy's staging branch admits the uploader whose prefix holds
 the object while they are still a member of the collection.

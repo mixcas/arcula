@@ -69,6 +69,12 @@ export async function apiRequest<T>(
   if (!res.ok) {
     throw await toRequestError(res);
   }
+  // A 204 has no body at all: `res.json()` would reject on the empty stream
+  // rather than answer the write's success. The writes that answer it have
+  // nothing to return, so `undefined` is the whole document.
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
 
