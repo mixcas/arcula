@@ -550,7 +550,7 @@ the moves that keep the inventory accurate as works travel. Distinct from
   documented today, not deployed
 
 The design decisions behind the product — the data model, the media pipeline,
-and what is still open — are written up in [project-plan.md](project-plan.md).
+and what is still open — are written up in the [design record](DESIGN.md).
 
 ## Contributing
 

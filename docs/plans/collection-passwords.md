@@ -1,7 +1,7 @@
 # Plan: real password protection for collections
 
 **Status: shipped.** Both releases below are in production, and the design record
-now carries the feature — `project-plan.md`'s _Protected_ section and
+now carries the feature — `DESIGN.md`'s _Protected_ section and
 `packages/db/README.md`'s `0005` narrative. What follows is the historical
 working record of how it was built: the release order, the schema split, and the
 parameters settled at the time. Read it as a record of a completed plan, not as
@@ -17,7 +17,7 @@ This is what the repository looked like before Release 1, kept as the record of
 what the work had to reconcile — none of it describes the code today.
 
 - `collections` has no password column. `packages/db/src/index.ts` says so in a
-  comment, and `project-plan.md` lists password protection first under _What is
+  comment, and `DESIGN.md` lists password protection first under _What is
   not built_.
 - `CollectionSettingsPage.tsx` already renders a `Require Password` switch and a
   `PasswordInput` (`:66-67`, `:267-286`) — orphaned from an earlier design, never
@@ -148,7 +148,7 @@ invalid-password` on a miss; `429` past the throttle window. The route shipped
 
 ## Documentation updates (done at completion)
 
-- `project-plan.md`: password protection left _What is not built_; the feature,
+- `DESIGN.md`: password protection left _What is not built_; the feature,
   the two-release schema narrative, and the residual throttle weakness are in.
 - `packages/db/README.md`: the `0005` migration and why it needs no tightening
   step.
