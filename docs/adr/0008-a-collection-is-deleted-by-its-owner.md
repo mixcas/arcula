@@ -59,9 +59,11 @@ moving the timestamp twice.
 shared loader in `authorize.ts` refuses a stamped row, so every consumer of it
 answers not-found with no per-route change: the settings read and write, the
 artwork list and the single-work read (including the Deleted view), the media
-proxy, the collection PDF, the invitation preview and acceptance, and the unlock
-route. The owner gets the same answer as a stranger, so a deleted collection is
-indistinguishable from one that never existed. The four raw queries that bypass
+proxy, the invitation preview and acceptance, and the unlock route. The
+collection export runs in the client and reads the collection and artwork
+endpoints, so it meets the same refusal. The owner gets the same answer as a
+stranger, so a deleted collection is indistinguishable from one that never
+existed. The four raw queries that bypass
 the loader filter the stamp themselves: the anonymous public list, the signed-in
 list of owned and shared collections, the tier-cap count, and the invitee's
 inbox join. The inbox is additionally kept honest by the withdrawal; its filter
@@ -136,7 +138,7 @@ than fought.
   carry an explicit filter that a new raw list query is expected to copy.
 - **Filtering deleted rows out of the lists only.** Rejected. Every address that
   named the collection must answer not-found for everyone, the owner included; a
-  list filter alone would leave direct links, media keys, PDFs and invitation
+  list filter alone would leave direct links, media keys, exports and invitation
   tokens live.
 
 ## Consequences

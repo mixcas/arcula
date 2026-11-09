@@ -141,8 +141,9 @@ hand-edited value cannot corrupt a collection.
 `deletedAt` is the collection's deletion stamp: null while it is live, a
 timestamp once its owner deletes it. It is nullable with no default and no
 backfill — a live collection is the normal state, so nothing needed tightening
-later — and it carries no index, because the lists and the cap count already
-narrow on the owner column and deleted rows are rare. The stamp is the whole
+later — and it carries no index, because the signed-in list and the cap count
+already narrow on the owner column, the anonymous public list narrows on the
+visibility flags, and deleted rows are rare. The stamp is the whole
 record of the act. The shared loader refuses a stamped row, so every address
 that named the collection answers not-found for every viewer, and the four raw
 queries that bypass the loader filter it themselves: the two lists, the cap
