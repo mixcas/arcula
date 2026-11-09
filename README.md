@@ -59,26 +59,29 @@ Early, and honest about what is missing:
 
 | Area                                        | State                                                         |
 | ------------------------------------------- | ------------------------------------------------------------- |
-| Email/password auth, protected routes       | Working (Better Auth)                                         |
-| Sign up                                     | Working                                                       |
-| Sign in / sign out, password reset by email | Working                                                       |
-| Account profile (name), change password     | Working                                                       |
-| Create, list, view, rename collections      | Working                                                       |
-| Share a collection with collaborators       | Working (invite, administer, remove, leave, transfer)         |
+| Email/password auth, protected routes       | ✅                                                            |
+| Sign up                                     | ✅                                                            |
+| Sign in / sign out, password reset by email | ✅                                                            |
+| Account profile (name), change password     | ✅                                                            |
+| Create, list, view, rename collections      | ✅                                                            |
+| Share a collection with collaborators       | ✅                                                            |
 | Collections per account                     | Free tier cap: one owned collection; shared ones do not count |
-| Public/private flag per collection          | Working                                                       |
-| List a collection's artworks                | Working                                                       |
-| Add and edit an artwork                     | Working                                                       |
-| Published/draft status per artwork          | Working; the collection is the gate                           |
-| Public collection and single-artwork pages  | Working (the "skins")                                         |
-| Photo uploads                               | Working — server-side variants (5 + original)                 |
-| "Other Documents" uploads (images and PDFs) | Working; members only, enforced by the proxy                  |
-| Soft delete of artworks (in bulk)           | Working                                                       |
-| Restore a soft-deleted artwork              | Working (the collection's Deleted view)                       |
-| CSV import of artworks                      | Working                                                       |
-| Protected collections (password on Public)  | Working (Access grant, Lock screen, throttle)                 |
-| Delete a collection                         | Working (owner-only, Collection Settings → Data)              |
-| Export and search                           | Not implemented (see the roadmap)                             |
+| Public/private flag per collection          | ✅                                                            |
+| List a collection's artworks                | ✅                                                            |
+| Search a collection                         | ✅                                                            |
+| Artwork list                                | ✅                                                            |
+| Add and edit an artwork                     | ✅                                                            |
+| Published/draft status per artwork          | ✅                                                            |
+| Public collection and single-artwork pages  | ✅                                                            |
+| Collection PDF                              | ✅                                                            |
+| Photo uploads                               | ✅                                                            |
+| "Other Documents" uploads (images and PDFs) | ✅                                                            |
+| Soft delete of artworks (in bulk)           | ✅                                                            |
+| Restore a soft-deleted artwork              | ✅                                                            |
+| CSV import of artworks                      | ✅                                                            |
+| Protected collections (password on Public)  | ✅                                                            |
+| Delete a collection                         | ✅                                                            |
+| Portable data export                        | Not implemented (see the roadmap)                             |
 
 ### How access control works
 
@@ -108,13 +111,19 @@ previous owner stays as a collaborator and can leave. A transfer mails the new
 owner a link to the collection; a failed mail answers `emailSent: false` and
 never undoes the invitation or the transfer.
 
-The collection is the only gate: a visitor sees a published, live work exactly
-when its collection is public, and a draft, a deleted work and a private
+Today the collection is the only gate: a visitor sees a published, live work
+exactly when its collection is public, and a draft, a deleted work and a private
 collection are one answer to them. A work is published or draft; it carries no
 visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
 deleted work disappears from every live list without its bytes going anywhere.
 Each collection's **Deleted** view lists its deleted works, most recently
 deleted first, and restores one or several.
+
+**The Collection PDF asks the same question.** The PDF route is public chrome,
+not behind the sign-in guard: the ordinary collection and artwork reads decide
+access, and the document always holds published, live works only — never a
+draft, a deleted work or a document. It is generated in the browser, so the
+API's only role is a font subset; the file is never stored.
 
 **Protected** is a second condition on a **Public** collection, not a third
 visibility state. The works and the visitor rule are unchanged; a non-member
@@ -191,6 +200,7 @@ built `index.html` (deep links included); `/api/*` runs the routes.
 - **Database**: PostgreSQL via [Drizzle ORM](https://orm.drizzle.team/)
 - **Storage**: S3 (via the AWS SDK)
 - **Media**: [Sharp](https://sharp.pixelplumbing.com/)
+- **PDF**: [@react-pdf/renderer](https://react-pdf.org/) — generated in the browser
 - **Mail**: Resend in production, SMTP locally
 - **Infrastructure**: AWS CDK
 - **Typography**: [Darker Grotesque](https://fonts.google.com/specimen/Darker+Grotesque)
@@ -206,18 +216,22 @@ by the API and the forms alike, so both sides accept and reject the same input.
 Every collection and artwork route carries a readable segment alongside the id:
 
 ```
-/manage/collection/van-gogh-collection-7aV9xKqL2mP4nR8tY1zC
-/manage/collection/van-gogh-collection-7aV9xKqL2mP4nR8tY1zC/artwork/the-potato-eaters-Yh8kD2mL5vN9qR
+/manage/collection/van-gogh-collection-7aV9xKqL2m
+/manage/collection/van-gogh-collection-7aV9xKqL2m/artwork/the-potato-eaters-Yh8kD2mL5v
 ```
 
 The name is cosmetic, and **only the id is ever a lookup key.** The slug lives in
 the URL and nowhere else, which is what makes a rename safe: changing a
-collection's name cannot orphan the artworks that point at it. Three
+collection's name cannot orphan the artworks that point at it. Four
 consequences worth knowing:
 
 - **Bare ids still work.** An older link of the form
-  `/collection/7aV9xKqL2mP4nR8tY1zC` loads fine and the page rewrites the address
-  bar to the canonical slug using `replace`.
+  `/collection/7aV9xKqL2m` loads fine and the page rewrites the address bar to
+  the canonical slug using `replace`.
+- **New ids are ten base62 characters.** A minted id is ten characters of
+  `0-9A-Za-z` (`packages/shared/src/ids.ts`); the longer hex ids minted before
+  that change are permanent, and both lengths load, so old links keep working.
+  See [ADR-0007](docs/adr/0007-ids-are-ten-base62-characters.md).
 - **Parsing splits on the last hyphen**, not at a fixed offset, so it depends on
   neither the length nor the alphabet of the id — and ids are minted hyphen-free
   precisely so the cut can never land inside one.
@@ -439,13 +453,14 @@ apps/
       App.tsx                # routes
       auth/                  # the Better Auth React client
       components/            # ProductPage, auth/, manage/, collection/,
-                             # invitation/
+                             # invitation/, pdf/
       hooks/                 # useAuth, useArtworkPhotos, useArtworkDocuments,
                              # useUploadPool
       schemas/               # form schemas
       services/              # the API clients (api.ts is the transport)
       skins/                 # the public-view system
       theme.ts               # Mantine theme: fonts, sizes, spacing
+      userSettings.ts        # the stored Table/Grid view and sort
       utils/                 # artworkDocuments, csv, invitation, returnPath
   api/                       # Hono backend (Bun dev / Node 24 Lambda prod)
     src/
@@ -456,10 +471,10 @@ apps/
       collectionPassword.ts collectionGrants.ts unlockThrottle.ts
       session.ts clientAddress.ts
       routes/                # me, access, invitations, media, collections,
-                             # artworkMedia, artworkSave, artworks
+                             # artworkMedia, artworkSave, artworks, pdf
       media/                 # keys, pipeline, populations, variants, promote
       email/                 # SMTP locally, Resend in production
-      db.ts storage.ts serialize.ts errors.ts env.ts
+      db.ts storage.ts serialize.ts errors.ts env.ts pdfFontSubset.ts
 packages/
   shared/                    # the client⇄server contract
   db/                        # the Drizzle schema + the generated migrations
@@ -468,6 +483,8 @@ infra/
   Dockerfile                 # the scale-up container (documented, not deployed)
 scripts/                     # stack, build, provision, reset, deploy
 docs/adr/                    # decision records, with rejected alternatives
+docs/specs/                  # implementation-ready feature specs
+docs/plans/                  # working plans
 docs/mail.md                 # mail identity, and the deferred DMARC/opt-out work
 GLOSSARY.md                  # the product's own vocabulary
 ```
@@ -488,12 +505,45 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 ## Roadmap
 
-Roughly in order of how much they matter:
+The three larger product features below are ideas, not commitments; none is
+built. The smaller items follow, roughly in order of how much they matter.
+
+### Quick look
+
+A side panel on a collection's manage page that opens an artwork without leaving
+the list: the full record, with shortcuts to its public page and its Edit form.
+A reading and navigation aid, not a second editor.
+
+### Catalogues
+
+A **Catalogue** is a curated subset of a Collection's artworks, published on its
+own address with its own audience. It would reuse the Collection's model —
+Public or Private, an optional password, collaborators — and have its own PDF.
+It selects from the Collection rather than copying or owning the works.
+
+- A collector shortlisting works for a gallery considering an exhibition,
+  shared as a password-protected link or a PDF.
+- A collector or gallerist taking five works to an art fair, with a public page
+  carrying those works' information.
+
+Giving a Catalogue its own public address would make it the first public surface
+besides a Collection, so its access model needs its own decision before
+implementation.
+
+### Artwork location
+
+Where each work is now — at home, in storage, on loan or in transit — with the
+place (a gallery, storage facility, art fair, another address), the dates, and
+the moves that keep the inventory accurate as works travel. Distinct from
+**Place of origin**, which records where the work came from.
+
+### Smaller items
 
 - Purge and a retention window for soft-deleted artworks (the Deleted view
   restores them)
-- Export, so you are never locked in
-- Search and filtering, once there are enough works for it to matter
+- A portable data export (CSV/JSON), so you are never locked in — the Collection
+  PDF is a printed document, not your data
+- Filtering beyond the collection search that exists today
 - Account tiers and billing — this is what turns the per-tier collection cap
   into a sold allowance
 - An always-on container (`infra/Dockerfile`) as the scale-up path from Lambda:
