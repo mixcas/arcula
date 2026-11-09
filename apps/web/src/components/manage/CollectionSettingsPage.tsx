@@ -307,7 +307,7 @@ const CollectionSettingsPage: React.FC = () => {
         </Tabs.Panel>
 
         <Tabs.Panel value="data">
-          <DataTab collectionParam={param ?? ""} />
+          <DataTab collectionParam={param ?? ""} collection={collection} />
         </Tabs.Panel>
       </Tabs>
     </Container>

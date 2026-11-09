@@ -74,6 +74,16 @@ export const collectionService = {
   },
 
   /**
+   * Owner-only: delete the collection. The answer is a `204` with no body,
+   * so the act's fact is the resolved call. A collection that is absent or
+   * was already deleted rejects `404` — for the caller that is the same
+   * outcome, and the Data tab folds it to success.
+   */
+  async deleteCollection(id: string): Promise<void> {
+    await apiRequest<void>(`${BASE}/${id}`, { method: "DELETE" });
+  },
+
+  /**
    * The lock screen's attempt: a right password sets the Access grant cookie
    * for this collection, and the ordinary read then succeeds. A wrong one
    * rejects with 403 `invalid-password`; a collection with no password (or a

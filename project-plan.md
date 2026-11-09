@@ -119,7 +119,8 @@ a config flip rather than a schema change.
 ### `collections`
 
 `id`, `userId`, `mediaNamespaceId`, `name`, `description?`, `skin?`,
-`skinOptions` (jsonb), `isPublic` (default `true`), `createdAt`, `updatedAt`.
+`skinOptions` (jsonb), `isPublic` (default `true`), `deletedAt?`, `createdAt`,
+`updatedAt`.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
 namespace every final media key uses. The schema shipped in two releases:
@@ -137,11 +138,26 @@ validated at read time against the selected skin's declared options; an unknown
 key is dropped and a wrong type falls back to the default, so a stale or
 hand-edited value cannot corrupt a collection.
 
-Collections are never deleted in this model. `passwordHash` is nullable text —
-a one-way scrypt hash with its salt and cost parameters encoded in the string —
-so a collection with no password is the normal state rather than a gap to
-backfill. The plaintext is never stored and never reaches a client under any
-read, for any viewer, the owner included.
+`deletedAt` is the collection's deletion stamp: null while it is live, a
+timestamp once its owner deletes it. It is nullable with no default and no
+backfill — a live collection is the normal state, so nothing needed tightening
+later — and it carries no index, because the signed-in list and the cap count
+already narrow on the owner column, the anonymous public list narrows on the
+visibility flags, and deleted rows are rare. The stamp is the whole
+record of the act. The shared loader refuses a stamped row, so every address
+that named the collection answers not-found for every viewer, and the four raw
+queries that bypass the loader filter it themselves: the two lists, the cap
+count and the invitee's inbox. Nothing cascades — the works, their photo and
+document rows, the media objects and the collaborator rows stay — which is what
+makes an operator's restore of the collection a one-column update. The deletion
+transaction also withdraws the collection's pending invitations and deletes its
+Access grant rows
+([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)).
+
+`passwordHash` is nullable text — a one-way scrypt hash with its salt and cost
+parameters encoded in the string — so a collection with no password is the
+normal state rather than a gap to backfill. The plaintext is never stored and
+never reaches a client under any read, for any viewer, the owner included.
 
 ### `collection_access_grants` and `collection_unlock_attempts`
 
@@ -521,9 +537,11 @@ after it the card re-reads itself as the collaborator's view.
 `collectionLimitForTier`. One map, imported by both sides, so the API's
 enforcement and the client's messaging cannot disagree. The API checks the cap on
 create and returns `limit-reached` (409); the client reads the same table to
-reflect the cap in the UI. The cap counts collections an account **owns**;
-collaborations do not count, and a transfer may take the recipient over the cap
-without being refused. The free tier is one owned collection.
+reflect the cap in the UI. The cap counts owned collections that are **live**;
+collaborations do not count, a transfer may take the recipient over the cap
+without being refused, and a deleted collection frees its slot immediately
+([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)). The free
+tier is one owned collection.
 
 ## What is not built
 
@@ -547,7 +565,12 @@ Roughly in order of how much it matters:
 - **Purge and retention for deleted works.** The collection's Deleted view lists
   and restores them; nothing purges long-dead rows or promises a retention
   window.
-- **Delete a collection.** The model does not delete collections at all.
+- **Restoring a deleted collection from the app.** Deletion is a stamp an
+  operator clears by hand
+  ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)); there is
+  no trash view, no undo and no script.
+- **Reclaiming a deleted collection's storage.** Deletion keeps every object so
+  the collection can be restored, and nothing purges them.
 - **Export**, so a collector is never locked in.
 - **Search and filtering**, once a collection is large enough to need it.
 - **Account tiers and billing** — the hook the collection cap reads.
