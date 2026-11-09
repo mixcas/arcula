@@ -75,6 +75,8 @@ fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and
 `collection_access_grants` keeps a grant's hash, never its token, with the
 collection indexed so a password change revokes in one statement.
+`collections.deletedAt` is nullable, with no default and no backfill: a
+collection without a stamp is live.
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
 PostgREST roles' grants on what exists and on the defaults for what comes next.

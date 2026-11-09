@@ -133,6 +133,9 @@ const PASSWORD_SQL = readMigration("0005_collection_passwords");
 // The committed lock-down: RLS on every table, the client grants revoked.
 const RLS_SQL = readMigration("0006_enable_rls");
 
+// The committed stamp that retires a whole collection.
+const DELETION_SQL = readMigration("0007_collection_deletion_stamp");
+
 describe("the thirteen-table schema", () => {
   it("declares exactly the thirteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
@@ -281,6 +284,16 @@ describe("the thirteen-table schema", () => {
     expect(c.passwordHash.dataType).toBe("string");
     expect(c.passwordHash.notNull).toBe(false);
     expect(c.passwordHash.hasDefault).toBe(false);
+  });
+
+  it("collections carries a nullable deletion stamp, with no default to hide a gap", () => {
+    const c = cols(collections);
+    // Nullable is the whole point: a collection without a stamp is live, so
+    // no backfill and no NOT NULL step is owed later. A default would stamp a
+    // deletion no owner asked for.
+    expect(c.deletedAt.dataType).toBe("date");
+    expect(c.deletedAt.notNull).toBe(false);
+    expect(c.deletedAt.hasDefault).toBe(false);
   });
 
   it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
@@ -690,6 +703,27 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(PASSWORD_SQL.replace(/timestamp with time zone/g, "")).not.toContain(
       "timestamp",
     );
+  });
+});
+
+describe("the committed deletion-stamp migration (as it will actually be applied)", () => {
+  it("adds the stamp nullable, with no default and no NOT NULL step", () => {
+    expect(DELETION_SQL).toContain(
+      'ALTER TABLE "collections" ADD COLUMN "deletedAt" timestamp with time zone;',
+    );
+    // Nullable is load-bearing: every row that existed before the migration
+    // keeps reading as live, so the column cannot arrive with a value.
+    expect(DELETION_SQL).not.toMatch(/ADD COLUMN "deletedAt"[^;]*NOT NULL/);
+    expect(DELETION_SQL).not.toMatch(/ADD COLUMN "deletedAt"[^;]*DEFAULT/);
+    expect(DELETION_SQL).not.toContain("SET NOT NULL");
+  });
+
+  it("is additive and forward-only: no row write, no drop, no constraint change", () => {
+    // The release ships alone, ahead of the code that uses the column, so
+    // every statement here must leave the old code's rows and queries intact.
+    expect(dataWrites(DELETION_SQL)).toEqual([]);
+    expect(DELETION_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(DELETION_SQL).not.toMatch(/ALTER COLUMN/);
   });
 });
 

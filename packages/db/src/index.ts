@@ -143,6 +143,9 @@ export const collections = pgTable(
     // no tightening step. The plaintext is never stored, and there is no
     // read-back path by design (ADR-0005).
     passwordHash: text("passwordHash"),
+    // NULL = live, as on `artworks`. Nullable with no backfill: a collection
+    // without a stamp is the normal state, not a gap to tighten later.
+    deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
     updatedAt: timestamptz("updatedAt"),
   },
