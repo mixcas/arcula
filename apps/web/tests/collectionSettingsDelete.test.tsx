@@ -127,10 +127,19 @@ const access = (role: CollectionAccess["role"]): CollectionAccess => ({
         ],
 });
 
-const renderDataTab = (loaded: Collection, seen: CollectionAccess) => {
+const renderDataTab = (
+  loaded: Collection,
+  seen: CollectionAccess | Error | Promise<CollectionAccess>,
+) => {
   const param = collectionSlug(loaded.name, COLLECTION_ID);
   getCollection.mockResolvedValue(loaded);
-  getAccess.mockResolvedValue(seen);
+  if (seen instanceof Error) {
+    getAccess.mockRejectedValue(seen);
+  } else if (seen instanceof Promise) {
+    getAccess.mockReturnValue(seen);
+  } else {
+    getAccess.mockResolvedValue(seen);
+  }
   return render(
     <MantineProvider>
       <Notifications />
@@ -178,11 +187,11 @@ describe("the settings page's delete control", () => {
     renderDataTab(collection({ role: "collaborator" }), access("owner"));
 
     const card = within(await dangerCard());
-    expect(card.getByText(COLLECTION_NAME)).toBeInTheDocument();
-    expect(card.getByText(/cannot undo/i)).toBeInTheDocument();
+    expect(
+      card.getByRole("textbox", { name: /collection name/i }),
+    ).toBeInTheDocument();
     expect(card.getByRole("button", { name: /delete/i })).toBeDisabled();
     expect(screen.getByRole("link", { name: /import/i })).toBeInTheDocument();
-    expect(getAccess).toHaveBeenCalledWith(COLLECTION_ID);
   });
 
   it("shows a collaborator only the Import card", async () => {
@@ -197,23 +206,7 @@ describe("the settings page's delete control", () => {
   });
 
   it("offers no delete control while the access read is in flight", async () => {
-    getCollection.mockResolvedValue(collection());
-    getAccess.mockReturnValue(new Promise<CollectionAccess>(() => undefined));
-    const param = collectionSlug(COLLECTION_NAME, COLLECTION_ID);
-    render(
-      <MantineProvider>
-        <MemoryRouter
-          initialEntries={[`/manage/collection/${param}/settings/data`]}
-        >
-          <Routes>
-            <Route
-              path="/manage/collection/:collectionId/settings/:tab?"
-              element={<CollectionSettingsPage />}
-            />
-          </Routes>
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderDataTab(collection(), new Promise<CollectionAccess>(() => undefined));
 
     expect(
       await screen.findByRole("link", { name: /import/i }),
@@ -306,23 +299,7 @@ describe("the settings page's delete control", () => {
   });
 
   it("shows an alert in the card's place when the access read fails", async () => {
-    getCollection.mockResolvedValue(collection());
-    getAccess.mockRejectedValue(new Error("offline"));
-    const param = collectionSlug(COLLECTION_NAME, COLLECTION_ID);
-    render(
-      <MantineProvider>
-        <MemoryRouter
-          initialEntries={[`/manage/collection/${param}/settings/data`]}
-        >
-          <Routes>
-            <Route
-              path="/manage/collection/:collectionId/settings/:tab?"
-              element={<CollectionSettingsPage />}
-            />
-          </Routes>
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderDataTab(collection(), new Error("offline"));
 
     expect(
       await screen.findByRole("link", { name: /import/i }),

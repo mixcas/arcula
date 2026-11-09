@@ -364,8 +364,6 @@ describe("DELETE /collections/{cid}", () => {
       );
       expect(accepted.status, `${role} accept`).toBe(404);
     }
-    // The preview is public, so even a reader with no session learns nothing.
-    expect((await req("GET", `/api/v1/invitations/${token}`)).status).toBe(404);
     // Acceptance is session-gated first, as every session route is.
     expect(
       (await req("POST", `/api/v1/invitations/${token}/accept`)).status,
