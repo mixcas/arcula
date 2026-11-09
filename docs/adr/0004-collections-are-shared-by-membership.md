@@ -193,7 +193,7 @@ a 60-second cooldown. No rate limiter ships in v1.
   the schema suite.
 - **Not built here.** A read-only role, per-work attribution or audit trail,
   acceptance of a transfer, invitation rate limiting, a collaborator cap, and
-  account deletion. They are listed in `project-plan.md` under _What is not
+  account deletion. They are listed in `DESIGN.md` under _What is not
   built_.
 
 **Amended by [ADR-0008](0008-a-collection-is-deleted-by-its-owner.md):** a

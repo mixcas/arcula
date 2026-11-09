@@ -228,4 +228,4 @@ cookie now set, so there is one path to ready.
 - **Not built here.** Account-level password management, a read-only role, a
   distributed rate limiter, and any application-level password recovery. The
   first and last are not wanted; the middle two are listed in
-  `project-plan.md` under _What is not built_.
+  `DESIGN.md` under _What is not built_.
