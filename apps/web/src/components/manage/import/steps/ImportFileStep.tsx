@@ -83,24 +83,24 @@ const ImportFileStep: React.FC<ImportFileStepProps> = ({
         </Group>
       </Dropzone>
 
-      <Card shadow="sm" p="lg" mt="md">
-        <Group justify="space-between" align="center">
-          <div>
-            <Text fw={600}>{fileName ?? "No file selected"}</Text>
-            <Text size="sm" c="dimmed" mt={4}>
-              {empty
-                ? "Waiting for a file…"
-                : `${rowCount} data row${rowCount === 1 ? "" : "s"} · ${columnCount} column${columnCount === 1 ? "" : "s"}`}
-            </Text>
-          </div>
-          <Switch
-            label="First row is a header"
-            checked={hasHeader}
-            disabled={empty}
-            onChange={(e) => onHasHeaderChange(e.currentTarget.checked)}
-          />
-        </Group>
-      </Card>
+      {empty ? null : (
+        <Card shadow="sm" p="lg" mt="md">
+          <Group justify="space-between" align="center">
+            <div>
+              <Text fw={600}>{fileName ?? "No file selected"}</Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                {`${rowCount} data row${rowCount === 1 ? "" : "s"} · ${columnCount} column${columnCount === 1 ? "" : "s"}`}
+              </Text>
+            </div>
+            <Switch
+              label="First row is a header"
+              checked={hasHeader}
+              disabled={empty}
+              onChange={(e) => onHasHeaderChange(e.currentTarget.checked)}
+            />
+          </Group>
+        </Card>
+      )}
 
       {showWarning ? (
         <Alert color="yellow" mt="md" title="The file parsed with warnings">

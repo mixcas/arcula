@@ -136,13 +136,13 @@ const ReviewRowsStep: React.FC<ReviewRowsStepProps> = ({
       </Alert>
 
       <Group mb="xs" gap="xs">
-        <Text size="xs" c="dimmed">
+        <Text size="sm" c="dimmed">
           Legend:
         </Text>
-        <Badge color="red" variant="light" size="xs">
+        <Badge color="red" variant="light" size="sm">
           needs fixing
         </Badge>
-        <Text size="xs" c="dimmed">
+        <Text size="sm" c="dimmed">
           Click any cell to edit it.
         </Text>
       </Group>

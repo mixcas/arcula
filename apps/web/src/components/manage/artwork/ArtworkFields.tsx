@@ -184,7 +184,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         fullWidth
         {...form.getInputProps("status")}
       />
-      <Text size="xs" c="dimmed" mt={6} mb="md">
+      <Text size="sm" c="dimmed" mt={6} mb="md">
         Published if the collection is public. A draft stays in the collection
         and is visible only to you.
       </Text>

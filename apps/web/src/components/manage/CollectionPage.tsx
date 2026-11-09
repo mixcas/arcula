@@ -296,7 +296,7 @@ const CollectionPage: React.FC = () => {
               setDraft({ forQuery: query, text: next });
               debouncedCommitRef.current?.(next);
             }}
-            placeholder="Search this collection"
+            placeholder="Search"
             aria-label="Search this collection"
             leftSection={<IconZoom size={16} />}
             // The X answers either kind of text: an uncommitted draft or an
