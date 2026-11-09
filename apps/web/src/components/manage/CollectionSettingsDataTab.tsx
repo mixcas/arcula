@@ -12,14 +12,15 @@
 import React from "react";
 import { Box, Button, Card, Group, Stack, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
-import type { Collection } from "@arcula/shared";
-import CollectionDangerCard from "./collection/CollectionDangerCard";
+import CollectionDangerCard, {
+  type CollectionIdentity,
+} from "./collection/CollectionDangerCard";
 
 interface DataTabProps {
   /** The address's collection segment, "{slug}-{id}" — the import's route. */
   collectionParam: string;
   /** The loaded document's identity, for the danger card. */
-  collection: Pick<Collection, "id" | "name">;
+  collection: CollectionIdentity;
 }
 
 const DataTab: React.FC<DataTabProps> = ({ collectionParam, collection }) => {

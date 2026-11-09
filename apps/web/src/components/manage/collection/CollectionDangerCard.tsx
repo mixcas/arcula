@@ -30,9 +30,11 @@ import { ApiRequestError, isNotFound } from "@/services/api";
 import { accessService } from "@/services/accessService";
 import { collectionService } from "@/services/collectionService";
 
+export type CollectionIdentity = Pick<Collection, "id" | "name">;
+
 interface CollectionDangerCardProps {
   /** The loaded document's identity: the card names it and deletes it. */
-  collection: Pick<Collection, "id" | "name">;
+  collection: CollectionIdentity;
 }
 
 const CollectionDangerCard: React.FC<CollectionDangerCardProps> = ({
