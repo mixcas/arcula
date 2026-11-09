@@ -160,8 +160,7 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
       <Card withBorder>
         <Group align="flex-start" justify="space-between" mb="md">
           <div>
-            <Text fw="600">Name</Text>
-            <Text size="sm" c="dim" tt="uppercase">
+            <Text size="mn" fw={500} c="dim">
               {me.email}
             </Text>
           </div>
