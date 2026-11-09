@@ -64,9 +64,9 @@ export type ArtworkRow = typeof artworksTable.$inferSelect;
  * proxy, the invitation preview and acceptance, the unlock route, the access
  * view — answers not-found for the owner exactly as for a stranger.
  *
- * The four raw collection queries that bypass this loader (both dashboard
- * lists, the tier-cap count and the invitee's inbox) carry their own
- * `deletedAt IS NULL` filter.
+ * The four raw collection queries that bypass this loader (the anonymous
+ * public list, the signed-in list, the tier-cap count and the invitee's inbox)
+ * carry their own `deletedAt IS NULL` filter.
  */
 export const loadCollection = async (
   collectionId: string,
@@ -276,21 +276,23 @@ export async function requireMemberCollection(
 }
 
 /**
- * The owner-only check for access administration — invitations today, and
- * collaborator removal, leaving and transfer when those routes land. A
+ * The owner-only check for access administration — invitations, collaborator
+ * removal, leaving and transfer — and for deleting the collection. A
  * collaborator is a member (and may edit everything), but only the owner
- * decides who else gets in (ADR-0004).
+ * decides who else gets in (ADR-0004) and whether the collection is deleted
+ * (ADR-0008).
+ *
+ * `refusal` is the message the caller's route names the refused act with; the
+ * access routes keep the default.
  */
 export async function requireOwnerCollection(
   c: Context,
   collectionId: string,
+  refusal = "Only the collection's owner can manage access",
 ): Promise<CollectionRow> {
   const collection = await requireMemberCollection(c, collectionId);
   if (collection.userId !== c.get("user").id) {
-    throw new ApiError(
-      "forbidden",
-      "Only the collection's owner can manage access",
-    );
+    throw new ApiError("forbidden", refusal);
   }
   return collection;
 }

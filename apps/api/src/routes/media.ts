@@ -125,6 +125,19 @@ mediaRoutes.get("/media", async (c) => {
     );
   }
 
+  const collection = await loadCollection(parsed.collectionId);
+  if (!collection) {
+    throw new ApiError(
+      "not-found",
+      "The object key does not name a stored object",
+    );
+  }
+  const membership = await loadMembership(
+    parsed.collectionId,
+    collection,
+    viewer,
+  );
+
   // Which cache may keep these bytes: a document is a member's at every
   // status, and a Protected collection's photo was admitted by the reader's
   // grant, so neither is the same answer to every reader.
@@ -137,18 +150,6 @@ mediaRoutes.get("/media", async (c) => {
     // exception: there is no collection to hold a document, so the key names
     // nothing that exists (the same not-found the photo branch answers).
     cacheControl = PRIVATE_CACHE;
-    const collection = await loadCollection(parsed.collectionId);
-    if (!collection) {
-      throw new ApiError(
-        "not-found",
-        "The object key does not name a stored object",
-      );
-    }
-    const membership = await loadMembership(
-      parsed.collectionId,
-      collection,
-      viewer,
-    );
     if (!canReadArtworkDocuments(membership)) {
       throw new ApiError(
         "forbidden",
@@ -156,18 +157,6 @@ mediaRoutes.get("/media", async (c) => {
       );
     }
   } else {
-    const collection = await loadCollection(parsed.collectionId);
-    if (!collection) {
-      throw new ApiError(
-        "not-found",
-        "The object key does not name a stored object",
-      );
-    }
-    const membership = await loadMembership(
-      parsed.collectionId,
-      collection,
-      viewer,
-    );
     // The same verdict as the row, which is the whole point of the proxy: a
     // Protected collection's bytes are behind the same challenge as its page,
     // so the grant the reader holds (if any) is a fact this asks for too.

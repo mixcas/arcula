@@ -381,6 +381,7 @@ collectionRoutes.delete(
     const collection = await requireOwnerCollection(
       c,
       param(c, "collectionId"),
+      "Only the collection's owner can delete it",
     );
     const now = new Date();
     await safeTx(async (tx) => {
