@@ -36,12 +36,21 @@ const ManageNavBar: React.FC = () => {
       </Button>
       <Menu shadow="md" width={220}>
         <Menu.Target>
-          <Button variant="transparent">
+          {/* Below `md` (phones and portrait tablets) the label is hidden by the
+              breakpoint and the avatar initial is the whole trigger, so the
+              button carries the full name as its accessible name — otherwise
+              a screen reader would announce a single letter. */}
+          <Button
+            variant="transparent"
+            aria-label={label ? `${label} — account menu` : "Account menu"}
+          >
             <Group gap="xs">
               <Avatar size="sm" radius="xl">
                 {initial}
               </Avatar>
-              <Text size="sm">{label}</Text>
+              <Text size="sm" visibleFrom="md">
+                {label}
+              </Text>
             </Group>
           </Button>
         </Menu.Target>
