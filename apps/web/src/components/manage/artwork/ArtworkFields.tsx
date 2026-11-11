@@ -46,7 +46,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
-    <Grid.Col span={8}>
+    <Grid.Col span={{ base: 12, sm: 8 }}>
       <TextInput
         key={form.key("title")}
         label="Title"
@@ -162,7 +162,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("currentValue")}
       />
     </Grid.Col>
-    <Grid.Col span={4}>
+    <Grid.Col span={{ base: 12, sm: 4 }}>
       <Text size="sm" fw={500} mb={4}>
         Status
       </Text>

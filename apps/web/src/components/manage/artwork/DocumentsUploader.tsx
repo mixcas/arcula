@@ -3,9 +3,8 @@ import {
   ActionIcon,
   Anchor,
   Box,
-  Group,
   Image,
-  Paper,
+  SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
@@ -40,9 +39,10 @@ interface DocumentsUploaderProps {
 /**
  * The "Other Documents" list for the Add and Edit Artwork forms.
  *
- * A row per attachment rather than a grid, because this list has no sequence to
- * read across: a grid implies an order worth comparing, and there is not one.
- * Rows are a scannable list of things with names, which is what these are.
+ * A two-column tile grid, matching the photos beside it: the square is the
+ * thumbnail for an image and a content-type glyph for everything else, with the
+ * name and size underneath. Two columns rather than three because a filename
+ * needs more width to stay readable than a photo's index badge does.
  *
  * Deliberately headless about saving, exactly as `PhotoUploader` is — it renders
  * whatever the hook holds and calls back into it, so both forms share this whole
@@ -54,8 +54,8 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
 }) => {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   // Only the images have a modal, so the preview is looked up by key rather than
-  // by index: removing a row above the open one would otherwise silently show a
-  // different document than the one that was clicked.
+  // by index: removing a tile before the open one would otherwise silently show
+  // a different document than the one that was clicked.
   const previewEntry = documents.entries.find(
     (entry) => entry.key === previewKey,
   );
@@ -92,16 +92,16 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
           No documents yet.
         </Text>
       ) : (
-        <Stack gap="xs">
+        <SimpleGrid cols={2} spacing="sm">
           {documents.entries.map((entry) => (
-            <DocumentRow
+            <DocumentTile
               key={entry.key}
               entry={entry}
               onRemove={() => documents.remove(entry.key)}
               onPreview={() => setPreviewKey(entry.key)}
             />
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
 
       {description ? (
@@ -135,13 +135,13 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
 const isPdf = (contentType: string): boolean =>
   contentType === "application/pdf";
 
-interface DocumentRowProps {
+interface DocumentTileProps {
   entry: DocumentEntry;
   onRemove: () => void;
   onPreview: () => void;
 }
 
-const DocumentRow: React.FC<DocumentRowProps> = ({
+const DocumentTile: React.FC<DocumentTileProps> = ({
   entry,
   onRemove,
   onPreview,
@@ -154,92 +154,104 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
   // its original. There is no "preparing" state to draw.
   const canOpen = isImageEntry ? thumbnail !== null : !!document.original.url;
 
-  const leading = thumbnail ? (
-    <Image
-      src={thumbnail}
-      alt={document.name}
-      w={44}
-      h={44}
-      fit="cover"
-      radius="sm"
-      style={{ flexShrink: 0 }}
-    />
-  ) : (
-    <ThemeIcon
-      size={44}
-      radius="sm"
-      variant="light"
-      color="gray"
-      style={{ flexShrink: 0 }}
-    >
+  // A file has no pixels, so its tile is a glyph chosen by content type — the
+  // one fact the server knows, because it named the staged object from it.
+  const glyph = (
+    <ThemeIcon size={40} radius="sm" variant="light" color="gray">
       {isPdf(document.contentType) ? (
-        <IconFileTypePdf size={22} />
+        <IconFileTypePdf size={24} />
       ) : (
-        <IconFileText size={22} />
+        <IconFileText size={24} />
       )}
     </ThemeIcon>
   );
 
-  const label = (
-    <Box style={{ minWidth: 0, flex: 1 }}>
-      <Text size="sm" truncate>
+  return (
+    <Box pos="relative">
+      <Box
+        style={{
+          borderRadius: "var(--mantine-radius-md)",
+          overflow: "hidden",
+          aspectRatio: "1 / 1",
+          background: "var(--mantine-color-dark-7)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {thumbnail ? (
+          <UnstyledButton
+            onClick={onPreview}
+            aria-label={`Preview ${document.name}`}
+            style={{ display: "block", width: "100%", height: "100%" }}
+          >
+            <Image
+              src={thumbnail}
+              alt={document.name}
+              fit="cover"
+              h="100%"
+              w="100%"
+              style={{ cursor: "zoom-in" }}
+            />
+          </UnstyledButton>
+        ) : canOpen ? (
+          /*
+            A document opens in a new tab rather than in a modal. There is
+            nothing to page through and no second size worth showing, and a PDF
+            in a full-screen dark modal is a worse reader than the tab it came
+            from.
+
+            `rel="noopener noreferrer"` is not optional: without `noopener` the
+            opened document gets a handle on this window via `window.opener`.
+          */
+          <Anchor
+            href={document.original.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="never"
+            aria-label={`Open ${document.name}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            {glyph}
+          </Anchor>
+        ) : (
+          glyph
+        )}
+      </Box>
+
+      {/*
+        The remove control is a sibling of the clickable area rather than inside
+        it: a button within an anchor or a button is invalid and would swallow
+        the click on some browsers.
+      */}
+      <Tooltip label="Remove" withArrow>
+        <ActionIcon
+          pos="absolute"
+          top={6}
+          right={6}
+          size="sm"
+          variant="filled"
+          color="red"
+          onClick={onRemove}
+          aria-label={`Remove ${document.name}`}
+        >
+          <IconTrash size={14} />
+        </ActionIcon>
+      </Tooltip>
+
+      <Text size="xs" mt={4} truncate title={document.name}>
         {document.name}
       </Text>
       <Text size="xs" c="dimmed">
         {formatBytes(document.size)}
       </Text>
     </Box>
-  );
-
-  return (
-    <Paper withBorder p="xs" radius="sm">
-      <Group gap="sm" wrap="nowrap">
-        {canOpen && isImageEntry ? (
-          <UnstyledButton
-            onClick={onPreview}
-            aria-label={`Preview ${document.name}`}
-            style={{ display: "flex", flexShrink: 0 }}
-          >
-            {leading}
-          </UnstyledButton>
-        ) : (
-          leading
-        )}
-
-        {/*
-          A document opens in a new tab rather than in a modal. There is nothing
-          to page through and no second size worth showing, and a PDF in a
-          full-screen dark modal is a worse reader than the tab it came from.
-
-          `rel="noopener noreferrer"` is not optional: without `noopener` the
-          opened document gets a handle on this window via `window.opener`.
-        */}
-        {canOpen && !isImageEntry ? (
-          <Anchor
-            href={document.original.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="never"
-            style={{ flex: 1, minWidth: 0, color: "inherit" }}
-          >
-            {label}
-          </Anchor>
-        ) : (
-          label
-        )}
-
-        <Tooltip label="Remove" withArrow>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            onClick={onRemove}
-            aria-label={`Remove ${document.name}`}
-          >
-            <IconTrash size={18} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
-    </Paper>
   );
 };
 
