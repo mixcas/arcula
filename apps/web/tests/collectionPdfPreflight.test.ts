@@ -142,21 +142,32 @@ describe("placeInPhotoBox", () => {
     expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 170, 3);
   });
 
-  it("centres a small photo at its own size instead of enlarging it", () => {
-    // 500 x 500 px is 120 x 120 pt, well inside the box.
+  it("scales a small photo up to fill the box instead of printing it tiny", () => {
+    // 500 x 500 px is 120 x 120 pt at 300 dpi: a fifth of the column. The box
+    // is 504 x 580, so a square fills its width — 504 pt, centred vertically.
     const placement = placeInPhotoBox({ width: 120, height: 120 });
 
-    expect(placement.width).toBe(120);
-    expect(placement.height).toBe(120);
-    expect(placement.left).toBeCloseTo(PHOTO_PRINT_BOX.left + 192, 3);
-    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 230, 3);
+    expect(placement.width).toBe(504);
+    expect(placement.height).toBe(504);
+    expect(placement.left).toBe(PHOTO_PRINT_BOX.left);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top + 38, 3);
+  });
+
+  it("keeps the aspect ratio of an upscaled portrait", () => {
+    // 1200 x 1600 px is 288 x 384 pt: scaled to the box's height, 435 x 580.
+    const placement = placeInPhotoBox({ width: 288, height: 384 });
+
+    expect(placement.height).toBe(580);
+    expect(placement.width).toBeCloseTo(435, 3);
+    expect(placement.left).toBeCloseTo(PHOTO_PRINT_BOX.left + 34.5, 3);
   });
 
   it("caps a photo larger than the box instead of overflowing it", () => {
     const placement = placeInPhotoBox({ width: 504, height: 580.08 });
 
-    expect(placement.height).toBe(580);
-    expect(placement.top).toBe(PHOTO_PRINT_BOX.top);
+    expect(placement.height).toBeCloseTo(580, 3);
+    expect(placement.width).toBeLessThanOrEqual(PHOTO_PRINT_BOX.width);
+    expect(placement.top).toBeCloseTo(PHOTO_PRINT_BOX.top, 3);
   });
 });
 

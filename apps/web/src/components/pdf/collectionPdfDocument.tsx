@@ -171,6 +171,15 @@ const headerEllipsis = {
   textOverflow: "ellipsis",
 } as const;
 
+/**
+ * How the photo fills its placement. `objectFit` is runtime-supported but
+ * absent from 4.9.0's `ImageStyle`. The placement already has the photo's own
+ * aspect, so `contain` and the default `fill` agree — unless the wire's pixel
+ * record disagrees with the file, where `contain` prints it undistorted in the
+ * slightly wrong box rather than stretching it to fit.
+ */
+const photoFit = { objectFit: "contain" } as const;
+
 const Title: React.FC<{ children: string }> = ({ children }) => (
   <Text
     style={{
@@ -265,6 +274,7 @@ const PhotoPage: React.FC<{
           src={source.blob}
           style={{
             position: "absolute",
+            ...photoFit,
             ...placeInPhotoBox(printedSize(source.pixels)),
           }}
         />

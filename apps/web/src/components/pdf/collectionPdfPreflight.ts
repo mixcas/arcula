@@ -82,7 +82,10 @@ export interface PointSize {
   height: number;
 }
 
-/** A photo's print size: its own pixels at 300 dpi, never scaled to the box. */
+/**
+ * A photo's print size at 300 dpi, before the box fits it: what its own pixels
+ * would measure on paper. `placeInPhotoBox` is what scales it to the box.
+ */
 export const printedSize = (pixels: PixelSize): PointSize => ({
   width: (pixels.width * 72) / PRINT_DPI,
   height: (pixels.height * 72) / PRINT_DPI,
@@ -94,16 +97,29 @@ export interface PhotoPlacement extends PointSize {
 }
 
 /**
- * Where a converted photo sits on the page: its print size, centred in the
- * print box and capped at it.
+ * Where a converted photo sits on the page: its print size scaled to fill the
+ * print box, centred, and never stretched.
  *
- * This is `contain` with no upscaling — the photo keeps its own proportions
- * and is never stretched to fill the box — and it is why a small source still
- * prints small rather than being blown up to a blurry full page.
+ * This is `contain` — the photo keeps its own proportions, touching the box on
+ * one axis and centred on the other — but **it scales up as well as down**. The
+ * box is the page's whole free rectangle, and the print size is the box's, not
+ * the source's: a 1600 px scan is 384 pt wide at 300 dpi, and leaving it at its
+ * own pixel size would print it in a third of the column with the page around
+ * it empty, which is exactly the page the box exists to avoid. The pixel count
+ * decides how sharp the print is, never how large it is; a small source is one
+ * soft page, not a small one.
+ *
+ * The box stays a cap: `contain` on a box whose aspect matches the photo's
+ * lands on it, and the `min` is what keeps a rounding error in `printedSize`
+ * — 2417 px is 580.08 pt, not 580 — from spilling the photo past the edge.
  */
 export const placeInPhotoBox = (printed: PointSize): PhotoPlacement => {
-  const width = Math.min(printed.width, PHOTO_PRINT_BOX.width);
-  const height = Math.min(printed.height, PHOTO_PRINT_BOX.height);
+  const scale = Math.min(
+    PHOTO_PRINT_BOX.width / printed.width,
+    PHOTO_PRINT_BOX.height / printed.height,
+  );
+  const width = Math.min(PHOTO_PRINT_BOX.width, printed.width * scale);
+  const height = Math.min(PHOTO_PRINT_BOX.height, printed.height * scale);
   return {
     left: PHOTO_PRINT_BOX.left + (PHOTO_PRINT_BOX.width - width) / 2,
     top: PHOTO_PRINT_BOX.top + (PHOTO_PRINT_BOX.height - height) / 2,
