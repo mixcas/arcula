@@ -15,7 +15,7 @@ const row = (overrides: Partial<ImportRowValues>): ImportRowValues => ({
   artistName: "Whistler",
   serie: "",
   dateOfCreation: "",
-  media: "",
+  medium: "",
   dimensions: "",
   editions: "",
   acquisitionDate: "",
@@ -36,11 +36,19 @@ describe("matchHeader", () => {
   });
 
   it("matches common spreadsheet synonyms", () => {
-    expect(matchHeader("medium")).toBe("media");
+    expect(matchHeader("medium")).toBe("medium");
     expect(matchHeader("Purchased Date")).toBe("acquisitionDate");
     expect(matchHeader("price paid")).toBe("acquisitionPrice");
     expect(matchHeader("created")).toBe("dateOfCreation");
     expect(matchHeader("notes")).toBe("notes");
+  });
+
+  it("keeps the older spellings of the material mapped to medium", () => {
+    for (const header of ["Media", "Technique", "Material", "Materials"]) {
+      expect(matchHeader(header), `${header} should map to medium`).toBe(
+        "medium",
+      );
+    }
   });
 
   it("collapses punctuation around header words", () => {
@@ -60,7 +68,7 @@ describe("guessColumnMapping", () => {
     expect(mapping).toEqual({
       0: "title",
       2: "artistName",
-      3: "media",
+      3: "medium",
     });
   });
 
@@ -79,7 +87,11 @@ describe("guessColumnMapping", () => {
 
 describe("isMappingComplete", () => {
   it("requires title and artistName", () => {
-    const complete: ColumnMapping = { 0: "title", 1: "artistName", 2: "media" };
+    const complete: ColumnMapping = {
+      0: "title",
+      1: "artistName",
+      2: "medium",
+    };
     expect(isMappingComplete(complete)).toBe(true);
     expect(isMappingComplete({ 0: "title" })).toBe(false);
     expect(isMappingComplete({ 1: "artistName" })).toBe(false);
@@ -216,7 +228,7 @@ describe("validateImportRow", () => {
     const blankRow = row({
       serie: "",
       dateOfCreation: "",
-      media: "",
+      medium: "",
       dimensions: "",
       editions: "",
       acquisitionPrice: "",

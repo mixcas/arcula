@@ -214,7 +214,7 @@ artworkRoutes.post(
         artistName: payload.artistName,
         serie: payload.serie ?? null,
         dateOfCreation: payload.dateOfCreation ?? null,
-        media: payload.media ?? null,
+        medium: payload.medium ?? null,
         dimensions: payload.dimensions ?? null,
         editions: payload.editions ?? null,
         acquisitionDate: payload.acquisitionDate ?? null,
