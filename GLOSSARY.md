@@ -131,6 +131,12 @@ The state of the physical work — a slow-moving fact about the object, not a
 property of the record.
 _Avoid_: Status, grade
 
+**Medium**:
+The material a work is made of, in the owner's own words — "Oil on canvas",
+"Bronze", "Mixed media" — stored as the string that was typed. Distinct from
+**Media**, which is the uploaded files.
+_Avoid_: Media, technique, material
+
 **Artwork photo**:
 A picture of the artwork itself, ordered with its siblings. The first one is
 the work's primary thumbnail wherever it appears.

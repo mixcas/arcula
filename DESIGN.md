@@ -171,7 +171,7 @@ the mail.
 ### `artworks`
 
 `id`, `userId`, `collectionId`, `title`, `artistName` (both required), and the
-optional descriptive fields `serie`, `dateOfCreation`, `media`, `dimensions`,
+optional descriptive fields `serie`, `dateOfCreation`, `medium`, `dimensions`,
 `editions`, `acquisitionDate`, `acquisitionPrice`, `placeOfOrigin`, `provenance`,
 `notes`, `condition`, `currentValue` — all `text`, so the string that was typed
 is the string that is stored. Plus `status` (`published` or `draft`, default
@@ -411,7 +411,7 @@ included) `403` — and a query over 200 characters or 10 terms is `400
 validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
 stripped, lowercased), splits the query on punctuation and requires every term
 to appear somewhere in the joined text of the ten declared fields (title,
-artist name, serie, media, editions, date of creation, acquisition date, place
+artist name, serie, medium, editions, date of creation, acquisition date, place
 of origin, provenance, notes); terms may match different fields, and a query
 that normalizes to no terms matches nothing. The acquisition date is searched in
 both its stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. Deleted
