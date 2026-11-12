@@ -233,6 +233,16 @@ describe("the Add page — the single write", () => {
     expect(body.documents).toEqual(commits.documents);
   });
 
+  it("submits the typed medium under the medium key", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText(/^Medium/), "Oil on canvas");
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1].medium).toBe("Oil on canvas");
+  });
+
   it("carries the active search through Cancel and the new work's page", async () => {
     const user = userEvent.setup();
     renderPage("?q=picasso");

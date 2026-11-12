@@ -36,7 +36,7 @@ const row = (
     artistName: "Whistler",
     serie: "",
     dateOfCreation: "",
-    media: "",
+    medium: "",
     dimensions: "",
     editions: "",
     acquisitionDate: "",
