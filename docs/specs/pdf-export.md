@@ -299,7 +299,7 @@ The fields, in the order the design lists them:
 | Title            | `title`          | yes      |
 | Artist Name      | `artistName`     | yes      |
 | Serie            | `serie`          | no       |
-| Media            | `media`          | no       |
+| Medium           | `medium`         | no       |
 | Dimensions       | `dimensions`     | no       |
 | Editions         | `editions`       | no       |
 | Date of Creation | `dateOfCreation` | no       |
@@ -320,7 +320,7 @@ on the **Title row**, not the Artist row. This is the measured template and is
 the decision.
 
 - **Left column** (left 72 pt, width 216 pt): Title at the 641.32 pt layout
-  baseline, then Artist Name at **670.12 pt**, then Serie and Media 16.27 pt
+  baseline, then Artist Name at **670.12 pt**, then Serie and Medium 16.27 pt
   apart. The template's 30 pt rhythm is the source, but the measured baseline is
   the acceptance: Artist sits 28.8 pt below the Title's layout baseline and
   30 pt below its ink. A wrapped Title pushes the rows below it down by its
@@ -338,7 +338,7 @@ Each block is a single column of 216 pt:
 
 - Title at the block's first baseline, then the same 30 pt Title rhythm as the
   photo page;
-- Artist Name, Serie, Media, Dimensions, Editions, Date of Creation, Place of
+- Artist Name, Serie, Medium, Dimensions, Editions, Date of Creation, Place of
   Origin, one 16.27 pt line each, empty fields omitted;
 - a `--` (two hyphens, Regular 400, body size) at **Title baseline + 157.2 pt**,
   **absolutely positioned**, not in flow. It is identical in both columns and
