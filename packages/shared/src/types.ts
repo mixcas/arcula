@@ -75,7 +75,7 @@ export interface Artwork {
   serie?: string;
   artistName: string;
   dateOfCreation?: string;
-  media?: string;
+  medium?: string;
   dimensions?: string;
   editions?: string;
   acquisitionDate?: string;

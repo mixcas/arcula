@@ -222,7 +222,7 @@ describe("collectionPdfTexts", () => {
         title: "Estudio en rojo",
         artistName: "María López",
         serie: "Rojo",
-        media: "Oil",
+        medium: "Oil",
         dimensions: "100 × 80 cm",
         editions: "3/5",
         dateOfCreation: "2024",
@@ -260,7 +260,7 @@ describe("collectionPdfTexts", () => {
         title: "Sparse",
         artistName: "Ana",
         serie: "   ",
-        media: "",
+        medium: "",
       }),
     ]);
 

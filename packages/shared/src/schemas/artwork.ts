@@ -71,7 +71,7 @@ export const artworkSchema = z.object({
   artistName: z.string().trim().min(1, "Artist name is required"),
   serie: optionalText,
   dateOfCreation: optionalText,
-  media: optionalText,
+  medium: optionalText,
   dimensions: optionalText,
   editions: optionalText,
   acquisitionDate: optionalDate,
@@ -103,7 +103,7 @@ export interface ArtworkFormValues {
   artistName: string;
   serie: string;
   dateOfCreation: string;
-  media: string;
+  medium: string;
   dimensions: string;
   editions: string;
   acquisitionDate: string | null;
@@ -136,7 +136,7 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   artistName: "",
   serie: "",
   dateOfCreation: "",
-  media: "",
+  medium: "",
   dimensions: "",
   editions: "",
   acquisitionDate: "",
@@ -178,7 +178,7 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   artistName: artwork.artistName,
   serie: artwork.serie ?? "",
   dateOfCreation: artwork.dateOfCreation ?? "",
-  media: artwork.media ?? "",
+  medium: artwork.medium ?? "",
   dimensions: artwork.dimensions ?? "",
   editions: artwork.editions ?? "",
   acquisitionDate: artwork.acquisitionDate ?? "",
@@ -279,7 +279,7 @@ export const toArtworkCreatePayload = (
 export const UPDATABLE_TEXT_FIELDS = [
   "serie",
   "dateOfCreation",
-  "media",
+  "medium",
   "dimensions",
   "editions",
   "acquisitionDate",
@@ -306,7 +306,7 @@ export const artworkUpdateSchema = z.object({
   artistName: z.string().trim().min(1, "Artist name is required"),
   serie: updatableText,
   dateOfCreation: updatableText,
-  media: updatableText,
+  medium: updatableText,
   dimensions: updatableText,
   editions: updatableText,
   acquisitionDate: z.iso.date().nullable().optional(),

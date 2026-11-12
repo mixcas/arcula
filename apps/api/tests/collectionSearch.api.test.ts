@@ -50,7 +50,7 @@ interface WorkValues {
   title: string;
   artistName?: string;
   serie?: string;
-  media?: string;
+  medium?: string;
   editions?: string;
   dateOfCreation?: string;
   acquisitionDate?: string;
@@ -76,7 +76,7 @@ async function insertWork(
     title: values.title,
     artistName: values.artistName ?? values.title,
     serie: values.serie ?? null,
-    media: values.media ?? null,
+    medium: values.medium ?? null,
     editions: values.editions ?? null,
     dateOfCreation: values.dateOfCreation ?? null,
     acquisitionDate: values.acquisitionDate ?? null,
@@ -131,7 +131,7 @@ beforeAll(async () => {
     title: "Blue Harbour",
     artistName: "Pablo Picasso",
     serie: "Coastal Studies",
-    media: "Oil on canvas",
+    medium: "Oil on canvas",
     editions: "Edition 7 of 25",
     dateOfCreation: "circa 1889",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),

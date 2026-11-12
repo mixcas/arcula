@@ -186,7 +186,7 @@ describe("the thirteen-table schema", () => {
       "artistName",
       "serie",
       "dateOfCreation",
-      "media",
+      "medium",
       "dimensions",
       "editions",
       "acquisitionDate",

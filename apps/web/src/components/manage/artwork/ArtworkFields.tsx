@@ -74,11 +74,11 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       />
 
       <TextInput
-        key={form.key("media")}
-        label="Media"
+        key={form.key("medium")}
+        label="Medium"
         placeholder="e.g. Oil on canvas, Bronze, Mixed media"
         mb="md"
-        {...form.getInputProps("media")}
+        {...form.getInputProps("medium")}
       />
 
       <TextInput

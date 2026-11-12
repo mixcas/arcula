@@ -30,7 +30,7 @@ const artworkRow = (userId: string): ArtworkRow => ({
   artistName: "C. Cas",
   serie: null,
   dateOfCreation: null,
-  media: null,
+  medium: null,
   dimensions: null,
   editions: null,
   acquisitionDate: null,

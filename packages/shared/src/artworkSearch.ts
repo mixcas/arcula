@@ -42,7 +42,7 @@ export const ARTWORK_SEARCH_FIELDS = [
   "title",
   "artistName",
   "serie",
-  "media",
+  "medium",
   "editions",
   "dateOfCreation",
   "acquisitionDate",
