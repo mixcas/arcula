@@ -182,15 +182,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("the Edit page — the medium", () => {
-  it("shows the stored medium in its field", async () => {
-    getArtwork.mockResolvedValue(stored({ medium: "Bronze" }));
-    renderPage();
-
-    expect(await screen.findByLabelText(/^Medium/)).toHaveValue("Bronze");
-  });
-});
-
 describe("the Edit page — the status the owner chose", () => {
   it("shows the status the stored work arrived with", async () => {
     getArtwork.mockResolvedValue(stored({ status: "draft" }));

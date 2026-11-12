@@ -351,7 +351,7 @@ describe("POST …/artworks", () => {
     expect((await json<ArtworkRead>(silent)).status).toBe("published");
   });
 
-  it("saves the medium as typed and reads it back under the new key", async () => {
+  it("saves a medium and reads it back under the new key", async () => {
     const aid = uuid();
     const saved = await createArtwork({
       artworkId: aid,
