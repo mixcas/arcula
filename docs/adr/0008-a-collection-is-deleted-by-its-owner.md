@@ -167,4 +167,4 @@ than fought.
   clause that the owner cannot leave without transferring no longer rests on
   collections being permanent, and carries an amendment pointing here. The
   glossary's **Deleted** gains the collection sense beside the artwork's, and the
-  schema narrative in `project-plan.md` describes the column.
+  schema narrative in `DESIGN.md` describes the column.

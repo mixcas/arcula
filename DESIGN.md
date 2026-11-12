@@ -16,7 +16,8 @@ code disagree, the code is right — but a disagreement is a doc bug worth fixin
 For the user-facing overview and setup, see [README.md](README.md). For the agent
 working guide, see [AGENTS.md](AGENTS.md); the product's vocabulary is in
 [GLOSSARY.md](GLOSSARY.md). Per-package detail lives in each package's own
-`README.md` (`apps/api`, `packages/shared`, `packages/db`, `infra/cdk`).
+`README.md` (`apps/api`, `packages/shared`, `packages/db`, `infra/cdk`), and the
+implementation-ready contracts for individual features are in `docs/specs/`.
 
 ## What the product is
 
@@ -51,49 +52,24 @@ browser → API Gateway (custom domain) → Lambda (Hono) → Postgres / S3
 
 ## Environments
 
-Two permanent environments, and they are the same thing twice: one Lambda
-carrying the API and the built SPA, behind one HTTP API, with its own S3 media
-bucket and its own optional custom domain. Only what must differ differs.
-
-| Environment | Host             | Stack       | Fed by | Disposable |
-| ----------- | ---------------- | ----------- | ------ | ---------- |
-| production  | `arcula.art`     | `Arcula`    | `main` | no         |
-| dev         | `dev.arcula.art` | `ArculaDev` | `dev`  | yes        |
-
-Dev is a full replica and not a toy: its own Postgres project, media bucket,
-certificate, `AUTH_SECRET` and Resend key, so a wrecked dev database, a wiped
-dev bucket or a revoked dev mail key cannot touch production's. It is public —
-no authentication wall — and noindexed, which is what lets the same client the
-product ships and the end-to-end verify pass run against it unchanged. Its
-`/api/health` carries the deployed commit; production's carries no such key.
-`NODE_ENV=production` on both, because it is what makes the session cookie
-`Secure`.
-
-Merging is deploying: a push to a branch deploys that branch's environment
-through the same deploy script a laptop runs. Each environment's secrets live
-in a GitHub Environment restricted to its branch, and the deploy identity is a
-GitHub OIDC role pinned to that branch — no long-lived AWS key exists.
-
-Migrations are forward-only, so a revert redeploys the code but not the schema.
-A schema change the next release depends on therefore ships **alone** first:
-`scripts/deploy.sh` deploys the Lambda before it migrates, so a release carrying
-both would serve requests against tables that do not exist yet. A column that
-must end up `NOT NULL` ships nullable first and is tightened in the release that
-writes it; one migration that sets `NOT NULL` would break the old code's
-inserts.
-
-The reasoning, and the alternatives that were turned down, are not restated
-here:
-
-- [ADR-0001 — two long-lived branches, two permanent environments](docs/adr/0001-two-branches-two-environments.md)
-- [ADR-0002 — one AWS account and one CDK bootstrap for both](docs/adr/0002-one-account-one-bootstrap.md)
-
-The first-run order is in `infra/cdk/README.md`.
+Two permanent environments of one deploy shape — production on `main`, dev on
+`dev` — with the branch model, the deploy identity and the forward-only
+migration rule, are described in
+[AGENTS.md](AGENTS.md#branches-and-environments). The reasoning and the rejected
+alternatives are in
+[ADR-0001](docs/adr/0001-two-branches-two-environments.md) and
+[ADR-0002](docs/adr/0002-one-account-one-bootstrap.md); the first-run order is in
+`infra/cdk/README.md`.
 
 ## The data model
 
 Thirteen tables in Postgres with sharing and password protection, defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
+
+Every row id is short and opaque: ten base62 characters minted by `mintId` in
+`packages/shared/src/ids.ts`, never a sequence or a UUID. Ids minted before that
+shape existed are permanent, so both forms remain valid
+([ADR-0007](docs/adr/0007-ids-are-ten-base62-characters.md)).
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
 Supabase client roles' grants — `anon` and `authenticated`, on the tables, the
@@ -195,7 +171,7 @@ the mail.
 ### `artworks`
 
 `id`, `userId`, `collectionId`, `title`, `artistName` (both required), and the
-optional descriptive fields `serie`, `dateOfCreation`, `media`, `dimensions`,
+optional descriptive fields `serie`, `dateOfCreation`, `medium`, `dimensions`,
 `editions`, `acquisitionDate`, `acquisitionPrice`, `placeOfOrigin`, `provenance`,
 `notes`, `condition`, `currentValue` — all `text`, so the string that was typed
 is the string that is stored. Plus `status` (`published` or `draft`, default
@@ -265,10 +241,11 @@ literal prefixes, so one rule expires every staged object everywhere.
    inside), `xlarge` (max 2400, inside), `square_lg` (800 cover), `square_sm`
    (400 cover), `large` (max 1200, inside), `medium` (max 800, inside).
    `xxlarge` is the Collection PDF's source — its photo box needs 2417 px at
-   300 dpi, past `xlarge`'s cap — and the widest `srcSet` candidate the
-   slideshow offers. A document image gets only `square_sm` and `large` — the
-   two a document actually renders with. A PDF has no variants; the original is
-   the whole entry.
+   300 dpi, past `xlarge`'s cap
+   ([ADR-0006](docs/adr/0006-the-collection-pdf-prints-from-its-own-variant.md)) —
+   and the widest `srcSet` candidate the slideshow offers. A document image gets
+   only `square_sm` and `large` — the two a document actually renders with. A PDF
+   has no variants; the original is the whole entry.
 3. **Save** — one Postgres transaction writes the artwork fields, copies each
    entry's staged objects to their final keys, and upserts the rows; dropped
    entries lose their rows, and their final objects are deleted after commit.
@@ -434,7 +411,7 @@ included) `403` — and a query over 200 characters or 10 terms is `400
 validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
 stripped, lowercased), splits the query on punctuation and requires every term
 to appear somewhere in the joined text of the ten declared fields (title,
-artist name, serie, media, editions, date of creation, acquisition date, place
+artist name, serie, medium, editions, date of creation, acquisition date, place
 of origin, provenance, notes); terms may match different fields, and a query
 that normalizes to no terms matches nothing. The acquisition date is searched in
 both its stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. Deleted
@@ -545,7 +522,9 @@ tier is one owned collection.
 
 ## What is not built
 
-Roughly in order of how much it matters:
+Roughly in order of how much it matters. This list is the technical and
+access-model gaps a reader might expect to find; product-facing gaps and the
+larger feature ideas are in [README's Roadmap](README.md#roadmap).
 
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would
   need a second permission matrix on the server and in every management screen.
@@ -562,20 +541,12 @@ Roughly in order of how much it matters:
 - **A collaborator cap.** A collection may invite any number of collaborators.
 - **Account deletion**, and what it means for a collection's owner or a
   collaborator.
-- **Purge and retention for deleted works.** The collection's Deleted view lists
-  and restores them; nothing purges long-dead rows or promises a retention
-  window.
 - **Restoring a deleted collection from the app.** Deletion is a stamp an
   operator clears by hand
   ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)); there is
   no trash view, no undo and no script.
 - **Reclaiming a deleted collection's storage.** Deletion keeps every object so
   the collection can be restored, and nothing purges them.
-- **Export**, so a collector is never locked in.
-- **Search and filtering**, once a collection is large enough to need it.
-- **Account tiers and billing** — the hook the collection cap reads.
-- **An always-on container.** `infra/Dockerfile` is the documented scale-up path
-  from Lambda; it is not deployed.
 
 ## Open decisions
 

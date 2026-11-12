@@ -57,6 +57,13 @@
       "when": 1794180049566,
       "tag": "0007_collection_deletion_stamp",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794507543459,
+      "tag": "0008_artwork_medium",
+      "breakpoints": true
     }
   ]
 }

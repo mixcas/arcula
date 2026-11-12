@@ -152,7 +152,7 @@ export const fallbackChunks = (characters: string): string[] => {
 export const IMAGE_UNAVAILABLE = "Image unavailable";
 
 /** The metadata fields the document prints, in the design's order. */
-export const ARTWORK_LEFT_FIELDS = ["artistName", "serie", "media"] as const;
+export const ARTWORK_LEFT_FIELDS = ["artistName", "serie", "medium"] as const;
 
 export const ARTWORK_RIGHT_FIELDS = [
   "dimensions",

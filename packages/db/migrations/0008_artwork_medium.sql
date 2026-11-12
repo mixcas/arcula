@@ -1,0 +1,1 @@
+ALTER TABLE "artworks" RENAME COLUMN "media" TO "medium";

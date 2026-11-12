@@ -1,6 +1,6 @@
 # Arcula Agent Guide
 
-> The design record lives in **`project-plan.md`** — the as-built description
+> The design record lives in **`DESIGN.md`** — the as-built description
 > of the product, its data model and its architecture. This file is the working
 > guide: layout, commands, the sharing rules, and the test doctrine.
 > `README.md` is the user-facing overview.
@@ -334,7 +334,7 @@ never under another's prefix. The schema shipped in two releases, one per step:
 between (`WHERE "mediaNamespaceId" IS NULL`) and set the column `NOT NULL`.
 `0003` shipped alone, the code followed, and `0004` tightened afterwards — the
 worked example of the forward-only rule above. The full schema narrative is in
-`project-plan.md`; the migration detail is in `packages/db/README.md`.
+`DESIGN.md`; the migration detail is in `packages/db/README.md`.
 
 ## Protected collections
 
@@ -383,7 +383,7 @@ refusal states the window and never the time left in it, and sends no
 `Retry-After`, which would be the same countdown. The address is the gateway's
 `sourceIp`, carried by the Lambda entry in `x-arcula-client-ip`
 (`clientAddress.ts`), which a client cannot set; the residual weakness is
-recorded in `project-plan.md` — an address is shared behind a proxy and cheap
+recorded in `DESIGN.md` — an address is shared behind a proxy and cheap
 to multiply, so this raises the cost of guessing without being a proof.
 
 ## What to test

@@ -46,7 +46,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
-    <Grid.Col span={8}>
+    <Grid.Col span={{ base: 12, sm: 8 }}>
       <TextInput
         key={form.key("title")}
         label="Title"
@@ -74,11 +74,11 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       />
 
       <TextInput
-        key={form.key("media")}
-        label="Media"
+        key={form.key("medium")}
+        label="Medium"
         placeholder="e.g. Oil on canvas, Bronze, Mixed media"
         mb="md"
-        {...form.getInputProps("media")}
+        {...form.getInputProps("medium")}
       />
 
       <TextInput
@@ -162,7 +162,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("currentValue")}
       />
     </Grid.Col>
-    <Grid.Col span={4}>
+    <Grid.Col span={{ base: 12, sm: 4 }}>
       <Text size="sm" fw={500} mb={4}>
         Status
       </Text>
@@ -184,7 +184,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         fullWidth
         {...form.getInputProps("status")}
       />
-      <Text size="xs" c="dimmed" mt={6} mb="md">
+      <Text size="sm" c="dimmed" mt={6} mb="md">
         Published if the collection is public. A draft stays in the collection
         and is visible only to you.
       </Text>

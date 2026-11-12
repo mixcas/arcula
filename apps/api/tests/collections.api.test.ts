@@ -530,7 +530,7 @@ describe("POST /collections/{cid}/import/csv", () => {
     expect(red.serie).toBe("Reds");
     expect(red.acquisitionDate).toBe("2024-05-01");
     // A blank optional field is an absent key, not an empty one.
-    expect("media" in red).toBe(false);
+    expect("medium" in red).toBe(false);
     // A row that names a status is not obeyed: an import is the owner adding
     // works to a collection, so every imported work is published.
     expect(red.status).toBe("published");

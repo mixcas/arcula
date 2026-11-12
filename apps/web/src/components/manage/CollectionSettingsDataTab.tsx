@@ -37,9 +37,7 @@ const DataTab: React.FC<DataTabProps> = ({ collectionParam, collection }) => {
           <Box>
             <Text fw={600}>Import from CSV</Text>
             <Text size="sm" c="dimmed">
-              Add artworks in bulk from a comma-separated values file. The file
-              is parsed in this browser tab — nothing is uploaded until you
-              confirm the import.
+              Add artworks in bulk from a comma-separated values file.
             </Text>
           </Box>
           <Button

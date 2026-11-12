@@ -254,7 +254,7 @@ export const artworks = pgTable(
     artistName: text("artistName").notNull(),
     serie: text("serie"),
     dateOfCreation: text("dateOfCreation"),
-    media: text("media"),
+    medium: text("medium"),
     dimensions: text("dimensions"),
     editions: text("editions"),
     acquisitionDate: text("acquisitionDate"),

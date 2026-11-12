@@ -351,6 +351,26 @@ describe("POST …/artworks", () => {
     expect((await json<ArtworkRead>(silent)).status).toBe("published");
   });
 
+  it("saves a medium and reads it back under the new key", async () => {
+    const aid = uuid();
+    const saved = await createArtwork({
+      artworkId: aid,
+      title: "Oil Sketch",
+      artistName: "C. Cas",
+      medium: "circa 1889, oil on board",
+    });
+    expect(saved.status).toBe(201);
+    expect((await json<ArtworkRead>(saved)).medium).toBe(
+      "circa 1889, oil on board",
+    );
+
+    const read = await getArtwork(aid, owner.cookies);
+    expect(read.status).toBe(200);
+    expect((await json<ArtworkRead>(read)).medium).toBe(
+      "circa 1889, oil on board",
+    );
+  });
+
   it("answers a save with exactly the document a read returns", async () => {
     // The save reads its own work back through the single read: if the two
     // answers ever come from different loaders, this equality goes red.
@@ -629,7 +649,7 @@ describe("PATCH …/artworks/{aid}", () => {
           title: "T",
           artistName: "C. Cas",
           serie: "Series A",
-          media: "Oil on canvas",
+          medium: "Oil on canvas",
         })
       ).status,
     ).toBe(201);
@@ -642,8 +662,30 @@ describe("PATCH …/artworks/{aid}", () => {
     const body = await json<ArtworkRead>(res);
     // Cleared: the key is ABSENT, not null.
     expect("serie" in body).toBe(false);
-    expect(body.media).toBe("Oil on canvas");
+    expect(body.medium).toBe("Oil on canvas");
     expect(body.title).toBe("T");
+  });
+
+  it("strips a PATCH that names the field's old key instead of writing it", async () => {
+    const aid = uuid();
+    expect(
+      (
+        await createArtwork({
+          artworkId: aid,
+          title: "T",
+          artistName: "C. Cas",
+          medium: "Oil on canvas",
+        })
+      ).status,
+    ).toBe(201);
+    const res = await patchArtwork(aid, {
+      title: "T",
+      artistName: "C. Cas",
+      media: "Bronze",
+    });
+    expect(res.status).toBe(200);
+    const body = await json<ArtworkRead>(res);
+    expect(body.medium).toBe("Oil on canvas");
   });
 
   it("leaves the sequences alone when the payload omits them", async () => {

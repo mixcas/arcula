@@ -109,8 +109,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
 
         <Textarea
           label="Description"
-          description="Shown on the public view's first artwork."
-          placeholder="Enter collection description (optional)"
+          placeholder="Enter collection description"
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
           autosize
@@ -125,7 +124,9 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
           Privacy Settings
         </Text>
 
-        <Text>Make Collection Public</Text>
+        <Text size="sm" fw={600}>
+          Make Collection Public
+        </Text>
         <SegmentedControl
           data={[
             { label: "Private", value: "private" },

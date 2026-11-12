@@ -86,7 +86,7 @@ const MapColumnsStep: React.FC<MapColumnsStepProps> = ({
             {headers.map((header, index) => (
               <Table.Tr key={index}>
                 <Table.Td>
-                  <Text size="xs" c="dimmed">
+                  <Text size="sm" c="dimmed">
                     {index + 1}
                   </Text>
                 </Table.Td>

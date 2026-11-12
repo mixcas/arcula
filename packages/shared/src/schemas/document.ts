@@ -103,7 +103,7 @@ export const artworkReadSchema = z.object({
   artistName: z.string(),
   serie: z.string().optional(),
   dateOfCreation: z.string().optional(),
-  media: z.string().optional(),
+  medium: z.string().optional(),
   dimensions: z.string().optional(),
   editions: z.string().optional(),
   acquisitionDate: z.string().optional(),

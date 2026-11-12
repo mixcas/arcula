@@ -46,7 +46,7 @@ const IMPORTABLE_KEYS = [
   "artistName",
   "serie",
   "dateOfCreation",
-  "media",
+  "medium",
   "dimensions",
   "editions",
   "acquisitionDate",
@@ -85,7 +85,7 @@ export const ARTWORK_IMPORT_FIELDS: readonly ImportFieldMetadata[] = [
     required: false,
     kind: "text",
   },
-  { key: "media", label: "Media", required: false, kind: "text" },
+  { key: "medium", label: "Medium", required: false, kind: "text" },
   { key: "dimensions", label: "Dimensions", required: false, kind: "text" },
   { key: "editions", label: "Editions", required: false, kind: "text" },
   {
@@ -142,7 +142,7 @@ export interface ImportRowValues {
   artistName: string;
   serie: string;
   dateOfCreation: string;
-  media: string;
+  medium: string;
   dimensions: string;
   editions: string;
   acquisitionDate: string;
@@ -159,7 +159,7 @@ export const createEmptyImportRowValues = (): ImportRowValues => ({
   artistName: "",
   serie: "",
   dateOfCreation: "",
-  media: "",
+  medium: "",
   dimensions: "",
   editions: "",
   acquisitionDate: "",
@@ -209,11 +209,11 @@ const HEADER_ALIASES: Record<string, ImportFieldKey> = {
   "date created": "dateOfCreation",
   created: "dateOfCreation",
   year: "dateOfCreation",
-  media: "media",
-  medium: "media",
-  technique: "media",
-  material: "media",
-  materials: "media",
+  media: "medium",
+  medium: "medium",
+  technique: "medium",
+  material: "medium",
+  materials: "medium",
   dimensions: "dimensions",
   dimension: "dimensions",
   size: "dimensions",

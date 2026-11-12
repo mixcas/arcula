@@ -92,7 +92,7 @@ interface Metadata {
   title: string;
   artistName: string;
   serie?: string;
-  media?: string;
+  medium?: string;
   dimensions?: string;
   editions?: string;
   dateOfCreation?: string;
@@ -108,7 +108,7 @@ const metadataOf = (artwork: Artwork): Metadata => ({
   title: artwork.title.trim(),
   artistName: artwork.artistName.trim(),
   serie: clean(artwork.serie),
-  media: clean(artwork.media),
+  medium: clean(artwork.medium),
   dimensions: clean(artwork.dimensions),
   editions: clean(artwork.editions),
   dateOfCreation: clean(artwork.dateOfCreation),

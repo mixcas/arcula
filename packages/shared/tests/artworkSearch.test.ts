@@ -65,7 +65,7 @@ describe("matching", () => {
       { field: "title", value: "Harbour at Dusk", query: "harbour" },
       { field: "artistName", value: "Winslow Homer", query: "homer" },
       { field: "serie", value: "Coastal Studies", query: "coastal" },
-      { field: "media", value: "Oil on canvas", query: "canvas" },
+      { field: "medium", value: "Oil on canvas", query: "canvas" },
       { field: "editions", value: "Edition 7 of 25", query: "edition" },
       { field: "dateOfCreation", value: "circa 1889", query: "circa" },
       { field: "acquisitionDate", value: "2023-03-05", query: "2023" },
