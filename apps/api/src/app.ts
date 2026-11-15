@@ -15,6 +15,7 @@ import {
 import { errorResponse } from "./errors";
 import { clientOrigin, corsOrigins, deployedCommit, noindexFlag } from "./env";
 import { accessRoutes } from "./routes/access";
+import { artistNameRoutes } from "./routes/artistNames";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
 import { artworkRoutes } from "./routes/artworks";
 import { collectionRoutes } from "./routes/collections";
@@ -71,6 +72,7 @@ app.route(
 app.route("/api/v1", meRoutes);
 app.route("/api/v1", mediaRoutes);
 app.route("/api/v1", collectionRoutes);
+app.route("/api/v1", artistNameRoutes);
 app.route("/api/v1", accessRoutes);
 app.route("/api/v1", invitationRoutes);
 app.route("/api/v1", artworkMediaRoutes);

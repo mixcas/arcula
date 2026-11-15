@@ -10,6 +10,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
+import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
@@ -102,6 +103,9 @@ const ArtworkEditPage: React.FC = () => {
   // has to complete first, because staging needs neither.
   const photos = useArtworkPhotos({ collectionId, artworkId });
   const documents = useArtworkDocuments({ collectionId, artworkId });
+  // One fetch per mount: the suggestions are the caller's, not this
+  // collection's, and reopening the form is what refreshes them.
+  const artistNames = useArtistNames();
   // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each
   // render.
@@ -297,6 +301,7 @@ const ArtworkEditPage: React.FC = () => {
           form={form}
           photos={photos}
           documents={documents}
+          artistNames={artistNames}
           uploadsDisabled={isDeleted}
         />
 

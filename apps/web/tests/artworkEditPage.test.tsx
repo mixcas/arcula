@@ -82,6 +82,12 @@ vi.mock("@/services/artworkService", () => ({
   },
 }));
 
+// The page mounts the suggestions hook; an empty list is the ordinary
+// no-collections answer, and keeps these save-path tests off the network.
+vi.mock("@/services/artistNameService", () => ({
+  artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
+}));
+
 // Mantine resolves the colour scheme and responsive props through `matchMedia`,
 // which jsdom has no implementation of. Answering `true` only for the empty
 // query is what Chrome does, and it keeps responsive props from collapsing.

@@ -13,6 +13,7 @@ export * from "./artworkPhotos";
 export * from "./artworkSearch";
 export * from "./slug";
 export * from "./schemas/access";
+export * from "./schemas/artistNames";
 export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
 export * from "./schemas/collection";
