@@ -6,6 +6,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
+import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
@@ -74,6 +75,7 @@ const ArtworkAddPage: React.FC = () => {
   // happens at add time, under the collection the route names.
   const photos = useArtworkPhotos({ collectionId, artworkId });
   const documents = useArtworkDocuments({ collectionId, artworkId });
+  const artistNames = useArtistNames();
 
   return (
     <>
@@ -136,7 +138,12 @@ const ArtworkAddPage: React.FC = () => {
           }
         })}
       >
-        <ArtworkFields form={form} photos={photos} documents={documents} />
+        <ArtworkFields
+          form={form}
+          photos={photos}
+          documents={documents}
+          artistNames={artistNames}
+        />
 
         {error ? (
           <Alert color="red" mb="md">

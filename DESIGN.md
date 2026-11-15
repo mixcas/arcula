@@ -422,6 +422,25 @@ extension and no migration, and the list read remains the single seam to
 replace if collection sizes demand it. No matches is `200 []`, and an absent,
 empty or whitespace-only `q` leaves the list unchanged.
 
+The artwork form's Artist Name suggestions are the caller's own vocabulary, not
+a collection's: `GET /api/v1/artist-names` takes no collection id and no
+parameter, answers `401` without a session and `200 []` for a caller with no
+collections, and reads the names recorded in the collections the caller owns or
+collaborates on — the scope decided in
+[ADR-0009](docs/adr/0009-artist-name-suggestions-are-caller-scoped.md). Inside
+that scope it counts live works only — drafts contribute, deleted works and
+deleted collections never — grouping the exact spellings with their live-work
+count and newest update, then collapsing case and accent variants to one artist
+through the shared Collection-search normalization (`normalizeSearchText`). The
+spelling offered for each artist is its most-used one, with ties falling to the
+most recently updated work and then to lexicographic order; the list is ordered
+by use and then display name, case-insensitively, and silently cut at 2,000. The
+response is the names alone, parsed through a shared schema of non-blank
+strings: counts order the list and are never serialized. No migration, index or
+extension is involved — the grouping is over exact spellings and the collapse
+is pure, behind a module with no Hono type, so a future curated index can
+replace its source without changing the wire.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
@@ -482,6 +501,19 @@ Edit links and Add Artwork carry the active query, Cancel on either page returns
 to the same search, and a successful Add carries it into the new work's Edit
 page, whose canonical rewrite preserves it. Settings, Deleted, the public View
 links and the PDF do not carry it — `q` is inert on those pages.
+
+The artwork form's Artist Name field is an `Autocomplete` over the caller's
+artist names, fetched once per form mount and filtered in the browser. It stays
+uncontrolled like every field in the form, so choosing an option fills only the
+Artist Name and an unrecorded name still saves exactly as typed; `limit={20}`
+bounds the dropdown and there is no minimum length. The hook makes no
+per-keystroke request and keeps no cross-mount cache — reopening the form is what
+refreshes the list — and a failed fetch is silent: the list is empty, the field
+remains a working text input and no notification appears, with the `loading`
+prop showing progress while the one request is in flight. Filtering is Mantine's
+default accent-sensitive substring match, so the server's accent-insensitive
+collapse and the client's matching deliberately differ: typing `maria` misses a
+recorded "María López".
 
 The collection settings page is four tabs, each with its own save:
 **General** (name, description, public or private, and the password control),

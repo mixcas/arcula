@@ -93,9 +93,10 @@ const MONTH_NAMES = [
 
 /**
  * NFD, combining marks removed, lowercased. The one normalization both the
- * query and the recorded fields go through.
+ * query and the recorded fields go through, and the key Artist Name
+ * suggestions collapse on — a name ought to match the same way it searches.
  */
-function normalize(value: string): string {
+export function normalizeSearchText(value: string): string {
   return value
     .normalize("NFD")
     .replace(/\p{M}+/gu, "")
@@ -108,7 +109,7 @@ function normalize(value: string): string {
  * that matches nothing, not a blank one.
  */
 function searchTerms(query: string): string[] {
-  return normalize(query)
+  return normalizeSearchText(query)
     .split(/[^\p{L}\p{N}]+/u)
     .filter((term) => term.length > 0);
 }
@@ -180,7 +181,7 @@ function searchHaystack(artwork: ArtworkSearchText): string {
     const value = artwork[field];
     if (typeof value !== "string" || value.trim() === "") continue;
     parts.push(
-      normalize(
+      normalizeSearchText(
         field === "acquisitionDate" ? acquisitionDateText(value) : value,
       ),
     );

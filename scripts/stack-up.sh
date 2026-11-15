@@ -50,9 +50,14 @@ ensure_s3() {
   }
   echo "s3 (SeaweedFS): starting (native binary)..."
   mkdir -p "$ROOT/.stack/seaweedfs" "$ROOT/.stack/logs"
+  # Everything is pinned to loopback: `-ip` is the address the master
+  # advertises for the volume server, so a DHCP change cannot leave the S3
+  # gateway dialling the machine's previous LAN address (the old failure:
+  # GetObject answers 500 InternalError until the stack is restarted).
   # -volume.port: 8080 is often already taken on a dev machine, so the
   # volume server binds 8090 — only the S3 API on 9000 is used here.
   nohup "$WEED_BIN" server -dir="$ROOT/.stack/seaweedfs" -s3 \
+    -ip 127.0.0.1 -ip.bind 127.0.0.1 \
     -s3.ip.bind 127.0.0.1 -s3.port 9000 \
     -volume.port 8090 \
     >"$ROOT/.stack/logs/seaweedfs.log" 2>&1 &
