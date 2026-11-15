@@ -25,17 +25,7 @@
 // that are live: creating one is the caller's own, a shared collection does
 // not consume their slot, and a deleted one frees it.
 
-import {
-  and,
-  asc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
@@ -84,6 +74,7 @@ import {
   mintGrantToken,
 } from "../collectionGrants";
 import { hashPassword, verifyPassword } from "../collectionPassword";
+import { collaboratorJoin, readableCollectionsWhere } from "../collectionScope";
 import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
@@ -183,22 +174,8 @@ collectionRoutes.get("/collections", async (c) => {
     })
     .from(collectionsTable)
     .innerJoin(userTable, eq(userTable.id, collectionsTable.userId))
-    .leftJoin(
-      collectionCollaboratorsTable,
-      and(
-        eq(collectionCollaboratorsTable.collectionId, collectionsTable.id),
-        eq(collectionCollaboratorsTable.userId, userId),
-      ),
-    )
-    .where(
-      and(
-        isNull(collectionsTable.deletedAt),
-        or(
-          eq(collectionsTable.userId, userId),
-          eq(collectionCollaboratorsTable.userId, userId),
-        ),
-      ),
-    )
+    .leftJoin(collectionCollaboratorsTable, collaboratorJoin(userId))
+    .where(readableCollectionsWhere(userId))
     .orderBy(asc(collectionsTable.name));
 
   return c.json(

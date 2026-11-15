@@ -103,8 +103,6 @@ const ArtworkEditPage: React.FC = () => {
   // has to complete first, because staging needs neither.
   const photos = useArtworkPhotos({ collectionId, artworkId });
   const documents = useArtworkDocuments({ collectionId, artworkId });
-  // One fetch per mount: the suggestions are the caller's, not this
-  // collection's, and reopening the form is what refreshes them.
   const artistNames = useArtistNames();
   // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each

@@ -75,8 +75,6 @@ const ArtworkAddPage: React.FC = () => {
   // happens at add time, under the collection the route names.
   const photos = useArtworkPhotos({ collectionId, artworkId });
   const documents = useArtworkDocuments({ collectionId, artworkId });
-  // One fetch per mount: the suggestions are the caller's, not this
-  // collection's, and reopening the form is what refreshes them.
   const artistNames = useArtistNames();
 
   return (

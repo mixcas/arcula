@@ -28,14 +28,15 @@ an Artwork, and the suggestions are derived from the artworks themselves.
 
 **The scope is the caller's readable collections, never the database.** A
 suggestion is an Artwork's `artistName` whose Collection the caller owns or
-collaborates on. The query mirrors the signed-in `/collections` list — one join
-to the caller's collaborator row, filtered on live Collections and on
+collaborates on. The query mirrors the signed-in `/collections` list — a left
+join to the caller's collaborator row, filtered on live Collections and on
 `owner = caller OR collaborator = caller` — so a name from a collection the
 caller could not open is never read. Deleted Collections are excluded for the
 same reason they are not found on any path
 ([ADR-0008](0008-a-collection-is-deleted-by-its-owner.md)): a collection the
-caller removed must not keep influencing their typing. A collaborator's
-suggestions are computed per caller, so the owner never sees them.
+caller removed must not keep influencing their typing. The list is computed per
+caller and nothing is stored per collaborator, so one member's suggestions never
+touch another's.
 
 **Every name in the response is already readable by the caller.** That is the
 whole safety property, and it is what separates this read from a directory. The
@@ -55,9 +56,9 @@ Collections is `200 []`, not an error.
 **Eligible rows are the live works, drafts included.** The aggregate filters
 `artworks.deletedAt IS NULL`: a Draft contributes, because it is part of the
 Collection and a member reads it, while a Deleted work does not, because the list
-should reflect the library the collector actually has. Blank and whitespace-only
-names are dropped. The current artwork's own name is not filtered out, so the
-field's state is reflected honestly while editing.
+should reflect the collections the collector actually has. Blank and
+whitespace-only names are dropped. The current artwork's own name is not
+filtered out, so the field's state is reflected honestly while editing.
 
 **The database aggregates exact spellings; the collapse is a pure function.**
 Inside the scope the query groups by `artistName` with `count(*)` and
@@ -73,7 +74,7 @@ display name ascending and case-insensitively, and truncated at **2,000** names.
 Truncation is silent: a suggestion list is a hint, not the data.
 
 **The wire is the names alone.** The response is a JSON array of canonical
-spellings, parsed through a shared schema of non-empty strings on both sides.
+spellings, parsed through a shared schema of non-blank strings on both sides.
 Counts are an ordering input and are never serialized; the dropdown shows the
 name alone. There is no migration, no index and no Postgres extension: grouping
 the exact spellings and collapsing in JavaScript keeps this a code-only change,
@@ -94,8 +95,8 @@ length in this version, because with a single fetch there is nothing to gate.
 **The future index is the recorded direction, and it reopens this question.** The
 long-term goal is a much larger artist-name index, curated and crawled from user
 input and external sources. Such an index would be far larger than any one
-account's library, and it would **not** inherit the read's safety property: a
-name in it could come from outside the caller's readable collections, so its
+account's collections, and it would **not** inherit the read's safety property:
+a name in it could come from outside the caller's readable collections, so its
 authorization model has to be decided when it exists, not assumed from this one.
 The aggregate lives in a module with no Hono types, behind the route contract, so
 that index can replace the module's source without changing the wire.
@@ -139,16 +140,16 @@ that index can replace the module's source without changing the wire.
   can already open, so the endpoint adds no authorization surface.
 - **Wire.** One new member-only read, `GET /api/v1/artist-names`, with
   `401 unauthorized` as its only failure and `200 []` for an empty scope. No new
-  error code ships; the shared schema (`array of non-empty strings`) is the
+  error code ships; the shared schema (`array of non-blank strings`) is the
   contract on both sides.
 - **An accepted client gap.** The stored collapse ignores accents while
   Mantine's default filter does not, so typing `maria` does not match a recorded
   "María López". That is a matching refinement, not a scope leak, and it is
   deliberately deferred.
 - **The cap is the tripwire.** 2,000 names fit comfortably in one response for
-  any real library. If a caller approaches it, the next step is server-side `?q=`
-  filtering with a debounce, and the four-character gate returns as request cost
-  control rather than as dropdown policy.
+  any realistic set of collections. If a caller approaches it, the next step is
+  server-side `?q=` filtering with a debounce, and the four-character gate
+  returns as request cost control rather than as dropdown policy.
 - **Tests.** The collapse, ordering, tie-breaks and silent truncation are pure
   and tested directly. The API integration suite pins the scope and the wire: an
   owner's and a collaborator's names are suggested, a stranger's are absent, a

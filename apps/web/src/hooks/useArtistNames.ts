@@ -1,6 +1,9 @@
 /**
  * The Artist Name suggestions, loaded once per form mount.
  *
+ * The suggestions are the caller's whole artist vocabulary, not one
+ * collection's, so the hook takes no collection id.
+ *
  * The dropdown is a convenience, so the whole hook is best effort: a failed
  * request leaves an empty list, which makes the Artist Name field a plain text
  * input. There is deliberately no notification — the field still works, and

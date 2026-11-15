@@ -9,24 +9,25 @@
 //
 // The database aggregates **exact spellings**: one row per stored
 // `artistName`, with its live-work count and its newest update. Collapsing
-// those spellings to one artist is a pure function over those rows, using the
-// shared Collection-search normalization (trim, NFD, strip diacritics,
-// lowercase) so "María López" and "Maria Lopez" are one artist here exactly as
-// they are one search term there. The winning spelling is the most-used one;
-// ties fall to the most recently updated work and then to lexicographic order,
-// so the answer is deterministic.
+// those spellings to one artist is a pure function over those rows, using a
+// trim, then the shared Collection-search normalization (NFD, strip
+// diacritics, lowercase), so "María López" and "Maria Lopez" are one artist
+// here exactly as they are one search term there. The winning spelling is the
+// most-used one; ties fall to the most recently updated work and then to
+// lexicographic order, so the answer is deterministic.
 //
 // No Hono type appears here. The route owns the wire and the status codes, as
 // the artwork read module and its route already split; when a curated global
 // index arrives it replaces the source behind this module's seam.
 
-import { and, count, eq, isNull, max, or } from "drizzle-orm";
+import { count, eq, isNull, max } from "drizzle-orm";
 import {
   artworks as artworksTable,
   collectionCollaborators as collectionCollaboratorsTable,
   collections as collectionsTable,
 } from "@arcula/db";
 import { normalizeSearchText } from "@arcula/shared";
+import { collaboratorJoin, readableCollectionsWhere } from "./collectionScope";
 import { db } from "./db";
 
 /**
@@ -43,8 +44,8 @@ export interface ArtistNameAggregateRow {
 /**
  * The silent cap. A suggestion list is a hint, not the data, so past this many
  * artists the list is cut rather than refused. 2,000 names fit comfortably in
- * one response for any real library; approaching it is the trigger to revisit
- * server-side filtering, not to raise the number.
+ * one response for any realistic set of collections; approaching it is the
+ * trigger to revisit server-side filtering, not to raise the number.
  */
 export const MAX_ARTIST_NAME_SUGGESTIONS = 2000;
 
@@ -64,7 +65,7 @@ const beats = (
 };
 
 /** Most-used first, then display name ascending, case-insensitively. */
-const compareForList = (
+const compareSuggestions = (
   a: ArtistNameAggregateRow,
   b: ArtistNameAggregateRow,
 ): number => {
@@ -96,7 +97,7 @@ export function collapseArtistNames(
     }
   }
   return [...byArtist.values()]
-    .sort(compareForList)
+    .sort(compareSuggestions)
     .slice(0, MAX_ARTIST_NAME_SUGGESTIONS)
     .map((row) => row.name);
 }
@@ -105,13 +106,13 @@ export function collapseArtistNames(
  * The caller's artist names: exact spellings grouped inside the membership
  * scope, collapsed and ordered by `collapseArtistNames`.
  *
- * The scope mirrors the signed-in `/collections` list — one join, filtered on
- * the caller's ownership or collaborator row and on live collections — so a
- * name from a collection the caller cannot open is never read. Inside it, only
- * live works count: a draft contributes, a deleted work does not, exactly as in
- * Collection search. The query aggregates exact spellings and leaves the
- * accent/case collapse to the pure function, which is why no Postgres
- * `unaccent` extension and no new index are involved.
+ * The scope is the signed-in `/collections` list's own — `collectionScope.ts`'s
+ * left join and readable-collection filter — so a name from a collection the
+ * caller cannot open is never read. Inside it, only live works count: a draft
+ * contributes, a deleted work does not, exactly as in Collection search. The
+ * query aggregates exact spellings and leaves the accent/case collapse to the
+ * pure function, which is why no Postgres `unaccent` extension and no new index
+ * are involved.
  */
 export async function readArtistNames(userId: string): Promise<string[]> {
   const rows = await db
@@ -125,23 +126,8 @@ export async function readArtistNames(userId: string): Promise<string[]> {
       collectionsTable,
       eq(collectionsTable.id, artworksTable.collectionId),
     )
-    .leftJoin(
-      collectionCollaboratorsTable,
-      and(
-        eq(collectionCollaboratorsTable.collectionId, collectionsTable.id),
-        eq(collectionCollaboratorsTable.userId, userId),
-      ),
-    )
-    .where(
-      and(
-        isNull(collectionsTable.deletedAt),
-        isNull(artworksTable.deletedAt),
-        or(
-          eq(collectionsTable.userId, userId),
-          eq(collectionCollaboratorsTable.userId, userId),
-        ),
-      ),
-    )
+    .leftJoin(collectionCollaboratorsTable, collaboratorJoin(userId))
+    .where(readableCollectionsWhere(userId, isNull(artworksTable.deletedAt)))
     .groupBy(artworksTable.artistName);
 
   return collapseArtistNames(

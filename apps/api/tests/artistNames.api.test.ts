@@ -2,8 +2,10 @@
 // vocabulary, who contributes to it, how exact spellings collapse, and the two
 // wire answers the read has (401, and an empty 200).
 //
-// The collapse/order/truncate rules themselves are asserted exhaustively in
-// artistNames.test.ts. What is only visible here is the scope: which
+// The pure suite (artistNames.test.ts) owns the exhaustive collapse, order and
+// truncation permutations. This suite pins their effect at the wire — the
+// spec's Testing Decisions ask for the case/accent collapse and by-use order to
+// be visible through the real app — and the scope only the wire can show: which
 // collections the aggregate reads, which works inside them count, and that one
 // caller's list is never another's.
 
@@ -16,10 +18,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 
-let owner: { cookies: string; userId: string };
-let collaborator: { cookies: string; userId: string };
-let outsider: { cookies: string; userId: string };
-let emptyCaller: { cookies: string; userId: string };
+type Account = { cookies: string; userId: string };
+
+let owner: Account;
+let collaborator: Account;
+let outsider: Account;
+let emptyCaller: Account;
 
 /** The owner's collection, shared with the collaborator. */
 let sharedCollectionId = "";

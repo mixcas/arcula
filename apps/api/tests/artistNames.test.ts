@@ -35,6 +35,9 @@ describe("the collapse", () => {
         row("Pablo Picasso", 2),
         row("pablo picasso", 1),
         row("PÁBLO PICASSO", 1),
+        // Surrounding whitespace is not part of the artist: trimmed, this is
+        // the same key as the spellings above and loses to their count.
+        row("  Pablo Picasso  ", 0),
         row("María López", 3),
         row("Maria Lopez", 1),
       ]),
@@ -72,15 +75,22 @@ describe("the order", () => {
 
 describe("the cap", () => {
   it("truncates silently at 2,000 names after ordering", () => {
+    // The 2,001st row is the most-used, so a correct list keeps it at the
+    // front and drops the last name in the alphabetical tail. Slicing before
+    // ordering would drop the most-used name and keep the tail instead.
     const rows = Array.from(
       { length: MAX_ARTIST_NAME_SUGGESTIONS + 1 },
-      (_, i) => row(`artist-${String(i).padStart(4, "0")}`, 1),
+      (_, i) =>
+        row(
+          `artist-${String(i).padStart(4, "0")}`,
+          i === MAX_ARTIST_NAME_SUGGESTIONS ? 2 : 1,
+        ),
     );
 
     const names = collapseArtistNames(rows);
     expect(names).toHaveLength(MAX_ARTIST_NAME_SUGGESTIONS);
-    expect(names[0]).toBe("artist-0000");
-    expect(names.at(-1)).toBe("artist-1999");
-    expect(names).not.toContain("artist-2000");
+    expect(names[0]).toBe("artist-2000");
+    expect(names.at(-1)).toBe("artist-1998");
+    expect(names).not.toContain("artist-1999");
   });
 });
