@@ -69,7 +69,7 @@ echo "==> bundling ($ENV)"
 bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
-# 1b. The Collection PDF's fallback face travels beside the bundle: the
+# 1b. The Catalogue PDF's fallback face travels beside the bundle: the
 #     bundle is one index.js, so the module's import.meta.url-relative
 #     resolve (`./assets/fonts/…`) would otherwise point at nothing in
 #     production. It is an asset, not a runtime npm dependency.

@@ -109,7 +109,7 @@ await writeFile(join(dist, "index.html"), "<html>SMOKE-INDEX</html>");
 await writeFile(join(dist, "assets/blob.bin"), "bin");
 process.env.WEB_DIST = dist;
 
-const shell = await handler(gw("/collection/smoke/artwork/x"));
+const shell = await handler(gw("/catalogue/smoke/artwork/x"));
 expectStatus("spa fallback", shell, 200);
 if (shell.body !== "<html>SMOKE-INDEX</html>") fail("SPA shell mismatch");
 if (shell.headers["cache-control"] !== "no-cache")
