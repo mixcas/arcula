@@ -57,6 +57,25 @@ function toUserTraits(traits: IdentifyTraits): Record<string, string> {
   return supplied;
 }
 
+/**
+ * Unwrap a function default export across the shapes a CommonJS module reaches
+ * us in. `logrocket-react` is CommonJS (`exports.default = setupReact`, with
+ * `__esModule: true`): the dev pre-bundle flattens that to the function itself,
+ * but the production bundle — and Node's ESM⇄CJS interop — hands back
+ * `{ default: { default: setupReact } }`. Calling that wrapper is the
+ * `TypeError: r is not a function` that aborted the `.then` before
+ * `identify`, so take the first function we find and give up quietly if the
+ * module is not shaped as expected (losing the React annotation is acceptable;
+ * throwing inside telemetry is not).
+ */
+export function resolveFunctionExport<T>(mod: unknown): T | undefined {
+  if (typeof mod === "function") return mod as T;
+  const first = (mod as { default?: unknown } | null | undefined)?.default;
+  if (typeof first === "function") return first as T;
+  const second = (first as { default?: unknown } | null | undefined)?.default;
+  return typeof second === "function" ? (second as T) : undefined;
+}
+
 const APP_ID: string =
   (import.meta.env.VITE_LOGROCKET_APP_ID as string | undefined) ??
   "wf0mol/arcula";
@@ -118,10 +137,12 @@ export function initTelemetry(): void {
     ([lrMod, reactMod]) => {
       // Both packages are CommonJS (`export =` / `export default`), which
       // Vite's interop hands back as `default`; the logrocket fallback covers
-      // a bundler that returns the object itself instead.
+      // a bundler that returns the object itself instead, and
+      // `resolveFunctionExport` covers the `logrocket-react` module being
+      // wrapped one `default` deeper in a production build.
       const LogRocket =
         (lrMod as unknown as { default?: LogRocketSdk }).default ?? lrMod;
-      const setupReact: SetupReact = reactMod.default;
+      const setupReact = resolveFunctionExport<SetupReact>(reactMod);
 
       // No `dom.inputSanitizer`: the SDK already skips `input[type=password]`,
       // and the name and email fields are deliberately recorded so a replay
@@ -136,8 +157,10 @@ export function initTelemetry(): void {
       });
       // Names the React components behind each click in replay. It only
       // annotates the tree the DOM capture already has, so it widens nothing
-      // the redaction above does not already cover.
-      setupReact();
+      // the redaction above does not already cover. Optional on purpose: a
+      // module shape we do not recognise must not break the recording, and
+      // `identify` below is what makes the session findable.
+      setupReact?.();
 
       sdk = LogRocket;
       if (pendingIdentify) {
