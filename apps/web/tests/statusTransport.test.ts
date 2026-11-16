@@ -11,7 +11,7 @@
 // session transport (tests/helpers/stackFetch.ts) re-hosts app-origin traffic
 // onto the API from jsdom's http://localhost:3000.
 //
-// The account and collection are run-scoped: the test database persists across
+// The account and catalogue are run-scoped: the test database persists across
 // runs, and email is unique.
 import { describe, expect, it } from "vitest";
 import {
@@ -22,11 +22,11 @@ import {
 } from "@arcula/shared";
 import { authClient } from "@/auth/client";
 import { artworkService } from "@/services/artworkService";
-import { collectionService } from "@/services/collectionService";
+import { catalogueService } from "@/services/catalogueService";
 
 /** A form the way the Add page submits it, with the status the owner chose. */
 const save = async (
-  collectionId: string,
+  catalogueId: string,
   title: string,
   status: ArtworkFormValues["status"],
 ) => {
@@ -38,7 +38,7 @@ const save = async (
   };
   // The page's own two steps: the schema first, then the create envelope.
   return artworkService.createArtwork(
-    collectionId,
+    catalogueId,
     toArtworkCreatePayload(toArtworkPayload(values), `w${Date.now()}`, [], []),
   );
 };
@@ -52,33 +52,33 @@ describe("the status against the real stack", () => {
     await authClient.signUp.email({ name: "Status", email, password });
     await authClient.signIn.email({ email, password });
 
-    const collection = await collectionService.createCollection({
+    const catalogue = await catalogueService.createCatalogue({
       name: `Status wall ${stamp}`,
     });
-    const draft = await save(collection.id, `Draft ${stamp}`, "draft");
+    const draft = await save(catalogue.id, `Draft ${stamp}`, "draft");
     const published = await save(
-      collection.id,
+      catalogue.id,
       `Published ${stamp}`,
       "published",
     );
 
     // What the owner's page reads — the list, and one work by id.
-    const listed = await artworkService.getCollectionArtworks(collection.id);
+    const listed = await artworkService.getCatalogueArtworks(catalogue.id);
     const byId = (id: string) => listed.find((row) => row.id === id)?.status;
     expect(byId(draft.id)).toBe("draft");
     expect(byId(published.id)).toBe("published");
     expect(
-      (await artworkService.getArtwork(collection.id, draft.id))?.status,
+      (await artworkService.getArtwork(catalogue.id, draft.id))?.status,
     ).toBe("draft");
 
-    // And the visitor's list of the same public collection: the draft is
+    // And the visitor's list of the same public catalogue: the draft is
     // absent, the published work is not.
     await authClient.signOut();
-    const visitor = await artworkService.getCollectionArtworks(collection.id);
+    const visitor = await artworkService.getCatalogueArtworks(catalogue.id);
     expect(visitor.map((row) => row.id)).toEqual([published.id]);
 
     // The single read of the draft is the API's uniform 404, which the service
     // folds to null — the public artwork page's not-found state, unchanged.
-    expect(await artworkService.getArtwork(collection.id, draft.id)).toBeNull();
+    expect(await artworkService.getArtwork(catalogue.id, draft.id)).toBeNull();
   }, 30000);
 });

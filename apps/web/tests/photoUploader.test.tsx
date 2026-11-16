@@ -68,7 +68,7 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-const COLLECTION_ID = "collection-1";
+const CATALOGUE_ID = "catalogue-1";
 const ARTWORK_ID = "artwork-1";
 
 // `useModals` throws without a provider. Rendered anyway so adding a modal
@@ -77,7 +77,7 @@ const Harness: React.FC<{ initialPhotos?: ArtworkPhoto[] }> = ({
   initialPhotos,
 }) => {
   const photos = useArtworkPhotos({
-    collectionId: COLLECTION_ID,
+    catalogueId: CATALOGUE_ID,
     artworkId: ARTWORK_ID,
     initialPhotos,
   });
@@ -392,7 +392,7 @@ describe("PhotoUploader", () => {
       expect(mediaService.discardPhoto).toHaveBeenCalledTimes(1);
     });
     expect(mediaService.discardPhoto).toHaveBeenCalledWith(
-      COLLECTION_ID,
+      CATALOGUE_ID,
       ARTWORK_ID,
       stagedEntryIds[0],
     );
@@ -413,7 +413,7 @@ describe("PhotoUploader", () => {
     // Fire-and-forget, so await the assertion rather than the call.
     await waitFor(() => {
       expect(mediaService.discardPhoto).toHaveBeenCalledWith(
-        COLLECTION_ID,
+        CATALOGUE_ID,
         ARTWORK_ID,
         entryId,
       );
@@ -481,7 +481,7 @@ const withHook = async (
   let latest: UseArtworkPhotos | null = null;
   const Probe: React.FC = () => {
     const photos = useArtworkPhotos({
-      collectionId: COLLECTION_ID,
+      catalogueId: CATALOGUE_ID,
       artworkId: ARTWORK_ID,
       initialPhotos,
     });

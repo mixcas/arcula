@@ -9,7 +9,7 @@
  * ## Why this is not `AppShell.Footer`
  *
  * `ManageLayout` is an `AppShell` shared by every `/manage` route, so a footer
- * there would put Save and Cancel on the collection page, the settings page and
+ * there would put Save and Cancel on the catalogue page, the settings page and
  * the import too. A bar the two forms choose to render is one line in each
  * file and cannot appear anywhere it has no meaning.
  *

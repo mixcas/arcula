@@ -88,7 +88,7 @@ const SignUpPage: React.FC = () => {
       // The sign-up establishes the session (auto-sign-in is on), so the
       // only work left is the move: the invite page that sent the visitor
       // here, or the dashboard, where a fresh account meets its
-      // one-collection cap.
+      // one-catalogue cap.
       void navigate(from ?? "/manage", { replace: true });
     } catch (err) {
       // A rejected fetch has no envelope to read: the server is not

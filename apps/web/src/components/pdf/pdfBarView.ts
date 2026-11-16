@@ -2,12 +2,12 @@
  * What the viewer's bar says, decided once and purely.
  *
  * The bar is present in every state the route can be in, and its left-hand
- * side is the same question in all of them: is there a Collection to name?
+ * side is the same question in all of them: is there a Catalogue to name?
  * A `ready` read disclosed the name and its canonical page; a `locked`
  * refusal disclosed the name alone (ADR-0005), which is what the prompt is
  * about but nothing to link. Every other state — `loading`, `invalid`,
  * `notFound`, `private`, `error`, and a lock with no usable name — has no
- * Collection to name, so the bar carries the page's own title and no
+ * Catalogue to name, so the bar carries the page's own title and no
  * subtitle.
  *
  * Its right-hand side is the export's report, under one rule: **the bar
@@ -26,16 +26,16 @@
  * session, a service or a renderer; the bar renders a view and owns no state.
  */
 
-import { collectionSlug } from "@arcula/shared";
+import { catalogueSlug } from "@arcula/shared";
 
-import type { PublicState } from "@/components/collection/usePublicCollection";
-import { collectionPdfFileName } from "./collectionPdfPreflight";
+import type { PublicState } from "@/components/catalogue/usePublicCatalogue";
+import { cataloguePdfFileName } from "./cataloguePdfPreflight";
 
-/** The bar's title until a read names the Collection, and its subtitle after. */
-export const COLLECTION_PDF = "Collection PDF";
+/** The bar's title until a read names the Catalogue, and its subtitle after. */
+export const CATALOGUE_PDF = "Catalogue PDF";
 
 /** The one fact the bar needs from a read that succeeded. */
-export interface PdfBarCollection {
+export interface PdfBarCatalogue {
   id: string;
   name: string;
 }
@@ -82,9 +82,9 @@ export type PdfBarDetail =
 export interface PdfBarView {
   /** The page's one top-level heading. */
   title: string;
-  /** **Collection PDF**, beside a real name and nowhere else. */
+  /** **Catalogue PDF**, beside a real name and nowhere else. */
   subtitle: string | null;
-  /** The Collection's canonical page, only when there is one to link. */
+  /** The Catalogue's canonical page, only when there is one to link. */
   href: string | null;
   /** The work in flight or the finished file, where the bar is their surface. */
   detail: PdfBarDetail;
@@ -134,7 +134,7 @@ const preparingDetail = (done: number, total: number): PdfBarDetail =>
 const runDetail = (
   run: PdfBarRun,
   mobile: boolean,
-  collectionName: string,
+  catalogueName: string,
 ): PdfBarDetail => {
   switch (run.status) {
     case "preparing":
@@ -152,7 +152,7 @@ const runDetail = (
             kind: "file",
             summary: pdfFileSummary(run.pages, run.size),
             url: run.url,
-            fileName: collectionPdfFileName(collectionName),
+            fileName: cataloguePdfFileName(catalogueName),
           };
     case "idle":
     case "cancelled":
@@ -165,40 +165,40 @@ const runDetail = (
  * The bar's title, subtitle, link and detail for a load state, a run and a
  * layout.
  *
- * `PublicState<T>` is covariant in `T`, so the page's own state (a Collection
- * and its artworks) is accepted by the narrower `PdfBarCollection` here.
+ * `PublicState<T>` is covariant in `T`, so the page's own state (a Catalogue
+ * and its artworks) is accepted by the narrower `PdfBarCatalogue` here.
  */
 export const pdfBarView = (
-  state: PublicState<{ collection: PdfBarCollection }>,
+  state: PublicState<{ catalogue: PdfBarCatalogue }>,
   run: PdfBarRun,
   mobile: boolean,
 ): PdfBarView => {
   if (state.status === "ready") {
-    const { name, id } = state.value.collection;
+    const { name, id } = state.value.catalogue;
     // A run is only reported by a read that succeeded: a reload, an unlock or
     // a failure drops whatever the previous run was reporting — progress or a
     // file — along with the state that owned it.
     return {
       title: name,
-      subtitle: COLLECTION_PDF,
-      href: `/collection/${collectionSlug(name, id)}`,
+      subtitle: CATALOGUE_PDF,
+      href: `/catalogue/${catalogueSlug(name, id)}`,
       detail: runDetail(run, mobile, name),
     };
   }
 
   // The refusal an oddly worded answer carries no name in is still `locked`;
   // the bar then keeps the fallback title rather than an empty heading.
-  if (state.status === "locked" && state.collectionName) {
+  if (state.status === "locked" && state.catalogueName) {
     return {
-      title: state.collectionName,
-      subtitle: COLLECTION_PDF,
+      title: state.catalogueName,
+      subtitle: CATALOGUE_PDF,
       href: null,
       detail: NO_DETAIL,
     };
   }
 
   return {
-    title: COLLECTION_PDF,
+    title: CATALOGUE_PDF,
     subtitle: null,
     href: null,
     detail: NO_DETAIL,

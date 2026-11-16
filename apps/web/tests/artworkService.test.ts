@@ -60,14 +60,14 @@ describe("the Deleted view's service calls", () => {
     updatedAt: { seconds: 1, nanoseconds: 0 },
   };
 
-  it("reads the deleted list from the collection-level route, not under /artworks", async () => {
+  it("reads the deleted list from the catalogue-level route, not under /artworks", async () => {
     const calls = stubFetch(ok([wireArtwork]));
 
     const rows = await artworkService.getDeletedArtworks("c1");
 
     expect(rows.map((row) => row.id)).toEqual(["a1"]);
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/deleted-artworks");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/deleted-artworks");
   });
 
   it("posts a restore to the single-artwork restore route", async () => {
@@ -76,7 +76,7 @@ describe("the Deleted view's service calls", () => {
     await artworkService.restoreArtwork("c1", "a1");
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks/a1/restore");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/artworks/a1/restore");
     expect(calls[0]?.init.method).toBe("POST");
   });
 
@@ -87,7 +87,7 @@ describe("the Deleted view's service calls", () => {
 
     expect(result).toEqual({ restored: 2 });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks/bulk-restore");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/artworks/bulk-restore");
     expect(calls[0]?.init.method).toBe("POST");
     expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
       artworkIds: ["a1", "a2"],
@@ -95,7 +95,7 @@ describe("the Deleted view's service calls", () => {
   });
 });
 
-describe("the collection list's search query", () => {
+describe("the catalogue list's search query", () => {
   const wireArtwork = {
     id: "a1",
     userId: "u1",
@@ -113,28 +113,28 @@ describe("the collection list's search query", () => {
   it("appends q only when the query holds something", async () => {
     const calls = stubFetch(ok([wireArtwork]));
 
-    await artworkService.getCollectionArtworks("c1");
-    await artworkService.getCollectionArtworks("c1", "");
-    await artworkService.getCollectionArtworks("c1", "   ");
-    await artworkService.getCollectionArtworks("c1", "picasso blue");
+    await artworkService.getCatalogueArtworks("c1");
+    await artworkService.getCatalogueArtworks("c1", "");
+    await artworkService.getCatalogueArtworks("c1", "   ");
+    await artworkService.getCatalogueArtworks("c1", "picasso blue");
 
-    // The public collection page, the public artwork page and the PDF call it
+    // The public catalogue page, the public artwork page and the PDF call it
     // with no query at all, so the absent and blank forms have to stay the
     // unadorned list URL.
     expect(calls.map((call) => call.url)).toEqual([
-      "/api/v1/collections/c1/artworks",
-      "/api/v1/collections/c1/artworks",
-      "/api/v1/collections/c1/artworks",
-      "/api/v1/collections/c1/artworks?q=picasso+blue",
+      "/api/v1/catalogues/c1/artworks",
+      "/api/v1/catalogues/c1/artworks",
+      "/api/v1/catalogues/c1/artworks",
+      "/api/v1/catalogues/c1/artworks?q=picasso+blue",
     ]);
   });
 
   it("encodes the query rather than pasting it into the URL", async () => {
     const calls = stubFetch(ok([]));
 
-    await artworkService.getCollectionArtworks("c1", "a&b");
+    await artworkService.getCatalogueArtworks("c1", "a&b");
 
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/artworks?q=a%26b");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/artworks?q=a%26b");
   });
 });
 
@@ -148,7 +148,7 @@ describe("createArtworks", () => {
     expect(outcome).toEqual({ inserted: 1, rejected: [] });
     expect(calls).toHaveLength(1);
     // The pin: `/import/csv`, not the create route's `/artworks`.
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/import/csv");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/import/csv");
     expect(calls[0]?.init.method).toBe("POST");
     // apiRequest JSON-stringifies the body, so the string arm of BodyInit is
     // the one actually present — the cast documents that, and keeps

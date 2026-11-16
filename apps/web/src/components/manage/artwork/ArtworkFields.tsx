@@ -199,8 +199,8 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("status")}
       />
       <Text size="sm" c="dimmed" mt={6} mb="md">
-        Published if the collection is public. A draft stays in the collection
-        and is visible only to you.
+        Published if the catalogue is public. A draft stays in the catalogue and
+        is visible only to you.
       </Text>
 
       <Box mb="md">

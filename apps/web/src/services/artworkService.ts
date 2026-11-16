@@ -21,38 +21,38 @@ import {
 } from "@arcula/shared";
 import { ApiRequestError, apiRequest } from "./api";
 
-const base = (collectionId: string) =>
-  `/api/v1/collections/${collectionId}/artworks`;
+const base = (catalogueId: string) =>
+  `/api/v1/catalogues/${catalogueId}/artworks`;
 
 export const artworkService = {
   /**
-   * The collection's live works. The optional `query` is a Collection search:
+   * The catalogue's live works. The optional `query` is a Catalogue search:
    * a member-only condition on the same read, so the URL carries `q` only when
    * there is something to search for. The public views and the PDF call this
    * with no query at all.
    */
-  async getCollectionArtworks(
-    collectionId: string,
+  async getCatalogueArtworks(
+    catalogueId: string,
     query = "",
   ): Promise<Artwork[]> {
     const trimmed = query.trim();
     const suffix = artworkSearchSuffix(trimmed);
-    const rows = await apiRequest<unknown[]>(`${base(collectionId)}${suffix}`);
+    const rows = await apiRequest<unknown[]>(`${base(catalogueId)}${suffix}`);
     return rows.map((row) => artworkReadSchema.parse(row));
   },
 
   /**
    * One work, by id. A work that does not exist — or that a visitor may not
-   * see (private or deleted) — resolves `null`. A private *collection*
+   * see (private or deleted) — resolves `null`. A private *catalogue*
    * rejects (403), which the public views map to their private state.
    */
   async getArtwork(
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
   ): Promise<Artwork | null> {
     try {
       const row = await apiRequest<unknown>(
-        `${base(collectionId)}/${artworkId}`,
+        `${base(catalogueId)}/${artworkId}`,
       );
       return artworkReadSchema.parse(row);
     } catch (err) {
@@ -68,10 +68,10 @@ export const artworkService = {
    * promoted in the same transaction. The answer is the created work.
    */
   async createArtwork(
-    collectionId: string,
+    catalogueId: string,
     payload: ArtworkCreatePayload,
   ): Promise<Artwork> {
-    const row = await apiRequest<unknown>(base(collectionId), {
+    const row = await apiRequest<unknown>(base(catalogueId), {
       method: "POST",
       body: payload,
     });
@@ -85,26 +85,26 @@ export const artworkService = {
    * produces the omission. The answer is the updated work.
    */
   async updateArtwork(
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
     payload: ArtworkUpdatePayload,
   ): Promise<Artwork> {
-    const row = await apiRequest<unknown>(
-      `${base(collectionId)}/${artworkId}`,
-      { method: "PATCH", body: payload },
-    );
+    const row = await apiRequest<unknown>(`${base(catalogueId)}/${artworkId}`, {
+      method: "PATCH",
+      body: payload,
+    });
     return artworkReadSchema.parse(row);
   },
 
   /**
-   * The collection's deleted works, most recently deleted first. This is the
+   * The catalogue's deleted works, most recently deleted first. This is the
    * Deleted view's read and it sits one level above `base`: a static segment
    * under `/artworks` would be shadowed by the single-artwork route on the
    * server. Members only.
    */
-  async getDeletedArtworks(collectionId: string): Promise<Artwork[]> {
+  async getDeletedArtworks(catalogueId: string): Promise<Artwork[]> {
     const rows = await apiRequest<unknown[]>(
-      `/api/v1/collections/${collectionId}/deleted-artworks`,
+      `/api/v1/catalogues/${catalogueId}/deleted-artworks`,
     );
     return rows.map((row) => artworkReadSchema.parse(row));
   },
@@ -114,11 +114,11 @@ export const artworkService = {
    * answers at once; the views refetch rather than splicing the row out.
    */
   async restoreArtwork(
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
   ): Promise<{ restored: true }> {
     return apiRequest<{ restored: true }>(
-      `${base(collectionId)}/${artworkId}/restore`,
+      `${base(catalogueId)}/${artworkId}/restore`,
       { method: "POST" },
     );
   },
@@ -129,11 +129,11 @@ export const artworkService = {
    * foreign id is not counted — and the view refetches rather than splicing.
    */
   async bulkRestoreArtworks(
-    collectionId: string,
+    catalogueId: string,
     artworkIds: string[],
   ): Promise<{ restored: number }> {
     return apiRequest<{ restored: number }>(
-      `${base(collectionId)}/bulk-restore`,
+      `${base(catalogueId)}/bulk-restore`,
       { method: "POST", body: { artworkIds } },
     );
   },
@@ -144,13 +144,13 @@ export const artworkService = {
    * splice.
    */
   async softDeleteArtworks(
-    collectionId: string,
+    catalogueId: string,
     artworkIds: string[],
   ): Promise<{ deleted: number }> {
-    return apiRequest<{ deleted: number }>(
-      `${base(collectionId)}/bulk-delete`,
-      { method: "POST", body: { artworkIds } },
-    );
+    return apiRequest<{ deleted: number }>(`${base(catalogueId)}/bulk-delete`, {
+      method: "POST",
+      body: { artworkIds },
+    });
   },
 
   /**
@@ -160,10 +160,10 @@ export const artworkService = {
    * outcome rather than throwing.
    */
   async createArtworks(
-    collectionId: string,
+    catalogueId: string,
     rows: unknown[],
   ): Promise<ArtworkImportOutcome> {
-    // The import route, NOT `base(collectionId)`: that one is the
+    // The import route, NOT `base(catalogueId)`: that one is the
     // single-artwork create route, which validates the body as one artwork
     // and 400s a `{rows}` envelope with "artworkId/title/artistName:
     // expected string, received undefined" — a validation error that says
@@ -171,7 +171,7 @@ export const artworkService = {
     // component suites stub this method, so tests/artworkService.test.ts is
     // the only thing that checks this seam.
     return apiRequest<ArtworkImportOutcome>(
-      `/api/v1/collections/${collectionId}/import/csv`,
+      `/api/v1/catalogues/${catalogueId}/import/csv`,
       {
         method: "POST",
         body: { rows },

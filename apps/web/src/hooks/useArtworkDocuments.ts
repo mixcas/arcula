@@ -102,7 +102,7 @@ const nextKey = keySequence("document");
  * promote.
  */
 async function stageAndProcess(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   file: File,
 ): Promise<StageOutcome<DocumentEntry>> {
@@ -112,7 +112,7 @@ async function stageAndProcess(
   const entryId = crypto.randomUUID().replace(/-/g, "");
   try {
     const staged = await mediaService.stageDocument(
-      collectionId,
+      catalogueId,
       artworkId,
       entryId,
       file,
@@ -143,7 +143,7 @@ async function stageAndProcess(
     }
     try {
       const { variants } = await mediaService.processDocument(
-        collectionId,
+        catalogueId,
         artworkId,
         entryId,
       );
@@ -152,7 +152,7 @@ async function stageAndProcess(
         // a server bug, not a file condition: discard what is up and say the
         // upload failed rather than render a document with no geometry.
         void mediaService
-          .discardDocument(collectionId, artworkId, entryId)
+          .discardDocument(catalogueId, artworkId, entryId)
           .catch(() => {});
         return { entry: null, rejection: "The image could not be read" };
       }
@@ -175,7 +175,7 @@ async function stageAndProcess(
       // The original is up and no save will ever name it: discard it now,
       // idempotently, and let the error report the failure.
       void mediaService
-        .discardDocument(collectionId, artworkId, entryId)
+        .discardDocument(catalogueId, artworkId, entryId)
         .catch(() => {});
       throw error;
     }
@@ -191,8 +191,8 @@ async function stageAndProcess(
 }
 
 export interface UseArtworkDocumentsOptions {
-  /** Staging happens at add time, under the collection the form belongs to. */
-  collectionId: string;
+  /** Staging happens at add time, under the catalogue the form belongs to. */
+  catalogueId: string;
   /**
    * The artwork id the entries stage under. On the Add page this is the
    * client-minted id the save will create the row with; on the Edit page it
@@ -204,7 +204,7 @@ export interface UseArtworkDocumentsOptions {
 }
 
 export const useArtworkDocuments = ({
-  collectionId,
+  catalogueId,
   artworkId,
   initialDocuments = [],
 }: UseArtworkDocumentsOptions) => {
@@ -267,7 +267,7 @@ export const useArtworkDocuments = ({
       }
 
       const staged = await run(accepted, (file) =>
-        stageAndProcess(collectionId, artworkId, file),
+        stageAndProcess(catalogueId, artworkId, file),
       );
 
       const { added } = staged;
@@ -276,7 +276,7 @@ export const useArtworkDocuments = ({
       }
       return { added, rejected: [...rejected, ...staged.rejected] };
     },
-    [collectionId, artworkId, entries.length, run],
+    [catalogueId, artworkId, entries.length, run],
   );
 
   /**
@@ -298,7 +298,7 @@ export const useArtworkDocuments = ({
             removedId = entry.document.id;
           } else {
             void mediaService
-              .discardDocument(collectionId, artworkId, entry.document.id)
+              .discardDocument(catalogueId, artworkId, entry.document.id)
               .catch(() => {});
           }
           return false;
@@ -306,7 +306,7 @@ export const useArtworkDocuments = ({
       );
       return removedId;
     },
-    [collectionId, artworkId],
+    [catalogueId, artworkId],
   );
 
   /**

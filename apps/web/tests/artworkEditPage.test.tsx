@@ -83,7 +83,7 @@ vi.mock("@/services/artworkService", () => ({
 }));
 
 // The page mounts the suggestions hook; an empty list is the ordinary
-// no-collections answer, and keeps these save-path tests off the network.
+// no-catalogues answer, and keeps these save-path tests off the network.
 vi.mock("@/services/artistNameService", () => ({
   artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
 }));
@@ -108,16 +108,16 @@ Object.defineProperty(window, "matchMedia", {
 
 // Opaque ids, not `"artwork-1"`: a manage URL is "{slug}-{id}" and the route
 // recovers the id by cutting at the last hyphen.
-const COLLECTION_ID = "AAAAAAAAAAAAAAAAAAAA";
+const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
-const COLLECTION_PARAM = `flores-solares-${COLLECTION_ID}`;
+const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
 const ARTWORK_PARAM = `estudio-en-rojo-${ARTWORK_ID}`;
 
 /** The server's answer for a stored work. */
 const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: COLLECTION_ID,
+  collectionId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -150,14 +150,14 @@ const renderPage = (artworkParam = ARTWORK_PARAM, search = "") =>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/${artworkParam}${search}`,
+            `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${artworkParam}${search}`,
           ]}
         >
           {/* Outside the routes, so it reports wherever the page lands. */}
           <LocationProbe />
           <Routes>
             <Route
-              path="/manage/collection/:collectionId/artwork/:artworkId"
+              path="/manage/catalogue/:catalogueId/artwork/:artworkId"
               element={<ArtworkEditPage />}
             />
           </Routes>
@@ -172,7 +172,7 @@ const landedAt = () => screen.getByTestId("location").textContent;
 const sentPatch = async (): Promise<ArtworkUpdatePayload> => {
   await waitFor(() => expect(updateArtwork).toHaveBeenCalledTimes(1));
   const call = updateArtwork.mock.calls[0];
-  expect(call[0]).toBe(COLLECTION_ID);
+  expect(call[0]).toBe(CATALOGUE_ID);
   expect(call[1]).toBe(ARTWORK_ID);
   return call[2];
 };
@@ -292,7 +292,7 @@ describe("the Edit page — a deleted work", () => {
     // The uploaders come back with the restore, in place.
     expect(page.getByTestId("photo-uploader")).toBeInTheDocument();
     expect(restoreArtwork).toHaveBeenCalledTimes(1);
-    expect(restoreArtwork).toHaveBeenCalledWith(COLLECTION_ID, ARTWORK_ID);
+    expect(restoreArtwork).toHaveBeenCalledWith(CATALOGUE_ID, ARTWORK_ID);
     // Re-read: a re-initialised form remounts the input, so the element found
     // before the click would keep its value even if the page discarded it.
     expect(await page.findByLabelText(/^Title/)).toHaveValue(
@@ -373,12 +373,12 @@ describe("the Edit page — returning to the active search", () => {
 
     await waitFor(() =>
       expect(landedAt()).toBe(
-        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
+        `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
       ),
     );
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
     );
   });
 
@@ -387,12 +387,12 @@ describe("the Edit page — returning to the active search", () => {
 
     await waitFor(() =>
       expect(landedAt()).toBe(
-        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}`,
+        `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}`,
       ),
     );
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}`,
+      `/manage/catalogue/${CATALOGUE_PARAM}`,
     );
   });
 });

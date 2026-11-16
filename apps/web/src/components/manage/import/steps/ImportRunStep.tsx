@@ -19,8 +19,8 @@ import {
 interface ImportRunStepProps {
   rows: ReviewRow[];
   selectedRowIds: Set<string>;
-  collectionId: string;
-  collectionSlugParam: string;
+  catalogueId: string;
+  catalogueSlugParam: string;
   onReset: () => void;
 }
 
@@ -37,8 +37,8 @@ interface ImportRunStepProps {
 const ImportRunStep: React.FC<ImportRunStepProps> = ({
   rows,
   selectedRowIds,
-  collectionId,
-  collectionSlugParam,
+  catalogueId,
+  catalogueSlugParam,
   onReset,
 }) => {
   const [total, setTotal] = useState(0);
@@ -90,7 +90,7 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
         // that were selected in review.
         setResult(
           await artworkService.createArtworks(
-            collectionId,
+            catalogueId,
             selected.map((row) => row.values),
           ),
         );
@@ -98,13 +98,13 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
         console.error("Import failed:", error);
         // The request itself failed (bad id, no session, transport) — no rows
         // were written at all, so there is no per-row answer to render.
-        setRequestError("Import failed. The collection was left unchanged.");
+        setRequestError("Import failed. The catalogue was left unchanged.");
         setResult({ inserted: 0, rejected: [] });
       }
     };
 
     void run();
-  }, [selected, collectionId]);
+  }, [selected, catalogueId]);
 
   // Before the run finishes, show the progress line. One request means one
   // answer, so the bar is indeterminate rather than ticked by chunks.
@@ -168,11 +168,8 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
         <Button onClick={onReset} variant="outline">
           Import another file
         </Button>
-        <Button
-          component={Link}
-          to={`/manage/collection/${collectionSlugParam}`}
-        >
-          View collection
+        <Button component={Link} to={`/manage/catalogue/${catalogueSlugParam}`}>
+          View catalogue
         </Button>
       </Group>
     </>
