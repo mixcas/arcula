@@ -40,6 +40,7 @@ const artworkRow = (userId: string): ArtworkRow => ({
   notes: null,
   condition: null,
   currentValue: null,
+  availability: null,
   status: "published",
   deletedAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
