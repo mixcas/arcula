@@ -224,23 +224,31 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
   `artistNames` (the caller's suggestion read), `me`, `media` (the object
-  proxy), `artworkMedia` (stage/process, under the caller's own staging prefix).
+  proxy), `artworkMedia` (the presign and process routes: the browser PUTs the
+  bytes straight to storage under the caller's own staging prefix, and process
+  is the point the server validates them —
+  [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `populations.ts` (what distinguishes photos from documents: caps, types,
   tables, variants and key shape), `variants.ts` (the geometry), `promote.ts`
-  (staged → final).
+  (staged → final), `stagedName.ts` (the original's filename, the one thing
+  that rides a signed header rather than a key or a query).
 - `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly
   two mails, the invitation and the ownership-transfer notice; a provider
   failure surfaces as `emailSent: false`, never as a failed write.
-- `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
+- `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default)
+  and `presignPut`, the short-lived single-object URL the browser PUTs a staged
+  original to ([ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
-artworkImport, artistNames, catalogue, invitation, document, user),
+artworkImport, artistNames, catalogue, invitation, document, media, user),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
 `photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
 predicate, its caps, the query suffix helper and `normalizeSearchText`, which
 Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
-types), `limits.ts` (the
+types), `stagedUpload.ts` (the headers a staged presigned PUT signs — the list
+the media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
+because that package is not a workspace member), `limits.ts` (the
 per-tier catalogue cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
 both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
@@ -559,9 +567,11 @@ restated here.
   goal; a test that fails only when we change something is.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 16-step end-to-end
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end
   pass (health, SPA, sign-up, the `Secure` session cookie, a real 12 MP photo
-  through stage → process → save, a visitor read, and the reset-mail path).
+  through presign → direct PUT → process → save with the bucket's CORS
+  preflight probed against the deployment, a visitor read, and the reset-mail
+  path).
   The catalogue cap is covered by the API integration suite instead, since
   reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
   either one by hand. It creates a throwaway `verify-<ts>@example.test` account

@@ -266,20 +266,56 @@ prefix, and the sweep lists only the caller's prefix.
 The `staging/` prefix leads deliberately: object-store lifecycle rules match
 literal prefixes, so one rule expires every staged object everywhere.
 
-1. **Stage** — the browser POSTs an original; the API validates the type against
-   the accepted map, derives the extension from the _declared type_ (never the
-   filename), and writes `staging/…/{entryId}.{ext}`. A decode gives the source
-   dimensions. Re-staging the same entry id replaces it.
-2. **Process** — Sharp decodes once, applies the EXIF orientation, and encodes
-   every variant to WebP at quality 95. The variants: `xxlarge` (max 3000,
-   inside), `xlarge` (max 2400, inside), `square_lg` (800 cover), `square_sm`
-   (400 cover), `large` (max 1200, inside), `medium` (max 800, inside).
+The bytes never pass through the API. They used to, and a Lambda's 6 MB
+synchronous invocation payload — reached after base64 inflation of the
+multipart body — refused every phone photograph over roughly 4.5 MB with a
+`413` the app never emitted ([ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
+The browser now writes the original straight to the bucket, and the API keeps
+the two decisions that need authority: what may be uploaded, and what the
+uploaded bytes actually are.
+
+1. **Stage** — presign, PUT, and the declaration. The browser POSTs a
+   _declaration_ (`entryId`, `contentType`, `size`, and optionally the original
+   `name`) to `…/{photos|documents}/stage`. The API checks membership, the
+   declared type against the accepted map and the declared size against the
+   cap, discards the entry's earlier staged objects (so re-staging replaces),
+   derives the extension from the _declared type_ (never the filename), and
+   answers a short-lived presigned `PUT` for
+   `staging/…/{entryId}.{ext}`. The browser then PUTs the file straight to the
+   bucket (`apps/web/src/services/mediaService.ts`), with no session cookie and
+   with exactly the headers the signature covers: `content-type`, which pins
+   what the object is stored as, and `x-amz-meta-name`, the original's filename
+   percent-encoded. That header is the name's only home — the process call
+   carries just the entry id — and it is signed and deliberately unhoistable
+   into the query string, where a filename would join the token in every access
+   log. The URL is a bearer token scoped to one method, one key and
+   `PRESIGNED_PUT_TTL_SECONDS` (300 s): it is never logged, and session replay
+   redacts both the presign call and the bucket `PUT`
+   ([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md)). The
+   bucket's CORS rule allows `PUT` from the app's origin with exactly those two
+   headers, and `deploy-verify` asks the deployed bucket that preflight
+   question, because nothing in-process can. Locally the SeaweedFS stand-in
+   runs anonymous and does not verify signatures, so it accepts a tampered PUT;
+   only real S3 refuses one, which is why nothing presign answered is trusted
+   later.
+2. **Process** — the first point the server sees the bytes, and the only place
+   they are measured. Before Sharp decodes, the stored content type is checked
+   against the same allowlist and the object's own length against the same cap,
+   so a forged declaration at presign buys nothing but a failed process and an
+   object the sweep removes. Sharp then decodes once, applies the EXIF
+   orientation, and encodes every variant to WebP at quality 95. The variants:
+   `xxlarge` (max 3000, inside), `xlarge` (max 2400, inside), `square_lg`
+   (800 cover), `square_sm` (400 cover), `large` (max 1200, inside), `medium`
+   (max 800, inside).
    `xxlarge` is the Catalogue PDF's source — its photo box needs 2417 px at
    300 dpi, past `xlarge`'s cap
    ([ADR-0006](docs/adr/0006-the-collection-pdf-prints-from-its-own-variant.md)) —
-   and the widest `srcSet` candidate the slideshow offers. A document image gets
-   only `square_sm` and `large` — the two a document actually renders with. A PDF
-   has no variants; the original is the whole entry.
+   and the widest `srcSet` candidate the slideshow offers. The answer carries
+   the original's measured metadata — `width`, `height`, `size`,
+   `contentType`, `name`, `url` — beside the variants, because presign held no
+   bytes to measure. A document image gets only `square_sm` and `large` — the
+   two a document actually renders with. A PDF has no variants; the original
+   is the whole entry.
 3. **Save** — one Postgres transaction writes the artwork fields, copies each
    entry's staged objects to their final keys, and upserts the rows; dropped
    entries lose their rows, and their final objects are deleted after commit.

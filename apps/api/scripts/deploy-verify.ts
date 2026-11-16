@@ -5,15 +5,16 @@
 // link + cache headers), sign-up (and that its cookie is `Secure`), /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
 // real 12 MP photo through presign → direct PUT → process → save (the
-// presigner, the bucket's CORS rule and Sharp on the deploy target), a
-// visitor read, and a reset request (the Resend call path). The catalogue cap
-// is covered by the API integration suite, not here: reaching it would mean
-// ten creates per run. One account is created per run under
+// presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
+// target), a visitor read, and a reset request (the Resend call path). The
+// catalogue cap is covered by the API integration suite, not here: reaching it
+// would mean ten creates per run. One account is created per run under
 // verify-<ts>@example.test; nothing is printed that is a credential — and the
 // presigned upload URL is a bearer token, so it is never printed either. Exit
 // code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import { STAGED_PUT_SIGNED_HEADERS } from "@arcula/shared";
 import { IMAGE_VARIANTS, variantSize } from "../src/media/variants";
 
 const base = (process.argv[2] ?? "").replace(/\/$/, "");
@@ -134,13 +135,14 @@ let catalogueId: string | null;
   step("create catalogue", res.status === 201 && catalogueId !== null);
 }
 
-// 7. A real 12 MP photo through presign → PUT → process → save. The bytes
-//    go straight to the media bucket, so this is the one place the direct hop
-//    is exercised against the deployed CORS rule and the real presigner; the
-//    process number is the Sharp-on-the-deploy-target measurement, and the
-//    dimensions are the ones the server read back off the stored object
-//    (presign never saw a byte). The presigned URL is a bearer token: it is
-//    never printed.
+// 7. A real 12 MP photo through presign → preflight → PUT → process → save.
+//    The bytes go straight to the media bucket, so this is the one place the
+//    direct hop meets the real presigner and the deployed bucket. The
+//    preflight step is the CORS proof (a Node `fetch` ignores CORS, so the PUT
+//    alone would prove nothing about the browser); the process number is the
+//    Sharp-on-the-deploy-target measurement, and the dimensions are the ones
+//    the server read back off the stored object (presign never saw a byte).
+//    The presigned URL is a bearer token: it is never printed.
 if (catalogueId) {
   const artworkId = hex();
   const entryId = hex();
@@ -178,6 +180,59 @@ if (catalogueId) {
     `${sample.length} bytes`,
   );
 
+  // The browser's half of the hop begins with a preflight, and the in-process
+  // suite can never ask for one. This asks the deployed bucket exactly what a
+  // browser will — same host, same path, same origin, same requested method
+  // and headers — and reads the answer. Only the presigned URL's origin and
+  // path are used; its query is the bearer token and is never printed.
+  if (typeof target.uploadUrl === "string") {
+    const upload = new URL(target.uploadUrl);
+    const preflight = await fetch(`${upload.origin}${upload.pathname}`, {
+      method: "OPTIONS",
+      headers: {
+        origin: base,
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": STAGED_PUT_SIGNED_HEADERS.join(","),
+      },
+    }).catch(() => null);
+    const status = preflight?.status ?? 0;
+    const allowedOrigin = preflight?.headers.get("access-control-allow-origin");
+    const allowedMethods = (
+      preflight?.headers.get("access-control-allow-methods") ?? ""
+    )
+      .toLowerCase()
+      .split(/\s*,\s*/);
+    const allowedHeaders = (
+      preflight?.headers.get("access-control-allow-headers") ?? ""
+    )
+      .toLowerCase()
+      .split(/\s*,\s*/);
+    const missing = STAGED_PUT_SIGNED_HEADERS.filter(
+      (header) => !allowedHeaders.includes(header),
+    );
+    const detail =
+      status === 403
+        ? // S3 refuses an origin its rule does not name: no CORS headers, just
+          // a 403. That is the browser's PUT failing before it starts, so it is
+          // reported as a check that did not run — never as a pass.
+          "the check did not run: storage refused the origin (403) — the bucket's CORS rule does not name this deploy's PUBLIC_URL"
+        : status === 0
+          ? "the check did not run: no response from storage"
+          : `status ${status}, origin ${allowedOrigin ?? "—"}${
+              missing.length > 0
+                ? `, missing headers: ${missing.join(", ")}`
+                : ""
+            }`;
+    step(
+      "bucket CORS preflight allows the direct PUT",
+      status === 200 &&
+        (allowedOrigin === base || allowedOrigin === "*") &&
+        allowedMethods.includes("put") &&
+        missing.length === 0,
+      detail,
+    );
+  }
+
   let uploadStatus = 0;
   try {
     // `credentials: "omit"` as the browser does: the URL is the whole
@@ -199,7 +254,7 @@ if (catalogueId) {
     );
   }
   step(
-    "PUT the photo straight to storage (the bucket's CORS rule)",
+    "PUT the photo straight to storage (the presigned URL)",
     uploadStatus === 200,
     `status ${uploadStatus}`,
   );

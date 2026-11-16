@@ -41,11 +41,8 @@ export class ApiRequestError extends Error {
 
 interface ApiRequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
-  /** A JSON body. Omitted for reads and for the multipart stage calls. */
+  /** A JSON body. Omitted for reads and for the DELETE routes. */
   body?: unknown;
-  /** The multipart body of the stage routes. A FormData skips the JSON
-   *  content-type — the browser sets the boundary-carrying one. */
-  form?: FormData;
 }
 
 /**
@@ -56,11 +53,9 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, form } = options;
+  const { method = "GET", body } = options;
   const init: RequestInit = { method };
-  if (form !== undefined) {
-    init.body = form;
-  } else if (body !== undefined) {
+  if (body !== undefined) {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(body);
   }
