@@ -24,8 +24,12 @@ its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
 `catalogueAccessGrants`, `catalogueUnlockAttempts`), while the physical tables
 keep their `collections` / `collection_*` names: renaming a table is a
 non-additive migration that collides with deploy-before-migrate, and the
-physical name is invisible (ADR-0010). The old export names stay as aliases of
-the same objects until the API and the web finish migrating.
+physical name is invisible (ADR-0010). The rule is worth stating once: **the
+Drizzle entity is `catalogues`; the physical Postgres table is still
+`collections`**, and the same holds for the four `collection_*` tables and for
+every relation's `catalogueId` property, whose physical column stays
+`"collectionId"`. A TS-only rename of a property or export therefore generates
+no SQL.
 
 Layout:
 
@@ -60,7 +64,11 @@ Layout:
   `authenticated` is appended by hand. The guard is deliberate: Supabase creates
   those roles, while the local stack and CI have neither, so an unguarded
   `REVOKE … FROM anon` would fail every `db:migrate` with `role "anon" does not
-exist`. Nothing else is edited by hand.
+exist`. `0009_catalogue_kind` and `0010_artwork_availability` are the other
+  contrast: both are pure `generate` output. `kind` is `NOT NULL` with a constant
+  default, so the existing rows are already right and no backfill is owed;
+  `availability` is nullable, so a work without a market state is the normal
+  state rather than a gap to tighten. Nothing else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
@@ -78,6 +86,9 @@ collaborator is a row in `collection_collaborators`;
 `collections.mediaNamespaceId` is fixed at creation, so a transfer moves no
 object; and `collection_invitations` stores the token's hash, never the token,
 with one pending offer per catalogue and address as a partial unique index.
+`catalogues.kind` is fixed at creation (`portfolio`, `collection`, `inventory`)
+and `artworks.availability` is nullable (`available`, `reserved`, `sold`,
+`on-consignment`), each guarded by a CHECK.
 `artworks.userId` is a mirror of the catalogue owner, not an authorization
 fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and

@@ -3,9 +3,9 @@
 This document describes the product and the code as they stand. Where it and the
 code disagree, the code is right — but a disagreement is a doc bug worth fixing.
 
-> **Sharing is built.** Access is membership: `collections.userId` is the owner
-> fact, a `collection_collaborators` row is everyone else, and the owner and
-> every collaborator read and edit the whole collection, documents included.
+> **Sharing is built.** Access is membership: `catalogues.userId` is the owner
+> fact, a `catalogueCollaborators` row is everyone else, and the owner and
+> every collaborator read and edit the whole catalogue, documents included.
 > Inviting, resending, revoking, removing and transferring stay owner-only. The
 > invitation loop, the invitee's in-app list, ownership transfer and the
 > settings page's access card are built; the two mails are the invitation and
@@ -21,12 +21,21 @@ implementation-ready contracts for individual features are in `docs/specs/`.
 
 ## What the product is
 
-An art collection manager for independent collectors. Accounts sign themselves
-up, own a collection (one on the free tier), invite collaborators by email, and
-record the artworks in it: title, artist, and the descriptive fields a real
-collection needs — with photos and other documents attached. A collection can be
-shared with collaborators, who edit it alongside the owner, and given a public
-page whose presentation is chosen by a "skin".
+A catalogue manager for independent collectors, artists and galleries.
+Accounts sign themselves up, own a catalogue (one on the free tier), invite
+collaborators by email, and record the artworks in it: title, artist, and the
+descriptive fields a real catalogue needs — with photos and other documents
+attached. A catalogue can be shared with collaborators, who edit it alongside
+the owner, and given a public page whose presentation is chosen by a "skin".
+
+A catalogue carries a **kind**, fixed at creation: a **Portfolio** is one
+artist's body of work, a **Collection** is what a collector owns, and an
+**Inventory** is what a gallery represents for sale. The kind shapes the surface
+(the name and description labels, and whether a work carries an availability) —
+it is not an account role, because one account may hold all three at once
+([ADR-0010](docs/adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md)).
+A work in a Portfolio or an Inventory carries an **availability** beside its
+published/draft status; a Collection's works do not.
 
 The design bet, stated in the README, is that art is not tidy data: an unset
 field is not an empty one, `acquisitionDate` is a string ("circa 1889") rather
@@ -66,6 +75,17 @@ alternatives are in
 Thirteen tables in Postgres with sharing and password protection, defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
+**The entity is a Catalogue; the physical table is `collections`.** The Drizzle
+entity is exported as `catalogues`, and its relations are
+`catalogueCollaborators`, `catalogueInvitations`, `catalogueAccessGrants` and
+`catalogueUnlockAttempts`; the relation property is `catalogueId`. The physical
+Postgres tables keep their `collections` / `collection_*` names and the physical
+column keeps `"collectionId"`, because renaming storage is a non-additive
+migration that collides with deploy-before-migrate, and the physical name is
+invisible ([ADR-0010](docs/adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md)).
+The section headings below name the physical table, as the storage record does;
+the prose says catalogue.
+
 Every row id is short and opaque: ten base62 characters minted by `mintId` in
 `packages/shared/src/ids.ts`, never a sequence or a UUID. Ids minted before that
 shape existed are permanent, so both forms remain valid
@@ -94,9 +114,15 @@ a config flip rather than a schema change.
 
 ### `collections`
 
-`id`, `userId`, `mediaNamespaceId`, `name`, `description?`, `skin?`,
-`skinOptions` (jsonb), `isPublic` (default `true`), `deletedAt?`, `createdAt`,
-`updatedAt`.
+`id`, `userId`, `mediaNamespaceId`, `name`, `kind` (default `collection`),
+`description?`, `skin?`, `skinOptions` (jsonb), `isPublic` (default `true`),
+`passwordHash?`, `deletedAt?`, `createdAt`, `updatedAt`.
+
+`kind` is `portfolio`, `collection` or `inventory`, `NOT NULL` with a constant
+default (every row that predates it is a collector's) and CHECK-constrained to
+the three values. Nothing writes it after create: a catalogue never changes
+meaning underneath the works it holds. `0009_catalogue_kind` is pure generated
+SQL — a constant default needs no backfill.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
 namespace every final media key uses. The schema shipped in two releases:
@@ -112,26 +138,26 @@ moves and existing URLs keep working.
 needs no backfill — the deliberate contrast with `deletedAt`. `skinOptions` is
 validated at read time against the selected skin's declared options; an unknown
 key is dropped and a wrong type falls back to the default, so a stale or
-hand-edited value cannot corrupt a collection.
+hand-edited value cannot corrupt a catalogue.
 
-`deletedAt` is the collection's deletion stamp: null while it is live, a
+`deletedAt` is the catalogue's deletion stamp: null while it is live, a
 timestamp once its owner deletes it. It is nullable with no default and no
-backfill — a live collection is the normal state, so nothing needed tightening
+backfill — a live catalogue is the normal state, so nothing needed tightening
 later — and it carries no index, because the signed-in list and the cap count
 already narrow on the owner column, the anonymous public list narrows on the
 visibility flags, and deleted rows are rare. The stamp is the whole
 record of the act. The shared loader refuses a stamped row, so every address
-that named the collection answers not-found for every viewer, and the four raw
+that named the catalogue answers not-found for every viewer, and the four raw
 queries that bypass the loader filter it themselves: the two lists, the cap
 count and the invitee's inbox. Nothing cascades — the works, their photo and
 document rows, the media objects and the collaborator rows stay — which is what
-makes an operator's restore of the collection a one-column update. The deletion
-transaction also withdraws the collection's pending invitations and deletes its
+makes an operator's restore of the catalogue a one-column update. The deletion
+transaction also withdraws the catalogue's pending invitations and deletes its
 Access grant rows
 ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)).
 
 `passwordHash` is nullable text — a one-way scrypt hash with its salt and cost
-parameters encoded in the string — so a collection with no password is the
+parameters encoded in the string — so a catalogue with no password is the
 normal state rather than a gap to backfill. The plaintext is never stored and
 never reaches a client under any read, for any viewer, the owner included.
 
@@ -139,14 +165,14 @@ never reaches a client under any read, for any viewer, the owner included.
 
 `collection_access_grants`: `collectionId`, `tokenHash` (unique), `createdAt`,
 `expiresAt`, with an index on `collectionId` so a password change revokes a
-collection's grants in one statement. It holds the SHA-256 hash of a 32-byte
+catalogue's grants in one statement. It holds the SHA-256 hash of a 32-byte
 token, never the token: a database leak is a set of unguessable hashes, not a
 set of working grants. Expiry is computed from `expiresAt`, never stored as a
 status.
 
 `collection_unlock_attempts`: `(ip, collectionId, windowStart)` as the primary
 key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
-collection's throttle cannot lock visitors out of another's through a shared
+catalogue's throttle cannot lock visitors out of another's through a shared
 address. The window length is the route's policy, not the schema's
 (`unlockThrottle.ts`), and the unlock route is the only writer and reader.
 
@@ -155,12 +181,12 @@ address. The window length is the route's policy, not the schema's
 `collection_collaborators`: `collectionId`, `userId`, `createdAt`, primary key
 `(collectionId, userId)`, with an index on `userId` for the dashboard. The owner
 is not duplicated here; a row is what makes an account a collaborator and is the
-authorization fact for everything inside the collection.
+authorization fact for everything inside the catalogue.
 
 `collection_invitations`: `id`, `collectionId`, `email`, `invitedByUserId`,
 `tokenHash`, `status` (`pending` | `accepted` | `declined` | `revoked`),
 `createdAt`, `expiresAt`, `resolvedAt?`, with a unique `tokenHash`. There is at
-most one pending invitation per collection and email (stored trimmed and
+most one pending invitation per catalogue and email (stored trimmed and
 lowercased), enforced by a partial unique index on
 `(collectionId, lower(email)) WHERE status = 'pending'`. Resending rotates the
 token, the expiry and the issue time on that row, which is also the 60-second
@@ -174,17 +200,25 @@ the mail.
 optional descriptive fields `serie`, `dateOfCreation`, `medium`, `dimensions`,
 `editions`, `acquisitionDate`, `acquisitionPrice`, `placeOfOrigin`, `provenance`,
 `notes`, `condition`, `currentValue` — all `text`, so the string that was typed
-is the string that is stored. Plus `status` (`published` or `draft`, default
-`published`), `deletedAt` (nullable), `createdAt`, `updatedAt`.
+is the string that is stored — plus `availability` (nullable), `status`
+(`published` or `draft`, default `published`), `deletedAt` (nullable),
+`createdAt`, `updatedAt`.
 
-`userId` is a mirror of the collection owner, kept in step when a collection is
+`availability` is `available`, `reserved`, `sold` or `on-consignment`, nullable
+with no default and CHECK-constrained to the four values. Null means no market
+state, which is every Collection work, so `0010_artwork_availability` is pure
+generated SQL and needs no backfill. The API accepts it on any work and never
+checks it against the catalogue's kind; which kinds surface it is a presentation
+decision.
+
+`userId` is a mirror of the catalogue owner, kept in step when a catalogue is
 transferred; no route authorizes on it, and media URLs no longer derive their
 namespace from it. No per-work creator is recorded.
 
-The collection is the only gate on a visitor: a visitor sees a published, live
-work exactly when its collection is public. There is no per-work visibility
+The catalogue is the only gate on a visitor: a visitor sees a published, live
+work exactly when its catalogue is public. There is no per-work visibility
 flag — a work's only choice of its own is published or draft, and a draft counts
-as part of its collection.
+as part of its catalogue.
 
 Three indexes back the two list queries and the create-time check: the owner
 list (`collectionId, deletedAt`), the visitor list (`collectionId, status,
@@ -220,11 +254,11 @@ segments are ids and variant keys, and no user-supplied filename ever reaches a
 path.
 
 ```
-final:    artworks/{mediaNamespaceId}/{collectionId}/{artworkId}/{photos|documents}/{entryId}_{key}.{ext}
-staging:  staging/{uploaderId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+final:    artworks/{mediaNamespaceId}/{catalogueId}/{artworkId}/{photos|documents}/{entryId}_{key}.{ext}
+staging:  staging/{uploaderId}/{catalogueId}/{artworkId}/{entryId}[_{key}].{ext}
 ```
 
-The final namespace is the collection's `mediaNamespaceId`, fixed at creation:
+The final namespace is the catalogue's `mediaNamespaceId`, fixed at creation:
 a transfer changes the owner but never the key, so no object moves. Staging is
 per uploader, so one collaborator's staged object is never under another's
 prefix, and the sweep lists only the caller's prefix.
@@ -240,7 +274,7 @@ literal prefixes, so one rule expires every staged object everywhere.
    every variant to WebP at quality 95. The variants: `xxlarge` (max 3000,
    inside), `xlarge` (max 2400, inside), `square_lg` (800 cover), `square_sm`
    (400 cover), `large` (max 1200, inside), `medium` (max 800, inside).
-   `xxlarge` is the Collection PDF's source — its photo box needs 2417 px at
+   `xxlarge` is the Catalogue PDF's source — its photo box needs 2417 px at
    300 dpi, past `xlarge`'s cap
    ([ADR-0006](docs/adr/0006-the-collection-pdf-prints-from-its-own-variant.md)) —
    and the widest `srcSet` candidate the slideshow offers. A document image gets
@@ -251,35 +285,35 @@ literal prefixes, so one rule expires every staged object everywhere.
    entries lose their rows, and their final objects are deleted after commit.
    Staged objects are deleted after commit too. An S3 copy cannot roll back with
    the rows, so a failed save may leave final objects with no row — the accepted
-   residual that the staging lifecycle (7 days) and the collection sweep route
+   residual that the staging lifecycle (7 days) and the catalogue sweep route
    exist to clear.
 
 Reads never touch S3 directly. `GET /api/v1/media?key=…` parses the key back into
 its segments, re-checks visibility against the row, and streams the object:
 
-- **final photo** — a member of the collection (the owner or a collaborator),
-  or a visitor when the work is published **and** live **and** its collection is
+- **final photo** — a member of the catalogue (the owner or a collaborator),
+  or a visitor when the work is published **and** live **and** its catalogue is
   public;
-- **final document** — the collection's members only (a visitor gets a `403`,
-  so a forgotten-to-hide UI fails closed);
+- **final document** — the catalogue's members only (a visitor gets a `403`, so
+  a forgotten-to-hide UI fails closed);
 - **staged object** — the uploader whose staging prefix holds it, while they are
-  still a member of the collection the entry was staged under.
+  still a member of the catalogue the entry was staged under.
 
 ## Access control
 
 There is no rules language to audit: **the API is the only path to the data.**
 `requireSession` / `resolveSession` establish the caller; `authorize.ts` loads
-the collection, the viewer's membership row and the rows every write route
+the catalogue, the viewer's membership row and the rows every write route
 shares, and `access.ts` answers the access questions as pure functions over
 those rows.
 
 Access is membership, and the membership fact (`membershipOf`) says which of
-two matrices applies. **Inside a collection** — the owner, and every account
-with a `collection_collaborators` row — see the collection: every live work,
+two matrices applies. **Inside a catalogue** — the owner, and every account
+with a `catalogueCollaborators` row — see the catalogue: every live work,
 drafts included, and a deleted work by id; and its documents, at every status.
 `artworks.userId` is never consulted for authorization; it mirrors the owner for
 the wire document, nothing more. The read paths load the viewer's membership,
-and every write path asks the same question through `requireMemberCollection`:
+and every write path asks the same question through `requireMemberCatalogue`:
 a collaborator changes every setting (public/private included), creates, edits,
 imports, bulk-deletes, restores and sweeps exactly as the owner does. Only
 access administration stays owner-only. Staging is per uploader, so
@@ -288,46 +322,46 @@ uploads (ADR-0004).
 
 **Outside it**, the visitor rule lives in `apps/api/src/access.ts`, pure over
 rows a caller has already loaded: no database, no session, no framework. **The
-collection is the only gate.** A visitor sees a published, live work exactly
-when its collection is public; a draft, a deleted work and a private collection
+catalogue is the only gate.** A visitor sees a published, live work exactly
+when its catalogue is public; a draft, a deleted work and a private catalogue
 are one answer to them, and a blocked work answers a uniform `404` — saying
-which was refused would be a disclosure. (A private _collection_ answers `403`,
+which was refused would be a disclosure. (A private _catalogue_ answers `403`,
 which the web client maps to its "private" state.) Signing in buys nothing here:
 a Visitor and an anonymous reader are one membership, `null`. The list route
 keeps its SQL filter, and a test pins the filter and the verdict to the same
 answer ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
 
 **Protected** is that gate with a second condition in front of it, not a third
-visibility state: a public collection whose `passwordHash` is set is readable by
+visibility state: a public catalogue whose `passwordHash` is set is readable by
 a non-member only when the request carries a valid **Access grant**
 ([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
 Membership bypasses the challenge entirely, the grant admits exactly what a
 visitor sees — published, live works, and never a draft or a document — and a
-private collection stays closed to a grant holder. `canSeeCollection` and
+private catalogue stays closed to a grant holder. `canSeeCatalogue` and
 `canSeeArtwork` take the grant as a fact beside membership; `authorize.ts`'s
-`grantHeld` reads it off the cookie named for the collection (`arcula_grant_{id}`,
-`Path=/api/v1`, because the media proxy is one route for every collection's
+`grantHeld` reads it off the cookie named for the catalogue (`arcula_grant_{id}`,
+`Path=/api/v1`, because the media proxy is one route for every catalogue's
 bytes, so the name rather than the path is the scope) and looks the row up by
-the collection id and the token's hash. The collection read, the artwork list,
-the single-artwork read and the media proxy all ask that one verdict, so the
-password covers the row and the bytes alike. The anonymous list filters on
-public **and not protected**, exactly as it excludes a private collection: a
-protected collection is shared as a link, not found in an index. A refused
-collection read answers `403 password-required` with the collection's name —
+the catalogue id and the token's hash. The catalogue read, the artwork list, the
+single-artwork read and the media proxy all ask that one verdict, so the password
+covers the row and the bytes alike. The anonymous list filters on public **and
+not protected**, exactly as it excludes a private catalogue: a protected
+catalogue is shared as a link, not found in an index. A refused catalogue read
+answers `403 password-required` with the catalogue's name —
 a challenge the lock screen answers, and the deliberate contrast with the
 invitation token's uniform `not-found`, because here the artefact is not the
 secret.
 
-A collaborator is a row in `collection_collaborators`, never a second `userId`
-on the collection, and the owner is not duplicated there. Documents are readable
+A collaborator is a row in `catalogueCollaborators`, never a second `userId` on
+the catalogue, and the owner is not duplicated there. Documents are readable
 by the owner and collaborators at every status, never by a visitor
 ([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)). The
-dashboard reads `GET /collections` — owned and shared together, name-ordered,
+dashboard reads `GET /catalogues` — owned and shared together, name-ordered,
 each row with `role` and a shared row with the owner's `ownerName` — and its
-cap counter counts owned collections only, because the tier cap gates creation.
+cap counter counts owned catalogues only, because the tier cap gates creation.
 
 Soft delete is a `deletedAt` stamp: the work leaves every live list, the bytes
-stay, and the collection's **Deleted** view lists the stamped works, most
+stay, and the catalogue's **Deleted** view lists the stamped works, most
 recently deleted first, where one or several are restored. A deleted work's Edit
 page says so, disables Save and the media uploaders, and offers Restore in
 place, keeping any unsaved input. Restore clears the stamp and touches nothing
@@ -345,18 +379,18 @@ timestamp and the media-proxy `url` fields).
 
 Sharing is built. The owner creates an invitation; the mail is the only place
 the raw token exists, and the invited account previews, accepts or declines it.
-The owner administers the offers from `GET /collections/:id/access` (the
+The owner administers the offers from `GET /catalogues/:id/access` (the
 caller's role, the owner and the collaborators, plus the pending invitations to
 the owner alone), resends (a fresh token, expiry and issue time on the same
 row, once every 60 seconds) and revokes. The invitee's `GET /me/invitations`
-lists their pending, unexpired offers — each with its collection and inviter —
+lists their pending, unexpired offers — each with its catalogue and inviter —
 and can decline one in app; acceptance is the mailed link's job. Access ends
 when the owner removes a collaborator
-(`DELETE /collections/:id/collaborators/:userId`) or a collaborator leaves
-(`DELETE /collections/:id/collaborators/me`), both immediately and both
-discarding only the departing account's staging prefix for that collection,
+(`DELETE /catalogues/:id/collaborators/:userId`) or a collaborator leaves
+(`DELETE /catalogues/:id/collaborators/me`), both immediately and both
+discarding only the departing account's staging prefix for that catalogue,
 best effort. Ownership moves to an existing collaborator through
-`POST /collections/:id/transfer`: one transaction updates the owner, mirrors
+`POST /catalogues/:id/transfer`: one transaction updates the owner, mirrors
 the artwork rows, persists the media namespace and swaps the two membership
 rows; the namespace never moves, so every URL keeps working. The new owner is
 mailed a link to the manage page (a failed notice answers `emailSent: false`
@@ -367,7 +401,7 @@ expired, revoked or consumed invitation token answers `not-found` like an
 unknown one, as does an in-app decline of anything but the caller's own live
 offer.
 
-The settings write is partial. `PATCH /collections/:id` makes every field
+The settings write is partial. `PATCH /catalogues/:id` makes every field
 optional — name and visibility included: an absent key leaves the column
 alone, a present key validates as before (a name still trims and still cannot
 be blank), and a body that names nothing is a valid, successful no-op that
@@ -377,20 +411,20 @@ bundle cached from before it still sends both fields and is still accepted,
 and the two halves cannot skew, because the client and the server ship as one
 Lambda.
 
-Collection passwords ride the same write. A string sets (or overwrites) the
+Catalogue passwords ride the same write. A string sets (or overwrites) the
 password, `null` removes it, and an absent key leaves it alone; the write
-revokes the collection's grants in the same transaction, and the member read
+revokes the catalogue's grants in the same transaction, and the member read
 carries `isPasswordProtected`, derived from the hash's presence, the hash
-itself never leaving the server. `POST /collections/:id/unlock`
+itself never leaving the server. `POST /catalogues/:id/unlock`
 takes a password and answers `201` with the grant cookie or `403
-invalid-password`; a collection with no password (or a private one) answers
+invalid-password`; a catalogue with no password (or a private one) answers
 `409`, because there is nothing to get past. Those new codes are `403`
 (`password-required` for the challenge, `invalid-password` for a failed
 attempt), and the envelope's fixed set gained them rather than overloading
 `forbidden`.
 
 Guessing is throttled. Each unlock attempt claims a failure slot for its
-**(address, collection)** pair in `collection_unlock_attempts`, in a **fixed**
+**(address, catalogue)** pair in `catalogueUnlockAttempts`, in a **fixed**
 ten-minute window floored from the attempt's own time: ten failures spend the
 window and the eleventh attempt is refused unread with `429
 too-many-attempts`, whose message states the window and nothing about the time
@@ -404,8 +438,8 @@ forwarding header is never trusted, because it is client-supplied. The identity
 is honest rather than complete: an address is shared behind a proxy and cheap to
 multiply, so this raises the cost of guessing without being a proof.
 
-The collection artwork list takes an optional member-only `q`. A present query
-is a member condition ahead of the visitor verdict — a missing collection is
+The catalogue artwork list takes an optional member-only `q`. A present query
+is a member condition ahead of the visitor verdict — a missing catalogue is
 `404`, no session `401`, and a signed-in non-member (an Access grant holder
 included) `403` — and a query over 200 characters or 10 terms is `400
 validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
@@ -419,19 +453,19 @@ works are never candidates and a member's drafts are. The filter runs in the API
 over the rows the list already reads, after the visibility verdict, so only
 matching works load their photos and documents; there is no SQL pushdown, no
 extension and no migration, and the list read remains the single seam to
-replace if collection sizes demand it. No matches is `200 []`, and an absent,
+replace if catalogue sizes demand it. No matches is `200 []`, and an absent,
 empty or whitespace-only `q` leaves the list unchanged.
 
 The artwork form's Artist Name suggestions are the caller's own vocabulary, not
-a collection's: `GET /api/v1/artist-names` takes no collection id and no
+a catalogue's: `GET /api/v1/artist-names` takes no catalogue id and no
 parameter, answers `401` without a session and `200 []` for a caller with no
-collections, and reads the names recorded in the collections the caller owns or
+catalogues, and reads the names recorded in the catalogues the caller owns or
 collaborates on — the scope decided in
 [ADR-0009](docs/adr/0009-artist-name-suggestions-are-caller-scoped.md). Inside
 that scope it counts live works only — drafts contribute, deleted works and
-deleted collections never — grouping the exact spellings with their live-work
+deleted catalogues never — grouping the exact spellings with their live-work
 count and newest update, then collapsing case and accent variants to one artist
-through the shared Collection-search normalization (`normalizeSearchText`). The
+through the shared catalogue-search normalization (`normalizeSearchText`). The
 spelling offered for each artist is its most-used one, with ties falling to the
 most recently updated work and then to lexicographic order; the list is ordered
 by use and then display name, case-insensitively, and silently cut at 2,000. The
@@ -448,41 +482,41 @@ replace its source without changing the wire.
 - **Public** — `/` (product page), `/login`, `/signup`,
   `/reset-password` (the request) and `/reset-password/:token` (the form the
   mailed link lands on), `/invite/:token` (the invitation landing page, which
-  shows the collection and invited email before sign-in), and the skin-rendered
-  `/collection/:collectionId` and `/collection/:collectionId/artwork/:artworkId`.
-- **Protected** — everything under `/manage`: the dashboard, a collection and its
+  shows the catalogue and invited email before sign-in), and the skin-rendered
+  `/catalogue/:catalogueId` and `/catalogue/:catalogueId/artwork/:artworkId`.
+- **Protected** — everything under `/manage`: the dashboard, a catalogue and its
   settings, artwork add/edit, the CSV import, and the account profile.
 
 `src/services/` is the client layer (`api.ts` is the transport the domain
 services share); `src/auth/` is the Better Auth React client; `src/skins/` is the
-public-view system. A skin renders a public collection through `SkinHost`, which
+public-view system. A skin renders a public catalogue through `SkinHost`, which
 scopes the skin's CSS variables so its type scale cannot leak onto `/manage`; a
 skin must not use a portaled Mantine component, which would render outside that
 scope. Skins are registered in `src/skins/registry.ts` (`basicx` is the default),
-and a collection's stored options are resolved against the skin's declared specs
+and a catalogue's stored options are resolved against the skin's declared specs
 with an unknown key reported rather than silently dropped.
 
-A Protected collection's lock screen is app chrome, not a skin: the public page
+A Protected catalogue's lock screen is app chrome, not a skin: the public page
 renders it beside the canonical-URL rewrite, outside the skin's scope, because
-the lock is about the collection rather than how it is presented, and because a
+the lock is about the catalogue rather than how it is presented, and because a
 prompt is the portaled component a skin may not use. It is reached as a state,
-not an error: the collection read's `403 password-required` folds to `locked`,
-the screen names the collection the refusal named, and a wrong password is the
+not an error: the catalogue read's `403 password-required` folds to `locked`,
+the screen names the catalogue the refusal named, and a wrong password is the
 one attempt failure with its own sentence. On success it calls the hook's
-`reload`, which re-runs the ordinary load — collection first, artworks second —
+`reload`, which re-runs the ordinary load — catalogue first, artworks second —
 with the grant cookie now set, so there is one path to ready. An expired grant
 re-enters the same way: the next read is refused again and the reader lands back
 on the lock screen rather than on an error page.
 
-The dashboard lists owned and shared collections together with a role badge and
-the owner's name on a shared row; its cap counter counts owned collections only.
-A shared collection is readable and editable: the manage page's write controls
+The dashboard lists owned and shared catalogues together with a role badge and
+the owner's name on a shared row; its cap counter counts owned catalogues only.
+A shared catalogue is readable and editable: the manage page's write controls
 work for a collaborator exactly as for the owner, because the server answers
 them by membership. Above that list sit the pending invitations addressed to
-the signed-in account, each naming its collection and inviter and offering
+the signed-in account, each naming its catalogue and inviter and offering
 decline only — acceptance is the mailed link, and the card says so.
 
-The collection page's search is address state, not component state: `q` in the
+The catalogue page's search is address state, not component state: `q` in the
 URL is the source of truth. The query is written as the collector types,
 debounced, replacing the current history entry so a live search does not fill
 the Back stack; the X clears it; and the canonical `{slug}-{id}` rewrite
@@ -491,8 +525,8 @@ Back/Forward without overwriting a draft still being typed, so a reload, a
 bookmark or a shared address lands on the same results.
 With a query active the count reads `Found X artworks` (`Found 1 artwork` in the
 singular); zero matches shows a no-results panel naming the query with a Clear
-search action, while a collection with no works and no query keeps the ordinary
-empty-collection state. A list read in flight keeps the previous rows on screen
+search action, while a catalogue with no works and no query keeps the ordinary
+empty state. A list read in flight keeps the previous rows on screen
 under the fetching indicator, a stale answer is discarded, and a failure keeps
 those rows with an inline Alert and Retry; with no previous rows the Alert
 replaces the table. A new query resets the table to page 1 and clears the row
@@ -515,16 +549,16 @@ default accent-sensitive substring match, so the server's accent-insensitive
 collapse and the client's matching deliberately differ: typing `maria` misses a
 recorded "María López".
 
-The collection settings page is four tabs, each with its own save:
+The catalogue settings page is four tabs, each with its own save:
 **General** (name, description, public or private, and the password control),
 **Public view** (the skin and the options the selected skin declares, with the
 notice that some stored options are unused), **Access** (the card described
 below) and **Data** (the CSV import card). Each tab is an address —
 `/settings/general`, `/settings/public`, `/settings/access`,
 `/settings/data` — and a bare or unknown segment lands on General through the
-effect that rewrites the collection's name-and-id in the address, so an old
+effect that rewrites the catalogue's name-and-id in the address, so an old
 settings link needs no redirect route of its own. Each tab saves only its own
-half of the collection update, as the pure decision beside the page answers
+half of the catalogue update, as the pure decision beside the page answers
 it: a save leaves the member on the tab it saved from, names the tab in the
 confirmation, and re-canonicalises the name in the address in place; a failed
 save keeps the input on screen; and the Save is off while the tab's decision
@@ -542,15 +576,15 @@ after it the card re-reads itself as the collaborator's view.
 
 ## Tiers and quotas
 
-`packages/shared/src/limits.ts` holds `COLLECTION_LIMITS` and
-`collectionLimitForTier`. One map, imported by both sides, so the API's
+`packages/shared/src/limits.ts` holds `CATALOGUE_LIMITS` and
+`catalogueLimitForTier`. One map, imported by both sides, so the API's
 enforcement and the client's messaging cannot disagree. The API checks the cap on
 create and returns `limit-reached` (409); the client reads the same table to
-reflect the cap in the UI. The cap counts owned collections that are **live**;
+reflect the cap in the UI. The cap counts owned catalogues that are **live**;
 collaborations do not count, a transfer may take the recipient over the cap
-without being refused, and a deleted collection frees its slot immediately
+without being refused, and a deleted catalogue frees its slot immediately
 ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)). The free
-tier is one owned collection.
+tier is one owned catalogue.
 
 ## What is not built
 
@@ -561,24 +595,24 @@ larger feature ideas are in [README's Roadmap](README.md#roadmap).
 - **A read-only collaborator role.** Every collaborator can edit; a viewer would
   need a second permission matrix on the server and in every management screen.
 - **Per-work attribution or an audit trail.** `artworks.userId` mirrors the
-  collection owner, so the record does not say who added or edited a work.
+  catalogue owner, so the record does not say who added or edited a work.
 - **Accepting or declining an ownership transfer.** A transfer is immediate and
   sends a notice; reversing it is another transfer.
-- **Rate limiting.** The unlock route is throttled per address and collection (a
+- **Rate limiting.** The unlock route is throttled per address and catalogue (a
   fixed ten-minute window in Postgres), but neither the invitation create route
   nor the password-reset mail is: both still go out at server speed. And the
   unlock throttle's identity is an address, which is shared behind a proxy and
   cheap to multiply, so it raises the cost of guessing rather than proving
   anything.
-- **A collaborator cap.** A collection may invite any number of collaborators.
-- **Account deletion**, and what it means for a collection's owner or a
+- **A collaborator cap.** A catalogue may invite any number of collaborators.
+- **Account deletion**, and what it means for a catalogue's owner or a
   collaborator.
-- **Restoring a deleted collection from the app.** Deletion is a stamp an
+- **Restoring a deleted catalogue from the app.** Deletion is a stamp an
   operator clears by hand
   ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)); there is
   no trash view, no undo and no script.
-- **Reclaiming a deleted collection's storage.** Deletion keeps every object so
-  the collection can be restored, and nothing purges them.
+- **Reclaiming a deleted catalogue's storage.** Deletion keeps every object so
+  the catalogue can be restored, and nothing purges them.
 
 ## Open decisions
 
