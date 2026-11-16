@@ -19,4 +19,6 @@ export * from "./schemas/artworkImport";
 export * from "./schemas/catalogue";
 export * from "./schemas/document";
 export * from "./schemas/invitation";
+export * from "./schemas/media";
 export * from "./schemas/user";
+export * from "./stagedUpload";

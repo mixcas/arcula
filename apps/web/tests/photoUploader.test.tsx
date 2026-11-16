@@ -21,8 +21,9 @@ import {
   type UseArtworkPhotos,
 } from "@/hooks/useArtworkPhotos";
 import { mediaService } from "@/services/mediaService";
+import { MediaUploadError } from "@/services/uploadError";
 import { ApiRequestError } from "@/services/api";
-import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import { MAX_ARTWORK_PHOTOS, MAX_IMAGE_BYTES } from "@arcula/shared";
 import type { ArtworkPhoto } from "@arcula/shared";
 
 /**
@@ -140,38 +141,50 @@ const fileInput = (): HTMLInputElement => {
 };
 
 /**
- * Every entry id that passed through the stage mock, in arrival order.
+ * Every entry id that passed through the staging mock, in arrival order.
  *
  * The ids are minted by the hook with `crypto.randomUUID` and its hyphens
  * removed, so a test cannot predict them; capturing them is what makes the
  * discard assertions name the exact object the server is being asked to drop.
+ * The file is kept alongside it because the process call carries only the id —
+ * the mock's answer has to reconstruct what the server measured from the bytes
+ * it staged, the way the real process call does.
  */
 let stagedEntryIds: string[];
+let stagedFiles: Map<string, File>;
 
 beforeEach(() => {
   stagedEntryIds = [];
+  stagedFiles = new Map();
 
+  // `stagePhoto` is presign + the direct PUT: the hook never sees the
+  // presigned URL, so the mock answers the staged object's proxy path only.
   vi.mocked(mediaService.stagePhoto).mockImplementation(
     (_cid, _aid, entryId, file) => {
       stagedEntryIds.push(entryId);
+      stagedFiles.set(entryId, file);
       return Promise.resolve({
         entryId,
-        name: file.name,
-        width: 2000,
-        height: 1500,
-        size: file.size,
-        contentType: file.type,
         url: `https://media.test/staging/${entryId}/original`,
       });
     },
   );
   // The two variants the form actually renders: `square_lg` for the tile,
   // `large` for the preview modal. Named urls, not blobs — there is no
-  // object-URL lifecycle left to test against.
+  // object-URL lifecycle left to test against. The metadata is what the
+  // server measured from the stored object, so it comes back here, not from
+  // the presign declaration.
   vi.mocked(mediaService.processPhoto).mockImplementation(
-    (_cid, _aid, entryId) =>
-      Promise.resolve({
+    (_cid, _aid, entryId) => {
+      const file = stagedFiles.get(entryId);
+      return Promise.resolve({
         entryId,
+        name: file?.name ?? "untitled",
+        width: 2000,
+        height: 1500,
+        size: file?.size ?? 0,
+        contentType: file?.type ?? "image/jpeg",
+        url: `https://media.test/staging/${entryId}/original`,
         variants: [
           {
             key: "square_lg",
@@ -190,7 +203,8 @@ beforeEach(() => {
             contentType: "image/webp",
           },
         ],
-      }),
+      });
+    },
   );
   vi.mocked(mediaService.discardPhoto).mockResolvedValue(undefined);
 });
@@ -373,6 +387,48 @@ describe("PhotoUploader", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByRole("img", { name: "scan.jpg" })).toBeNull();
+  });
+
+  it("stages the file before asking the server to process it", async () => {
+    // The order is the flow: presign + PUT (one call from the hook's side),
+    // then process. Nothing can be processed that storage does not hold yet,
+    // and a swapped pair would make every upload fail at process — visible
+    // only against a real stack.
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+    await screen.findByRole("img", { name: "scan.jpg" });
+
+    expect(mediaService.stagePhoto).toHaveBeenCalledTimes(1);
+    expect(mediaService.processPhoto).toHaveBeenCalledTimes(1);
+    const stagedAt = vi.mocked(mediaService.stagePhoto).mock
+      .invocationCallOrder[0];
+    const processedAt = vi.mocked(mediaService.processPhoto).mock
+      .invocationCallOrder[0];
+    expect(stagedAt).toBeLessThan(processedAt);
+  });
+
+  it("rejects the file when the direct upload to storage fails", async () => {
+    // The PUT is the one call with no API envelope: the presigned URL may be
+    // expired, storage may refuse the headers, the connection may drop. The
+    // person gets a reason, the entry never appears, and there is nothing to
+    // discard because a failed PUT writes no object.
+    vi.mocked(mediaService.stagePhoto).mockRejectedValue(
+      new MediaUploadError(),
+    );
+    const user = userEvent.setup();
+    await renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+
+    expect(
+      await screen.findByText(
+        "scan.jpg: The file could not be uploaded to storage",
+      ),
+    ).toBeInTheDocument();
+    expect(mediaService.processPhoto).not.toHaveBeenCalled();
+    expect(mediaService.discardPhoto).not.toHaveBeenCalled();
   });
 
   it("discards the staged original when the variants fail", async () => {
@@ -623,6 +679,29 @@ describe("addFiles", () => {
     expect(mediaService.stagePhoto).not.toHaveBeenCalled();
   });
 
+  it("refuses a supported image over the byte cap without staging it", async () => {
+    // The shared guard asks the same type-and-size question presign does, so a
+    // file the server would refuse at the declaration costs no round trip —
+    // and its reason is the API's own "too large", not a second wording.
+    const oversized = jpegFile("huge.jpg");
+    Object.defineProperty(oversized, "size", {
+      value: MAX_IMAGE_BYTES + 1,
+    });
+    const photos = await withHook([], async (hook) => {
+      await act(async () => {
+        const result = await hook.addFiles([oversized]);
+        expect(result.added).toHaveLength(0);
+        expect(result.rejected.map((entry) => entry.reason)).toEqual([
+          "too large",
+        ]);
+      });
+    });
+
+    expect(photos.entries).toHaveLength(0);
+    expect(mediaService.stagePhoto).not.toHaveBeenCalled();
+    expect(mediaService.processPhoto).not.toHaveBeenCalled();
+  });
+
   it("leaves no gap in the numbering when a file fails mid-batch", async () => {
     // The append numbers each success from `entries.length + added.length`, so
     // a failure in the middle must not open a hole: the second success still
@@ -636,13 +715,9 @@ describe("addFiles", () => {
           );
         }
         stagedEntryIds.push(entryId);
+        stagedFiles.set(entryId, file);
         return Promise.resolve({
           entryId,
-          name: file.name,
-          width: 2000,
-          height: 1500,
-          size: file.size,
-          contentType: file.type,
           url: `https://media.test/staging/${entryId}/original`,
         });
       },

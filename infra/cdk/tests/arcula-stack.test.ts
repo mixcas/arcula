@@ -119,3 +119,35 @@ describe("the API display name", () => {
     expect(dev).not.toBe(prod);
   });
 });
+
+describe("the media bucket's browser upload allowance", () => {
+  // The bucket's rule and the presign's signed set are one contract with no
+  // shared build: `infra/cdk` installs its own dependencies and is not a
+  // workspace member, so it cannot import `@arcula/shared`. The list is read
+  // from the shared module instead — a plain constant with no imports — and
+  // the API's integration suite pins the other end to the same list. A header
+  // added to the presign without the rule (or a rule without the header) fails
+  // here, not in a browser. The import is dynamic because this package is
+  // CommonJS and the shared package is ESM.
+  it("admits a PUT from the public origin with exactly the signed headers", async () => {
+    const { STAGED_PUT_SIGNED_HEADERS } =
+      await import("../../../packages/shared/src/stagedUpload.js");
+    const origin = "https://arcula.example";
+    const stack = stackFor("prod", { PUBLIC_URL: origin });
+    const buckets = Template.fromStack(stack).findResources(
+      "AWS::S3::Bucket",
+    ) as unknown as Record<
+      string,
+      { Properties?: { CorsConfiguration?: { CorsRules?: unknown[] } } }
+    >;
+    const [media] = Object.values(buckets);
+
+    expect(media?.Properties?.CorsConfiguration?.CorsRules).toEqual([
+      {
+        AllowedHeaders: [...STAGED_PUT_SIGNED_HEADERS],
+        AllowedMethods: ["PUT"],
+        AllowedOrigins: [origin],
+      },
+    ]);
+  });
+});

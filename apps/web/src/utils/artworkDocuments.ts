@@ -9,11 +9,12 @@
  * `artworkPhotos.ts` reads the way it does. Sharing a module would mean either
  * pretending documents are ordered or threading a flag through every helper.
  *
- * What this module does not do anymore: name a document's stored object. The
- * server mints the object key from the content type it decoded, so
- * the client has no extension to choose and no allowlist to keep in step with
- * the rules — the accepted-type checks below are the form's only gate, and the
- * stage route enforces the same lists at the boundary.
+ * What this module does not do anymore: name a document's stored object, or
+ * judge whether a picked file is admissible. The server mints the object key
+ * from the content type it was given, and the allowlist and byte cap are the
+ * shared `checkDeclaredUpload` guard's — the form asks that same function, so
+ * there is no per-side list here to keep in step. What remains is
+ * classification: whether a type gets variants or an icon.
  */
 
 import {
@@ -22,15 +23,11 @@ import {
   type ArtworkDocument,
   type ArtworkDocumentImage,
 } from "@arcula/shared";
-import { ACCEPTED_DOCUMENT_TYPES } from "@arcula/shared";
 
-// The caps (`MAX_ARTWORK_DOCUMENTS`, `MAX_DOCUMENT_BYTES`) live in
-// `@arcula/shared/src/caps.ts`, shared by every side that enforces them; the
-// forms import them from there.
-
-/** True when the browser-reported type is one the form accepts. */
-export const isAcceptedDocumentType = (type: string | undefined): boolean =>
-  type !== undefined && type in ACCEPTED_DOCUMENT_TYPES;
+// The caps (`MAX_ARTWORK_DOCUMENTS`, `MAX_DOCUMENT_BYTES`) and the accepted
+// types live in `@arcula/shared/src/caps.ts`, shared by every side that
+// enforces them; the forms and the API read them through
+// `checkDeclaredUpload`.
 
 /** True for a type that gets variants rather than an icon. */
 export const isDocumentImageType = (type: string | undefined): boolean =>
