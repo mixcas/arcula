@@ -119,3 +119,25 @@ describe("the API display name", () => {
     expect(dev).not.toBe(prod);
   });
 });
+
+describe("the media bucket's browser upload allowance", () => {
+  it("admits a PUT from the public origin with only the signed header", () => {
+    const origin = "https://arcula.example";
+    const stack = stackFor("prod", { PUBLIC_URL: origin });
+    const buckets = Template.fromStack(stack).findResources(
+      "AWS::S3::Bucket",
+    ) as unknown as Record<
+      string,
+      { Properties?: { CorsConfiguration?: { CorsRules?: unknown[] } } }
+    >;
+    const [media] = Object.values(buckets);
+
+    expect(media?.Properties?.CorsConfiguration?.CorsRules).toEqual([
+      {
+        AllowedHeaders: ["content-type"],
+        AllowedMethods: ["PUT"],
+        AllowedOrigins: [origin],
+      },
+    ]);
+  });
+});
