@@ -11,8 +11,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArtworkAddPage from "@/components/manage/ArtworkAddPage";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
-import { MINTED_ID_SHAPE_RE, type Artwork } from "@arcula/shared";
+import {
+  MINTED_ID_SHAPE_RE,
+  type Artwork,
+  type Catalogue,
+  type CatalogueKind,
+} from "@arcula/shared";
 
 /**
  * The Add page is now one write: the form fields, the client-minted artwork
@@ -85,8 +91,12 @@ vi.mock("@/services/artworkService", () => ({
   artworkService: { createArtwork: vi.fn() },
 }));
 
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getCatalogue: vi.fn() },
+}));
+
 // The page mounts the suggestions hook; an empty list is the ordinary
-// no-collections answer, and keeps these save-path tests off the network.
+// no-catalogues answer, and keeps these save-path tests off the network.
 vi.mock("@/services/artistNameService", () => ({
   artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
 }));
@@ -109,15 +119,15 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-const COLLECTION_ID = "AAAAAAAAAAAAAAAAAAAA";
+const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
-const COLLECTION_PARAM = `flores-solares-${COLLECTION_ID}`;
+const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
 
 /** The server's answer for a created work. */
 const created = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: COLLECTION_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -128,7 +138,18 @@ const created = (overrides: Partial<Artwork> = {}): Artwork => ({
 
 /* eslint-disable @typescript-eslint/unbound-method */
 const createArtwork = vi.mocked(artworkService.createArtwork);
+const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
+
+const catalogue = (kind: CatalogueKind): Catalogue => ({
+  id: CATALOGUE_ID,
+  name: "Flores Solares",
+  kind,
+  userId: "owner-1",
+  isPublic: true,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+});
 
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
@@ -148,7 +169,7 @@ const renderPage = (search = "") =>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/add${search}`,
+            `/manage/catalogue/${CATALOGUE_PARAM}/artwork/add${search}`,
           ]}
         >
           {/* Outside the routes, so it reports wherever the page lands — the Add
@@ -156,7 +177,7 @@ const renderPage = (search = "") =>
           <LocationProbe />
           <Routes>
             <Route
-              path="/manage/collection/:collectionId/artwork/add"
+              path="/manage/catalogue/:catalogueId/artwork/add"
               element={<ArtworkAddPage />}
             />
           </Routes>
@@ -176,18 +197,20 @@ const renderPage = (search = "") =>
  * exactly the change worth being told about.
  */
 const editPath = () =>
-  `/manage/collection/${COLLECTION_PARAM}/artwork/estudio-en-rojo-${ARTWORK_ID}`;
+  `/manage/catalogue/${CATALOGUE_PARAM}/artwork/estudio-en-rojo-${ARTWORK_ID}`;
 
 /** Fills the two required fields and saves. */
 const save = async (
   user: ReturnType<typeof userEvent.setup>,
   title = "Estudio en rojo",
 ) => {
+  // The page waits for the catalogue's kind before it shows the fields, so a
+  // test that saves has to wait for the form too.
   // Regex, because Mantine appends a required marker and the accessible name
   // is "Title *" rather than "Title". Artist Name is narrowed to the input:
   // the Autocomplete's listbox is labelled by the same text, so a bare label
   // query would match the dropdown too.
-  await user.type(screen.getByLabelText(/^Title/), title);
+  await user.type(await screen.findByLabelText(/^Title/), title);
   await user.type(
     screen.getByLabelText(/^Artist Name/, { selector: "input" }),
     "María López",
@@ -201,6 +224,9 @@ beforeEach(() => {
   commits.photos = null;
   commits.documents = null;
   createArtwork.mockResolvedValue(created());
+  // A Collection by default: the plain form, with no market-state control.
+  // The availability tests below ask for a Portfolio or an Inventory.
+  getCatalogue.mockResolvedValue(catalogue("collection"));
 });
 
 afterEach(() => {
@@ -217,17 +243,17 @@ describe("the Add page — the single write", () => {
     commits.documents = [{ entryId: "d1", name: "report.pdf" }];
     const user = userEvent.setup();
     renderPage();
-    // No search was active, so Cancel is the collection's plain address.
-    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    // No search was active, so Cancel is the catalogue's plain address.
+    expect(await screen.findByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}`,
+      `/manage/catalogue/${CATALOGUE_PARAM}`,
     );
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
     expect(createArtwork).toHaveBeenCalledTimes(1);
-    const [collectionId, body] = createArtwork.mock.calls[0];
-    expect(collectionId).toBe(COLLECTION_ID);
+    const [catalogueId, body] = createArtwork.mock.calls[0];
+    expect(catalogueId).toBe(CATALOGUE_ID);
     // The id the page staged under: minted from the shared contract — the
     // same mint the API uses — and ten base62 characters, never a hyphen. The
     // redirect below lands on `{title}-{id}`, and the route recovers the id by
@@ -236,7 +262,7 @@ describe("the Add page — the single write", () => {
     expect(body.title).toBe("Estudio en rojo");
     expect(body.artistName).toBe("María López");
     // A work the owner did not say otherwise about goes in front of the
-    // collection's gate.
+    // catalogue's gate.
     expect(body.status).toBe("published");
     // The staged entries pass through the hook's answer untouched: the page
     // neither reorders nor re-names them.
@@ -247,7 +273,7 @@ describe("the Add page — the single write", () => {
   it("submits the typed medium under the medium key", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.type(screen.getByLabelText(/^Medium/), "Oil on canvas");
+    await user.type(await screen.findByLabelText(/^Medium/), "Oil on canvas");
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
@@ -258,10 +284,10 @@ describe("the Add page — the single write", () => {
     const user = userEvent.setup();
     renderPage("?q=picasso");
 
-    // Cancel returns to the search the user left, not to the whole collection.
-    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    // Cancel returns to the search the user left, not to the whole catalogue.
+    expect(await screen.findByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
     );
 
     await save(user);
@@ -274,7 +300,7 @@ describe("the Add page — the single write", () => {
   it("lets the owner send a new work as a draft", async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole("radio", { name: "Draft" }));
+    await user.click(await screen.findByRole("radio", { name: "Draft" }));
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
@@ -323,5 +349,105 @@ describe("the Add page — the single write", () => {
 
     expect(await screen.findByText(capMessage)).toBeVisible();
     expect(landedAt()).toContain("/artwork/add");
+  });
+});
+
+/**
+ * A market state is surfaced on the two kinds that sell work — a Portfolio and
+ * an Inventory — and a new one starts Available. A Collection's form has no
+ * such field, and its save carries no availability at all, so its works keep
+ * a null (ADR-0010).
+ */
+describe("the Add page — the catalogue kind and a work's availability", () => {
+  it.each(["portfolio", "inventory"] as const)(
+    "offers a %s work a market state, defaulting to available",
+    async (kind) => {
+      getCatalogue.mockResolvedValue(catalogue(kind));
+      const user = userEvent.setup();
+      renderPage();
+
+      // The select is only there once the catalogue's kind is known.
+      const select = await screen.findByRole("combobox", {
+        name: /^Availability/,
+      });
+      expect(select).toHaveValue("Available");
+      await save(user);
+
+      await waitFor(() => expect(landedAt()).toBe(editPath()));
+      expect(createArtwork.mock.calls[0][1].availability).toBe("available");
+    },
+  );
+
+  it("sends the state the owner picks", async () => {
+    // On-consignment is an Inventory's state, so the pick is made there.
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
+    const user = userEvent.setup();
+    renderPage();
+
+    const select = await screen.findByRole("combobox", {
+      name: /^Availability/,
+    });
+    await user.click(select);
+    await waitFor(() =>
+      expect(select).toHaveAttribute("aria-expanded", "true"),
+    );
+    // jsdom gives the portal's option rows no accessible name, so the row is
+    // found by its visible text (the Table suite reads its Select the same
+    // way).
+    const option = screen
+      .queryAllByRole("option", { hidden: true })
+      .find((entry) => entry.textContent === "On consignment");
+    expect(option).toBeDefined();
+    await user.click(option!);
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1].availability).toBe("on-consignment");
+  });
+
+  it("offers a Portfolio no on-consignment state", async () => {
+    // The surface's per-kind values are what the Select renders: a Portfolio
+    // sells the artist's own work, so an option it does not have must not be
+    // on screen (ADR-0010).
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+
+    const select = await screen.findByRole("combobox", {
+      name: /^Availability/,
+    });
+    await user.click(select);
+    await waitFor(() =>
+      expect(select).toHaveAttribute("aria-expanded", "true"),
+    );
+    const options = screen
+      .queryAllByRole("option", { hidden: true })
+      .map((entry) => entry.textContent);
+    expect(options).toContain("Sold");
+    expect(options).not.toContain("On consignment");
+  });
+
+  it("offers a Collection no market state and sends none", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    // The catalogue must have loaded before the absence means anything: the
+    // form is only on screen once its kind is known.
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1]).not.toHaveProperty("availability");
+  });
+
+  it("stays on the form when the catalogue itself cannot be loaded", async () => {
+    getCatalogue.mockResolvedValue(null);
+    renderPage();
+
+    expect(await screen.findByText("Catalogue not found")).toBeVisible();
+    expect(screen.queryByLabelText(/^Title/)).toBeNull();
   });
 });

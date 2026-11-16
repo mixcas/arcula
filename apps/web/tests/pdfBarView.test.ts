@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import { pdfBarView, type PdfBarRun } from "@/components/pdf/pdfBarView";
-import type { PublicState } from "@/components/collection/usePublicCollection";
-import type { Collection } from "@arcula/shared";
+import type { PublicState } from "@/components/catalogue/usePublicCatalogue";
+import type { Catalogue } from "@arcula/shared";
 
-const collection = (overrides: Partial<Collection> = {}): Collection => ({
-  id: "collection-1",
+const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
+  id: "catalogue-1",
   name: "Flores Solares",
   userId: "owner-1",
   isPublic: true,
   ...overrides,
 });
 
-type BarState = PublicState<{ collection: Collection }>;
+type BarState = PublicState<{ catalogue: Catalogue }>;
 
 const ready: BarState = {
   status: "ready",
-  value: { collection: collection() },
+  value: { catalogue: catalogue() },
 };
 
 const idle: PdfBarRun = { status: "idle" };
@@ -31,39 +31,39 @@ const done: PdfBarRun = {
 };
 
 /**
- * The bar's rules, one per state: the Collection's name wherever a read
+ * The bar's rules, one per state: the Catalogue's name wherever a read
  * disclosed it, the fallback title where none did, a link only to a page that
  * exists, the work in flight while it runs, and the finished file's summary and
  * actions in the bar on a desktop alone (issues #146, #147, #148).
  */
 describe("pdfBarView", () => {
-  it("names the Collection and links its page when the read succeeded", () => {
+  it("names the Catalogue and links its page when the read succeeded", () => {
     expect(pdfBarView(ready, idle, false)).toEqual({
       title: "Flores Solares",
-      subtitle: "Collection PDF",
-      href: "/collection/flores-solares-collection-1",
+      subtitle: "Catalogue PDF",
+      href: "/catalogue/flores-solares-catalogue-1",
       detail: { kind: "none" },
     });
   });
 
   it("keeps the name a locked refusal disclosed, without a link", () => {
     // ADR-0005: the locked refusal carries the name so the prompt has context,
-    // but nothing of the Collection itself was read — there is no page to link.
+    // but nothing of the Catalogue itself was read — there is no page to link.
     expect(
       pdfBarView(
-        { status: "locked", collectionName: "Flores Solares" },
+        { status: "locked", catalogueName: "Flores Solares" },
         idle,
         false,
       ),
     ).toEqual({
       title: "Flores Solares",
-      subtitle: "Collection PDF",
+      subtitle: "Catalogue PDF",
       href: null,
       detail: { kind: "none" },
     });
   });
 
-  it("is `Collection PDF` alone when no read disclosed a name", () => {
+  it("is `Catalogue PDF` alone when no read disclosed a name", () => {
     const nameless: BarState[] = [
       { status: "loading" },
       { status: "invalid" },
@@ -72,12 +72,12 @@ describe("pdfBarView", () => {
       { status: "error" },
       // A locked refusal the server worded without a usable name.
       { status: "locked" },
-      { status: "locked", collectionName: "" },
+      { status: "locked", catalogueName: "" },
     ];
 
     for (const state of nameless) {
       expect(pdfBarView(state, idle, false)).toEqual({
-        title: "Collection PDF",
+        title: "Catalogue PDF",
         subtitle: null,
         href: null,
         detail: { kind: "none" },
@@ -125,8 +125,8 @@ describe("pdfBarView", () => {
   it("reports the finished file on a desktop, named for download", () => {
     expect(pdfBarView(ready, done, false)).toEqual({
       title: "Flores Solares",
-      subtitle: "Collection PDF",
-      href: "/collection/flores-solares-collection-1",
+      subtitle: "Catalogue PDF",
+      href: "/catalogue/flores-solares-catalogue-1",
       detail: {
         kind: "file",
         summary: "17 pages · 3.00 MB",
@@ -142,13 +142,13 @@ describe("pdfBarView", () => {
     expect(pdfBarView(ready, done, true).detail).toEqual({ kind: "none" });
   });
 
-  it("drops the file once the Collection is re-read", () => {
+  it("drops the file once the Catalogue is re-read", () => {
     // A reload, an unlock or a restart leaves the previous file's buttons out
     // of the bar: an export that no longer exists cannot be downloaded from it.
     for (const state of [
       { status: "loading" },
       { status: "error" },
-      { status: "locked", collectionName: "Flores Solares" },
+      { status: "locked", catalogueName: "Flores Solares" },
       { status: "notFound" },
     ] as BarState[]) {
       expect(pdfBarView(state, done, false).detail).toEqual({ kind: "none" });

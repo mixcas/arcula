@@ -1,9 +1,9 @@
 // The artwork resource routes:
 //
-//   GET    /collections/{cid}/artworks            the collection's live works
-//   POST   /collections/{cid}/artworks            create + promote staged entries
-//   GET    /collections/{cid}/artworks/{aid}      one work
-//   PATCH  /collections/{cid}/artworks/{aid}      edit fields + new sequence
+//   GET    /catalogues/{cid}/artworks            the catalogue's live works
+//   POST   /catalogues/{cid}/artworks            create + promote staged entries
+//   GET    /catalogues/{cid}/artworks/{aid}      one work
+//   PATCH  /catalogues/{cid}/artworks/{aid}      edit fields + new sequence
 //
 // A save is one Postgres transaction: field write → per-entry S3 copy
 // (staged → final) and row upserts → row deletes for entries dropped
@@ -13,17 +13,17 @@
 // save leaves behind is exactly what the sweep and the staging lifecycle
 // exist to remove.
 //
-// Reader access: a member of the collection always; a visitor on the live
-// PUBLISHED works in the list, and a single work of a PUBLIC collection
-// when the work itself is published and live — the collection is the whole
+// Reader access: a member of the catalogue always; a visitor on the live
+// PUBLISHED works in the list, and a single work of a PUBLIC catalogue
+// when the work itself is published and live — the catalogue is the whole
 // gate (docs/adr/0003). The single read, the list read and the read-back
 // after a save all go through artworkRead.ts, which now owns the list's SQL
 // filter too; a test pins that filter and the verdict together.
 //
 // Writer access: any member, the owner or a collaborator, for every route
 // here (ADR-0004). A save by a collaborator promotes THEIR staged entries
-// onto the collection's final keys, but records `artworks.userId` as the
-// collection's owner — the mirror, never the session user.
+// onto the catalogue's final keys, but records `artworks.userId` as the
+// catalogue's owner — the mirror, never the session user.
 
 import { asc, eq } from "drizzle-orm";
 import {
@@ -51,7 +51,7 @@ import {
   grantHeld,
   loadArtworkById,
   requireMemberArtwork,
-  requireMemberCollection,
+  requireMemberCatalogue,
 } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
@@ -74,11 +74,11 @@ import {
 /** The work a save must read back; absence after a successful save is a
  *  server bug, not a half-shaped response. */
 async function readSavedArtwork(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   viewer: string,
 ): Promise<ArtworkRead> {
-  const read = await readArtwork(collectionId, artworkId, viewer);
+  const read = await readArtwork(catalogueId, artworkId, viewer);
   if (read.status !== "ok") {
     throw new ApiError("internal", "The saved artwork could not be read back");
   }
@@ -91,64 +91,58 @@ async function readSavedArtwork(
 
 export const artworkRoutes = new Hono();
 
-// GET one — a member always; a visitor when collection and work both admit it.
-artworkRoutes.get(
-  "/collections/:collectionId/artworks/:artworkId",
-  async (c) => {
-    const session = await resolveSession(c);
-    const collectionId = param(c, "collectionId");
-    // The grant is a fact the route reads off the cookie and the verdict
-    // takes as one; a member's read never needs it (`grantHeld` still costs
-    // nothing without the cookie, and the verdict ignores it for a member).
-    const hasValidGrant = await grantHeld(c, collectionId);
-    const read = await readArtwork(
-      collectionId,
-      param(c, "artworkId"),
-      session?.user.id ?? null,
-      hasValidGrant,
-    );
-    // A draft work, a deleted work and a public work inside a private
-    // collection are one uniform 404 for a visitor: saying which was
-    // refused would be a disclosure.
-    if (read.status !== "ok") {
-      throw new ApiError("not-found", "The artwork does not exist");
-    }
-    return c.json(read.artwork);
-  },
-);
+// GET one — a member always; a visitor when catalogue and work both admit it.
+artworkRoutes.get("/catalogues/:catalogueId/artworks/:artworkId", async (c) => {
+  const session = await resolveSession(c);
+  const catalogueId = param(c, "catalogueId");
+  // The grant is a fact the route reads off the cookie and the verdict
+  // takes as one; a member's read never needs it (`grantHeld` still costs
+  // nothing without the cookie, and the verdict ignores it for a member).
+  const hasValidGrant = await grantHeld(c, catalogueId);
+  const read = await readArtwork(
+    catalogueId,
+    param(c, "artworkId"),
+    session?.user.id ?? null,
+    hasValidGrant,
+  );
+  // A draft work, a deleted work and a public work inside a private
+  // catalogue are one uniform 404 for a visitor: saying which was
+  // refused would be a disclosure.
+  if (read.status !== "ok") {
+    throw new ApiError("not-found", "The artwork does not exist");
+  }
+  return c.json(read.artwork);
+});
 
 // GET list — member: every live work; non-member: the published ones; a
-// private collection, or a protected one the visitor holds no grant for: 403
+// private catalogue, or a protected one the visitor holds no grant for: 403
 // (never 404 — the client maps the refusal to "private"). An optional `q` is
-// the member-only Collection search. Its questions are answered in order:
-// a missing collection is 404, no session is 401, a signed-in non-member —
+// the member-only Catalogue search. Its questions are answered in order:
+// a missing catalogue is 404, no session is 401, a signed-in non-member —
 // grant holder included — is 403, and only then is a query past the shared
 // caps a validation error attributed to `q`. Absent, empty or whitespace-only
 // leaves the list exactly as it was.
-artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
+artworkRoutes.get("/catalogues/:catalogueId/artworks", async (c) => {
   const session = await resolveSession(c);
-  const collectionId = param(c, "collectionId");
+  const catalogueId = param(c, "catalogueId");
   const rawQuery = c.req.query("q");
   const search =
     rawQuery !== undefined && !isBlankSearchQuery(rawQuery) ? rawQuery : null;
-  const hasValidGrant = await grantHeld(c, collectionId);
+  const hasValidGrant = await grantHeld(c, catalogueId);
   const read = await readArtworkList(
-    collectionId,
+    catalogueId,
     session?.user.id ?? null,
     hasValidGrant,
     search,
   );
   if (read.status === "not-found") {
-    throw new ApiError("not-found", "The collection does not exist");
+    throw new ApiError("not-found", "The catalogue does not exist");
   }
   if (read.status === "unauthorized") {
-    throw new ApiError("unauthorized", "Sign in to search this collection");
+    throw new ApiError("unauthorized", "Sign in to search this catalogue");
   }
   if (read.status === "forbidden") {
-    throw new ApiError(
-      "forbidden",
-      "You do not have access to this collection",
-    );
+    throw new ApiError("forbidden", "You do not have access to this catalogue");
   }
   // The access questions came first; the query's own caps answer only for a
   // caller who may search at all.
@@ -164,14 +158,11 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
 
 // POST — create the row and promote the staged entries, one transaction.
 artworkRoutes.post(
-  "/collections/:collectionId/artworks",
+  "/catalogues/:catalogueId/artworks",
   requireSession,
   async (c) => {
     const user = c.get("user");
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const payload: ArtworkCreatePayload = await parseBody(
       c,
       artworkCreateSchema,
@@ -206,10 +197,10 @@ artworkRoutes.post(
     const stagedKeys = await safeTx(async (tx) => {
       await tx.insert(artworksTable).values({
         id: payload.artworkId,
-        // The mirror of the collection's owner, not the session user: a
-        // collaborator saves work into someone else's collection (ADR-0004).
-        userId: collection.userId,
-        collectionId: collection.id,
+        // The mirror of the catalogue's owner, not the session user: a
+        // collaborator saves work into someone else's catalogue (ADR-0004).
+        userId: catalogue.userId,
+        catalogueId: catalogue.id,
         title: payload.title,
         artistName: payload.artistName,
         serie: payload.serie ?? null,
@@ -225,6 +216,9 @@ artworkRoutes.post(
         condition: payload.condition ?? null,
         currentValue: payload.currentValue ?? null,
         status: payload.status,
+        // Always written, null included: a save that names no market state
+        // stores the absence, which is what every Collection work carries.
+        availability: payload.availability ?? null,
         // Always written, as null: the list filters on it, and a missing
         // field is not a null (the write-path doctrine).
         deletedAt: null,
@@ -233,7 +227,7 @@ artworkRoutes.post(
       });
       const photos = await writePhotoSequence(
         tx,
-        collection,
+        catalogue,
         user.id,
         payload.artworkId,
         payload.photos,
@@ -241,7 +235,7 @@ artworkRoutes.post(
       );
       const documents = await writeDocumentSequence(
         tx,
-        collection,
+        catalogue,
         user.id,
         payload.artworkId,
         payload.documents,
@@ -254,7 +248,7 @@ artworkRoutes.post(
     }
 
     const artworkRead = await readSavedArtwork(
-      collection.id,
+      catalogue.id,
       payload.artworkId,
       user.id,
     );
@@ -264,15 +258,15 @@ artworkRoutes.post(
 
 // PATCH — the edit form: fields plus the full new sequences.
 artworkRoutes.patch(
-  "/collections/:collectionId/artworks/:artworkId",
+  "/catalogues/:catalogueId/artworks/:artworkId",
   requireSession,
   async (c) => {
-    const collectionId = param(c, "collectionId");
+    const catalogueId = param(c, "catalogueId");
     const artworkId = param(c, "artworkId");
     const user = c.get("user");
-    const { collection, artwork } = await requireMemberArtwork(
+    const { catalogue, artwork } = await requireMemberArtwork(
       c,
-      collectionId,
+      catalogueId,
       artworkId,
     );
     const payload: ArtworkUpdatePayload = await parseBody(
@@ -344,6 +338,11 @@ artworkRoutes.patch(
       if (payload.status !== undefined) {
         set.status = payload.status;
       }
+      // Present sets (or, as null, clears); absent leaves the column — the
+      // same three states the text fields have.
+      if (payload.availability !== undefined) {
+        set.availability = payload.availability;
+      }
       await tx
         .update(artworksTable)
         .set(set)
@@ -353,7 +352,7 @@ artworkRoutes.patch(
         payload.photos !== undefined
           ? await writePhotoSequence(
               tx,
-              collection,
+              catalogue,
               user.id,
               artwork.id,
               nextPhotos,
@@ -364,7 +363,7 @@ artworkRoutes.patch(
         payload.documents !== undefined
           ? await writeDocumentSequence(
               tx,
-              collection,
+              catalogue,
               user.id,
               artwork.id,
               nextDocs,
@@ -382,20 +381,20 @@ artworkRoutes.patch(
       await deleteObject(key);
     }
     await deleteFinalEntryObjects(
-      collection,
+      catalogue,
       artwork.id,
       "photo",
       result.removedPhotos,
     );
     await deleteFinalEntryObjects(
-      collection,
+      catalogue,
       artwork.id,
       "document",
       result.removedDocuments,
     );
 
     const artworkRead = await readSavedArtwork(
-      collection.id,
+      catalogue.id,
       artwork.id,
       user.id,
     );

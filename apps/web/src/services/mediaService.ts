@@ -5,7 +5,7 @@
  * `stage` — and the server generates its display variants on demand —
  * `process` — so the form never decodes or resizes a byte. Neither call
  * touches the artwork's rows: the entries only become rows in the save
- * transaction, which is why staging needs only collection membership, not an
+ * transaction, which is why staging needs only catalogue membership, not an
  * existing artwork. An entry the form drops is `discard`ed; a save that
  * fails after promoting its entries leaves the final objects in place, and
  * that residual is the sweep's job, not this module's.
@@ -38,13 +38,13 @@ export interface StagedVariants {
 }
 
 const base = (
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   population: "photos" | "documents",
-) => `/api/v1/collections/${collectionId}/artworks/${artworkId}/${population}`;
+) => `/api/v1/catalogues/${catalogueId}/artworks/${artworkId}/${population}`;
 
 const stage = async (
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   population: "photos" | "documents",
   entryId: string,
@@ -56,7 +56,7 @@ const stage = async (
   form.append("entryId", entryId);
   form.append("file", file);
   return apiRequest<StagedOriginal>(
-    `${base(collectionId, artworkId, population)}/stage`,
+    `${base(catalogueId, artworkId, population)}/stage`,
     {
       method: "POST",
       form,
@@ -65,24 +65,24 @@ const stage = async (
 };
 
 const process = async (
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   population: "photos" | "documents",
   entryId: string,
 ): Promise<StagedVariants> =>
   apiRequest<StagedVariants>(
-    `${base(collectionId, artworkId, population)}/process`,
+    `${base(catalogueId, artworkId, population)}/process`,
     { method: "POST", body: { entryId } },
   );
 
 const discard = async (
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   population: "photos" | "documents",
   entryId: string,
 ): Promise<void> => {
   await apiRequest(
-    `${base(collectionId, artworkId, population)}/${encodeURIComponent(entryId)}`,
+    `${base(catalogueId, artworkId, population)}/${encodeURIComponent(entryId)}`,
     { method: "DELETE" },
   );
 };
@@ -91,34 +91,34 @@ export const mediaService = {
   /** PUT the original into staging. Re-runnable for the same entry: the
    *  server discards the previous objects first. */
   stagePhoto: (
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
     entryId: string,
     file: File,
-  ) => stage(collectionId, artworkId, "photos", entryId, file),
+  ) => stage(catalogueId, artworkId, "photos", entryId, file),
 
   /** Generate the photo's variants. The server owns the geometry and the
    *  encoder; the answer is the truth for what the form renders. */
-  processPhoto: (collectionId: string, artworkId: string, entryId: string) =>
-    process(collectionId, artworkId, "photos", entryId),
+  processPhoto: (catalogueId: string, artworkId: string, entryId: string) =>
+    process(catalogueId, artworkId, "photos", entryId),
 
   /** Remove a staged photo entry. Idempotent — nothing to delete answers 200. */
-  discardPhoto: (collectionId: string, artworkId: string, entryId: string) =>
-    discard(collectionId, artworkId, "photos", entryId),
+  discardPhoto: (catalogueId: string, artworkId: string, entryId: string) =>
+    discard(catalogueId, artworkId, "photos", entryId),
 
   /** PUT the original into staging, document flavour (25 MiB, PDFs admitted). */
   stageDocument: (
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
     entryId: string,
     file: File,
-  ) => stage(collectionId, artworkId, "documents", entryId, file),
+  ) => stage(catalogueId, artworkId, "documents", entryId, file),
 
   /** Generate the variants of a document image; `[]` for a PDF. */
-  processDocument: (collectionId: string, artworkId: string, entryId: string) =>
-    process(collectionId, artworkId, "documents", entryId),
+  processDocument: (catalogueId: string, artworkId: string, entryId: string) =>
+    process(catalogueId, artworkId, "documents", entryId),
 
   /** Remove a staged document entry. Idempotent. */
-  discardDocument: (collectionId: string, artworkId: string, entryId: string) =>
-    discard(collectionId, artworkId, "documents", entryId),
+  discardDocument: (catalogueId: string, artworkId: string, entryId: string) =>
+    discard(catalogueId, artworkId, "documents", entryId),
 };

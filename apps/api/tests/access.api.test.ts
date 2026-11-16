@@ -1,16 +1,16 @@
-// The access read: who may read and change a collection.
+// The access read: who may read and change a catalogue.
 //
-// GET /collections/{cid}/access answers the caller's role, the owner and the
+// GET /catalogues/{cid}/access answers the caller's role, the owner and the
 // collaborators, and — to the owner only — the pending invitations. It is the
 // source of the role the settings and the access card render; the dashboard
 // list is not.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { collectionCollaborators as collaboratorsTable } from "@arcula/db";
-import type { CollectionAccess } from "@arcula/shared";
+import { catalogueCollaborators as collaboratorsTable } from "@arcula/db";
+import type { CatalogueAccess } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req } from "./helpers/api";
-import { makeCollection, makeInvitation } from "./helpers/fixtures";
+import { makeCatalogue, makeInvitation } from "./helpers/fixtures";
 
 let owner: { email: string; cookies: string; userId: string };
 let mate: { email: string; cookies: string; userId: string };
@@ -19,14 +19,14 @@ let stranger: { email: string; cookies: string; userId: string };
 let cid = "";
 
 const access = (cookies: string) =>
-  req("GET", `/api/v1/collections/${cid}/access`, { cookies });
+  req("GET", `/api/v1/catalogues/${cid}/access`, { cookies });
 
 beforeAll(async () => {
   owner = await freshUser("AccessOwner");
   mate = await freshUser("AccessMate");
   mate2 = await freshUser("AccessMate2");
   stranger = await freshUser("AccessStranger");
-  cid = await makeCollection(owner.userId, {
+  cid = await makeCatalogue(owner.userId, {
     name: "Access Wall",
     isPublic: false,
   });
@@ -34,38 +34,38 @@ beforeAll(async () => {
   // they were added, and one multi-row insert would tie them.
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: mate.userId });
+    .values({ catalogueId: cid, userId: mate.userId });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: mate2.userId,
   });
   // A stray row naming the owner — a hand-written seed, a former transfer's
   // leftover. The owner is the column, so it must not list them twice.
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: owner.userId });
+    .values({ catalogueId: cid, userId: owner.userId });
 });
 
 afterAll(async () => {
   await closeDb();
 });
 
-describe("GET /collections/{cid}/access", () => {
+describe("GET /catalogues/{cid}/access", () => {
   it("gives the owner the members and every pending invitation", async () => {
     const live = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Live-Access@Example.Test",
     });
     const expired = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Lapsed-Access@Example.Test",
       createdAt: new Date(Date.now() - 8 * 86_400_000),
       expiresAt: new Date(Date.now() - 86_400_000),
     });
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Resolved-Access@Example.Test",
       status: "revoked",
@@ -73,7 +73,7 @@ describe("GET /collections/{cid}/access", () => {
 
     const res = await access(owner.cookies);
     expect(res.status).toBe(200);
-    const body = await json<CollectionAccess>(res);
+    const body = await json<CatalogueAccess>(res);
 
     expect(body.role).toBe("owner");
     expect(body.owner).toEqual({
@@ -104,14 +104,14 @@ describe("GET /collections/{cid}/access", () => {
 
   it("gives a collaborator the members and no invitation data at all", async () => {
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "NotForCollaborators@Example.Test",
     });
 
     const res = await access(mate.cookies);
     expect(res.status).toBe(200);
-    const body = await json<CollectionAccess>(res);
+    const body = await json<CatalogueAccess>(res);
 
     expect(body.role).toBe("collaborator");
     expect(body.owner.userId).toBe(owner.userId);
@@ -133,10 +133,10 @@ describe("GET /collections/{cid}/access", () => {
     }
   });
 
-  it("answers 404 for a collection that does not exist", async () => {
+  it("answers 404 for a catalogue that does not exist", async () => {
     const res = await req(
       "GET",
-      "/api/v1/collections/00000000-0000-4000-8000-000000000000/access",
+      "/api/v1/catalogues/00000000-0000-4000-8000-000000000000/access",
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(404);

@@ -58,6 +58,7 @@
         "@mantine/hooks": "^9.6.3",
         "@mantine/modals": "^9.6.3",
         "@mantine/notifications": "^9.6.3",
+        "@phosphor-icons/react": "^2.1.10",
         "@react-pdf/renderer": "4.9.0",
         "@tabler/icons-react": "^3.48.0",
         "better-auth": "1.7.7",
@@ -65,6 +66,8 @@
         "embla-carousel": "^8.6.0",
         "embla-carousel-react": "^8.6.0",
         "lodash": "^4.18.1",
+        "logrocket": "^12.4.0",
+        "logrocket-react": "^7.0.1",
         "mantine-datatable": "^9.4.0",
         "papaparse": "^5.7.0",
         "react": "^19.3.0",
@@ -95,6 +98,7 @@
         "drizzle-orm": "0.45.3",
       },
       "devDependencies": {
+        "@arcula/shared": "workspace:*",
         "@types/node": "24.19.1",
         "drizzle-kit": "0.31.11",
         "vitest": "5.0.2",
@@ -491,6 +495,8 @@
     "@oxfmt/binding-win32-ia32-msvc": ["@oxfmt/binding-win32-ia32-msvc@0.35.0", "", { "os": "win32", "cpu": "ia32" }, "sha512-oSRD2k8J2uxYDEKR2nAE/YTY9PobOEnhZgCmspHu0+yBQ665yH8lFErQVSTE7fcGJmJp/cC6322/gc8VFuQf7g=="],
 
     "@oxfmt/binding-win32-x64-msvc": ["@oxfmt/binding-win32-x64-msvc@0.35.0", "", { "os": "win32", "cpu": "x64" }, "sha512-WCDJjlS95NboR0ugI2BEwzt1tYvRDorDRM9Lvctls1SLyKYuNRCyrPwp1urUPFBnwgBNn9p2/gnmo7gFMySRoQ=="],
+
+    "@phosphor-icons/react": ["@phosphor-icons/react@2.1.10", "", { "peerDependencies": { "react": ">= 16.8", "react-dom": ">= 16.8" } }, "sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA=="],
 
     "@pkgr/core": ["@pkgr/core@0.3.6", "", {}, "sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA=="],
 
@@ -1037,6 +1043,10 @@
     "locate-path": ["locate-path@6.0.0", "", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
     "lodash": ["lodash@4.18.1", "", {}, "sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q=="],
+
+    "logrocket": ["logrocket@12.4.0", "", {}, "sha512-bLfsBzlpeQ+pKb9z79SbCdiIYt4hwgmsynF5AAOcRee63UZzKUMYUezie4NryISuqn9S1Qc21bYeeO5G2Cn6ug=="],
+
+    "logrocket-react": ["logrocket-react@7.0.1", "", { "peerDependencies": { "logrocket": ">=2.0", "react": "^17 || ^18 || ^19", "react-dom": "^17 || ^18 || ^19" } }, "sha512-RQrE6lxWcOKJLu26rzSmcRINGYqhslaC5mNCg6q5e7IES9mQNyrHL1vrwPc2l+caqd5vJ66SaH4LCqLQT9Q9yQ=="],
 
     "loose-envify": ["loose-envify@1.4.0", "", { "dependencies": { "js-tokens": "^3.0.0 || ^4.0.0" }, "bin": { "loose-envify": "cli.js" } }, "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q=="],
 

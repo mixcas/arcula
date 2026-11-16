@@ -69,7 +69,7 @@ echo "==> bundling ($ENV)"
 bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
 mv "$STAGE/lambda.js" "$STAGE/index.js"
 
-# 1b. The Collection PDF's fallback face travels beside the bundle: the
+# 1b. The Catalogue PDF's fallback face travels beside the bundle: the
 #     bundle is one index.js, so the module's import.meta.url-relative
 #     resolve (`./assets/fonts/…`) would otherwise point at nothing in
 #     production. It is an asset, not a runtime npm dependency.
@@ -83,6 +83,16 @@ mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
 # 2. The SPA the Lambda serves (spa.ts reads WEB_DIST, which the deploy
 #    sets to /var/task/web/dist). A fresh build: a stale dist would
 #    ship an old app under the new API.
+#
+#    Session replay is production-only, and the SPA is built per
+#    environment, so the switch is the environment's: prod's bundle
+#    enables it, dev's is built with it off and never initialises the
+#    recorder. Vite inlines the VITE_-prefixed value at build time.
+if [ "$ENV" = prod ]; then
+  export VITE_LOGROCKET_ENABLED=true
+else
+  export VITE_LOGROCKET_ENABLED=false
+fi
 echo "==> building web"
 bun run build
 rm -rf "$STAGE/web"

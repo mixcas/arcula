@@ -13,10 +13,11 @@ import { MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import DeletedArtworksPage from "@/components/manage/collection/DeletedArtworksPage";
+import DeletedArtworksPage from "@/components/manage/catalogue/DeletedArtworksPage";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
-import type { Artwork } from "@arcula/shared";
+import type { Artwork, Catalogue, CatalogueKind } from "@arcula/shared";
 
 vi.mock("@/services/artworkService", () => ({
   artworkService: {
@@ -24,6 +25,10 @@ vi.mock("@/services/artworkService", () => ({
     restoreArtwork: vi.fn(),
     bulkRestoreArtworks: vi.fn(),
   },
+}));
+
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getCatalogue: vi.fn() },
 }));
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -39,12 +44,25 @@ const getDeletedMock = vi.mocked(artworkService.getDeletedArtworks);
 const restoreMock = vi.mocked(artworkService.restoreArtwork);
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const bulkRestoreMock = vi.mocked(artworkService.bulkRestoreArtworks);
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const getCatalogueMock = vi.mocked(catalogueService.getCatalogue);
 
-const COLLECTION_PARAM = "deleted-view-collection1";
-const OTHER_COLLECTION_PARAM = "deleted-view-collection2";
+/** The catalogue the page reads for the kind that decides the badge. */
+const catalogue = (kind: CatalogueKind): Catalogue => ({
+  id: "catalogue1",
+  name: "Catalogue",
+  kind,
+  userId: "user-1",
+  isPublic: true,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+});
+
+const CATALOGUE_PARAM = "deleted-view-catalogue1";
+const OTHER_CATALOGUE_PARAM = "deleted-view-catalogue2";
 
 /**
- * The page plus a trigger that changes only the route's collection id. The
+ * The page plus a trigger that changes only the route's catalogue id. The
  * page instance stays mounted across the switch, which is where a selection
  * can outlive the list it was made on.
  */
@@ -54,10 +72,10 @@ const SwitchingPage: React.FC = () => {
     <>
       <button
         onClick={() => {
-          void navigate(`/manage/collection/${OTHER_COLLECTION_PARAM}/deleted`);
+          void navigate(`/manage/catalogue/${OTHER_CATALOGUE_PARAM}/deleted`);
         }}
       >
-        Switch collection
+        Switch catalogue
       </button>
       <DeletedArtworksPage />
     </>
@@ -72,7 +90,7 @@ const deletedArtwork = (
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "collection1",
+  catalogueId: "catalogue1",
   status: "published",
   deletedAt: { seconds: 1767225600, nanoseconds: 0 },
   createdAt: { seconds: 1, nanoseconds: 0 },
@@ -85,11 +103,11 @@ const renderPage = () =>
     <MantineProvider>
       <Notifications />
       <MemoryRouter
-        initialEntries={[`/manage/collection/${COLLECTION_PARAM}/deleted`]}
+        initialEntries={[`/manage/catalogue/${CATALOGUE_PARAM}/deleted`]}
       >
         <Routes>
           <Route
-            path="/manage/collection/:collectionId/deleted"
+            path="/manage/catalogue/:catalogueId/deleted"
             element={<DeletedArtworksPage />}
           />
         </Routes>
@@ -106,6 +124,8 @@ describe("DeletedArtworksPage", () => {
     getDeletedMock.mockReset();
     restoreMock.mockReset();
     bulkRestoreMock.mockReset();
+    getCatalogueMock.mockReset();
+    getCatalogueMock.mockResolvedValue(catalogue("collection"));
     consoleError.mockClear();
     // `matches: query === ""` mirrors Chrome: mantine-datatable resolves each
     // column through `matchMedia("")`, and a stub answering false for
@@ -190,6 +210,35 @@ describe("DeletedArtworksPage", () => {
     expect(draftRow.getByText("Draft")).toBeTruthy();
   });
 
+  it("badges a deleted work's market state when the kind has one", async () => {
+    // The Deleted view is a manage view: it shows the same availability badge
+    // the live table does, and only on the kinds that carry a market state.
+    getCatalogueMock.mockResolvedValue(catalogue("portfolio"));
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "Sold Out", availability: "sold" }),
+    ]);
+    renderPage();
+
+    const row = within(
+      (await screen.findByText("Sold Out")).closest("tr") as HTMLElement,
+    );
+    expect(await row.findByText("Sold")).toBeTruthy();
+  });
+
+  it("shows no market-state badge on a kind without one", async () => {
+    // A Collection records what is owned; a stored state must not be shown.
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "Owned", availability: "sold" }),
+    ]);
+    renderPage();
+
+    await screen.findByText("Owned");
+    // The kind read has resolved by now: the catalogue's kind settles before
+    // anything could badge.
+    await waitFor(() => expect(getCatalogueMock).toHaveBeenCalled());
+    expect(screen.queryByText("Sold")).toBeNull();
+  });
+
   it("restores one row through the single route and refetches the list", async () => {
     const user = userEvent.setup();
     getDeletedMock
@@ -208,7 +257,7 @@ describe("DeletedArtworksPage", () => {
 
     // No confirmation: the click is the write.
     await waitFor(() =>
-      expect(restoreMock).toHaveBeenCalledWith("collection1", "a"),
+      expect(restoreMock).toHaveBeenCalledWith("catalogue1", "a"),
     );
     // The list is refetched, not spliced: the restored row leaves because the
     // server no longer returns it.
@@ -241,7 +290,7 @@ describe("DeletedArtworksPage", () => {
     // No confirmation: the click is the write, with exactly the ticked ids —
     // not the whole list and not the unticked row between them.
     await waitFor(() =>
-      expect(bulkRestoreMock).toHaveBeenCalledWith("collection1", ["a", "c"]),
+      expect(bulkRestoreMock).toHaveBeenCalledWith("catalogue1", ["a", "c"]),
     );
     // The list is refetched, not spliced: the restored rows leave because the
     // server no longer returns them.
@@ -251,23 +300,23 @@ describe("DeletedArtworksPage", () => {
     expect(screen.getByText("Second Out")).toBeTruthy();
   });
 
-  it("drops a previous collection's ticks when the route switches", async () => {
+  it("drops a previous catalogue's ticks when the route switches", async () => {
     const user = userEvent.setup();
     getDeletedMock
       .mockResolvedValueOnce([
-        deletedArtwork({ id: "a", title: "First Collection" }),
+        deletedArtwork({ id: "a", title: "First Catalogue" }),
       ])
       .mockResolvedValueOnce([
-        deletedArtwork({ id: "c", title: "Other Collection" }),
+        deletedArtwork({ id: "c", title: "Other Catalogue" }),
       ]);
     render(
       <MantineProvider>
         <MemoryRouter
-          initialEntries={[`/manage/collection/${COLLECTION_PARAM}/deleted`]}
+          initialEntries={[`/manage/catalogue/${CATALOGUE_PARAM}/deleted`]}
         >
           <Routes>
             <Route
-              path="/manage/collection/:collectionId/deleted"
+              path="/manage/catalogue/:catalogueId/deleted"
               element={<SwitchingPage />}
             />
           </Routes>
@@ -275,16 +324,16 @@ describe("DeletedArtworksPage", () => {
       </MantineProvider>,
     );
 
-    await screen.findByText("First Collection");
+    await screen.findByText("First Catalogue");
     await user.click(screen.getAllByRole("checkbox")[1]);
     expect(
       screen.getByRole("button", { name: "Restore selected" }),
     ).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Switch collection" }));
-    await screen.findByText("Other Collection");
+    await user.click(screen.getByRole("button", { name: "Switch catalogue" }));
+    await screen.findByText("Other Catalogue");
 
-    // The first collection's tick is not in the new list, so the first load
+    // The first catalogue's tick is not in the new list, so the first load
     // prunes it: a bulk action here cannot carry a row from the old one.
     expect(
       screen.queryByRole("button", { name: "Restore selected" }),
@@ -323,9 +372,9 @@ describe("DeletedArtworksPage", () => {
     },
   );
 
-  it("does not claim a collection is empty when the route names none", async () => {
-    // No `:collectionId` param: nothing can be fetched, and the empty state's
-    // "nothing has been deleted" would be a claim about a collection that was
+  it("does not claim a catalogue is empty when the route names none", async () => {
+    // No `:catalogueId` param: nothing can be fetched, and the empty state's
+    // "nothing has been deleted" would be a claim about a catalogue that was
     // never named.
     const { container } = render(
       <MantineProvider>
@@ -338,7 +387,7 @@ describe("DeletedArtworksPage", () => {
 
     expect(await page.findByRole("alert")).toBeInTheDocument();
     expect(
-      page.queryByText("Nothing has been deleted from this collection."),
+      page.queryByText("Nothing has been deleted from this catalogue."),
     ).toBeNull();
     expect(getDeletedMock).not.toHaveBeenCalled();
   });
@@ -359,10 +408,10 @@ describe("DeletedArtworksPage", () => {
     // list still refetches, and the toast must not read "0 artworks are back".
     await waitFor(() => expect(getDeletedMock).toHaveBeenCalledTimes(2));
     expect(
-      await screen.findByText("Nothing has been deleted from this collection."),
+      await screen.findByText("Nothing has been deleted from this catalogue."),
     ).toBeTruthy();
     expect(
-      screen.queryByText("0 artworks are back in the collection."),
+      screen.queryByText("0 artworks are back in the catalogue."),
     ).toBeNull();
   });
 });

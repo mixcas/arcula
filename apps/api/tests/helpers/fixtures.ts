@@ -1,16 +1,17 @@
 // The media fixtures: rows inserted straight through drizzle, and the two
 // staging calls that hang off them.
 //
-// Collections and artworks go in through drizzle rather than the API — the
+// Catalogues and artworks go in through drizzle rather than the API — the
 // routes that create them have their own suites, and these ones are about what
 // happens to the media afterwards.
 
 import sharp from "sharp";
 import {
   artworks as artworksTable,
-  collectionInvitations as invitationsTable,
-  collections as collectionsTable,
+  catalogueInvitations as invitationsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
+import type { CatalogueKind } from "@arcula/shared";
 import { app } from "../../src/app";
 import { db } from "../../src/db";
 import {
@@ -20,23 +21,27 @@ import {
 } from "../../src/invitations";
 import { API, ORIGIN, req, uuid } from "./api";
 
-export async function makeCollection(
+export async function makeCatalogue(
   userId: string,
   opts: {
     isPublic?: boolean;
     name?: string;
     mediaNamespaceId?: string;
+    /** The kind decides which surface reads the catalogue; the physical
+     *  default is a Collection, as it is for a row written before the column. */
+    kind?: CatalogueKind;
   } = {},
 ): Promise<string> {
   const id = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id,
     userId,
     // Required since 0004. The default is the owner's id — the shape 0004's
     // backfill leaves on a pre-existing row, and the key segment the media
     // fixtures build against. A suite that needs the minted shape passes one.
     mediaNamespaceId: opts.mediaNamespaceId ?? userId,
-    name: opts.name ?? "Test Collection",
+    name: opts.name ?? "Test Catalogue",
+    kind: opts.kind ?? "collection",
     isPublic: opts.isPublic ?? true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -44,15 +49,26 @@ export async function makeCollection(
   return id;
 }
 
+/** Insert `count` owned catalogues for `userId`, for a test that needs an
+ *  account at or near its cap without spending API creates on setup. */
+export async function seedCatalogues(
+  userId: string,
+  count: number,
+): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    await makeCatalogue(userId, { name: `Seed ${uuid()}`, isPublic: false });
+  }
+}
+
 export async function makeArtwork(
   userId: string,
-  collectionId: string,
+  catalogueId: string,
 ): Promise<string> {
   const id = uuid();
   await db.insert(artworksTable).values({
     id,
     userId,
-    collectionId,
+    catalogueId,
     title: "Test Artwork",
     artistName: "Test Artist",
     status: "published",
@@ -99,7 +115,7 @@ export async function stageEntry(
   form.append("entryId", entryId);
   form.append("file", file);
   return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/${population}/stage`,
+    `${API}/api/v1/catalogues/${cid}/artworks/${aid}/${population}/stage`,
     {
       method: "POST",
       headers: { Cookie: cookies, Origin: ORIGIN },
@@ -137,7 +153,7 @@ export async function processEntry(
 ): Promise<Response> {
   return req(
     "POST",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/process`,
+    `/api/v1/catalogues/${cid}/artworks/${aid}/${population}/process`,
     {
       cookies,
       headers: { "Content-Type": "application/json" },
@@ -155,7 +171,7 @@ export async function discardEntry(
 ): Promise<Response> {
   return req(
     "DELETE",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/${entryId}`,
+    `/api/v1/catalogues/${cid}/artworks/${aid}/${population}/${entryId}`,
     {
       cookies,
     },
@@ -168,7 +184,7 @@ export async function discardEntry(
  * an address no account owns yet.
  */
 export async function makeInvitation(opts: {
-  collectionId: string;
+  catalogueId: string;
   invitedByUserId: string;
   email: string;
   status?: "pending" | "accepted" | "declined" | "revoked";
@@ -186,7 +202,7 @@ export async function makeInvitation(opts: {
   const status = opts.status ?? "pending";
   await db.insert(invitationsTable).values({
     id,
-    collectionId: opts.collectionId,
+    catalogueId: opts.catalogueId,
     email: opts.storeEmailAsGiven
       ? opts.email
       : opts.email.trim().toLowerCase(),

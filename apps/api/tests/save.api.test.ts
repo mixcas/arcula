@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { artworks as artworksTable } from "@arcula/db";
 import { MAX_ARTWORK_PHOTOS, type ArtworkRead } from "@arcula/shared";
 import { canSeeArtwork } from "../src/access";
-import { loadArtworkInCollection, loadCollection } from "../src/authorize";
+import { loadArtworkInCatalogue, loadCatalogue } from "../src/authorize";
 import { closeDb, db } from "../src/db";
 import {
   finalDocumentKey,
@@ -25,7 +25,7 @@ import {
 import { listObjects } from "../src/storage";
 import { freshUser, json, req, uuid } from "./helpers/api";
 import {
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageDocument,
@@ -75,8 +75,8 @@ let privateCid: string;
 beforeAll(async () => {
   owner = await freshUser("Save");
   visitor = await freshUser("SaveVisitor");
-  cid = await makeCollection(owner.userId, { isPublic: true });
-  privateCid = await makeCollection(owner.userId, { isPublic: false });
+  cid = await makeCatalogue(owner.userId, { isPublic: true });
+  privateCid = await makeCatalogue(owner.userId, { isPublic: false });
 });
 
 afterAll(async () => {
@@ -138,7 +138,7 @@ async function stageAndProcessDocument(
 }
 
 function createArtwork(body: Record<string, unknown>): Promise<Response> {
-  return req("POST", `/api/v1/collections/${cid}/artworks`, {
+  return req("POST", `/api/v1/catalogues/${cid}/artworks`, {
     cookies: owner.cookies,
     body: JSON.stringify(body),
   });
@@ -148,18 +148,18 @@ function patchArtwork(
   aid: string,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  return req("PATCH", `/api/v1/collections/${cid}/artworks/${aid}`, {
+  return req("PATCH", `/api/v1/catalogues/${cid}/artworks/${aid}`, {
     cookies: owner.cookies,
     body: JSON.stringify(body),
   });
 }
 
 function getArtwork(aid: string, cookies?: string): Promise<Response> {
-  return req("GET", `/api/v1/collections/${cid}/artworks/${aid}`, { cookies });
+  return req("GET", `/api/v1/catalogues/${cid}/artworks/${aid}`, { cookies });
 }
 
 function listArtworks(cookies?: string): Promise<Response> {
-  return req("GET", `/api/v1/collections/${cid}/artworks`, { cookies });
+  return req("GET", `/api/v1/catalogues/${cid}/artworks`, { cookies });
 }
 
 /**
@@ -193,7 +193,7 @@ async function makeTwoPhotoArtwork(): Promise<{
 
 /** A bare artwork row, inserted directly (the route's job is tested elsewhere). */
 async function insertRow(
-  collectionId: string,
+  catalogueId: string,
   opts: {
     id?: string;
     status?: "draft" | "published";
@@ -206,7 +206,7 @@ async function insertRow(
   await db.insert(artworksTable).values({
     id,
     userId: owner.userId,
-    collectionId,
+    catalogueId,
     title: "Direct Row",
     artistName: "C. Cas",
     status: opts.status ?? "published",
@@ -276,7 +276,7 @@ describe("POST …/artworks", () => {
     // is left to prove is that this document carries the right values.
     // Blank text fields are ABSENT keys, not nulls.
     expect(body.userId).toBe(owner.userId);
-    expect(body.collectionId).toBe(cid);
+    expect(body.catalogueId).toBe(cid);
     expect(body.status).toBe("published");
     expect(body.deletedAt).toBe(null);
     expect(body.serie).toBe("Early works");
@@ -916,7 +916,7 @@ describe("GET reads", () => {
   });
 
   it("answers a list in creation-then-id order, the same on a repeated read", async () => {
-    const orderedCid = await makeCollection(owner.userId, { isPublic: true });
+    const orderedCid = await makeCatalogue(owner.userId, { isPublic: true });
     const shared = new Date("2026-01-02T03:04:05.000Z");
     const late = await insertRow(orderedCid, {
       createdAt: new Date("2026-01-03T00:00:00.000Z"),
@@ -936,7 +936,7 @@ describe("GET reads", () => {
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
     });
 
-    const path = `/api/v1/collections/${orderedCid}/artworks`;
+    const path = `/api/v1/catalogues/${orderedCid}/artworks`;
     const first = (await json<ArtworkRead[]>(await req("GET", path))).map(
       (a) => a.id,
     );
@@ -948,8 +948,8 @@ describe("GET reads", () => {
     expect(again).toEqual(first);
   });
 
-  it("404s a list on a missing collection", async () => {
-    const res = await req("GET", `/api/v1/collections/${uuid()}/artworks`);
+  it("404s a list on a missing catalogue", async () => {
+    const res = await req("GET", `/api/v1/catalogues/${uuid()}/artworks`);
     expect(res.status).toBe(404);
     expect((await json<WireError>(res)).error.code).toBe("not-found");
   });
@@ -957,14 +957,14 @@ describe("GET reads", () => {
   it("answers the visitor list, the single read and the verdict the same way for one fixture", async () => {
     // The two declarations meet here: the list is a SQL filter over `status`
     // and `deletedAt`, the single read is the pure verdict in access.ts over
-    // the loaded rows. A draft or a deleted work of a public collection is in
+    // the loaded rows. A draft or a deleted work of a public catalogue is in
     // none of the three answers; a published, live one is in all of them.
     const pub = await insertRow(cid, { status: "published" });
     const draft = await insertRow(cid, { status: "draft" });
     const del = await insertRow(cid, { status: "published", deleted: true });
 
-    const collection = await loadCollection(cid);
-    if (!collection) throw new Error("the fixture collection is missing");
+    const catalogue = await loadCatalogue(cid);
+    if (!catalogue) throw new Error("the fixture catalogue is missing");
 
     const visitorList = await json<ArtworkRead[]>(
       await listArtworks(undefined),
@@ -976,28 +976,28 @@ describe("GET reads", () => {
       [draft, false],
       [del, false],
     ] as const) {
-      const row = await loadArtworkInCollection(cid, id);
+      const row = await loadArtworkInCatalogue(cid, id);
       if (!row) throw new Error("the fixture row is missing");
-      const verdict = canSeeArtwork(null, collection, row);
+      const verdict = canSeeArtwork(null, catalogue, row);
       expect(verdict).toBe(listed);
       expect(visitorIds.includes(id)).toBe(verdict);
       expect((await getArtwork(id)).status).toBe(verdict ? 200 : 404);
     }
   });
 
-  it("403s a visitor's list on a private collection", async () => {
+  it("403s a visitor's list on a private catalogue", async () => {
     await insertRow(privateCid, { status: "published" });
-    const res = await req("GET", `/api/v1/collections/${privateCid}/artworks`);
+    const res = await req("GET", `/api/v1/catalogues/${privateCid}/artworks`);
     expect(res.status).toBe(403);
     const err = await json<WireError>(res);
     expect(err.error.code).toBe("forbidden");
   });
 
-  it("hides a published work inside a private collection from a stranger and an anonymous reader", async () => {
-    // The case ADR-0003 removes: the collection is the whole gate, so a
+  it("hides a published work inside a private catalogue from a stranger and an anonymous reader", async () => {
+    // The case ADR-0003 removes: the catalogue is the whole gate, so a
     // direct id read no longer reaches a work hidden behind it.
     const aid = await insertRow(privateCid, { status: "published" });
-    const path = `/api/v1/collections/${privateCid}/artworks/${aid}`;
+    const path = `/api/v1/catalogues/${privateCid}/artworks/${aid}`;
 
     const anon = await req("GET", path);
     expect(anon.status).toBe(404);
@@ -1014,13 +1014,13 @@ describe("GET reads", () => {
     const draft = await insertRow(cid, { status: "draft" });
     const draftRes = await req(
       "GET",
-      `/api/v1/collections/${cid}/artworks/${draft}`,
+      `/api/v1/catalogues/${cid}/artworks/${draft}`,
     );
     expect(draftRes.status).toBe(404);
 
     const del = await insertRow(cid, { deleted: true });
     expect(
-      (await req("GET", `/api/v1/collections/${cid}/artworks/${del}`)).status,
+      (await req("GET", `/api/v1/catalogues/${cid}/artworks/${del}`)).status,
     ).toBe(404);
 
     const asOwner = await getArtwork(del, owner.cookies);
@@ -1030,8 +1030,8 @@ describe("GET reads", () => {
     expect(body.deletedAt?.seconds).toBeGreaterThan(0);
   });
 
-  it("404s an artwork addressed under the wrong collection", async () => {
-    const otherCid = await makeCollection(owner.userId, { isPublic: true });
+  it("404s an artwork addressed under the wrong catalogue", async () => {
+    const otherCid = await makeCatalogue(owner.userId, { isPublic: true });
     const aid = uuid();
     expect(
       (
@@ -1044,14 +1044,14 @@ describe("GET reads", () => {
     ).toBe(201);
     const res = await req(
       "GET",
-      `/api/v1/collections/${otherCid}/artworks/${aid}`,
+      `/api/v1/catalogues/${otherCid}/artworks/${aid}`,
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(404);
   });
 
   it("401s an unauthenticated write", async () => {
-    const res = await req("POST", `/api/v1/collections/${cid}/artworks`, {
+    const res = await req("POST", `/api/v1/catalogues/${cid}/artworks`, {
       body: JSON.stringify({
         artworkId: uuid(),
         title: "T",

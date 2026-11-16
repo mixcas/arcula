@@ -8,15 +8,19 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ManagePage from "@/components/manage/ManagePage";
-import { collectionService } from "@/services/collectionService";
-import type { Collection, SessionUserRead } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
+import {
+  CATALOGUE_LIMITS,
+  type Catalogue,
+  type SessionUserRead,
+} from "@arcula/shared";
 
 /**
- * The dashboard's cap reflection: the "N of 1" counter, the
- * New-collection button's link, and its disabled state at the cap.
+ * The dashboard's cap reflection: the "N of the cap" counter, the
+ * New-catalogue button's link, and its disabled state at the cap.
  *
  * Enforcement is the API's (409 limit-reached — pinned by
- * `collections.api.test.ts`); these tests pin the reflection: the count
+ * `catalogues.api.test.ts`); these tests pin the reflection: the count
  * the UI shows, and that a capped button is a dead link, not a live one
  * that would land on a form the server refuses.
  */
@@ -24,12 +28,12 @@ import type { Collection, SessionUserRead } from "@arcula/shared";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("@/services/collectionService", () => ({
-  collectionService: { getUserCollections: vi.fn() },
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getUserCatalogues: vi.fn() },
 }));
 
 // The dashboard mounts the invitee's pending-offer list. Its own suite pins
-// that card; here it only has to stay out of the collections assertions.
+// that card; here it only has to stay out of the catalogues assertions.
 vi.mock("@/services/invitationService", () => ({
   invitationService: {
     getPendingInvitations: vi.fn(() => Promise.resolve([])),
@@ -75,7 +79,7 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 /* eslint-disable @typescript-eslint/unbound-method */
-const getUserCollections = vi.mocked(collectionService.getUserCollections);
+const getUserCatalogues = vi.mocked(catalogueService.getUserCatalogues);
 /* eslint-enable @typescript-eslint/unbound-method */
 
 const freeMe: SessionUserRead = {
@@ -92,9 +96,10 @@ const freeMe: SessionUserRead = {
   updatedAt: "2026-10-01T00:00:00.000Z",
 };
 
-const collection: Collection = {
+const catalogue: Catalogue = {
   id: "cccccccccccccccccccc",
   name: "Flores Solares",
+  kind: "collection",
   userId: "u1",
   isPublic: true,
   role: "owner",
@@ -102,10 +107,11 @@ const collection: Collection = {
   updatedAt: { seconds: 1, nanoseconds: 0 },
 };
 
-/** A collection somebody else owns and shared with this account. */
-const sharedCollection: Collection = {
+/** A catalogue somebody else owns and shared with this account. */
+const sharedCatalogue: Catalogue = {
   id: "dddddddddddddddddddd",
   name: "Estudio Compartido",
+  kind: "collection",
   userId: "u2",
   isPublic: false,
   role: "collaborator",
@@ -114,21 +120,29 @@ const sharedCollection: Collection = {
   updatedAt: { seconds: 1, nanoseconds: 0 },
 };
 
+/** `count` distinct owned catalogues, so an at-cap case can fill the cap. */
+const ownedCatalogues = (count: number): Catalogue[] =>
+  Array.from({ length: count }, (_, i) => ({
+    ...catalogue,
+    id: `owned-${i}`,
+    name: `Owned ${i}`,
+  }));
+
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;
 };
 
-const renderPage = (collections: Collection[]) => {
-  getUserCollections.mockResolvedValue(collections);
+const renderPage = (catalogues: Catalogue[]) => {
+  getUserCatalogues.mockResolvedValue(catalogues);
   return render(
     <MantineProvider>
       <MemoryRouter initialEntries={["/manage"]}>
         <LocationProbe />
         <Routes>
           <Route path="/manage" element={<ManagePage />} />
-          <Route path="/manage/collection/new" element={<div />} />
+          <Route path="/manage/catalogue/new" element={<div />} />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -136,14 +150,14 @@ const renderPage = (collections: Collection[]) => {
 };
 
 /**
- * The New-collection control, per its state: below the cap it is a link
+ * The New-catalogue control, per its state: below the cap it is a link
  * (role link, it navigates), at the cap it is a disabled button (role
  * button — a disabled anchor cannot exist, so the control changes kind).
  */
-const newCollectionLink = () =>
-  screen.getByRole("link", { name: /new collection/i });
-const newCollectionButton = () =>
-  screen.getByRole("button", { name: /new collection/i });
+const newCatalogueLink = () =>
+  screen.getByRole("link", { name: /new catalogue/i });
+const newCatalogueButton = () =>
+  screen.getByRole("button", { name: /new catalogue/i });
 
 beforeEach(() => {
   authState.me = freeMe;
@@ -160,34 +174,34 @@ describe("the dashboard's cap reflection", () => {
     renderPage([]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 collection/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
-    const link = newCollectionLink();
-    expect(link).toHaveAttribute("href", "/manage/collection/new");
+    const link = newCatalogueLink();
+    expect(link).toHaveAttribute("href", "/manage/catalogue/new");
 
     const user = userEvent.setup();
     await user.click(link);
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(
-        "/manage/collection/new",
+        "/manage/catalogue/new",
       ),
     );
   });
 
-  it("shows 1 of 1 at the cap, and the control is a disabled button that goes nowhere", async () => {
-    renderPage([collection]);
+  it("shows the cap at the cap, and the control is a disabled button that goes nowhere", async () => {
+    renderPage(ownedCatalogues(CATALOGUE_LIMITS.free));
 
     await waitFor(() =>
-      expect(screen.getByText(/1 of 1 collection/i)).toBeInTheDocument(),
+      expect(screen.getByText(/10 of 10 catalogues/i)).toBeInTheDocument(),
     );
     // The failure this test exists for is a control that looks capped but
     // still navigates to a form the server would refuse: a disabled anchor
     // is not a thing, so the at-cap control must be a real button — and
     // clicking it must not move the location.
-    const button = newCollectionButton();
+    const button = newCatalogueButton();
     expect(button).toBeDisabled();
     expect(
-      screen.queryByRole("link", { name: /new collection/i }),
+      screen.queryByRole("link", { name: /new catalogue/i }),
     ).not.toBeInTheDocument();
 
     const user = userEvent.setup();
@@ -203,41 +217,35 @@ describe("the dashboard's cap reflection", () => {
     renderPage([]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 collection/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
-    expect(newCollectionLink()).toHaveAttribute(
-      "href",
-      "/manage/collection/new",
-    );
+    expect(newCatalogueLink()).toHaveAttribute("href", "/manage/catalogue/new");
   });
 
-  it("counts owned collections only, so a shared row does not cap the account", async () => {
-    // The failure this test exists for: one shared collection beside no owned
-    // one counting as "1 of 1" and disabling a create the API would allow.
-    renderPage([sharedCollection]);
+  it("counts owned catalogues only, so a shared row does not cap the account", async () => {
+    // The failure this test exists for: a shared row counted as owned would
+    // read "1 of 10" here, not "0 of 10".
+    renderPage([sharedCatalogue]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 collection/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
-    expect(newCollectionLink()).toHaveAttribute(
-      "href",
-      "/manage/collection/new",
-    );
+    expect(newCatalogueLink()).toHaveAttribute("href", "/manage/catalogue/new");
   });
 
   it("caps on the owned count even when shared rows are present", async () => {
-    renderPage([collection, sharedCollection]);
+    renderPage([...ownedCatalogues(CATALOGUE_LIMITS.free), sharedCatalogue]);
 
     await waitFor(() =>
-      expect(screen.getByText(/1 of 1 collection/i)).toBeInTheDocument(),
+      expect(screen.getByText(/10 of 10 catalogues/i)).toBeInTheDocument(),
     );
-    expect(newCollectionButton()).toBeDisabled();
+    expect(newCatalogueButton()).toBeDisabled();
   });
 });
 
 describe("a shared row on the dashboard", () => {
   it("names the role and the owner on the shared row, and the owner alone", async () => {
-    renderPage([collection, sharedCollection]);
+    renderPage([catalogue, sharedCatalogue]);
 
     await waitFor(() =>
       expect(screen.getByText("Estudio Compartido")).toBeInTheDocument(),

@@ -13,8 +13,8 @@ import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  collectionSlug,
-  type Collection,
+  catalogueSlug,
+  type Catalogue,
   type InvitationPreview,
 } from "@arcula/shared";
 
@@ -99,15 +99,16 @@ const TOKEN = "tok-from-the-mail";
 const INVITE_PATH = `/invite/${TOKEN}`;
 
 const preview: InvitationPreview = {
-  collection: { id: "cccccccccccccccccccc", name: "Flores Solares" },
+  catalogue: { id: "cccccccccccccccccccc", name: "Flores Solares" },
   inviter: { name: "Sofía Lara" },
   email: "invited@example.test",
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
 };
 
-const collection: Collection = {
-  id: preview.collection.id,
-  name: preview.collection.name,
+const catalogue: Catalogue = {
+  id: preview.catalogue.id,
+  name: preview.catalogue.name,
+  kind: "collection",
   userId: "u-owner",
   isPublic: false,
   createdAt: { seconds: 1, nanoseconds: 0 },
@@ -116,7 +117,7 @@ const collection: Collection = {
 
 const declinedRow = {
   id: "iiiiiiiiiiiiiiiiiiii",
-  collectionId: preview.collection.id,
+  catalogueId: preview.catalogue.id,
   email: preview.email,
   invitedByUserId: "u-owner",
   status: "declined" as const,
@@ -157,7 +158,7 @@ const renderPage = () =>
           <Route path="/login" element={<div />} />
           <Route path="/signup" element={<div />} />
           <Route path="/manage" element={<div />} />
-          <Route path="/manage/collection/:collectionId" element={<div />} />
+          <Route path="/manage/catalogue/:catalogueId" element={<div />} />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -172,7 +173,7 @@ const declineButton = () => screen.queryByRole("button", { name: "Decline" });
 beforeEach(() => {
   authState.currentUser = null;
   getInvitation.mockResolvedValue(preview);
-  acceptInvitation.mockResolvedValue({ status: "accepted", collection });
+  acceptInvitation.mockResolvedValue({ status: "accepted", catalogue });
   declineInvitation.mockResolvedValue(declinedRow);
   signOut.mockResolvedValue({ data: { success: true } });
 });
@@ -195,9 +196,7 @@ describe("the invite page's loading and dead-link states", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
 
     resolve(preview);
-    expect(
-      await screen.findByText(preview.collection.name),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(preview.catalogue.name)).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -209,7 +208,7 @@ describe("the invite page's loading and dead-link states", () => {
       await screen.findByTestId("invitation-not-found"),
     ).toBeInTheDocument();
     // Nothing the invitation would have named, and no way to answer it.
-    expect(screen.queryByText(preview.collection.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(preview.catalogue.name)).not.toBeInTheDocument();
     expect(screen.queryByText(preview.email)).not.toBeInTheDocument();
     expect(acceptButton()).not.toBeInTheDocument();
     expect(declineButton()).not.toBeInTheDocument();
@@ -230,20 +229,16 @@ describe("the invite page's loading and dead-link states", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(
-      await screen.findByText(preview.collection.name),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(preview.catalogue.name)).toBeInTheDocument();
     expect(getInvitation).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("the invite page's signed-out preview", () => {
-  it("names the collection, the inviter, the invited address and the expiry, and offers no answer", async () => {
+  it("names the catalogue, the inviter, the invited address and the expiry, and offers no answer", async () => {
     renderPage();
 
-    expect(
-      await screen.findByText(preview.collection.name),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(preview.catalogue.name)).toBeInTheDocument();
     expect(
       screen.getByText(new RegExp(preview.inviter.name)),
     ).toBeInTheDocument();
@@ -272,7 +267,7 @@ describe("the invite page's signed-out preview", () => {
   it("sends a visitor to sign in and carries the invite path back", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("link", { name: "Sign in" }));
 
@@ -283,7 +278,7 @@ describe("the invite page's signed-out preview", () => {
   it("sends a visitor to sign up and carries the invite path back", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("link", { name: "Create an account" }));
 
@@ -293,11 +288,11 @@ describe("the invite page's signed-out preview", () => {
 });
 
 describe("the invite page for the invited account", () => {
-  it("accepts, and lands in the collection", async () => {
+  it("accepts, and lands in the catalogue", async () => {
     signedInAs(preview.email);
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     expect(acceptButton()).toBeInTheDocument();
     expect(declineButton()).toBeInTheDocument();
@@ -307,7 +302,7 @@ describe("the invite page for the invited account", () => {
     await waitFor(() => expect(acceptInvitation).toHaveBeenCalledWith(TOKEN));
     await waitFor(() =>
       expect(location().textContent).toBe(
-        `/manage/collection/${collectionSlug(collection.name, collection.id)}`,
+        `/manage/catalogue/${catalogueSlug(catalogue.name, catalogue.id)}`,
       ),
     );
   });
@@ -316,7 +311,7 @@ describe("the invite page for the invited account", () => {
     signedInAs(preview.email);
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("button", { name: "Decline" }));
 
@@ -335,7 +330,7 @@ describe("the invite page for the invited account", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("button", { name: "Accept invitation" }));
 
@@ -344,7 +339,7 @@ describe("the invite page for the invited account", () => {
     expect(
       await screen.findByTestId("invitation-not-found"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(preview.collection.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(preview.catalogue.name)).not.toBeInTheDocument();
   });
 
   it("says the account already has access when accept conflicts", async () => {
@@ -354,7 +349,7 @@ describe("the invite page for the invited account", () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("button", { name: "Accept invitation" }));
 
@@ -379,7 +374,7 @@ describe("the invite page for the invited account", () => {
     });
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("button", { name: "Accept invitation" }));
 
@@ -397,7 +392,7 @@ describe("the invite page for a different account", () => {
   it("names the invited address and offers a switch, never an accept", async () => {
     signedInAs("someone-else@example.test");
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     const mismatch = screen.getByRole("alert");
     expect(
@@ -415,7 +410,7 @@ describe("the invite page for a different account", () => {
     signedInAs("someone-else@example.test");
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(preview.collection.name);
+    await screen.findByText(preview.catalogue.name);
 
     await user.click(screen.getByRole("button", { name: "Switch account" }));
 

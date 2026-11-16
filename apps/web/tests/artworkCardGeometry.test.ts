@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   artworkCardSpan,
   artworkCardAspect,
-} from "@/components/manage/collection/artworkCardGeometry";
+} from "@/components/manage/catalogue/artworkCardGeometry";
 
 describe("artworkCardAspect", () => {
   it("keeps a natural aspect inside the clamp", () => {

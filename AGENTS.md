@@ -12,22 +12,22 @@
 > **`docs/specs/`**.
 >
 > **Sharing is built.** Access is membership: the owner and every collaborator
-> read and edit one collection, invitations are mailed single-use tokens, and
+> read and edit one catalogue, invitations are mailed single-use tokens, and
 > ownership transfers without moving media. The model is accepted in
 > [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
 > as-built detail is in **Sharing** below.
 >
-> **Collection passwords are built too.** A password is a second condition on a
-> public collection, answered by an Access grant in a per-collection cookie, and
-> the unlock route is throttled per address and collection; the design record is
+> **Catalogue passwords are built too.** A password is a second condition on a
+> public catalogue, answered by an Access grant in a per-catalogue cookie, and
+> the unlock route is throttled per address and catalogue; the design record is
 > [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)
-> and the as-built detail is under **Protected collections**.
+> and the as-built detail is under **Protected catalogues**.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
 
 - **`apps/web`** — the React 19 + Vite SPA (Mantine v9), including the public
-  collection pages (the "skins").
+  catalogue pages (the "skins").
 - **`apps/api`** — the Hono API, run by Bun in dev and by a Node 24 Lambda in
   prod. It also serves the built SPA.
 - **`packages/shared`** — the client⇄server contract: types, Zod schemas, the
@@ -163,24 +163,24 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
   holds the pure decisions derived from it.
 - `access.ts` — the access verdicts, pure over loaded rows: the membership
-  fact (owner, collaborator, nobody) and the visitor rule (the collection is
+  fact (owner, collaborator, nobody) and the visitor rule (the catalogue is
   the only gate, with an Access grant as the second condition on a Protected
-  one); `authorize.ts` loads the collection, the viewer's membership row and
+  one); `authorize.ts` loads the catalogue, the viewer's membership row and
   the row each route acts on, reads the grant (`grantHeld`, from the cookie
-  named for that collection) where a visitor needs one, and answers the one
-  write question — `requireMemberCollection` / `requireMemberArtwork`, owner or
+  named for that catalogue) where a visitor needs one, and answers the one
+  write question — `requireMemberCatalogue` / `requireMemberArtwork`, owner or
   collaborator — that every write path asks.
-- `collectionGrants.ts` — the Access grant's pure facts: `mintGrantToken`,
+- `catalogueGrants.ts` — the Access grant's pure facts: `mintGrantToken`,
   `hashGrantToken`, `grantCookieName` and `isGrantUsable` (not past
   `expiresAt`); `GRANT_TTL_MS` (twelve hours) is the one number behind both the
   cookie's `Max-Age` and the row's expiry. No database and no Hono — the unlock
   route mints and stores, the read paths load the row and ask this.
-- `collectionPassword.ts` — hashing (`hashPassword`) and the check
-  (`verifyPassword`) for a collection's password.
-- `collectionScope.ts` — the membership scope the reads share: the left join
-  to the caller's collaborator row and the live-collections where-clause — the
-  collections the caller owns or collaborates on — used by the signed-in
-  `/collections` list and the Artist Name aggregate so the two cannot drift.
+- `cataloguePassword.ts` — hashing (`hashPassword`) and the check
+  (`verifyPassword`) for a catalogue's password.
+- `catalogueScope.ts` — the membership scope the reads share: the left join
+  to the caller's collaborator row and the live-catalogues where-clause — the
+  catalogues the caller owns or collaborates on — used by the signed-in
+  `/catalogues` list and the Artist Name aggregate so the two cannot drift.
 - `unlockThrottle.ts` — the throttle's policy and nothing else: `UNLOCK_WINDOW_MS`
   (ten minutes, **fixed**, and why not sliding) and `unlockWindowStart`, which
   floors an attempt to the window it belongs to. `clientAddress.ts` — the
@@ -189,9 +189,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   own, and no forwarding header is ever trusted; locally the header is absent
   and every attempt shares one bucket.
 - `artworkRead.ts` — the single read path for Artworks: one work (the
-  Collection, the work, its photos, documents and Variants), or a Collection's
+  Catalogue, the work, its photos, documents and Variants), or a Catalogue's
   list — live, or the member-only Deleted one, most recently deleted first —
-  loading the Collection and each child table once for the whole page (at most
+  loading the Catalogue and each child table once for the whole page (at most
   five queries, six for a collaborator's membership row) and returning ok,
   not-found, unauthorized or forbidden for the list. The live list also takes
   an optional member-only search (`q`), refused ahead of the visitor verdict and
@@ -202,7 +202,7 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   and the route owns the wire code. The save routes read their work back
   through it.
 - `artistNames.ts` — the caller's Artist Name suggestions for the artwork form:
-  the aggregate read over live works in the live collections the caller owns or
+  the aggregate read over live works in the live catalogues the caller owns or
   collaborates on (the caller scope recorded in
   [ADR-0009](docs/adr/0009-artist-name-suggestions-are-caller-scoped.md)), and
   the pure collapse of case and accent variants to one most-used spelling,
@@ -217,7 +217,7 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `collections` (the reads, the settings write, `…/unlock`, the
+- `routes/` — `catalogues` (the reads, the settings write, `…/unlock`, the
   import, the Deleted list and the batch delete/restore), `access` (the access
   read, removal, leaving and transfer), `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
@@ -235,36 +235,68 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
-artworkImport, artistNames, collection, invitation, document, user),
+artworkImport, artistNames, catalogue, invitation, document, user),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
-`photoUrl` ladder), `artworkSearch.ts` (the ten-field Collection search
+`photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
 predicate, its caps, the query suffix helper and `normalizeSearchText`, which
 Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
 types), `limits.ts` (the
-per-tier collection cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
+per-tier catalogue cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
 both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
 card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
 `MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),
-`slug.ts`, `types.ts`.
+`slug.ts`, `types.ts`. `schemas/artwork.ts` holds `artworkStatusSchema` and
+`artworkAvailabilitySchema` (`available`/`reserved`/`sold`/`on-consignment`,
+both pinned to their client types); the save schemas accept availability as
+`.nullable()`, the create treating an absent key as null and the update as
+"leave it alone", and the read schema requires the key because the serializer
+always emits it. The API never validates it against the catalogue's kind — a
+Collection's work may carry one. `schemas/catalogue.ts` holds
+`catalogueKindSchema` (`portfolio`/`collection`/`inventory`, pinned to
+`CatalogueKind`); the create
+schema accepts `kind` defaulting to `collection` and the update schema does
+not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
+`catalogueReadSchema` carries it, and the API's serializer validates a row
+against the three values (`catalogueKindOf`) before emitting it.
 
-**`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
-(`api.ts` is the transport); `auth/` is the Better Auth React client;
-`components/manage` and `components/collection`; `skins/` is the public-view
-system.
+**`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
+means for the surface, as data: the kind's colour (`kindColor`, a literal union
+the screens turn into a CSS variable through `kindColorVar`), the labels, the
+market states a kind offers (a Portfolio's three, an Inventory's four, a
+Collection's none) with their words, and the v1 artwork field table — every
+field visible, only `title` and `artistName` required. The field table is the
+data a later per-kind hiding will read; no v1 screen consumes
+`visible`/`required`, and a screen that reads the module uses the labels, the
+availability values and `availabilityFor`'s default. `services/` are the API
+clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
+`telemetry/logRocket.ts` is the session-replay hook, redacted at the client
+([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
+`components/manage` and `components/catalogue`; `skins/` is the public-view
+system. The artwork Add and Edit pages load the catalogue for its kind; a
+Collection's form renders no availability control and sends no key, while a
+Portfolio or an Inventory defaults a surfaced work with no stored state to
+`available` through `availabilityFor`, and offers only the states that kind
+carries. The manage page and the Deleted view pass `showAvailability` down from
+the kind; no public page renders availability at all, and the API emits it on a
+member read only.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
-`account`, `verification`, `collections`, `collectionCollaborators`,
-`collectionInvitations`, `collectionAccessGrants`, `collectionUnlockAttempts`,
+`account`, `verification`, `catalogues`, `catalogueCollaborators`,
+`catalogueInvitations`, `catalogueAccessGrants`, `catalogueUnlockAttempts`,
 `artworks`, `artworkPhotos`, `artworkPhotoVariants`, `artworkDocuments`) and the
-`schema` object the adapter consumes. The two sharing tables are in the schema
-and `collectionCollaborators` is read on every
-access question; the invitation routes write `collectionInvitations`, while the
-code that writes `collectionCollaborators` covers acceptance, removal, leaving
+`schema` object the adapter consumes. The Drizzle entity is `catalogues` and the
+relation property is `catalogueId`, but the physical Postgres tables keep their
+`collections` / `collection_*` names and the physical column stays
+`"collectionId"` — a storage rename is a non-additive migration (ADR-0010). The
+two sharing tables are in the schema
+and `catalogueCollaborators` is read on every
+access question; the invitation routes write `catalogueInvitations`, while the
+code that writes `catalogueCollaborators` covers acceptance, removal, leaving
 and transfer, which swaps the two membership rows and rewrites the owner.
-`collections.passwordHash` is the one password fact; `collectionAccessGrants`
-holds a grant's token hash and its expiry, and `collectionUnlockAttempts` is the
-unlock throttle's counter — `(ip, collectionId, windowStart)` with `attempts`,
+`catalogues.passwordHash` is the one password fact; `catalogueAccessGrants`
+holds a grant's token hash and its expiry, and `catalogueUnlockAttempts` is the
+unlock throttle's counter — `(ip, catalogueId, windowStart)` with `attempts`,
 written and read by the unlock route alone.
 `packages/db/migrations/` is generated; hand edits are the documented exception,
 and there are exactly three: a data backfill appended to the generated file, the
@@ -295,33 +327,33 @@ cover both the row and the bytes.
 
 ## Sharing
 
-Sharing is membership, and it is built. `collections.userId` is the one owner
-fact; `collection_collaborators` holds everyone else, the owner is not
+Sharing is membership, and it is built. `catalogues.userId` is the one owner
+fact; `catalogueCollaborators` holds everyone else, the owner is not
 duplicated there, and a membership row is the authorization fact for everything
-inside the collection. `access.ts` answers the questions over loaded rows and
-`authorize.ts` loads the collection and the viewer's row, so the owner and every
-collaborator read every live work in the collection — drafts included — and a
+inside the catalogue. `access.ts` answers the questions over loaded rows and
+`authorize.ts` loads the catalogue and the viewer's row, so the owner and every
+collaborator read every live work in the catalogue — drafts included — and a
 deleted work by id, and read its documents at every status. A deleted work is in
-no live list; the collection's **Deleted** view lists the stamped works, most
+no live list; the catalogue's **Deleted** view lists the stamped works, most
 recently deleted first, and restores one or many, and a deleted work's Edit page
 disables Save and the media uploaders and restores in place. Every write path
-asks the same membership question through `requireMemberCollection` /
+asks the same membership question through `requireMemberCatalogue` /
 `requireMemberArtwork`.
 
 The boundary is access administration. A collaborator changes every setting
 (public/private included), creates, edits, imports, bulk-deletes, restores and
 sweeps exactly as the owner does, and may leave; the owner alone invites,
 resends, revokes, removes and transfers, and cannot leave without transferring.
-`GET /collections/:id/access` is member-readable: the owner and collaborators
+`GET /catalogues/:id/access` is member-readable: the owner and collaborators
 see who has access, while the pending offers are the owner's alone.
-`GET /collections` returns owned and shared rows together, each with `role` and
-a shared row with `ownerName`; the tier cap counts owned live collections only,
-so deleting a collection frees the slot. The visitor rule is unchanged: a
-collaborator is never a visitor, and the collection remains the visitor's only
+`GET /catalogues` returns owned and shared rows together, each with `role` and
+a shared row with `ownerName`; the tier cap counts owned live catalogues only,
+so deleting a catalogue frees the slot. The visitor rule is unchanged: a
+collaborator is never a visitor, and the catalogue remains the visitor's only
 gate
 ([ADR-0003](docs/adr/0003-the-collection-gates.md)).
 
-`collection_invitations` carries the offer: one pending row per collection and
+`catalogueInvitations` carries the offer: one pending row per catalogue and
 lowercased email, the SHA-256 hash of a single-use token, a seven-day expiry
 and a status. The raw token exists only in the mail. Acceptance needs the
 mailed token and a session whose email matches the invited address; the
@@ -337,7 +369,7 @@ owner can resend once the 60-second cooldown has passed; a transfer commits
 before its notice, so a failed notice never undoes the transfer.
 
 **The media namespace and the two migrations.** Final object keys use the
-collection's `mediaNamespaceId`, fixed at creation, so a transfer changes the
+catalogue's `mediaNamespaceId`, fixed at creation, so a transfer changes the
 owner and the artwork mirror and moves no object: existing URLs keep working.
 Staging keys use the uploader's id, so one collaborator's unsaved upload is
 never under another's prefix. The schema shipped in two releases, one per step:
@@ -350,43 +382,43 @@ between (`WHERE "mediaNamespaceId" IS NULL`) and set the column `NOT NULL`.
 worked example of the forward-only rule above. The full schema narrative is in
 `DESIGN.md`; the migration detail is in `packages/db/README.md`.
 
-## Protected collections
+## Protected catalogues
 
-A password is a **second condition on a public collection**, never a third
+A password is a **second condition on a public catalogue**, never a third
 visibility state ([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
-`collections.passwordHash` nullable is the whole of the stored protection — a
-collection without one is the normal state — and the member read carries
+`catalogues.passwordHash` nullable is the whole of the stored protection — a
+catalogue without one is the normal state — and the member read carries
 `isPasswordProtected`, derived from the hash's presence, while the hash never
 leaves the server. Membership bypasses the challenge; a visitor needs an
 **Access grant**.
 
-The grant is a 32-byte token in the cookie named for its collection
+The grant is a 32-byte token in the cookie named for its catalogue
 (`arcula_grant_{id}`, `Path=/api/v1`, `HttpOnly`, `SameSite=Lax`, twelve
 hours), and the row stores only its SHA-256 hash with the same expiry. The
 cookie's path is broad because the media proxy is one route for every
-collection's bytes; the **name** is the scope, and `grantHeld` reads only the
-name for the collection it serves and looks the row up by collection id and
+catalogue's bytes; the **name** is the scope, and `grantHeld` reads only the
+name for the catalogue it serves and looks the row up by catalogue id and
 token hash, so a grant minted elsewhere is never consulted. The verdict is still
-`access.ts`'s: `canSeeCollection` and `canSeeArtwork` take the grant as a fact
-beside membership, and the collection read, the artwork list, the single-artwork
+`access.ts`'s: `canSeeCatalogue` and `canSeeArtwork` take the grant as a fact
+beside membership, and the catalogue read, the artwork list, the single-artwork
 read and the media proxy all ask it — so a grant admits exactly what a visitor
 sees (published, live works; never a draft, never a document) and a private
-collection stays shut to a grant holder.
+catalogue stays shut to a grant holder.
 
-`POST /collections/:id/unlock` takes the password: `201` and the cookie on
-success, `403 invalid-password` on a wrong one, `409` on a collection with no
+`POST /catalogues/:id/unlock` takes the password: `201` and the cookie on
+success, `403 invalid-password` on a wrong one, `409` on a catalogue with no
 password (or a private one, where there is nothing to get past), and `429
-too-many-attempts` once the window is spent. A refused collection read is `403
-password-required` with `details.collectionName`, which the public pages fold to
+too-many-attempts` once the window is spent. A refused catalogue read is `403
+password-required` with `details.catalogueName`, which the public pages fold to
 the lock screen — app chrome, not a skin — and whose success calls the hook's
-`reload` to re-run the ordinary load, collection read first. An expired grant
+`reload` to re-run the ordinary load, catalogue read first. An expired grant
 lands back on the lock screen the same way. A password write (`PATCH
-/collections/:id`) revokes the collection's grants in the same transaction, so
+/catalogues/:id`) revokes the catalogue's grants in the same transaction, so
 changing the password closes every open cookie.
 
-**The unlock throttle.** Guessing is counted in `collection_unlock_attempts`,
-one row per `(address, collection, window)` — the pair is the key precisely so
-one collection's throttle cannot lock visitors out of another's through a
+**The unlock throttle.** Guessing is counted in `catalogueUnlockAttempts`,
+one row per `(address, catalogue, window)` — the pair is the key precisely so
+one catalogue's throttle cannot lock visitors out of another's through a
 shared address. The window is **fixed**, ten minutes, floored from the
 attempt's own time (`unlockThrottle.ts`), so a row names the span it counts
 instead of the span depending on the clock. Ten failures spend it and the
@@ -420,9 +452,10 @@ Three tiers, and the first is where nearly everything belongs:
    `variantSize` / `coverCrop` (`apps/api/src/media/variants.ts`),
    `parseAcquisitionDate` (`packages/shared/src/schemas/artworkImport.ts`),
    `sortPhotos` / `reindexPhotos` (`packages/shared/src/artworkPhotos.ts`),
-   `collectionLimitForTier` (`packages/shared/src/limits.ts`),
-   `publicCollectionState` / `publicFailure`
-   (`apps/web/src/components/collection/usePublicCollection.ts`),
+   `catalogueLimitForTier` (`packages/shared/src/limits.ts`),
+   `publicCatalogueState` / `publicFailure`
+   (`apps/web/src/components/catalogue/usePublicCatalogue.ts`),
+   `catalogueSurface` (`apps/web/src/catalogueSurface.ts`),
    `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
    verdict (`apps/api/src/access.ts`). Ours end to end, and where a real
    regression lives.
@@ -526,10 +559,11 @@ restated here.
   goal; a test that fails only when we change something is.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 17-step end-to-end
-  pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real
-  12 MP photo through stage → process → save, a visitor read, and the
-  reset-mail path). It takes the URL, not an environment, so it runs against
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 16-step end-to-end
+  pass (health, SPA, sign-up, the `Secure` session cookie, a real 12 MP photo
+  through stage → process → save, a visitor read, and the reset-mail path).
+  The catalogue cap is covered by the API integration suite instead, since
+  reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
   either one by hand. It creates a throwaway `verify-<ts>@example.test` account
   per run, so treat it as a write against the environment. A deploy whose host
   does not resolve yet prints the DNS records and exits successfully instead of
@@ -571,8 +605,8 @@ now. The glossary holds the product's own vocabulary — the nouns in the data
 model and the design record — and **not** deployment, branch or process
 vocabulary, which belongs in this file. ADRs hold decisions with their rejected
 alternatives: two long-lived branches feeding two permanent environments, both
-environments sharing one AWS account and CDK bootstrap, the collection as the
-only visitor gate, and collections shared by membership. See
+environments sharing one AWS account and CDK bootstrap, the catalogue as the
+only visitor gate, and catalogues shared by membership. See
 `docs/agents/domain.md`.
 
 ## graphify

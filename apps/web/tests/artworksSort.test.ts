@@ -4,13 +4,13 @@
 // titles numerically, that a direction flips only the field's comparison and
 // leaves the id tie-break ascending so equal values never reshuffle with the
 // direction, and that the caller's array is left untouched (it is React state,
-// and sorting it in place would reorder the collection behind the list's back).
+// and sorting it in place would reorder the catalogue behind the list's back).
 
 import { describe, expect, it } from "vitest";
 import {
   sortArtworks,
   type SortState,
-} from "@/components/manage/collection/artworksSort";
+} from "@/components/manage/catalogue/artworksSort";
 import type { Artwork } from "@arcula/shared";
 
 const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
@@ -19,7 +19,7 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "collection1",
+  catalogueId: "catalogue1",
   status: "published",
   deletedAt: null,
   ...overrides,

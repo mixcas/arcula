@@ -2,7 +2,7 @@
  * The pending offers addressed to the signed-in account, on the dashboard.
  *
  * This is the invitee's list, not the owner's administrative view: the server
- * returns only the caller's own live offers, each with the collection and the
+ * returns only the caller's own live offers, each with the catalogue and the
  * account that sent it. A card offers decline alone — acceptance needs the
  * token in the mail, which is the proof of inbox control (ADR-0004) — and says
  * so, because an email that never arrived is otherwise a dead end.
@@ -101,7 +101,7 @@ const PendingInvitations: React.FC = () => {
         >
           <Group justify="space-between" align="center" wrap="nowrap">
             <div>
-              <Text size="h3">{invitation.collectionName}</Text>
+              <Text size="h3">{invitation.catalogueName}</Text>
               <Text size="sm" c="dim">
                 Invited by {invitation.inviterName}
               </Text>

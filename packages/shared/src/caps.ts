@@ -9,7 +9,7 @@
  */
 
 /**
- * How many distinct fallback code points one Collection PDF font-subset
+ * How many distinct fallback code points one catalogue PDF font-subset
  * request may carry. The export chunks the document's set at this size and
  * the API refuses anything larger, so the two sides cannot drift.
  */

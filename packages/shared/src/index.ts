@@ -16,7 +16,7 @@ export * from "./schemas/access";
 export * from "./schemas/artistNames";
 export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
-export * from "./schemas/collection";
+export * from "./schemas/catalogue";
 export * from "./schemas/document";
 export * from "./schemas/invitation";
 export * from "./schemas/user";

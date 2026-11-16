@@ -14,30 +14,30 @@
 import { artworkSearchSuffix, artworkSlug } from "@arcula/shared";
 import type { Artwork } from "@arcula/shared";
 
-/** The `:collectionId` / `:artworkId` param an artwork's links carry. */
-const artworkParam = (collectionParam: string, artwork: Artwork): string =>
-  `/collection/${collectionParam}/artwork/${artworkSlug(artwork.title, artwork.id)}`;
+/** The `:catalogueId` / `:artworkId` param an artwork's links carry. */
+const artworkParam = (catalogueParam: string, artwork: Artwork): string =>
+  `/catalogue/${catalogueParam}/artwork/${artworkSlug(artwork.title, artwork.id)}`;
 
 /**
- * The work's public page, in the collection's own skin. It deliberately does
+ * The work's public page, in the catalogue's own skin. It deliberately does
  * not carry the search: View leaves the app for the visitor's view, and the
  * search belongs to the manage list.
  */
 export const publicArtworkHref = (
-  collectionParam: string,
+  catalogueParam: string,
   artwork: Artwork,
-): string => artworkParam(collectionParam, artwork);
+): string => artworkParam(catalogueParam, artwork);
 
 /**
- * The work's edit page under `/manage`, carrying the committed collection
+ * The work's edit page under `/manage`, carrying the committed catalogue
  * search back so saving returns to the results being read. Built from `q`
  * alone (`artworkSearchSuffix`), so no other parameter follows the user back.
  */
 export const manageArtworkEditHref = (
-  collectionParam: string,
+  catalogueParam: string,
   artwork: Artwork,
   searchQuery: string,
 ): string =>
-  `/manage${artworkParam(collectionParam, artwork)}${artworkSearchSuffix(
+  `/manage${artworkParam(catalogueParam, artwork)}${artworkSearchSuffix(
     searchQuery.trim(),
   )}`;

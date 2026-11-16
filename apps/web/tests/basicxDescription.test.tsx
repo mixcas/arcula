@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { basicxSkin } from "@/skins/basicx";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
-import type { Artwork, Collection, ImageVariantKey } from "@arcula/shared";
+import type { Artwork, Catalogue, ImageVariantKey } from "@arcula/shared";
 import type { MockEmblaApi } from "./helpers/carouselMock";
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -73,9 +73,10 @@ vi.mock("@/skins/basicx/useActiveSection", () => ({
   }),
 }));
 
-const collection: Collection = {
-  id: "collection-1",
+const catalogue: Catalogue = {
+  id: "catalogue-1",
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };
@@ -108,7 +109,7 @@ const photo = (id: string, order: number) => ({
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "artwork-1",
   userId: "owner-1",
-  collectionId: "collection-1",
+  catalogueId: "catalogue-1",
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -119,18 +120,18 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
 
 const rtlRender = rtl.render;
 
-const COLLECTION_PATH = "/collection/flores-solares-collection-1";
+const CATALOGUE_PATH = "/catalogue/flores-solares-catalogue-1";
 
 const makeProps = ({
   options: stored,
-  collection: withCollection,
+  catalogue: withCatalogue,
   ...props
-}: Partial<SkinProps> & { collection?: Collection } = {}): SkinProps => ({
-  collection: { ...collection, ...withCollection },
+}: Partial<SkinProps> & { catalogue?: Catalogue } = {}): SkinProps => ({
+  catalogue: { ...catalogue, ...withCatalogue },
   artworks: [artwork()],
   view: "home",
-  collectionPath: COLLECTION_PATH,
-  artworkPath: (work) => `${COLLECTION_PATH}/artwork/${work.title}-${work.id}`,
+  cataloguePath: CATALOGUE_PATH,
+  artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
   ...props,
   // Resolved last: the props above may carry raw stored options, and
   // `resolveSkinOptions` is exactly what the host does with them.
@@ -139,7 +140,7 @@ const makeProps = ({
 
 const renderSkin = ({
   ...props
-}: Partial<SkinProps> & { collection?: Collection } = {}) =>
+}: Partial<SkinProps> & { catalogue?: Catalogue } = {}) =>
   rtlRender(
     <MantineProvider theme={basicxSkin.theme}>
       <MemoryRouter>
@@ -158,7 +159,7 @@ const carouselApis = (): MockEmblaApi[] =>
           .__embla as MockEmblaApi,
     );
 
-/** The wrapped description element, or null when the collection has none. */
+/** The wrapped description element, or null when the catalogue has none. */
 const descriptionBox = (): HTMLElement | null => {
   const text = screen.queryByText("A handful of sunscapes.");
   return text?.parentElement ?? null;
@@ -179,9 +180,9 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Basicx — the collection description", () => {
-  it("renders the description bottom-right on home when the collection has one", () => {
-    renderSkin({ collection: { description: "A handful of sunscapes." } });
+describe("Basicx — the catalogue description", () => {
+  it("renders the description bottom-right on home when the catalogue has one", () => {
+    renderSkin({ catalogue: { description: "A handful of sunscapes." } });
     const box = descriptionBox();
     expect(box).not.toBeNull();
     expect(box).toHaveStyle({ opacity: "1", visibility: "visible" });
@@ -189,7 +190,7 @@ describe("Basicx — the collection description", () => {
   });
 
   it("keeps the artwork lines and the description in the same footer", () => {
-    renderSkin({ collection: { description: "A handful of sunscapes." } });
+    renderSkin({ catalogue: { description: "A handful of sunscapes." } });
     const box = descriptionBox();
     const footer = box?.closest("footer");
     expect(footer).not.toBeNull();
@@ -200,12 +201,12 @@ describe("Basicx — the collection description", () => {
   });
 
   it("renders nothing when the description is blank or whitespace", () => {
-    renderSkin({ collection: { description: "   \n  " } });
+    renderSkin({ catalogue: { description: "   \n  " } });
     expect(screen.queryByText(/sunscapes/)).toBeNull();
   });
 
   it("keeps the description out of the artwork view, not merely faded over it", () => {
-    // It is an introduction to the collection, and a visitor on one artwork
+    // It is an introduction to the catalogue, and a visitor on one artwork
     // has already stepped past the introduction. The chrome mounts the box
     // (so the fade it would play never measures a fresh element), which means
     // "hidden" rather than "absent" is what "not shown" asserts: invisible to
@@ -215,7 +216,7 @@ describe("Basicx — the collection description", () => {
         <MemoryRouter>
           <basicxSkin.Artwork
             {...makeProps({
-              collection: { description: "A handful of sunscapes." },
+              catalogue: { description: "A handful of sunscapes." },
               view: "artwork" as const,
             })}
           />
@@ -230,7 +231,7 @@ describe("Basicx — the collection description", () => {
 
   it("fades out when the visitor clicks to the second photo of the first artwork", () => {
     renderSkin({
-      collection: { description: "A handful of sunscapes." },
+      catalogue: { description: "A handful of sunscapes." },
       artworks: [artwork()],
     });
     const [api] = carouselApis();
@@ -251,7 +252,7 @@ describe("Basicx — the collection description", () => {
     // clause can never fire — hiding the description here would mean it never
     // appears at all. Only the scroll can dismiss it.
     renderSkin({
-      collection: { description: "A handful of sunscapes." },
+      catalogue: { description: "A handful of sunscapes." },
       artworks: [artwork({ photos: [photo("p1", 0)] })],
     });
     expect(screen.queryAllByTestId("carousel")).toHaveLength(0);
@@ -262,7 +263,7 @@ describe("Basicx — the collection description", () => {
     // The latch: the description is an introduction, and a visitor who has
     // already passed it does not get it back by scrolling up.
     renderSkin({
-      collection: { description: "A handful of sunscapes." },
+      catalogue: { description: "A handful of sunscapes." },
       artworks: [artwork({ id: "work-a" }), artwork({ id: "work-b" })],
     });
     moveTo(carouselApis()[0], 1);
@@ -275,7 +276,7 @@ describe("Basicx — the collection description", () => {
 
   it("dismisses when the visitor scrolls to the second artwork, for good", () => {
     const merged = makeProps({
-      collection: { description: "A handful of sunscapes." },
+      catalogue: { description: "A handful of sunscapes." },
       artworks: [artwork({ id: "work-a" }), artwork({ id: "work-b" })],
     });
     const result = rtlRender(

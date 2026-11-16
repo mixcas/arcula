@@ -1,7 +1,7 @@
 // The owner administering the invitations, and the invitee's in-app list.
 //
-//   POST   /collections/{cid}/invitations/{id}/resend   owner: rotate and mail again
-//   DELETE /collections/{cid}/invitations/{id}          owner: revoke a pending offer
+//   POST   /catalogues/{cid}/invitations/{id}/resend   owner: rotate and mail again
+//   DELETE /catalogues/{cid}/invitations/{id}          owner: revoke a pending offer
 //   GET    /me/invitations                              the invitee's pending offers
 //   POST   /me/invitations/{id}/decline                 the invitee says no, in app
 //
@@ -14,7 +14,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  collectionInvitations as invitationsTable,
+  catalogueInvitations as invitationsTable,
   user as userTable,
 } from "@arcula/db";
 import type {
@@ -27,14 +27,14 @@ import { closeDb, db } from "../src/db";
 import { emailProvider } from "../src/email/provider";
 import { hashInvitationToken } from "../src/invitations";
 import { err, freshUser, json, req } from "./helpers/api";
-import { makeCollection, makeInvitation } from "./helpers/fixtures";
+import { makeCatalogue, makeInvitation } from "./helpers/fixtures";
 import { linkIn, mailpitText, waitForNewMail } from "./helpers/mailpit";
 
 let owner: { email: string; cookies: string; userId: string };
 let mate: { email: string; cookies: string; userId: string };
 let cid = "";
 
-/** A second collection the same owner has, for the wrong-collection checks. */
+/** A second catalogue the same owner has, for the wrong-catalogue checks. */
 let otherCid = "";
 
 const unknownId = () => crypto.randomUUID();
@@ -42,18 +42,18 @@ const unknownId = () => crypto.randomUUID();
 const uniqueEmail = (label: string) =>
   `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
 
-const resend = (cookies: string, id: string, collectionId = cid) =>
-  req("POST", `/api/v1/collections/${collectionId}/invitations/${id}/resend`, {
+const resend = (cookies: string, id: string, catalogueId = cid) =>
+  req("POST", `/api/v1/catalogues/${catalogueId}/invitations/${id}/resend`, {
     cookies,
   });
 
-const revoke = (cookies: string, id: string, collectionId = cid) =>
-  req("DELETE", `/api/v1/collections/${collectionId}/invitations/${id}`, {
+const revoke = (cookies: string, id: string, catalogueId = cid) =>
+  req("DELETE", `/api/v1/catalogues/${catalogueId}/invitations/${id}`, {
     cookies,
   });
 
 const createInvitation = (email: string) =>
-  req("POST", `/api/v1/collections/${cid}/invitations`, {
+  req("POST", `/api/v1/catalogues/${cid}/invitations`, {
     cookies: owner.cookies,
     body: { email },
   });
@@ -91,11 +91,11 @@ async function tokenFromMail(
 beforeAll(async () => {
   owner = await freshUser("OfferOwner");
   mate = await freshUser("OfferMate");
-  cid = await makeCollection(owner.userId, {
+  cid = await makeCatalogue(owner.userId, {
     name: "Offer Wall",
     isPublic: false,
   });
-  otherCid = await makeCollection(owner.userId, {
+  otherCid = await makeCatalogue(owner.userId, {
     name: "Offer Other",
     isPublic: false,
   });
@@ -105,7 +105,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("POST /collections/{cid}/invitations/{id}/resend", () => {
+describe("POST /catalogues/{cid}/invitations/{id}/resend", () => {
   it("rotates the token, the expiry and the issue time and mails again", async () => {
     const email = uniqueEmail("Resend");
     const created = await json<InvitationCreateResponse>(
@@ -180,7 +180,7 @@ describe("POST /collections/{cid}/invitations/{id}/resend", () => {
 
     for (const status of ["accepted", "declined", "revoked"] as const) {
       const resolved = await makeInvitation({
-        collectionId: cid,
+        catalogueId: cid,
         invitedByUserId: owner.userId,
         email: uniqueEmail(`Resend${status}`),
         status,
@@ -194,7 +194,7 @@ describe("POST /collections/{cid}/invitations/{id}/resend", () => {
   it("revives an expired pending invitation", async () => {
     const email = uniqueEmail("ResendLapsed");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -225,7 +225,7 @@ describe("POST /collections/{cid}/invitations/{id}/resend", () => {
     expect(byMate.status).toBe(403);
     expect((await err(byMate)).code).toBe("forbidden");
 
-    // Reachable only through its own collection's path.
+    // Reachable only through its own catalogue's path.
     const elsewhere = await resend(
       owner.cookies,
       created.invitation.id,
@@ -237,7 +237,7 @@ describe("POST /collections/{cid}/invitations/{id}/resend", () => {
   });
 });
 
-describe("DELETE /collections/{cid}/invitations/{id}", () => {
+describe("DELETE /catalogues/{cid}/invitations/{id}", () => {
   it("revokes a pending offer and records the resolution", async () => {
     const email = uniqueEmail("Revoke");
     const created = await json<InvitationCreateResponse>(
@@ -258,7 +258,7 @@ describe("DELETE /collections/{cid}/invitations/{id}", () => {
     ).toBe(404);
     // A revoked row is no longer the owner's pending list.
     const access = await json<{ invitations: InvitationSummary[] }>(
-      await req("GET", `/api/v1/collections/${cid}/access`, {
+      await req("GET", `/api/v1/catalogues/${cid}/access`, {
         cookies: owner.cookies,
       }),
     );
@@ -269,7 +269,7 @@ describe("DELETE /collections/{cid}/invitations/{id}", () => {
 
   it("revokes an expired pending offer too", async () => {
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeLapsed"),
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -282,7 +282,7 @@ describe("DELETE /collections/{cid}/invitations/{id}", () => {
 
   it("conflicts on a resolved offer and is owner-only", async () => {
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeDone"),
       status: "accepted",
@@ -294,7 +294,7 @@ describe("DELETE /collections/{cid}/invitations/{id}", () => {
     expect((await invitationRow(resolved.id)).status).toBe("accepted");
 
     const pending = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeByMate"),
     });
@@ -308,30 +308,30 @@ describe("GET /me/invitations", () => {
   it("lists the pending, unexpired offers for the signed-in address and never a token", async () => {
     const invitee = await freshUser("OfferInvitee");
     const live = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email.toUpperCase(),
       // Stored as given: an address is compared case-insensitively, so a row
       // that was not normalized still reaches its invitee.
       storeEmailAsGiven: true,
     });
-    // A lapsed offer (in another collection — one pending row per address
-    // per collection), a declined one, and one addressed to somebody else.
+    // A lapsed offer (in another catalogue — one pending row per address
+    // per catalogue), a declined one, and one addressed to somebody else.
     await makeInvitation({
-      collectionId: otherCid,
+      catalogueId: otherCid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
       expiresAt: new Date(Date.now() - 86_400_000),
     });
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       status: "declined",
     });
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferInboxOther"),
     });
@@ -341,14 +341,14 @@ describe("GET /me/invitations", () => {
     });
     expect(res.status).toBe(200);
     const body = await json<InvitationInboxEntry[]>(res);
-    // Only the live offer: the lapsed one (another collection), the declined
+    // Only the live offer: the lapsed one (another catalogue), the declined
     // one, and the one addressed to somebody else are all absent.
     expect(body.map((entry) => entry.id)).toEqual([live.id]);
 
-    // Enough to render the card without a second read: the collection and
+    // Enough to render the card without a second read: the catalogue and
     // the account that sent the offer, never the inviter's own address.
     const [entry] = body;
-    expect(entry.collectionName).toBe("Offer Wall");
+    expect(entry.catalogueName).toBe("Offer Wall");
     expect(entry.inviterName).toBe("OfferOwner Test");
     expect(entry.status).toBe("pending");
     expect(JSON.stringify(body)).not.toContain(owner.email);
@@ -360,7 +360,7 @@ describe("GET /me/invitations", () => {
   it("names a nameless inviter neutrally, never by address", async () => {
     const invitee = await freshUser("OfferNameless");
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
     });
@@ -401,7 +401,7 @@ describe("POST /me/invitations/{id}/decline", () => {
   it("marks the invitee's own pending offer declined", async () => {
     const invitee = await freshUser("OfferDecline");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
     });
@@ -417,7 +417,7 @@ describe("POST /me/invitations/{id}/decline", () => {
     // The owner's pending view reflects it: a declined offer is no longer
     // theirs to resend or revoke.
     const access = await json<{ invitations: InvitationSummary[] }>(
-      await req("GET", `/api/v1/collections/${cid}/access`, {
+      await req("GET", `/api/v1/catalogues/${cid}/access`, {
         cookies: owner.cookies,
       }),
     );
@@ -436,18 +436,18 @@ describe("POST /me/invitations/{id}/decline", () => {
     const other = await freshUser("OfferDeclineOther");
 
     const someoneElses = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferDeclineOtherAddress"),
     });
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       status: "accepted",
     });
     const lapsed = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -475,7 +475,7 @@ describe("POST /me/invitations/{id}/decline", () => {
   it("matches the caller's address case-insensitively", async () => {
     const invitee = await freshUser("OfferDeclineCase");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email.toUpperCase(),
       storeEmailAsGiven: true,
@@ -488,7 +488,7 @@ describe("POST /me/invitations/{id}/decline", () => {
 
   it("requires a session", async () => {
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferDeclineAnon"),
     });

@@ -51,7 +51,7 @@ describe("the built SPA", () => {
 
   it("falls back to the app shell for a client route", async () => {
     const res = await app.request(
-      "/collection/flores-solares-cce9e196/artwork/art1",
+      "/catalogue/flores-solares-cce9e196/artwork/art1",
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(INDEX);

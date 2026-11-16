@@ -15,7 +15,7 @@ import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ArtworksList from "@/components/manage/collection/ArtworksList";
+import ArtworksList from "@/components/manage/catalogue/ArtworksList";
 import { artworkService } from "@/services/artworkService";
 import type { Artwork } from "@arcula/shared";
 
@@ -50,7 +50,7 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "collection1",
+  catalogueId: "catalogue1",
   status: "published",
   deletedAt: null,
   ...overrides,
@@ -74,7 +74,7 @@ const startInTable = () =>
 interface ListProps {
   artworks: Artwork[];
   onDeleted?: () => Promise<void> | void;
-  /** The committed Collection search; "" or absent means no search. */
+  /** The committed Catalogue search; "" or absent means no search. */
   searchQuery?: string;
   /** A list read is in flight, with the previous rows still on screen. */
   fetching?: boolean;
@@ -84,6 +84,8 @@ interface ListProps {
   searchError?: string | null;
   onRetry?: () => void;
   onClearSearch?: () => void;
+  /** Show each work's market state — the two kinds that carry one. */
+  showAvailability?: boolean;
 }
 
 const ListTree: React.FC<ListProps> = ({
@@ -95,6 +97,7 @@ const ListTree: React.FC<ListProps> = ({
   searchError,
   onRetry,
   onClearSearch,
+  showAvailability,
 }) => (
   <MantineProvider>
     <ModalsProvider>
@@ -102,7 +105,7 @@ const ListTree: React.FC<ListProps> = ({
       <MemoryRouter>
         <ArtworksList
           artworks={artworks}
-          collectionParam="my-collection-collection1"
+          catalogueParam="my-catalogue-catalogue1"
           onDeleted={onDeleted ?? vi.fn()}
           searchQuery={searchQuery}
           fetching={fetching}
@@ -110,6 +113,7 @@ const ListTree: React.FC<ListProps> = ({
           searchError={searchError}
           onRetry={onRetry}
           onClearSearch={onClearSearch}
+          showAvailability={showAvailability}
         />
       </MemoryRouter>
     </ModalsProvider>
@@ -332,12 +336,12 @@ describe("ArtworksList", () => {
     // rather than merely that it is enabled: the link is the only thing in this
     // table that leaves the app, so a wrong path here is silent — the button
     // still looks right and only the destination is wrong.
-    // The collection param is reused verbatim in the public URL, the same way
+    // The catalogue param is reused verbatim in the public URL, the same way
     // the Edit link reuses it — it is the "{slug}-{id}" segment the manage route
     // already carries, and the public route parses the id back out of it.
     const view = screen.getByRole("link", { name: "View" });
     expect(view.getAttribute("href")).toBe(
-      "/collection/my-collection-collection1/artwork/art-1-a",
+      "/catalogue/my-catalogue-catalogue1/artwork/art-1-a",
     );
     // A new tab, so the owner can check the public page without losing their
     // place in this one. `noopener` is asserted because it is not optional:
@@ -355,7 +359,7 @@ describe("ArtworksList", () => {
     await user.click(scope.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a"]),
+      expect(softDeleteMock).toHaveBeenCalledWith("catalogue1", ["a"]),
     );
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
     // The dialog closes on success and the toast confirms it.
@@ -371,11 +375,11 @@ describe("ArtworksList", () => {
       onDeleted,
     });
 
-    // No stored choice: the cards are what a collector opens the collection to.
+    // No stored choice: the cards are what a collector opens the catalogue to.
     expect(screen.queryByRole("table")).toBeNull();
     const view = screen.getByRole("link", { name: "View" });
     expect(view.getAttribute("href")).toBe(
-      "/collection/my-collection-collection1/artwork/art-1-a",
+      "/catalogue/my-catalogue-catalogue1/artwork/art-1-a",
     );
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -383,7 +387,7 @@ describe("ArtworksList", () => {
     await user.click(scope.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a"]),
+      expect(softDeleteMock).toHaveBeenCalledWith("catalogue1", ["a"]),
     );
     expect(onDeleted).toHaveBeenCalledTimes(1);
   });
@@ -434,7 +438,7 @@ describe("ArtworksList", () => {
     await user.click(scope.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(softDeleteMock).toHaveBeenCalledWith("collection1", ["a", "b"]),
+      expect(softDeleteMock).toHaveBeenCalledWith("catalogue1", ["a", "b"]),
     );
     // The selection is cleared once the write lands, so a second batch delete
     // cannot silently reuse stale ids.
@@ -487,7 +491,7 @@ describe("ArtworksList", () => {
     );
     expect(screen.getByText("Found 2 artworks")).toBeTruthy();
 
-    // No query: the collection's own count, which the page keeps today.
+    // No query: the catalogue's own count, which the page keeps today.
     rerender(
       <ListTree
         artworks={[
@@ -499,7 +503,7 @@ describe("ArtworksList", () => {
     expect(screen.getByText("2 artworks")).toBeTruthy();
   });
 
-  it("shows the no-results panel instead of the empty-collection copy under a search", async () => {
+  it("shows the no-results panel instead of the empty-catalogue copy under a search", async () => {
     const user = userEvent.setup();
     const onClearSearch = vi.fn();
     renderList({
@@ -512,21 +516,17 @@ describe("ArtworksList", () => {
     // The quoted search term is the state under test; Clear search is a live
     // action, not a caption.
     expect(screen.getByText("No artworks match “picasso”.")).toBeTruthy();
-    // A completed search that matched nothing is not an empty collection.
-    expect(
-      screen.queryByText("No artworks in this collection yet."),
-    ).toBeNull();
+    // A completed search that matched nothing is not an empty catalogue.
+    expect(screen.queryByText("No artworks in this catalogue yet.")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Clear search" }));
     expect(onClearSearch).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the empty-collection copy when no search is active", () => {
+  it("keeps the empty-catalogue copy when no search is active", () => {
     renderList({ artworks: [] });
 
-    expect(
-      screen.getByText("No artworks in this collection yet."),
-    ).toBeTruthy();
+    expect(screen.getByText("No artworks in this catalogue yet.")).toBeTruthy();
     expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 
@@ -535,9 +535,7 @@ describe("ArtworksList", () => {
 
     // Neither answer is known yet, so neither published state may appear.
     expect(screen.queryByText(/No artworks match/)).toBeNull();
-    expect(
-      screen.queryByText("No artworks in this collection yet."),
-    ).toBeNull();
+    expect(screen.queryByText("No artworks in this catalogue yet.")).toBeNull();
     expect(screen.getByText("Searching…")).toBeTruthy();
   });
 
@@ -563,9 +561,7 @@ describe("ArtworksList", () => {
 
     // Neither published answer is known yet, with no request even in flight.
     expect(screen.queryByText(/No artworks match/)).toBeNull();
-    expect(
-      screen.queryByText("No artworks in this collection yet."),
-    ).toBeNull();
+    expect(screen.queryByText("No artworks in this catalogue yet.")).toBeNull();
     expect(screen.getByText("Searching…")).toBeTruthy();
   });
 
@@ -685,9 +681,7 @@ describe("ArtworksList", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     // No table answers, and no state is invented in its place.
     expect(screen.queryByRole("table")).toBeNull();
-    expect(
-      screen.queryByText("No artworks in this collection yet."),
-    ).toBeNull();
+    expect(screen.queryByText("No artworks in this catalogue yet.")).toBeNull();
     expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 
@@ -728,7 +722,7 @@ describe("ArtworksList", () => {
       expect(visibleTitles()).toEqual(["Art 1", "Art 2"]);
       expect(tableSegment()).toBeChecked();
 
-      // Remembered for the next visit and the next collection: the one key
+      // Remembered for the next visit and the next catalogue: the one key
       // holds the view, and the sort it did not touch keeps its value.
       expect(
         JSON.parse(localStorage.getItem("arcula.userSettings") ?? "null"),
@@ -838,12 +832,12 @@ describe("ArtworksList", () => {
       expect(screen.getByRole("button", { name: "2" })).toBeTruthy();
     });
 
-    it("shows the collection's own empty state, not a pager", () => {
+    it("shows the catalogue's own empty state, not a pager", () => {
       startInGrid();
       renderList({ artworks: [] });
 
       expect(
-        screen.getByText("No artworks in this collection yet."),
+        screen.getByText("No artworks in this catalogue yet."),
       ).toBeTruthy();
       expect(screen.queryByRole("list")).toBeNull();
       // No pager either: there is no page to move between.
@@ -854,11 +848,11 @@ describe("ArtworksList", () => {
       startInGrid();
       // Nothing to page, so the pager is meaningless — but the page size is
       // still a choice the collector makes here, and hiding it on an empty
-      // collection would leave the control unreachable exactly when a search
+      // catalogue would leave the control unreachable exactly when a search
       // emptied the page.
       renderList({ artworks: [] });
       expect(
-        screen.getByText("No artworks in this collection yet."),
+        screen.getByText("No artworks in this catalogue yet."),
       ).toBeTruthy();
       expect(screen.queryByRole("button", { name: "2" })).toBeNull();
 
@@ -970,7 +964,7 @@ describe("ArtworksList", () => {
       );
       expect(sortBox()).toHaveValue("Artist Name Z-A");
       // Written at the one point either control changes the sort, so the next
-      // collection — and the Table, if the collector switches back — opens on
+      // catalogue — and the Table, if the collector switches back — opens on
       // it too.
       expect(
         JSON.parse(localStorage.getItem("arcula.userSettings") ?? "null"),
@@ -1130,7 +1124,7 @@ describe("ArtworksList", () => {
           .filter((box) => (box as HTMLInputElement).checked)
           .map((box) => box.getAttribute("aria-label"));
 
-      it("selects the page it is on, not the collection", async () => {
+      it("selects the page it is on, not the catalogue", async () => {
         const user = userEvent.setup();
         startInGrid();
         renderList({ artworks: threePages() });
@@ -1203,7 +1197,7 @@ describe("ArtworksList", () => {
 
         await waitFor(() =>
           expect(softDeleteMock).toHaveBeenCalledWith(
-            "collection1",
+            "catalogue1",
             Array.from(
               { length: 50 },
               (_, i) => `w${String(i).padStart(2, "0")}`,
@@ -1261,9 +1255,68 @@ describe("ArtworksList", () => {
       });
 
       // The alert says the read failed; the cards it could not replace stay,
-      // so a transient failure does not blank a collection being browsed.
+      // so a transient failure does not blank a catalogue being browsed.
       expect(screen.getByText("Failed to search artworks")).toBeTruthy();
       expect(cardTitles()).toEqual(["Art 1"]);
     });
+  });
+
+  /**
+   * A market state is a member-facing fact of the two kinds that sell work.
+   * The page decides whether this list carries one; the list and both of its
+   * presentations only honour that flag (ADR-0010).
+   */
+  it("shows a work's market state in the Table when the kind carries one", () => {
+    startInTable();
+    renderList({
+      artworks: [artwork({ id: "a", title: "For Sale", availability: "sold" })],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("Sold")).toBeTruthy();
+  });
+
+  it("shows a work's market state on a card in the Grid when the kind carries one", () => {
+    renderList({
+      artworks: [
+        artwork({
+          id: "a",
+          title: "Held",
+          availability: "on-consignment",
+        }),
+      ],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("On consignment")).toBeTruthy();
+  });
+
+  it("shows no market state on a Collection's list", () => {
+    // The API is a superset — a Collection work may carry a value — so the
+    // list must hide it by the flag, not by the row being null.
+    renderList({
+      artworks: [artwork({ id: "a", title: "Owned", availability: "sold" })],
+      showAvailability: false,
+    });
+
+    expect(screen.queryByText("Sold")).toBeNull();
+  });
+
+  it("still marks a draft beside the market state", () => {
+    startInTable();
+    renderList({
+      artworks: [
+        artwork({
+          id: "a",
+          title: "Unfinished",
+          status: "draft",
+          availability: "available",
+        }),
+      ],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("Available")).toBeTruthy();
   });
 });

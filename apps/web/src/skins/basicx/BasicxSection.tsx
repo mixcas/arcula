@@ -157,7 +157,7 @@ interface BasicxSectionProps {
   sectionRef: (element: HTMLElement | null) => void;
   /**
    * Whether to mount the photos at all. False until the section has been within
-   * a viewport of the stage, so a fifty-artwork collection does not create
+   * a viewport of the stage, so a fifty-artwork catalogue does not create
    * fifty embla instances and five hundred `<img>` elements up front.
    */
   mounted: boolean;

@@ -1,8 +1,8 @@
-// Collection search: the pure matching rule, shared by the API that runs it
+// Catalogue search: the pure matching rule, shared by the API that runs it
 // and the client that explains its caps.
 //
-// A Collection search is a member's query against the recorded fields of one
-// collection's works. It is not a filter, a find or a lookup: every term the
+// A Catalogue search is a member's query against the recorded fields of one
+// catalogue's works. It is not a filter, a find or a lookup: every term the
 // query carries has to appear somewhere in the ten declared fields, and
 // different terms may appear in different fields. There is no ranking and no
 // highlighting — the caller keeps its own order — so this module answers one
@@ -23,7 +23,7 @@
 // reaches this predicate. A query that survives `isBlankSearchQuery` but
 // normalizes to zero terms (punctuation only) is a **committed search that
 // matches nothing**: the caller asked something, and the honest answer is an
-// empty list rather than the whole collection.
+// empty list rather than the whole catalogue.
 //
 // ## Acquisition date
 //
@@ -32,7 +32,7 @@
 // acquisition. Date of creation stays free text and is searched as written.
 
 /**
- * The ten fields a Collection search reads, declared once.
+ * The ten fields a Catalogue search reads, declared once.
  *
  * Adding one is a deliberate edit here and in the predicate's test — not a
  * change to a route, a schema or a database query. `title` and `artistName`
@@ -144,7 +144,7 @@ export const searchQueryOverflow = (
 };
 
 /**
- * The address suffix that carries a committed query from the collection page
+ * The address suffix that carries a committed query from the catalogue page
  * to the pages that return to it: `?q=…`, or "" when there is nothing to search
  * for. Built from `q` alone — URLSearchParams does the encoding — so no other
  * parameter can follow the user back.

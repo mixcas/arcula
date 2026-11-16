@@ -1,5 +1,5 @@
 /**
- * The Collection PDF's photo pipeline.
+ * The Catalogue PDF's photo pipeline.
  *
  * React-PDF decodes JPEG, PNG and SVG and **silently drops** a WebP, a 404 or a
  * 403: `toBlob()` still resolves with a missing photo and only a `console.warn`
@@ -12,11 +12,11 @@
  *
  * - **At most four conversions in flight.** Each one holds a decoded bitmap of
  *   up to 2100 × 2417 px — the print box, because the decode is asked for the
- *   box and not for the source — so the cap is what keeps a long collection
+ *   box and not for the source — so the cap is what keeps a long catalogue
  *   from allocating a working set the browser cannot hold.
  * - **A refused photo is not a placeholder until access is re-checked.** The
  *   media proxy answers an expired grant with `404`, so a 403/404 asks the
- *   Collection again (`collectionPdfAccess.ts`) and a lost grant re-locks
+ *   Catalogue again (`cataloguePdfAccess.ts`) and a lost grant re-locks
  *   instead of printing a document of empty boxes.
  *
  * The failure of one photo is never the failure of the export: it keeps its
@@ -30,15 +30,15 @@
 import type { ArtworkPhoto } from "@arcula/shared";
 
 import {
-  CollectionPdfAccessError,
+  CataloguePdfAccessError,
   type AccessOutcome,
-} from "./collectionPdfAccess";
+} from "./cataloguePdfAccess";
 import {
   fitInsideBox,
   PRINT_BOX_PX,
   type PixelSize,
-} from "./collectionPdfPreflight";
-import type { CollectionPdfPage } from "./collectionPdfPlan";
+} from "./cataloguePdfPreflight";
+import type { CataloguePdfPage } from "./cataloguePdfPlan";
 
 /** How many photos may be fetched and encoded at the same time. */
 export const PHOTO_CONCURRENCY = 4;
@@ -103,7 +103,7 @@ export const scheduledPhotoSource = (
  * One entry per photo, not per page: the plan already caps a work at three
  * photos.
  */
-export const scheduledPhotos = (pages: CollectionPdfPage[]): ArtworkPhoto[] => {
+export const scheduledPhotos = (pages: CataloguePdfPage[]): ArtworkPhoto[] => {
   const seen = new Set<string>();
   const photos: ArtworkPhoto[] = [];
   for (const page of pages) {
@@ -283,7 +283,7 @@ export async function convertPhoto(
   const source = scheduledPhotoSource(photo);
   if (!source) {
     // The ladder's end: no object to fetch and no second variant to try. No
-    // read refused anything, so there is nothing to ask the Collection about.
+    // read refused anything, so there is nothing to ask the Catalogue about.
     throw new Error("the photo has no object to fetch");
   }
 
@@ -357,8 +357,8 @@ export type PhotoResults = Map<string, ConvertedPhoto>;
  *
  * A failed photo is simply absent from the answer, which is what the document
  * draws as a placeholder, and the run continues. A lost access throws
- * `CollectionPdfAccessError` and the run stops, because a document of
- * placeholders for a collection the reader can no longer see is worse than no
+ * `CataloguePdfAccessError` and the run stops, because a document of
+ * placeholders for a catalogue the reader can no longer see is worse than no
  * document at all. An aborted run throws `AbortError` and answers nothing.
  */
 export async function preparePhotos(
@@ -372,7 +372,7 @@ export async function preparePhotos(
   let done = 0;
   // A holder rather than a `let`: the workers assign it after the compiler's
   // control-flow analysis has already looked at it.
-  const lost: { error: CollectionPdfAccessError | null } = { error: null };
+  const lost: { error: CataloguePdfAccessError | null } = { error: null };
 
   if (photos.length > 0) {
     onProgress?.(0, photos.length);
@@ -414,7 +414,7 @@ export async function preparePhotos(
             return;
           }
           if (outcome.status !== "continue") {
-            lost.error ??= new CollectionPdfAccessError(outcome);
+            lost.error ??= new CataloguePdfAccessError(outcome);
             return;
           }
         }

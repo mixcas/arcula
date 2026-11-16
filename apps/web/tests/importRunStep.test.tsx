@@ -87,8 +87,8 @@ describe("ImportRunStep", () => {
             <ImportRunStep
               rows={[row("row-0", "Nocturne"), row("row-1", "Dawn")]}
               selectedRowIds={new Set(["row-0", "row-1"])}
-              collectionId="collection-1"
-              collectionSlugParam="my-collection-collection-1"
+              catalogueId="catalogue-1"
+              catalogueSlugParam="my-catalogue-catalogue-1"
               onReset={vi.fn()}
             />
           </MemoryRouter>
@@ -101,7 +101,7 @@ describe("ImportRunStep", () => {
     expect(createArtworksMock).toHaveBeenCalledTimes(1);
     // One request, one answer: the body is the posted rows' values, in the
     // selection's order.
-    expect(createArtworksMock.mock.calls[0][0]).toBe("collection-1");
+    expect(createArtworksMock.mock.calls[0][0]).toBe("catalogue-1");
     expect(
       createArtworksMock.mock.calls[0][1].map(
         (values: { title: string }) => values.title,
@@ -127,8 +127,8 @@ describe("ImportRunStep", () => {
           <ImportRunStep
             rows={[row("row-0", "Nocturne"), row("row-1", "Dawn")]}
             selectedRowIds={new Set(["row-0", "row-1"])}
-            collectionId="collection-1"
-            collectionSlugParam="my-collection-collection-1"
+            catalogueId="catalogue-1"
+            catalogueSlugParam="my-catalogue-catalogue-1"
             onReset={vi.fn()}
           />
         </MemoryRouter>
@@ -142,7 +142,7 @@ describe("ImportRunStep", () => {
     expect(screen.getByText(/title: Title is required/i)).toBeTruthy();
   });
 
-  it("says the collection was left unchanged when the request itself fails", async () => {
+  it("says the catalogue was left unchanged when the request itself fails", async () => {
     // No rows were written at all, so there is no per-row answer to render —
     // the outcome is a whole-request refusal.
     createArtworksMock.mockRejectedValue(new TypeError("fetch failed"));
@@ -153,8 +153,8 @@ describe("ImportRunStep", () => {
           <ImportRunStep
             rows={[row("row-0", "Nocturne")]}
             selectedRowIds={new Set(["row-0"])}
-            collectionId="collection-1"
-            collectionSlugParam="my-collection-collection-1"
+            catalogueId="catalogue-1"
+            catalogueSlugParam="my-catalogue-catalogue-1"
             onReset={vi.fn()}
           />
         </MemoryRouter>
@@ -163,7 +163,7 @@ describe("ImportRunStep", () => {
 
     expect(await screen.findByText("Nothing was imported")).toBeTruthy();
     expect(
-      screen.getByText("Import failed. The collection was left unchanged."),
+      screen.getByText("Import failed. The catalogue was left unchanged."),
     ).toBeTruthy();
   });
 });

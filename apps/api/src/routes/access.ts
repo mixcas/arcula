@@ -1,31 +1,31 @@
 // The access-administration routes:
 //
-//   GET    /collections/{cid}/access                         a member's view of who has access
-//   DELETE /collections/{cid}/collaborators/{userId}         owner: remove somebody
-//   DELETE /collections/{cid}/collaborators/me               collaborator: leave
-//   POST   /collections/{cid}/transfer                       owner: transfer the collection
+//   GET    /catalogues/{cid}/access                         a member's view of who has access
+//   DELETE /catalogues/{cid}/collaborators/{userId}         owner: remove somebody
+//   DELETE /catalogues/{cid}/collaborators/me               collaborator: leave
+//   POST   /catalogues/{cid}/transfer                       owner: transfer the catalogue
 //
 // The owner and every collaborator read the access view; nobody else does. It
 // answers the caller's role, the owner and the collaborators — and, for the
 // owner alone, the pending invitations, expired ones included. That split is
 // the whole design (ADR-0004): the invitation list is an administrative view
 // of addresses and expiry, while the people who have access are a fact every
-// member of the collection already works with.
+// member of the catalogue already works with.
 //
-// The owner is not in `collaborators`: `collections.userId` is the one owner
+// The owner is not in `collaborators`: `catalogues.userId` is the one owner
 // fact, never a row.
 //
 // The access card and the settings screen read their role from here, not from
 // the dashboard list: a list row's `role` is a dashboard badge, and an
-// administrative screen has to ask the collection itself.
+// administrative screen has to ask the catalogue itself.
 //
 // Access can end. Removal is the owner's (a collaborator attempting it is
 // refused, even on themselves); leaving is the collaborator's own, and the
-// owner is refused because a collection is never left without an owner —
+// owner is refused because a catalogue is never left without an owner —
 // transfer first. Both delete the membership row and nothing that is saved:
-// the works the departing account recorded stay in the collection, with their
+// the works the departing account recorded stay in the catalogue, with their
 // final objects, and the account is a visitor from its next request on. Only
-// its unsaved uploads for that one collection are discarded — its staging
+// its unsaved uploads for that one catalogue are discarded — its staging
 // prefix, emptied best effort. A storage failure does not fail the action; the
 // seven-day staging lifecycle is the backstop.
 //
@@ -38,37 +38,38 @@
 // stays a collaborator, and the notice to the new owner is attempted only
 // after the commit: a provider failure answers `emailSent: false` and does not
 // undo the transfer. The recipient's tier is never checked — receiving a
-// collection may take an account over its cap.
+// catalogue may take an account over its cap.
 //
 // The two removal paths differ only in who may ask and in which account is
 // named — the deletion and the cleanup are one helper each. `/me` is
 // registered before `/:userId` so the literal segment is never read as an
 // account id.
+//
 
 import { and, asc, eq, ne } from "drizzle-orm";
 import {
   artworks as artworksTable,
-  collectionCollaborators as collectionCollaboratorsTable,
-  collectionInvitations as collectionInvitationsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as catalogueCollaboratorsTable,
+  catalogueInvitations as catalogueInvitationsTable,
+  catalogues as cataloguesTable,
   user as userTable,
 } from "@arcula/db";
 import {
-  collectionSlug,
-  collectionTransferSchema,
-  type CollectionAccess,
-  type CollectionTransferPayload,
-  type CollectionTransferResponse,
+  catalogueSlug,
+  catalogueTransferSchema,
+  type CatalogueAccess,
+  type CatalogueTransferPayload,
+  type CatalogueTransferResponse,
 } from "@arcula/shared";
 import { Hono } from "hono";
-import { requireMemberCollection, requireOwnerCollection } from "../authorize";
+import { requireMemberCatalogue, requireOwnerCatalogue } from "../authorize";
 import { db } from "../db";
 import { ownershipTransferMail } from "../email/compose";
 import { clientLink } from "../email/links";
 import { emailProvider } from "../email/provider";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
-import { mediaNamespaceOf, stagedCollectionPrefix } from "../media/keys";
+import { mediaNamespaceOf, stagedCataloguePrefix } from "../media/keys";
 import { requireSession } from "../session";
 import {
   displayName,
@@ -90,26 +91,23 @@ const memberColumns = {
 };
 
 accessRoutes.get(
-  "/collections/:collectionId/access",
+  "/catalogues/:catalogueId/access",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const user = c.get("user");
     // Membership is already proven, so the role is the owner column and
     // nothing else: no second membership query.
-    const role = collection.userId === user.id ? "owner" : "collaborator";
+    const role = catalogue.userId === user.id ? "owner" : "collaborator";
 
     const [owner] = await db
       .select(memberColumns)
       .from(userTable)
-      .where(eq(userTable.id, collection.userId));
-    // The collection's owner column is not a foreign key; a dangling owner is
+      .where(eq(userTable.id, catalogue.userId));
+    // The catalogue's owner column is not a foreign key; a dangling owner is
     // a corrupt row, not a permission question.
     if (!owner) {
-      throw new ApiError("internal", "The collection's owner does not exist");
+      throw new ApiError("internal", "The catalogue's owner does not exist");
     }
 
     // `collaborators` is everyone except the owner: the owner fact is the
@@ -117,20 +115,20 @@ accessRoutes.get(
     // transfer's leftover) must not list them twice.
     const collaborators = await db
       .select(memberColumns)
-      .from(collectionCollaboratorsTable)
+      .from(catalogueCollaboratorsTable)
       .innerJoin(
         userTable,
-        eq(userTable.id, collectionCollaboratorsTable.userId),
+        eq(userTable.id, catalogueCollaboratorsTable.userId),
       )
       .where(
         and(
-          eq(collectionCollaboratorsTable.collectionId, collection.id),
-          ne(collectionCollaboratorsTable.userId, collection.userId),
+          eq(catalogueCollaboratorsTable.catalogueId, catalogue.id),
+          ne(catalogueCollaboratorsTable.userId, catalogue.userId),
         ),
       )
-      .orderBy(asc(collectionCollaboratorsTable.createdAt));
+      .orderBy(asc(catalogueCollaboratorsTable.createdAt));
 
-    const access: CollectionAccess = {
+    const access: CatalogueAccess = {
       role,
       owner: serializeMember(owner),
       collaborators: collaborators.map(serializeMember),
@@ -142,14 +140,14 @@ accessRoutes.get(
       // revoked, and the card reads its liveness off `expiresAt`.
       const invitations = await db
         .select()
-        .from(collectionInvitationsTable)
+        .from(catalogueInvitationsTable)
         .where(
           and(
-            eq(collectionInvitationsTable.collectionId, collection.id),
-            eq(collectionInvitationsTable.status, "pending"),
+            eq(catalogueInvitationsTable.catalogueId, catalogue.id),
+            eq(catalogueInvitationsTable.status, "pending"),
           ),
         )
-        .orderBy(asc(collectionInvitationsTable.createdAt));
+        .orderBy(asc(catalogueInvitationsTable.createdAt));
       access.invitations = invitations.map(serializeInvitation);
     }
 
@@ -164,38 +162,38 @@ accessRoutes.get(
  * one. Returns whether this request took it.
  */
 async function deleteMembership(
-  collectionId: string,
+  catalogueId: string,
   userId: string,
 ): Promise<boolean> {
   const [deleted] = await db
-    .delete(collectionCollaboratorsTable)
+    .delete(catalogueCollaboratorsTable)
     .where(
       and(
-        eq(collectionCollaboratorsTable.collectionId, collectionId),
-        eq(collectionCollaboratorsTable.userId, userId),
+        eq(catalogueCollaboratorsTable.catalogueId, catalogueId),
+        eq(catalogueCollaboratorsTable.userId, userId),
       ),
     )
-    .returning({ userId: collectionCollaboratorsTable.userId });
+    .returning({ userId: catalogueCollaboratorsTable.userId });
   return deleted !== undefined;
 }
 
 /**
- * Empty the account's staging prefix for this collection — their unsaved
+ * Empty the account's staging prefix for this catalogue — their unsaved
  * uploads for it, and nothing that was saved (a saved entry's staged objects
- * are already gone; its final objects live under the collection's namespace).
+ * are already gone; its final objects live under the catalogue's namespace).
  *
  * Best effort by contract: a storage failure must not fail the removal. The
  * seven-day staging lifecycle is the backstop for whatever this could not
- * reach. The whole prefix is one uploader's space in one collection, so unlike
+ * reach. The whole prefix is one uploader's space in one catalogue, so unlike
  * a single entry's discard there is no sibling entry id to tell apart.
  */
 async function discardStagedUploads(
-  collectionId: string,
+  catalogueId: string,
   userId: string,
 ): Promise<void> {
   let keys: string[];
   try {
-    keys = await listObjects(stagedCollectionPrefix(userId, collectionId));
+    keys = await listObjects(stagedCataloguePrefix(userId, catalogueId));
   } catch {
     return; // Nothing listed, nothing to discard — see above.
   }
@@ -210,27 +208,24 @@ async function discardStagedUploads(
 }
 
 // DELETE …/collaborators/me — the collaborator's own exit. The owner cannot
-// take it: a collection is never left without one, so the owner transfers
+// take it: a catalogue is never left without one, so the owner transfers
 // first. Refusals are the membership check's (`403` for a non-member, `404`
-// for a missing collection) and this handler's one conflict.
+// for a missing catalogue) and this handler's one conflict.
 accessRoutes.delete(
-  "/collections/:collectionId/collaborators/me",
+  "/catalogues/:catalogueId/collaborators/me",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const user = c.get("user");
-    if (collection.userId === user.id) {
+    if (catalogue.userId === user.id) {
       throw new ApiError(
         "conflict",
-        "Transfer the collection before leaving it",
+        "Transfer the catalogue before leaving it",
       );
     }
 
-    await deleteMembership(collection.id, user.id);
-    await discardStagedUploads(collection.id, user.id);
+    await deleteMembership(catalogue.id, user.id);
+    await discardStagedUploads(catalogue.id, user.id);
     return c.json({ left: true });
   },
 );
@@ -241,33 +236,30 @@ accessRoutes.delete(
 // naming them is a conflict rather than a no-op, exactly as naming an account
 // that never had access is.
 accessRoutes.delete(
-  "/collections/:collectionId/collaborators/:userId",
+  "/catalogues/:catalogueId/collaborators/:userId",
   requireSession,
   async (c) => {
-    const collection = await requireOwnerCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireOwnerCatalogue(c, param(c, "catalogueId"));
     const targetId = param(c, "userId");
-    if (targetId === collection.userId) {
+    if (targetId === catalogue.userId) {
       throw new ApiError(
         "conflict",
-        "The collection's owner is not a collaborator",
+        "The catalogue's owner is not a collaborator",
       );
     }
 
-    if (!(await deleteMembership(collection.id, targetId))) {
+    if (!(await deleteMembership(catalogue.id, targetId))) {
       // The row is the access fact: no row is "this account does not have
       // access", which is what a stale access card needs to hear.
       throw new ApiError(
         "conflict",
-        "That account does not have access to this collection",
+        "That account does not have access to this catalogue",
       );
     }
 
     // The row went first, so the access has already ended by the time the
     // objects are reached: the cleanup is the residue, never the refusal.
-    await discardStagedUploads(collection.id, targetId);
+    await discardStagedUploads(catalogue.id, targetId);
     return c.json({ removed: true });
   },
 );
@@ -275,23 +267,23 @@ accessRoutes.delete(
 interface TransferMail {
   to: string;
   firstName?: string | null;
-  collectionId: string;
-  collectionName: string;
+  catalogueId: string;
+  catalogueName: string;
   previousOwnerName: string;
 }
 
-/** The notice to the account that now owns the collection. The link lands on
+/** The notice to the account that now owns the catalogue. The link lands on
  *  the manage page — the new owner's first job is there, not on the public
  *  view. The copy is the composer's; this function only builds the link. */
 async function sendTransferMail(mail: TransferMail): Promise<void> {
   const link = clientLink(
-    `/manage/collection/${collectionSlug(mail.collectionName, mail.collectionId)}`,
+    `/manage/catalogue/${catalogueSlug(mail.catalogueName, mail.catalogueId)}`,
   );
   await emailProvider.send(
     ownershipTransferMail({
       to: mail.to,
       firstName: mail.firstName,
-      collectionName: mail.collectionName,
+      catalogueName: mail.catalogueName,
       previousOwnerName: mail.previousOwnerName,
       url: link,
     }),
@@ -303,22 +295,19 @@ async function sendTransferMail(mail: TransferMail): Promise<void> {
 // and the owner in one step, bypassing the invitation's consent. The tier is
 // deliberately not consulted — the cap gates creation, not ownership.
 accessRoutes.post(
-  "/collections/:collectionId/transfer",
+  "/catalogues/:catalogueId/transfer",
   requireSession,
   async (c) => {
-    const collection = await requireOwnerCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireOwnerCatalogue(c, param(c, "catalogueId"));
     const user = c.get("user");
-    const payload: CollectionTransferPayload = await parseBody(
+    const payload: CatalogueTransferPayload = await parseBody(
       c,
-      collectionTransferSchema,
+      catalogueTransferSchema,
     );
     const targetId = payload.userId;
 
-    if (targetId === collection.userId) {
-      throw new ApiError("conflict", "You already own this collection");
+    if (targetId === catalogue.userId) {
+      throw new ApiError("conflict", "You already own this catalogue");
     }
 
     // The recipient's address is the mail's `to`; the membership row is the
@@ -326,36 +315,36 @@ accessRoutes.post(
     // conflict a stale card needs to hear.
     const [recipient] = await db
       .select(memberColumns)
-      .from(collectionCollaboratorsTable)
+      .from(catalogueCollaboratorsTable)
       .innerJoin(
         userTable,
-        eq(userTable.id, collectionCollaboratorsTable.userId),
+        eq(userTable.id, catalogueCollaboratorsTable.userId),
       )
       .where(
         and(
-          eq(collectionCollaboratorsTable.collectionId, collection.id),
-          eq(collectionCollaboratorsTable.userId, targetId),
+          eq(catalogueCollaboratorsTable.catalogueId, catalogue.id),
+          eq(catalogueCollaboratorsTable.userId, targetId),
         ),
       );
     if (!recipient) {
       throw new ApiError(
         "conflict",
-        "That account is not a collaborator of this collection",
+        "That account is not a collaborator of this catalogue",
       );
     }
 
-    const previousOwnerId = collection.userId;
-    // The namespace every existing key was built with. A collection the old
+    const previousOwnerId = catalogue.userId;
+    // The namespace every existing key was built with. A catalogue the old
     // code created in the migration gap has none, so the transfer writes the
     // fallback before the owner changes and those keys keep resolving. One
     // that already minted a namespace is written back unchanged.
-    const namespaceId = mediaNamespaceOf(collection);
+    const namespaceId = mediaNamespaceOf(catalogue);
     const now = new Date();
     await safeTx(async (tx) => {
       // The owner column moves first, guarded by the owner the check read: two
-      // transfers racing each other cannot both take the collection.
+      // transfers racing each other cannot both take the catalogue.
       const [moved] = await tx
-        .update(collectionsTable)
+        .update(cataloguesTable)
         .set({
           userId: targetId,
           mediaNamespaceId: namespaceId,
@@ -363,15 +352,15 @@ accessRoutes.post(
         })
         .where(
           and(
-            eq(collectionsTable.id, collection.id),
-            eq(collectionsTable.userId, previousOwnerId),
+            eq(cataloguesTable.id, catalogue.id),
+            eq(cataloguesTable.userId, previousOwnerId),
           ),
         )
-        .returning({ id: collectionsTable.id });
+        .returning({ id: cataloguesTable.id });
       if (!moved) {
         throw new ApiError(
           "conflict",
-          "The collection's owner changed while this transfer was in progress",
+          "The catalogue's owner changed while this transfer was in progress",
         );
       }
 
@@ -380,32 +369,32 @@ accessRoutes.post(
       await tx
         .update(artworksTable)
         .set({ userId: targetId, updatedAt: now })
-        .where(eq(artworksTable.collectionId, collection.id));
+        .where(eq(artworksTable.catalogueId, catalogue.id));
 
       // The two membership rows swap. The delete is the permission fact inside
       // the transaction too: a recipient removed by a request that raced this
       // one rolls the whole transfer back.
       const removed = await tx
-        .delete(collectionCollaboratorsTable)
+        .delete(catalogueCollaboratorsTable)
         .where(
           and(
-            eq(collectionCollaboratorsTable.collectionId, collection.id),
-            eq(collectionCollaboratorsTable.userId, targetId),
+            eq(catalogueCollaboratorsTable.catalogueId, catalogue.id),
+            eq(catalogueCollaboratorsTable.userId, targetId),
           ),
         )
-        .returning({ userId: collectionCollaboratorsTable.userId });
+        .returning({ userId: catalogueCollaboratorsTable.userId });
       if (removed.length === 0) {
         throw new ApiError(
           "conflict",
-          "That account is not a collaborator of this collection",
+          "That account is not a collaborator of this catalogue",
         );
       }
       // A stray row naming the previous owner (a hand-written seed) is not a
       // reason to fail the transfer: they are the owner column either way.
       await tx
-        .insert(collectionCollaboratorsTable)
+        .insert(catalogueCollaboratorsTable)
         .values({
-          collectionId: collection.id,
+          catalogueId: catalogue.id,
           userId: previousOwnerId,
           createdAt: now,
         })
@@ -419,15 +408,15 @@ accessRoutes.post(
       await sendTransferMail({
         to: recipient.email,
         firstName: recipient.firstName,
-        collectionId: collection.id,
-        collectionName: collection.name,
+        catalogueId: catalogue.id,
+        catalogueName: catalogue.name,
         previousOwnerName: displayName(user.name, user.email),
       });
     } catch {
       emailSent = false;
     }
 
-    const response: CollectionTransferResponse = {
+    const response: CatalogueTransferResponse = {
       transferred: true,
       emailSent,
     };

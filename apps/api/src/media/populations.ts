@@ -52,7 +52,7 @@ export interface Population {
   imagesOnly: boolean;
   finalKey: (
     namespaceId: string,
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
     entryId: string,
     key: string,
@@ -60,7 +60,7 @@ export interface Population {
   ) => string;
   finalPrefix: (
     namespaceId: string,
-    collectionId: string,
+    catalogueId: string,
     artworkId: string,
     entryId: string,
   ) => string;

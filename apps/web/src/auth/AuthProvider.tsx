@@ -13,6 +13,7 @@ import { meService } from "../services/meService";
 import { authClient } from "./client";
 import { toAuthError } from "./errors";
 import { toArculaUser, type ArculaUser } from "./user";
+import { identifyUser } from "../telemetry/logRocket";
 
 export interface AuthContextType {
   currentUser: ArculaUser | null;
@@ -47,6 +48,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   // departed account and clears the profile, so signing out never leaves the
   // previous account's name in the menu.
   const uid = currentUser?.uid;
+  const displayName = currentUser?.displayName ?? undefined;
+  const email = currentUser?.email ?? undefined;
+
+  // The account whose session this is: the immutable uid, plus the name and
+  // email that make the session findable in the LogRocket dashboard. Keyed on
+  // the scalars, so a profile change re-identifies without a render loop;
+  // anonymous visits stay anonymous.
+  useEffect(() => {
+    if (uid) identifyUser(uid, { name: displayName, email });
+  }, [uid, displayName, email]);
+
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;

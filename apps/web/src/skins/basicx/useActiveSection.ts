@@ -8,7 +8,7 @@
  * - The fixed footer names the *current* artwork, so it has to follow the
  *   scroll. `activeId` is that.
  * - Rendering every artwork's carousel up front would mean one embla instance
- *   and a pile of `<img>` elements per photo, for a collection that may have
+ *   and a pile of `<img>` elements per photo, for a catalogue that may have
  *   fifty artworks. `nearIds` gates mounting to the sections within a viewport
  *   of the stage.
  *
@@ -19,7 +19,7 @@
  * ## `farthestIndex` is `activeId`'s one-way sibling
  *
  * The footer names the artwork in view, so `activeId` must follow the scroll
- * back up as well as down. One-way presentations — the collection description
+ * back up as well as down. One-way presentations — the catalogue description
  * is gone for the visit once the visitor passes the first artwork — instead
  * derive from `farthestIndex`, which only ever grows: the observer sets it
  * when a section becomes active, comparing document position *there* rather
@@ -63,7 +63,7 @@ export interface ActiveSection {
    *
    * Monotonic on purpose, and the deliberate contrast with `activeId`, which
    * follows the scroll back up — the skin's footer must name the artwork in
-   * view again after a scroll up. One-way presentations (the collection
+   * view again after a scroll up. One-way presentations (the catalogue
    * description never re-appearing once dismissed) are derived from this
    * instead: a monotonic input makes the one-way latch a plain value.
    */
@@ -231,7 +231,7 @@ export const useActiveSection = (
 
   // jsdom implements no IntersectionObserver, so nothing would ever report a
   // section as near and every section would stay empty. A browser without one
-  // would also rather show the whole collection than wait for an event that
+  // would also rather show the whole catalogue than wait for an event that
   // cannot fire, so this is the right failure mode and not only a test
   // affordance.
   //

@@ -3,10 +3,11 @@
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
 // link + cache headers), sign-up (and that its cookie is `Secure`), /me,
-// the duplicate sign-up (the 422 over the gateway), create-collection,
-// the CAP (409 limit-reached on the second), a real 12 MP photo through
-// stage → process → save (Sharp + S3 on the deploy target), a visitor
-// read, and a reset request (the Resend call path). One account is
+// the duplicate sign-up (the 422 over the gateway), create-catalogue, a
+// real 12 MP photo through stage → process → save (Sharp + S3 on the
+// deploy target), a visitor read, and a reset request (the Resend call
+// path). The catalogue cap is covered by the API integration suite, not
+// here: reaching it would mean ten creates per run. One account is
 // created per run under verify-<ts>@example.test; nothing is printed that
 // is a credential. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
@@ -122,27 +123,19 @@ const post = (path: string, body: unknown, authed = false) =>
   step("/me", res.status === 200 && body.email === email, `tier: ${body.tier}`);
 }
 
-// 6. Create a collection, then hit the cap.
-let collectionId: string | null;
+// 6. Create a catalogue.
+let catalogueId: string | null;
 {
-  const res = await post("/api/v1/collections", { name: `Verify ${ts}` }, true);
+  const res = await post("/api/v1/catalogues", { name: `Verify ${ts}` }, true);
   const body = (await res.json()) as { id?: string };
-  collectionId = body.id ?? null;
-  step("create collection", res.status === 201 && collectionId !== null);
-
-  const cap = await post("/api/v1/collections", { name: "Verify cap" }, true);
-  const capBody = (await cap.json()) as { error?: { code?: string } };
-  step(
-    "cap: the second collection is 409 limit-reached",
-    cap.status === 409 && capBody.error?.code === "limit-reached",
-    `status ${cap.status}`,
-  );
+  catalogueId = body.id ?? null;
+  step("create catalogue", res.status === 201 && catalogueId !== null);
 }
 
 // 7. A real 12 MP photo through stage → process → save. The process
 //    number is the Sharp-on-the-deploy-target measurement (S3's smoke
 //    measured it on the stand-in; this is the real runtime).
-if (collectionId) {
+if (catalogueId) {
   const artworkId = hex();
   const entryId = hex();
   const W = 4000;
@@ -167,7 +160,7 @@ if (collectionId) {
     }),
   );
   const stage = await fetch(
-    `${base}/api/v1/collections/${collectionId}/artworks/${artworkId}/photos/stage`,
+    `${base}/api/v1/catalogues/${catalogueId}/artworks/${artworkId}/photos/stage`,
     { method: "POST", headers: { cookie: sessionCookie! }, body: form },
   );
   const stageBody = (await stage.json()) as {
@@ -183,7 +176,7 @@ if (collectionId) {
 
   const t0 = Date.now();
   const proc = await post(
-    `/api/v1/collections/${collectionId}/artworks/${artworkId}/photos/process`,
+    `/api/v1/catalogues/${catalogueId}/artworks/${artworkId}/photos/process`,
     { entryId },
     true,
   );
@@ -210,7 +203,7 @@ if (collectionId) {
   }
 
   const save = await post(
-    `/api/v1/collections/${collectionId}/artworks`,
+    `/api/v1/catalogues/${catalogueId}/artworks`,
     {
       artworkId,
       title: "Verification Study",
@@ -234,17 +227,17 @@ if (collectionId) {
   );
 }
 
-// 8. A visitor (no session) reads the public collection and its works.
-if (collectionId) {
-  const res = await get(`/api/v1/collections/${collectionId}`);
+// 8. A visitor (no session) reads the public catalogue and its works.
+if (catalogueId) {
+  const res = await get(`/api/v1/catalogues/${catalogueId}`);
   const body = (await res.json()) as { name?: string };
   step(
-    "visitor reads the public collection",
+    "visitor reads the public catalogue",
     res.status === 200 && typeof body.name === "string",
   );
-  const works = await get(`/api/v1/collections/${collectionId}/artworks`);
-  step("visitor reads the collection's works", works.status === 200);
-  const deep = await get(`/collection/${collectionId}`);
+  const works = await get(`/api/v1/catalogues/${catalogueId}/artworks`);
+  step("visitor reads the catalogue's works", works.status === 200);
+  const deep = await get(`/catalogue/${catalogueId}`);
   step(
     "the public route serves the shell",
     deep.status === 200 && (await deep.text()).includes("<!doctype html"),

@@ -19,7 +19,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArtworkEditPage from "@/components/manage/ArtworkEditPage";
 import { artworkService } from "@/services/artworkService";
-import type { Artwork, ArtworkUpdatePayload } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
+import type {
+  Artwork,
+  ArtworkUpdatePayload,
+  Catalogue,
+  CatalogueKind,
+} from "@arcula/shared";
 
 /**
  * The Edit save is one PATCH, and the status is one of the fields it may carry.
@@ -82,8 +88,12 @@ vi.mock("@/services/artworkService", () => ({
   },
 }));
 
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getCatalogue: vi.fn() },
+}));
+
 // The page mounts the suggestions hook; an empty list is the ordinary
-// no-collections answer, and keeps these save-path tests off the network.
+// no-catalogues answer, and keeps these save-path tests off the network.
 vi.mock("@/services/artistNameService", () => ({
   artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
 }));
@@ -108,16 +118,16 @@ Object.defineProperty(window, "matchMedia", {
 
 // Opaque ids, not `"artwork-1"`: a manage URL is "{slug}-{id}" and the route
 // recovers the id by cutting at the last hyphen.
-const COLLECTION_ID = "AAAAAAAAAAAAAAAAAAAA";
+const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
-const COLLECTION_PARAM = `flores-solares-${COLLECTION_ID}`;
+const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
 const ARTWORK_PARAM = `estudio-en-rojo-${ARTWORK_ID}`;
 
 /** The server's answer for a stored work. */
 const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: COLLECTION_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -130,7 +140,18 @@ const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
 const getArtwork = vi.mocked(artworkService.getArtwork);
 const updateArtwork = vi.mocked(artworkService.updateArtwork);
 const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
+const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
+
+const catalogue = (kind: CatalogueKind): Catalogue => ({
+  id: CATALOGUE_ID,
+  name: "Flores Solares",
+  kind,
+  userId: "owner-1",
+  isPublic: true,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+});
 
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
@@ -150,14 +171,14 @@ const renderPage = (artworkParam = ARTWORK_PARAM, search = "") =>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/${artworkParam}${search}`,
+            `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${artworkParam}${search}`,
           ]}
         >
           {/* Outside the routes, so it reports wherever the page lands. */}
           <LocationProbe />
           <Routes>
             <Route
-              path="/manage/collection/:collectionId/artwork/:artworkId"
+              path="/manage/catalogue/:catalogueId/artwork/:artworkId"
               element={<ArtworkEditPage />}
             />
           </Routes>
@@ -172,7 +193,7 @@ const landedAt = () => screen.getByTestId("location").textContent;
 const sentPatch = async (): Promise<ArtworkUpdatePayload> => {
   await waitFor(() => expect(updateArtwork).toHaveBeenCalledTimes(1));
   const call = updateArtwork.mock.calls[0];
-  expect(call[0]).toBe(COLLECTION_ID);
+  expect(call[0]).toBe(CATALOGUE_ID);
   expect(call[1]).toBe(ARTWORK_ID);
   return call[2];
 };
@@ -181,6 +202,9 @@ beforeEach(() => {
   getArtwork.mockResolvedValue(stored());
   updateArtwork.mockResolvedValue(stored());
   restoreArtwork.mockResolvedValue({ restored: true });
+  // A Collection by default: no market-state control. The availability tests
+  // below ask for a Portfolio, which is the kind that carries one.
+  getCatalogue.mockResolvedValue(catalogue("collection"));
 });
 
 afterEach(() => {
@@ -230,6 +254,65 @@ describe("the Edit page — the status the owner chose", () => {
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect((await sentPatch()).status).toBe("published");
+  });
+});
+
+/**
+ * A market state belongs to the kinds that sell work. The Edit page learns the
+ * catalogue's kind, defaults a surfaced work with no stored state to Available,
+ * and never overwrites a stored one. A Collection's form has neither the field
+ * nor a key in the save (ADR-0010).
+ */
+describe("the Edit page — a work's availability", () => {
+  it("defaults a Portfolio work with no stored state to available", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Available");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect((await sentPatch()).availability).toBe("available");
+  });
+
+  it("shows the stored state and sends it without overwriting it", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ availability: "sold" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Sold");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect((await sentPatch()).availability).toBe("sold");
+  });
+
+  it("offers an Inventory the control too", async () => {
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Available");
+  });
+
+  it("offers a Collection no market state and sends none", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    // Absent, not null: the Collection's stored value stays exactly as it
+    // was, which is null for a work this form never surfaces.
+    expect(await sentPatch()).not.toHaveProperty("availability");
   });
 });
 
@@ -292,7 +375,7 @@ describe("the Edit page — a deleted work", () => {
     // The uploaders come back with the restore, in place.
     expect(page.getByTestId("photo-uploader")).toBeInTheDocument();
     expect(restoreArtwork).toHaveBeenCalledTimes(1);
-    expect(restoreArtwork).toHaveBeenCalledWith(COLLECTION_ID, ARTWORK_ID);
+    expect(restoreArtwork).toHaveBeenCalledWith(CATALOGUE_ID, ARTWORK_ID);
     // Re-read: a re-initialised form remounts the input, so the element found
     // before the click would keep its value even if the page discarded it.
     expect(await page.findByLabelText(/^Title/)).toHaveValue(
@@ -373,12 +456,12 @@ describe("the Edit page — returning to the active search", () => {
 
     await waitFor(() =>
       expect(landedAt()).toBe(
-        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
+        `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
       ),
     );
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
     );
   });
 
@@ -387,12 +470,12 @@ describe("the Edit page — returning to the active search", () => {
 
     await waitFor(() =>
       expect(landedAt()).toBe(
-        `/manage/collection/${COLLECTION_PARAM}/artwork/${ARTWORK_PARAM}`,
+        `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}`,
       ),
     );
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}`,
+      `/manage/catalogue/${CATALOGUE_PARAM}`,
     );
   });
 });

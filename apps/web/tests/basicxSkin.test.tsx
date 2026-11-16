@@ -12,7 +12,7 @@ import { basicxSkin } from "@/skins/basicx";
 import { emblaDuration, slideSizes } from "@/skins/basicx/BasicxSection";
 import { resolveSkinOptions } from "@/skins/registry";
 import type { SkinProps } from "@/skins/types";
-import type { Artwork, Collection, ImageVariantKey } from "@arcula/shared";
+import type { Artwork, Catalogue, ImageVariantKey } from "@arcula/shared";
 
 // React 19 requires this flag for act() outside a browser environment.
 (
@@ -52,9 +52,10 @@ vi.mock("@mantine/carousel", async () => {
   return carouselMock();
 });
 
-const collection: Collection = {
-  id: "collection-1",
+const catalogue: Catalogue = {
+  id: "catalogue-1",
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };
@@ -95,7 +96,7 @@ const photo = (id: string, order: number) => ({
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "artwork-1",
   userId: "owner-1",
-  collectionId: "collection-1",
+  catalogueId: "catalogue-1",
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -109,7 +110,7 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
 // shadowing is why RTL's is never called by name.)
 const rtlRender = rtl.render;
 
-const COLLECTION_PATH = "/collection/flores-solares-collection-1";
+const CATALOGUE_PATH = "/catalogue/flores-solares-catalogue-1";
 
 /**
  * Render the skin's Home view.
@@ -122,12 +123,11 @@ const COLLECTION_PATH = "/collection/flores-solares-collection-1";
  */
 const renderSkin = ({ options: stored, ...props }: Partial<SkinProps> = {}) => {
   const merged: SkinProps = {
-    collection,
+    catalogue,
     artworks: [artwork()],
     view: "home",
-    collectionPath: COLLECTION_PATH,
-    artworkPath: (work) =>
-      `${COLLECTION_PATH}/artwork/${work.title}-${work.id}`,
+    cataloguePath: CATALOGUE_PATH,
+    artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
     ...props,
     // Resolved last: the props above may carry raw stored options, and
     // `resolveSkinOptions` is exactly what the host does with them.
@@ -293,12 +293,12 @@ describe("Basicx — the section per artwork", () => {
 });
 
 describe("Basicx — the fixed chrome", () => {
-  it("names the collection in the nav and links back to it", () => {
+  it("names the catalogue in the nav and links back to it", () => {
     render();
     const title = screen.getByRole("link", { name: "Flores Solares" });
     expect(title).toHaveAttribute(
       "href",
-      "/collection/flores-solares-collection-1",
+      "/catalogue/flores-solares-catalogue-1",
     );
   });
 
@@ -319,7 +319,7 @@ describe("Basicx — the fixed chrome", () => {
     const title = screen.getByRole("link", { name: "Estudio en rojo" });
     expect(title).toHaveAttribute(
       "href",
-      `${COLLECTION_PATH}/artwork/Estudio en rojo-artwork-1`,
+      `${CATALOGUE_PATH}/artwork/Estudio en rojo-artwork-1`,
     );
   });
 

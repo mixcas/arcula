@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ID_ALPHABET, ID_LENGTH, MINTED_ID_SHAPE_RE, mintId } from "../src/ids";
-import { collectionSlug, parseId } from "../src/slug";
+import { catalogueSlug, parseId } from "../src/slug";
 
 /** The one method the mint reads, restated so a test can replace the source. */
 interface RandomSource {
@@ -69,7 +69,7 @@ describe("mintId", () => {
     // The route carries `{urlizedName}-{id}` and `parseId` cuts at the last
     // hyphen. This is the assertion whose failure is a user's broken link.
     const id = mintId();
-    expect(parseId(collectionSlug("Flores Solares", id))).toBe(id);
+    expect(parseId(catalogueSlug("Flores Solares", id))).toBe(id);
   });
 
   it("redraws a byte at or above 248 instead of taking it modulo", async () => {

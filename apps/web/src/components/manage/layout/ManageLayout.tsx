@@ -7,7 +7,7 @@ import ManageNavBar from "./ManageNavBar";
  *
  * Exported because it is not the layout's private business: whatever renders
  * in the header sits in it, and a body that fills the window under it — the
- * Collection PDF viewer's preview — sizes against the same number rather than
+ * Catalogue PDF viewer's preview — sizes against the same number rather than
  * writing 60 a second time.
  */
 export const MANAGE_HEADER_HEIGHT = 60;
@@ -18,7 +18,7 @@ interface ManageLayoutProps {
   /**
    * What the fixed header shows. Defaults to the manage nav bar, so every
    * `/manage` page is unchanged; a page themed as the app but branded
-   * differently (the Collection PDF viewer) passes its own bar instead of
+   * differently (the Catalogue PDF viewer) passes its own bar instead of
    * defining a second shell.
    */
   header?: React.ReactNode;

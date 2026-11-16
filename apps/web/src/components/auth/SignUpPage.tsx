@@ -12,6 +12,7 @@ import { schemaResolver, useForm } from "@mantine/form";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
+import { trackEvent } from "@/telemetry/logRocket";
 import { returnPathFrom, returnStateFor } from "@/utils/returnPath";
 import {
   EMPTY_SIGN_UP_FORM,
@@ -85,10 +86,11 @@ const SignUpPage: React.FC = () => {
         setError(mapSignUpError(failed));
         return;
       }
+      trackEvent("sign_up_completed");
       // The sign-up establishes the session (auto-sign-in is on), so the
       // only work left is the move: the invite page that sent the visitor
       // here, or the dashboard, where a fresh account meets its
-      // one-collection cap.
+      // one-catalogue cap.
       void navigate(from ?? "/manage", { replace: true });
     } catch (err) {
       // A rejected fetch has no envelope to read: the server is not

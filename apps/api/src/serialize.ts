@@ -1,10 +1,10 @@
 // The wire shape of GET responses: the exact wire document shape — same
 // keys, same nesting — with the `url` fields filled with proxy paths. That
-// is what keeps the client's types (`Artwork`, `Collection` in
+// is what keeps the client's types (`Artwork`, `Catalogue` in
 // @arcula/shared) working against the API unmodified.
 //
 // The return types ARE the contract: this file constructs the shared read
-// types (`ArtworkRead`, `CollectionRead`), so `bun run check` refuses a field
+// types (`ArtworkRead`, `CatalogueRead`), so `bun run check` refuses a field
 // the read schema does not have, or a required one this file forgets. There
 // is no parse here — the compiler is the whole check, and the server does not
 // re-validate what it just constructed.
@@ -30,22 +30,26 @@ import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotoVariants as artworkPhotoVariantsTable,
   artworkPhotos as artworkPhotosTable,
-  collectionInvitations as collectionInvitationsTable,
-  collections as collectionsTable,
+  catalogueInvitations as catalogueInvitationsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
+  artworkAvailabilitySchema,
+  catalogueKindSchema,
+  type ArtworkAvailability,
   type ArtworkRead,
   type ArtworkStatus,
-  type CollectionRead,
-  type CollectionRole,
-  type CollectionMember,
+  type CatalogueKind,
+  type CatalogueRead,
+  type CatalogueRole,
+  type CatalogueMember,
   type ImageVariantKey,
   type InvitationSummary,
   type Timestamp,
 } from "@arcula/shared";
 import { ApiError } from "./errors";
-import type { CollectionAudience } from "./access";
+import type { CatalogueAudience } from "./access";
 import {
   extensionFor,
   finalDocumentKey,
@@ -54,25 +58,25 @@ import {
 } from "./media/keys";
 import { DOCUMENT_VARIANT_SPECS, IMAGE_VARIANTS } from "./media/variants";
 
-export type CollectionRow = typeof collectionsTable.$inferSelect;
+export type CatalogueRow = typeof cataloguesTable.$inferSelect;
 export type ArtworkRow = typeof artworksTable.$inferSelect;
 export type PhotoRow = typeof artworkPhotosTable.$inferSelect;
 export type DocumentRow = typeof artworkDocumentsTable.$inferSelect;
 export type VariantRow = typeof artworkPhotoVariantsTable.$inferSelect;
-export type InvitationRow = typeof collectionInvitationsTable.$inferSelect;
+export type InvitationRow = typeof catalogueInvitationsTable.$inferSelect;
 
 /** The dashboard list's per-row extras. Absent on every other read, which is
  *  what keeps the otherwise-identical documents distinguishable: a shared row
  *  carries `role` and `ownerName`, an owned one `role` alone.
  *
  *  `audience` is not per-row data: it says the caller is the owner or a
- *  collaborator, which is what makes the collection's password state theirs
+ *  collaborator, which is what makes the catalogue's password state theirs
  *  to see. The value itself is derived below from `passwordHash` — the hash is
  *  never a document field, under any read. */
-export interface SerializeCollectionOptions {
-  role?: CollectionRole;
+export interface SerializeCatalogueOptions {
+  role?: CatalogueRole;
   ownerName?: string;
-  audience?: CollectionAudience;
+  audience?: CatalogueAudience;
 }
 
 /** The joined shape the read routes hand to the serializer. */
@@ -138,10 +142,35 @@ const kindOf = (kind: string): DocumentRead["kind"] => {
   return kind;
 };
 
-/** The skin-option value vocabulary `collectionUpdateSchema` admits. */
+/** The catalogue kind the schema's check constraint permits. Deliberately
+ *  named for the catalogue: `kindOf` above is the document's kind. */
+const catalogueKindOf = (kind: string): CatalogueKind => {
+  const parsed = catalogueKindSchema.safeParse(kind);
+  if (!parsed.success) {
+    throw new ApiError("internal", `Unrecognized catalogue kind ${kind}`);
+  }
+  return parsed.data;
+};
+
+/** The market state the schema's check constraint permits; null is the
+ *  absence of one, which is a fact the member read carries. A stored value
+ *  outside the four words is a server bug. */
+const availabilityOf = (value: string | null): ArtworkAvailability | null => {
+  if (value === null) return null;
+  const parsed = artworkAvailabilitySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ApiError(
+      "internal",
+      `Unrecognized artwork availability ${value}`,
+    );
+  }
+  return parsed.data;
+};
+
+/** The skin-option value vocabulary `catalogueUpdateSchema` admits. */
 const isSkinOptions = (
   value: unknown,
-): value is NonNullable<CollectionRead["skinOptions"]> => {
+): value is NonNullable<CatalogueRead["skinOptions"]> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
@@ -198,7 +227,7 @@ function serializePhoto(
   row: PhotoRow,
   variants: VariantRow[],
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): PhotoRead {
   // The photo row carries no metadata: the `original` variant row is where
@@ -220,7 +249,7 @@ function serializePhoto(
   const originalUrl = mediaUrl(
     finalPhotoKey(
       namespaceId,
-      collectionId,
+      catalogueId,
       artworkId,
       row.id,
       "original",
@@ -244,7 +273,7 @@ function serializePhoto(
         mediaUrl(
           finalPhotoKey(
             namespaceId,
-            collectionId,
+            catalogueId,
             artworkId,
             row.id,
             key,
@@ -260,7 +289,7 @@ function serializeDocument(
   row: DocumentRow,
   variants: VariantRow[],
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): DocumentRead {
   const kind = kindOf(row.kind);
@@ -273,7 +302,7 @@ function serializeDocument(
       url: mediaUrl(
         finalDocumentKey(
           namespaceId,
-          collectionId,
+          catalogueId,
           artworkId,
           row.id,
           "original",
@@ -298,7 +327,7 @@ function serializeDocument(
             mediaUrl(
               finalDocumentKey(
                 namespaceId,
-                collectionId,
+                catalogueId,
                 artworkId,
                 row.id,
                 key,
@@ -314,12 +343,17 @@ function serializeDocument(
 
 /** The exact wire document shape, urls filled with proxy paths.
  *
- *  `namespaceId` is the collection's fixed media namespace
+ *  `namespaceId` is the catalogue's fixed media namespace
  *  (`mediaNamespaceOf`), not the artwork's `userId`: a transfer changes the
- *  owner and must leave every URL pointing at the same object. */
+ *  owner and must leave every URL pointing at the same object.
+ *
+ *  `audience` decides whether `availability` — a member-facing market fact —
+ *  is on the document at all: a member read carries the key (null included),
+ *  and a visitor's read does not, though the row stores the value either way. */
 export function serializeArtwork(
   joined: ArtworkJoined,
   namespaceId: string,
+  audience: CatalogueAudience,
 ): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
@@ -329,7 +363,7 @@ export function serializeArtwork(
     else byParent.set(v.parentId, [v]);
   }
 
-  return {
+  const document: ArtworkRead = {
     id: artwork.id,
     userId: artwork.userId,
     title: artwork.title,
@@ -339,7 +373,7 @@ export function serializeArtwork(
         d,
         byParent.get(d.id) ?? [],
         namespaceId,
-        artwork.collectionId,
+        artwork.catalogueId,
         artwork.id,
       ),
     ),
@@ -348,11 +382,11 @@ export function serializeArtwork(
         p,
         byParent.get(p.id) ?? [],
         namespaceId,
-        artwork.collectionId,
+        artwork.catalogueId,
         artwork.id,
       ),
     ),
-    collectionId: artwork.collectionId,
+    catalogueId: artwork.catalogueId,
     status: statusOf(artwork.status),
     deletedAt: wireTimestampOrNull(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
@@ -360,22 +394,29 @@ export function serializeArtwork(
     // A blank field is an ABSENT key, not a null value — the document shape.
     ...presentTextFields(artwork),
   };
+  // A member sees the absence of a market state as a fact (null, not a missing
+  // key); a visitor does not see the key at all.
+  if (audience === "member") {
+    document.availability = availabilityOf(artwork.availability);
+  }
+  return document;
 }
 
-/** The exact wire collection document shape.
+/** The exact wire catalogue document shape.
  *
  *  `role`/`ownerName` are the dashboard list's additions: the signed-in list
  *  passes the viewer's role on every row, and the owner's display name on a
  *  shared one. Every other read — the public list, the single read — is
  *  anonymous, so it emits the plain document, which is the shape the public
  *  pages have always parsed. */
-export function serializeCollection(
-  row: CollectionRow,
-  opts: SerializeCollectionOptions = {},
-): CollectionRead {
-  const out: CollectionRead = {
+export function serializeCatalogue(
+  row: CatalogueRow,
+  opts: SerializeCatalogueOptions = {},
+): CatalogueRead {
+  const out: CatalogueRead = {
     id: row.id,
     name: row.name,
+    kind: catalogueKindOf(row.kind),
     userId: row.userId,
     isPublic: row.isPublic,
     createdAt: wireTimestamp(row.createdAt),
@@ -395,7 +436,7 @@ export function serializeCollection(
   if (row.skin !== null) out.skin = row.skin;
   if (row.skinOptions !== null) {
     if (!isSkinOptions(row.skinOptions)) {
-      throw new ApiError("internal", "Malformed collection skin options");
+      throw new ApiError("internal", "Malformed catalogue skin options");
     }
     out.skinOptions = row.skinOptions;
   }
@@ -403,7 +444,7 @@ export function serializeCollection(
 }
 
 /** A person's display name, falling back to their email — the rule the
- *  dashboard uses for a shared collection's owner, and the offer previews use
+ *  dashboard uses for a shared catalogue's owner, and the offer previews use
  *  for the inviter. */
 export const displayName = (name: string | null, email: string): string => {
   const trimmed = name?.trim();
@@ -424,7 +465,7 @@ export function serializeMember(row: {
   id: string;
   name: string | null;
   email: string;
-}): CollectionMember {
+}): CatalogueMember {
   return {
     userId: row.id,
     name: displayName(row.name, row.email),
@@ -437,7 +478,7 @@ export function serializeMember(row: {
 export function serializeInvitation(row: InvitationRow): InvitationSummary {
   return {
     id: row.id,
-    collectionId: row.collectionId,
+    catalogueId: row.catalogueId,
     email: row.email,
     invitedByUserId: row.invitedByUserId,
     status: row.status as InvitationSummary["status"],

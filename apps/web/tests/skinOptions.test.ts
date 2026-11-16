@@ -33,7 +33,7 @@ describe("resolveSkinOptions — defaults", () => {
   });
 
   it("treats null and an empty object the same as absent", () => {
-    // A collection written before the field existed has no `skinOptions` key,
+    // A catalogue written before the field existed has no `skinOptions` key,
     // which reads as `undefined`; `null` is what a caller may hand over after
     // a merge that removed it.
     expect(resolveSkinOptions(fakeSkin, null).options).toEqual(
@@ -58,7 +58,7 @@ describe("resolveSkinOptions — defaults", () => {
 
 describe("resolveSkinOptions — hostile stored values", () => {
   it("falls back to the default for a wrong type, per key", () => {
-    // Per key, not wholesale: a collection with one bad option should keep the
+    // Per key, not wholesale: a catalogue with one bad option should keep the
     // owner's other three.
     const { options } = resolveSkinOptions(fakeSkin, {
       flag: "yes",
@@ -103,7 +103,7 @@ describe("resolveSkinOptions — hostile stored values", () => {
 
   it("does not report a declared key as dropped, even when wrongly typed", () => {
     // The distinction matters: a wrongly-typed value is corrected, while a
-    // removed option is a signal that the skin changed under the collection.
+    // removed option is a signal that the skin changed under the catalogue.
     const { dropped } = resolveSkinOptions(fakeSkin, { flag: "nope" });
     expect(dropped).toEqual([]);
   });
@@ -111,7 +111,7 @@ describe("resolveSkinOptions — hostile stored values", () => {
 
 describe("Basicx's own vocabulary", () => {
   it("declares exactly the one option the spec calls for", () => {
-    // Autoplay was cut: a collection homepage is a stack of sections the
+    // Autoplay was cut: a catalogue homepage is a stack of sections the
     // visitor scrolls at their own pace, and it also removed the only option
     // that depended on another one, which is what keeps `resolveSkinOptions` a
     // flat per-key default with no cross-option logic.
@@ -149,12 +149,12 @@ describe("Basicx's own vocabulary", () => {
   });
 
   it("treats a hand-edited options bag as needing no ceremony", () => {
-    // No numeric/enum type on `Collection.skinOptions`, so anything can arrive.
+    // No numeric/enum type on `Catalogue.skinOptions`, so anything can arrive.
     const hostile: Record<string, unknown> = {
       // A removed option, and a value of the wrong type for the one that
       // remains. Both must resolve to the default, and only the former is
       // reported as dropped — a wrongly-typed value is corrected, while a
-      // removed option is a signal that the skin changed under the collection.
+      // removed option is a signal that the skin changed under the catalogue.
       showPoweredBy: "true",
       transitionSeconds: null,
       autoplay: true,

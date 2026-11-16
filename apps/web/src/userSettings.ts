@@ -14,7 +14,7 @@
 // No React and no Hono: the list reads once on mount and writes on each change,
 // which is all the cross-tab or reactive behaviour a preference needs.
 
-import type { SortState } from "@/components/manage/collection/artworksSort";
+import type { SortState } from "@/components/manage/catalogue/artworksSort";
 
 export type ArtworksView = "table" | "grid";
 

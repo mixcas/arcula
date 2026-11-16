@@ -4,9 +4,12 @@
 feature. It is precise enough to ticket without further design decisions; the
 prototype branch and the design templates are evidence, not the source of truth.
 
-The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Collection**,
+The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Catalogue**,
 **Artwork**, **Artwork photo**, **Visitor**, **Owner**, **Collaborator**, and the
-**Collection PDF** it defines. "Catalogue" is not used for a Collection.
+**Catalogue PDF** it defines. This spec predates [ADR-0010](../adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md),
+which renamed the unit from Collection to Catalogue, so the rest of the document
+still says "Collection" and "Collection PDF" where the code now says
+Catalogue — the feature is the same one.
 
 The design record, in order:
 

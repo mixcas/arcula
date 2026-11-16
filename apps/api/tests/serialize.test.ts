@@ -1,7 +1,7 @@
 // The serializer is pure over rows: the wire document's URL fields are
 // derived from the key algebra, never stored. These cases pin the one fact
 // that is easy to get wrong when the owner and the media namespace stop
-// being the same string: a final URL is keyed by the collection's namespace,
+// being the same string: a final URL is keyed by the catalogue's namespace,
 // not by the artwork's `userId`.
 
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,7 @@ const DOC = "doc-1";
 const artworkRow = (userId: string): ArtworkRow => ({
   id: AID,
   userId,
-  collectionId: CID,
+  catalogueId: CID,
   title: "Study in Red",
   artistName: "C. Cas",
   serie: null,
@@ -40,6 +40,7 @@ const artworkRow = (userId: string): ArtworkRow => ({
   notes: null,
   condition: null,
   currentValue: null,
+  availability: null,
   status: "published",
   deletedAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -93,8 +94,8 @@ const joined: ArtworkJoined = {
 };
 
 describe("serializeArtwork", () => {
-  it("keys every final URL by the collection's namespace, not the artwork's userId", () => {
-    const document = serializeArtwork(joined, NAMESPACE);
+  it("keys every final URL by the catalogue's namespace, not the artwork's userId", () => {
+    const document = serializeArtwork(joined, NAMESPACE, "member");
 
     expect(document.photos[0].original.url).toBe(
       mediaUrl(finalPhotoKey(NAMESPACE, CID, AID, PHOTO, "original", "jpg")),
