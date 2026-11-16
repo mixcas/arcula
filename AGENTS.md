@@ -246,9 +246,16 @@ both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
 card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
 `MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),
-`slug.ts`, `types.ts`.
+`slug.ts`, `types.ts`. `schemas/catalogue.ts` holds `catalogueKindSchema`
+(`portfolio`/`collection`/`inventory`, pinned to `CatalogueKind`); the create
+schema accepts `kind` defaulting to `collection` and the update schema does
+not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
+`catalogueReadSchema` carries it, and the API's serializer validates a row
+against the three values (`catalogueKindOf`) before emitting it.
 
-**`apps/web/src/`** — `App.tsx` routes; `services/` are the API clients
+**`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
+means for the surface, as data (labels, availability in play, the artwork
+form's visible/required fields); `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;
 `components/manage` and `components/catalogue`; `skins/` is the public-view
 system.
@@ -427,6 +434,7 @@ Three tiers, and the first is where nearly everything belongs:
    `catalogueLimitForTier` (`packages/shared/src/limits.ts`),
    `publicCatalogueState` / `publicFailure`
    (`apps/web/src/components/catalogue/usePublicCatalogue.ts`),
+   `catalogueSurface` (`apps/web/src/catalogueSurface.ts`),
    `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
    verdict (`apps/api/src/access.ts`). Ours end to end, and where a real
    regression lives.

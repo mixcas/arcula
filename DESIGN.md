@@ -411,6 +411,16 @@ bundle cached from before it still sends both fields and is still accepted,
 and the two halves cannot skew, because the client and the server ship as one
 Lambda.
 
+The kind is chosen once. `POST /catalogues` accepts `kind` — `portfolio`,
+`collection` or `inventory` — defaulting to `collection`, the collector's case
+the product started with, so a client that names none keeps the old behaviour.
+The insert stores it and every catalogue document carries it. `PATCH` does not
+carry `kind`: the update schema has no such key, so a body naming one is a
+successful no-op and the stored kind survives. The serializer validates a
+row's kind against the three values and answers `internal` for an unknown one,
+the same rule the artwork's status and a document's kind follow — a malformed
+row is a server bug, not a document to render.
+
 Catalogue passwords ride the same write. A string sets (or overwrites) the
 password, `null` removes it, and an absent key leaves it alone; the write
 revokes the catalogue's grants in the same transaction, and the member read
@@ -508,13 +518,26 @@ with the grant cookie now set, so there is one path to ready. An expired grant
 re-enters the same way: the next read is refused again and the reader lands back
 on the lock screen rather than on an error page.
 
-The dashboard lists owned and shared catalogues together with a role badge and
-the owner's name on a shared row; its cap counter counts owned catalogues only.
-A shared catalogue is readable and editable: the manage page's write controls
-work for a collaborator exactly as for the owner, because the server answers
-them by membership. Above that list sit the pending invitations addressed to
-the signed-in account, each naming its catalogue and inviter and offering
-decline only — acceptance is the mailed link, and the card says so.
+The dashboard lists owned and shared catalogues together with a kind badge, a
+role badge and the owner's name on a shared row; its cap counter counts owned
+catalogues only. A shared catalogue is readable and editable: the manage page's
+write controls work for a collaborator exactly as for the owner, because the
+server answers them by membership. Above that list sit the pending invitations
+addressed to the signed-in account, each naming its catalogue and inviter and
+offering decline only — acceptance is the mailed link, and the card says so.
+
+One pure module answers what a kind means for the surface.
+`src/catalogueSurface.ts` returns, for a kind, the kind's own label, the labels
+of `name` and `description`, whether availability is in play, and the artwork
+form's fields with their `visible` and `required` rules. v1 shows every
+existing artwork field on every kind and requires only `title` and
+`artistName`; only the words and the availability axis differ, so a later
+per-kind hiding is a data change in that one module. The create form offers a
+**Kind** selector defaulting to Collection and asks its two fields with the
+surface's labels (Artist name/Bio, Name/Description, Gallery name/About). The
+General tab relabels from the catalogue's stored kind and shows it as a fixed
+badge, so what the catalogue is stays clear after creation; the dashboard
+badges every row with its kind. Nothing writes the kind after creation.
 
 The catalogue page's search is address state, not component state: `q` in the
 URL is the source of truth. The query is written as the collector types,
@@ -550,10 +573,11 @@ collapse and the client's matching deliberately differ: typing `maria` misses a
 recorded "María López".
 
 The catalogue settings page is four tabs, each with its own save:
-**General** (name, description, public or private, and the password control),
-**Public view** (the skin and the options the selected skin declares, with the
-notice that some stored options are unused), **Access** (the card described
-below) and **Data** (the CSV import card). Each tab is an address —
+**General** (the name and description its kind labels, public or private, and
+the password control), **Public view** (the skin and the options the selected
+skin declares, with the notice that some stored options are unused), **Access**
+(the card described below) and **Data** (the CSV import card). Each tab is an
+address —
 `/settings/general`, `/settings/public`, `/settings/access`,
 `/settings/data` — and a bare or unknown segment lands on General through the
 effect that rewrites the catalogue's name-and-id in the address, so an old
