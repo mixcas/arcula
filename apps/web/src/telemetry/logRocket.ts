@@ -14,8 +14,11 @@
  *   every route that carries a secret: Better Auth's `/api/auth/*` (sign-in,
  *   sign-up, password change, reset — the new password is in the body), the
  *   catalogue `…/unlock` route (`{ password }`), the invitation routes (the
- *   raw token is in the path) and the media routes (object keys, and user
- *   artwork in the response). Timing and errors elsewhere are still recorded.
+ *   raw token is in the path), the media routes (object keys, and user
+ *   artwork in the response), the media presign/process routes (the presign
+ *   response carries a presigned upload URL, which is a bearer token) and the
+ *   browser's direct `PUT` to the staged key on the bucket. Timing and errors
+ *   elsewhere are still recorded.
  *
  * The app ID is a public client-side identifier, like a publishable key: it is
  * not a secret and belongs in the bundle. Recording is production-only, and
@@ -92,11 +95,25 @@ let pendingIdentify: { uid: string; traits: Record<string, string> } | null =
   null;
 
 /**
- * The routes whose request/response pairs LogRocket must not see. The check is
- * on the path only — the query string is how the media proxy names its object,
- * and the path is enough to recognise every route here. The URL is parsed
- * rather than string-matched because the SDK may hand back the absolute URL a
- * relative `fetch` resolved to.
+ * The routes whose request/response pairs LogRocket must not see.
+ *
+ * Two shapes are recognised: an app path, and the direct-to-storage upload
+ * that does not use one. The check is on the path only — the query string is
+ * how the media proxy names its object and how a presigned URL carries its
+ * signature, and the path is enough in every case. The URL is parsed rather
+ * than string-matched because the SDK may hand back the absolute URL a
+ * relative `fetch` resolved to, and because the bucket hop names a host
+ * instead of `/api`.
+ *
+ * A presigned upload URL is a **bearer token**: it authorises one `PUT` on
+ * one staged object until it expires. It appears in the presign response body
+ * (`uploadUrl`), so the presign call is redacted whole; and the `PUT` that
+ * uses it goes to the bucket, whose path is matched on the staged key's
+ * `staging/` segment. That is the shape that survives a change to the signed
+ * query, and the one path-style (`/bucket/staging/…`) and virtual-hosted
+ * (`/staging/…`) addressing share. The signed `x-amz-meta-name` header is the
+ * original's filename — not a secret, but it is user content, and redacting
+ * the whole pair drops it too rather than deciding per header.
  */
 export function isSensitivePath(url: string): boolean {
   let path: string;
@@ -105,6 +122,12 @@ export function isSensitivePath(url: string): boolean {
   } catch {
     path = url.split("?")[0] ?? "";
   }
+
+  // The browser's direct PUT. Matching the key's prefix rather than the host
+  // or the signed query is what keeps this true when the presigner's endpoint,
+  // its query parameters or its addressing style change.
+  if (/(^|\/)staging\//.test(path)) return true;
+
   if (!path.startsWith("/api/")) return false;
   return (
     // Sign-in, sign-up, change-password, reset-password: passwords in the body.
@@ -113,8 +136,16 @@ export function isSensitivePath(url: string): boolean {
     /\/catalogues\/[^/]+\/unlock$/.test(path) ||
     // Invitations: the raw token is a path segment on preview and accept.
     path.startsWith("/api/v1/invitations") ||
-    // `/api/v1/media?key=…` and the artwork media stage/process routes.
-    /(^|\/)media(\/|$)/.test(path)
+    // `/api/v1/media?key=…`: object keys and user artwork in the response.
+    /(^|\/)media(\/|$)/.test(path) ||
+    // The artwork media presign and process routes. The presign RESPONSE
+    // carries `uploadUrl`, the bearer token; process answers the staged
+    // original's proxy path and its variants. These routes carried a `media`
+    // segment before the direct hop, which is why the rule above never
+    // covered them.
+    /\/catalogues\/[^/]+\/artworks\/[^/]+\/(photos|documents)\/(stage|process)$/.test(
+      path,
+    )
   );
 }
 

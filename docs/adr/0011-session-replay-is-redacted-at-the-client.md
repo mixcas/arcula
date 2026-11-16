@@ -51,11 +51,24 @@ Three facts are true at `init`, not left to the defaults:
   routes that carry a secret: `/api/auth/*` (sign-in, sign-up, password change,
   password reset — the new password is in the body), `…/catalogues/:id/unlock`
   (the catalogue password), the invitation routes (the raw token is a path
-  segment) and the media routes (object keys in the query, user artwork in the
-  response). Everywhere else, timing and error data are still recorded.
+  segment), the media routes (object keys in the query, user artwork in the
+  response), the artwork media **presign** and **process** routes, and the
+  browser's direct `PUT` to the bucket. Everywhere else, timing and error data
+  are still recorded.
 - `identify` takes the immutable `uid` as the key and the member's **name and
   email** as traits, so the dashboard can find a session by either. The uid
   stays the identity; name and email are searchable metadata that may change.
+
+**A presigned upload URL is a bearer token, so its route and its hop are
+redacted.** The presign response body carries `uploadUrl`, which authorises one
+`PUT` on one staged object until it expires; the stage route has no `media`
+segment, so the media rule never covered it, and the `PUT` itself goes to the
+bucket rather than to `/api`. The sanitizer recognises the bucket hop on the
+staged key's `staging/` segment — a path shape that survives a signed-query
+change and both path-style and virtual-hosted addressing — and drops the whole
+pair, which also drops the signed `x-amz-meta-name` filename header. A filename
+is not a credential, but it is user content, and redacting the pair is cheaper
+than deciding header by header.
 
 **Track the writes, not the screens.** `sign_up_completed`,
 `artwork_created` and `catalogue_visibility_changed` are emitted after the
