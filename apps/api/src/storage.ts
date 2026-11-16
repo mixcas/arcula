@@ -1,9 +1,10 @@
 // The app's single S3 client.
 //
 // One module owns every object operation the app performs — put, get,
-// head, delete, copy, list. It knows nothing about photos, documents or
-// catalogues: keys are built by `media/keys.ts`, and everything above
-// this layer reads them back through that module's parser.
+// head, delete, copy, list, and the presigned upload URL that lets a
+// browser write straight to storage. It knows nothing about photos,
+// documents or catalogues: keys are built by `media/keys.ts`, and everything
+// above this layer reads them back through that module's parser.
 //
 // The client reads its config at import time, like env.ts. The `test`
 // and `dev` scripts source the root .env first, so every entry point
@@ -27,6 +28,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "node:stream";
 
 function required(name: string): string {
@@ -54,6 +56,13 @@ export const s3 = new S3Client({
           secretAccessKey: process.env.S3_SECRET_KEY,
         }
       : undefined,
+  // The SDK computes a CRC32 checksum for every request by default, and a
+  // presigned PUT has no body yet: it signs the checksum of an empty
+  // string, so the real object's bytes fail `BadDigest` at upload time.
+  // "WHEN_REQUIRED" leaves checksums off unless an operation demands one,
+  // which is the price of presigning with this client. Normal put/get
+  // behaviour is unchanged (S3 never required a checksum there).
+  requestChecksumCalculation: "WHEN_REQUIRED",
 });
 
 /**
@@ -128,6 +137,68 @@ export const copyObject = (
       ContentType: contentType,
     }),
   );
+
+/**
+ * Mint a short-lived, single-object `PUT` URL for a staged upload.
+ *
+ * This is the same client, bucket and credentials every other operation
+ * uses — endpoint, region and path style all come from `s3`, so local and
+ * production sign the same way (static keys locally, the Lambda's role in
+ * production).
+ *
+ * The URL is a bearer token with write authority over one key until it
+ * expires: **never log it**, and never put it in an error message. If it
+ * leaks it can overwrite that one staged object and nothing else.
+ *
+ * The signature pins the declared content type, so a client cannot obtain
+ * a URL for `image/jpeg` and upload `text/html`: the object is stored with
+ * the type the media proxy will later serve. Two details make that work:
+ *
+ * - `signableHeaders` re-adds `content-type` to the signed set. The SDK's
+ *   presigner marks it unsignable by default, which would leave the type
+ *   free to differ from the signature.
+ * - The declared length is deliberately **not** signed. `content-length`
+ *   is a forbidden header for `fetch`: the browser sets it itself, or
+ *   omits it entirely under HTTP/2, so a signed value would make the
+ *   upload flaky. The size is enforced from the declaration at presign
+ *   time and, authoritatively, from the stored object's own length when
+ *   the bytes are processed.
+ *
+ * SeaweedFS (the local stand-in) runs anonymous and does not verify the
+ * signature, so it accepts a PUT to these URLs with any content type; real
+ * S3 rejects a mismatch. The staged object is therefore always validated
+ * again at process time, never trusted from the presign call.
+ *
+ * Five minutes is long enough for a phone photograph on a slow connection
+ * and short enough that a leaked URL is worth little. It is the one number
+ * behind the URL's `X-Amz-Expires`.
+ */
+export const PRESIGNED_PUT_TTL_SECONDS = 300;
+
+export type PresignedPut = {
+  url: string;
+  /** The headers to send verbatim with the `PUT`; only the signed ones. */
+  headers: { "content-type": string };
+};
+
+export async function presignPut(
+  key: string,
+  contentType: string,
+): Promise<PresignedPut> {
+  const url = await getSignedUrl(
+    s3,
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+    }),
+    {
+      expiresIn: PRESIGNED_PUT_TTL_SECONDS,
+      signableHeaders: new Set(["content-type"]),
+    },
+  );
+  return { url, headers: { "content-type": contentType } };
+}
 
 /** Every object under a prefix, fully paginated. */
 export async function listObjects(prefix: string): Promise<string[]> {

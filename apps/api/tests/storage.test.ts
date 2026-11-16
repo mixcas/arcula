@@ -13,7 +13,10 @@ import {
   isObjectMissing,
   listObjects,
   objectBytes,
+  PRESIGNED_PUT_TTL_SECONDS,
+  presignPut,
   putObject,
+  readObject,
 } from "../src/storage";
 import {
   finalPhotoKey,
@@ -84,6 +87,43 @@ describe("copy", () => {
     const head = await headObject(to);
     expect(head.ContentType).toBe("image/webp");
     expect(Array.from(await objectBytes(to))).toEqual(Array.from(BANNER));
+  });
+});
+
+describe("presigned PUT", () => {
+  // The stand-in runs without an S3 identity, so it accepts anonymous
+  // requests and never verifies the signature (a wrong or absent
+  // `content-type`, and even a tampered `X-Amz-Signature`, all answer 200
+  // locally). What it can prove is the half the browser depends on: the URL
+  // our client mints, with the headers it tells the client to send, stores
+  // the bytes under the staged key with the declared type. The pinning is
+  // asserted on the URL itself, which is what real S3 verifies.
+  it("round-trips a PUT with exactly the returned headers", async () => {
+    const key = track(stagingOriginalKey(USER, CID, AID, "presigned", "png"));
+    const upload = await presignPut(key, "image/png");
+
+    const res = await fetch(upload.url, {
+      method: "PUT",
+      headers: upload.headers,
+      body: BANNER,
+    });
+    expect(res.status).toBe(200);
+
+    const read = await readObject(key);
+    expect(Array.from(read.bytes)).toEqual(Array.from(BANNER));
+    expect(read.contentType).toBe("image/png");
+  });
+
+  it("signs the content type and expires on the module's lifetime", async () => {
+    const key = stagingOriginalKey(USER, CID, AID, "signed", "png");
+    const upload = await presignPut(key, "image/png");
+    const params = new URL(upload.url).searchParams;
+
+    expect(params.get("X-Amz-SignedHeaders")?.split(";")).toContain(
+      "content-type",
+    );
+    expect(upload.headers["content-type"]).toBe("image/png");
+    expect(params.get("X-Amz-Expires")).toBe(String(PRESIGNED_PUT_TTL_SECONDS));
   });
 });
 

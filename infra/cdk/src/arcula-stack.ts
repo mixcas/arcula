@@ -80,10 +80,26 @@ export class ArculaStack extends cdk.Stack {
 
     // Media: private, encrypted, and the staging/ prefix self-expires —
     // the same rule the local self-heal counts on.
+    //
+    // CORS exists for one hop: the browser's direct `PUT` onto a presigned
+    // staging URL. The origin is the app's own, because the SPA and the API
+    // are same-origin by design; `content-type` is the only header the
+    // presign signs and therefore the only one a preflight must allow
+    // (host is browser-managed and credential headers are not sent). CORS
+    // is not the authorization boundary — the presigned URL is, and it is
+    // scoped to one key, one method and one type.
+    const clientOrigin = contextValue("PUBLIC_URL", "http://localhost:8000");
     const media = new s3.Bucket(this, "Media", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT],
+          allowedOrigins: [clientOrigin],
+          allowedHeaders: ["content-type"],
+        },
+      ],
       lifecycleRules: [
         { prefix: "staging/", expiration: cdk.Duration.days(7) },
       ],
@@ -115,9 +131,9 @@ export class ArculaStack extends cdk.Stack {
         AUTH_SECRET: contextValue("AUTH_SECRET", ""),
         // The one public origin: the API, the SPA, and the mail links all
         // live on it (same-origin by design — no CORS to configure).
-        AUTH_BASE_URL: contextValue("PUBLIC_URL", "http://localhost:8000"),
-        CLIENT_ORIGIN: contextValue("PUBLIC_URL", "http://localhost:8000"),
-        CORS_ORIGINS: contextValue("PUBLIC_URL", "http://localhost:8000"),
+        AUTH_BASE_URL: clientOrigin,
+        CLIENT_ORIGIN: clientOrigin,
+        CORS_ORIGINS: clientOrigin,
         // Mail: Resend in prod (SMTP from a Lambda is the path we did not
         // take; nodemailer stays for the local SMTP provider).
         EMAIL_PROVIDER: "resend",
