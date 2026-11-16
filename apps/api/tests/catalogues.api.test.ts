@@ -102,6 +102,7 @@ describe("POST /catalogues", () => {
       "id",
       "isPasswordProtected",
       "isPublic",
+      "kind",
       "name",
       "updatedAt",
       "userId",

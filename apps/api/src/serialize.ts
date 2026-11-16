@@ -37,6 +37,7 @@ import {
   UPDATABLE_TEXT_FIELDS,
   type ArtworkRead,
   type ArtworkStatus,
+  type CatalogueKind,
   type CatalogueRead,
   type CatalogueRole,
   type CatalogueMember,
@@ -134,6 +135,15 @@ const statusOf = (status: string): ArtworkStatus => {
 const kindOf = (kind: string): DocumentRead["kind"] => {
   if (kind !== "file" && kind !== "image") {
     throw new ApiError("internal", `Unrecognized document kind ${kind}`);
+  }
+  return kind;
+};
+
+/** The catalogue kind the schema's check constraint permits. Deliberately
+ *  named for the catalogue: `kindOf` above is the document's kind. */
+const catalogueKindOf = (kind: string): CatalogueKind => {
+  if (kind !== "portfolio" && kind !== "collection" && kind !== "inventory") {
+    throw new ApiError("internal", `Unrecognized catalogue kind ${kind}`);
   }
   return kind;
 };
@@ -376,6 +386,7 @@ export function serializeCatalogue(
   const out: CatalogueRead = {
     id: row.id,
     name: row.name,
+    kind: catalogueKindOf(row.kind),
     userId: row.userId,
     isPublic: row.isPublic,
     createdAt: wireTimestamp(row.createdAt),
