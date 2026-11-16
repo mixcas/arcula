@@ -1,9 +1,12 @@
-// The media fixtures: rows inserted straight through drizzle, and the two
-// staging calls that hang off them.
+// The media fixtures: rows inserted straight through drizzle, and the staging
+// hop that hangs off them.
 //
 // Catalogues and artworks go in through drizzle rather than the API — the
 // routes that create them have their own suites, and these ones are about what
-// happens to the media afterwards.
+// happens to the media afterwards. The staging hop is the real one: a presign
+// call, a direct `fetch` PUT to the URL it answered, and (where a suite needs
+// measurements or variants) a process call — so a suite that stages is
+// exercising the same three steps a browser does.
 
 import sharp from "sharp";
 import {
@@ -12,14 +15,13 @@ import {
   catalogues as cataloguesTable,
 } from "@arcula/db";
 import type { CatalogueKind } from "@arcula/shared";
-import { app } from "../../src/app";
+import { req, uuid } from "./api";
 import { db } from "../../src/db";
 import {
   INVITATION_TTL_MS,
   hashInvitationToken,
   mintInvitationToken,
 } from "../../src/invitations";
-import { API, ORIGIN, req, uuid } from "./api";
 
 export async function makeCatalogue(
   userId: string,
@@ -98,10 +100,69 @@ export const makeJpeg = async (
 
 type Population = "photos" | "documents";
 
+/** The presign answer, as the wire carries it. */
+export interface PresignedEntry {
+  entryId: string;
+  uploadUrl: string;
+  method: "PUT";
+  headers: Record<string, string>;
+  url: string;
+  expiresAt: string;
+}
+
 /**
- * Stage one file against the route for `population`. The named wrappers below
- * cover the two callers that always know which; the save sweep and the proxy
- * suite pass it through.
+ * The presign call for one entry — the declaration half of the direct hop.
+ *
+ * The named wrappers below take a `File` because that is what the form has;
+ * the tests that need to lie about a declaration (or PUT bytes the client
+ * never had) call this directly.
+ */
+export async function presignEntry(
+  population: Population,
+  cookies: string,
+  cid: string,
+  aid: string,
+  declaration: {
+    entryId: string;
+    contentType: string;
+    size: number;
+    name?: string;
+  },
+): Promise<Response> {
+  return req(
+    "POST",
+    `/api/v1/catalogues/${cid}/artworks/${aid}/${population}/stage`,
+    { cookies, body: JSON.stringify(declaration) },
+  );
+}
+
+/**
+ * The direct hop: a real `fetch` PUT of the file's bytes to the presigned URL
+ * with exactly the headers the presign answered.
+ *
+ * This is the browser's half of the flow, and it goes over the network like
+ * the browser's does — not through `app.request`, which would never prove the
+ * URL is usable. `headers` may be overridden to forge what the stand-in lets
+ * through (it does not verify signatures), which is how the process suite
+ * seeds an object the declaration would have refused.
+ */
+export async function putEntry(
+  upload: { uploadUrl: string; headers: Record<string, string> },
+  bytes: Uint8Array<ArrayBuffer>,
+  headers?: Record<string, string>,
+): Promise<Response> {
+  return fetch(upload.uploadUrl, {
+    method: "PUT",
+    headers: headers ?? upload.headers,
+    body: bytes,
+  });
+}
+
+/**
+ * Stage one file against the route for `population`: presign, then the direct
+ * PUT. The answer is the presign response, so a caller can assert `url` and
+ * status the way the old multipart stage was asserted; callers that need the
+ * measured metadata ask `processEntry`.
  */
 export async function stageEntry(
   population: Population,
@@ -111,17 +172,21 @@ export async function stageEntry(
   entryId: string,
   file: File,
 ): Promise<Response> {
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append("file", file);
-  return await app.request(
-    `${API}/api/v1/catalogues/${cid}/artworks/${aid}/${population}/stage`,
-    {
-      method: "POST",
-      headers: { Cookie: cookies, Origin: ORIGIN },
-      body: form,
-    },
-  );
+  const presign = await presignEntry(population, cookies, cid, aid, {
+    entryId,
+    contentType: file.type,
+    size: file.size,
+    name: file.name,
+  });
+  if (presign.status !== 200) return presign;
+  // Clone before reading: the caller gets the response, and a consumed body
+  // would make `json(staged)` in the suites a "body already used" failure.
+  const upload = (await presign.clone().json()) as PresignedEntry;
+  const put = await putEntry(upload, new Uint8Array(await file.arrayBuffer()));
+  if (!put.ok) {
+    throw new Error(`The direct PUT failed with ${put.status}`);
+  }
+  return presign;
 }
 
 export async function stagePhoto(

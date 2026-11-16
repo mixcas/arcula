@@ -26,14 +26,14 @@
  * ## What changed when the pipeline moved server-side
  *
  * An attachment that lands in the form is PUT to staging **the moment it is
- * added** — not at save — and the server generates an image's variants on
- * demand, so there is no object-URL lifecycle, no worker, and no local decode:
- * a PDF is a stage and nothing else (the client skips the process call for it
- * on purpose — a process answer for a non-image would be a `[]` the server had
- * to special-case for no information), and an image that cannot be decoded is
- * rejected by the stage route rather than by a canvas here. An entry the user
- * drops is `discard`ed on removal, best-effort, for the same reason the photo
- * one is.
+ * added** — not at save — and the server measures and generates its variants
+ * on demand, so there is no object-URL lifecycle, no worker, and no local
+ * decode: an image that cannot be decoded is rejected by the process call
+ * rather than by a canvas here. The upload itself is a direct hop — presign,
+ * PUT the file to storage, process — and the process call runs for a PDF too:
+ * it is now the server's only look at the bytes, so a PDF answers `[]` and
+ * null dimensions rather than being skipped. An entry the user drops is
+ * `discard`ed on removal, best-effort, for the same reason the photo one is.
  */
 
 import { useCallback, useState } from "react";
@@ -49,9 +49,9 @@ import {
   sortDocuments,
 } from "@/utils/artworkDocuments";
 import { mediaService } from "@/services/mediaService";
-import { ApiRequestError } from "@/services/api";
 import {
   keySequence,
+  rejectionReason,
   useUploadPool,
   type Rejection,
   type StageOutcome,
@@ -95,11 +95,12 @@ export interface AddDocumentsResult {
 const nextKey = keySequence("document");
 
 /**
- * One file through stage, and process when it is an image. Resolves to the
- * finished entry on success, or to the rejection on any failure — and
- * discards the staged original when the stage succeeded but the variants did
- * not, so a failed batch does not leave objects behind that no save will ever
- * promote.
+ * One file through presign → PUT → process — for both a PDF and an image.
+ *
+ * Resolves to the finished entry on success, or to the rejection on any
+ * failure — and discards the staged original when the upload succeeded but the
+ * process call did not, so a failed batch does not leave objects behind that
+ * no save will ever promote.
  */
 async function stageAndProcess(
   catalogueId: string,
@@ -111,26 +112,43 @@ async function stageAndProcess(
   // UUID's hyphens come off before it reaches the wire.
   const entryId = crypto.randomUUID().replace(/-/g, "");
   try {
-    const staged = await mediaService.stageDocument(
-      catalogueId,
-      artworkId,
-      entryId,
-      file,
-    );
+    // Presign + the direct PUT. On return the object is in storage and no byte
+    // of it has passed through the API.
+    await mediaService.stageDocument(catalogueId, artworkId, entryId, file);
+    let processed;
+    try {
+      // Process runs for a PDF too. It used to be skipped — there was nothing
+      // to generate — but process is now the only point the server sees the
+      // bytes, so skipping it would leave a document's real type, size and
+      // contents unchecked. A PDF answers `[]` and null dimensions.
+      processed = await mediaService.processDocument(
+        catalogueId,
+        artworkId,
+        entryId,
+      );
+    } catch (error) {
+      // The original is up and no save will ever name it: discard it now,
+      // idempotently, and let the error report the failure.
+      void mediaService
+        .discardDocument(catalogueId, artworkId, entryId)
+        .catch(() => {});
+      throw error;
+    }
     const base = {
       id: entryId,
-      name: staged.name,
-      size: staged.size,
-      contentType: staged.contentType,
+      name: processed.name,
+      size: processed.size,
+      contentType: processed.contentType,
       original: {
-        url: staged.url,
-        size: staged.size,
-        contentType: staged.contentType,
+        url: processed.url,
+        size: processed.size,
+        contentType: processed.contentType,
       },
     };
-    if (!isDocumentImageType(file.type)) {
-      // A PDF is staged and nothing more: there is nothing to generate, so no
-      // process call and no variants — the shape the saved document has.
+    // The kind comes off the STORED type the process answer reports, not the
+    // browser's declaration: the server validated what it stored, so the row's
+    // `kind` and the object it points at cannot disagree.
+    if (!isDocumentImageType(processed.contentType)) {
       return {
         entry: {
           key: nextKey(),
@@ -141,51 +159,34 @@ async function stageAndProcess(
         rejection: null,
       };
     }
-    try {
-      const { variants } = await mediaService.processDocument(
-        catalogueId,
-        artworkId,
-        entryId,
-      );
-      if (staged.width === null || staged.height === null) {
-        // The stage route decodes every image it admits, so a null dimension is
-        // a server bug, not a file condition: discard what is up and say the
-        // upload failed rather than render a document with no geometry.
-        void mediaService
-          .discardDocument(catalogueId, artworkId, entryId)
-          .catch(() => {});
-        return { entry: null, rejection: "The image could not be read" };
-      }
-      return {
-        entry: {
-          key: nextKey(),
-          status: "staged",
-          file,
-          document: {
-            ...base,
-            kind: "image",
-            width: staged.width,
-            height: staged.height,
-            variants,
-          },
-        },
-        rejection: null,
-      };
-    } catch (error) {
-      // The original is up and no save will ever name it: discard it now,
-      // idempotently, and let the error report the failure.
+    if (processed.width === null || processed.height === null) {
+      // Process decodes every image it admits, so a null dimension is a server
+      // bug, not a file condition: discard what is up and say the upload
+      // failed rather than render a document with no geometry.
       void mediaService
         .discardDocument(catalogueId, artworkId, entryId)
         .catch(() => {});
-      throw error;
+      return { entry: null, rejection: "The image could not be read" };
     }
+    return {
+      entry: {
+        key: nextKey(),
+        status: "staged",
+        file,
+        document: {
+          ...base,
+          kind: "image",
+          width: processed.width,
+          height: processed.height,
+          variants: processed.variants,
+        },
+      },
+      rejection: null,
+    };
   } catch (error) {
     return {
       entry: null,
-      rejection:
-        error instanceof ApiRequestError
-          ? (error.fields?.file ?? error.message)
-          : "The file could not be uploaded",
+      rejection: rejectionReason(error, "The file could not be uploaded"),
     };
   }
 }
@@ -228,11 +229,11 @@ export const useArtworkDocuments = ({
    * Add files, staging each one as it is accepted.
    *
    * The pre-checks here are the count cap and the type allowlist — the two
-   * things the form knows before spending a round trip. The size cap and the
-   * decode are the stage route's to answer, and its refusal arrives on the
-   * same `rejected` list with a reason the user can act on. The extension a
-   * saved object gets is the server's decision from the content type, so the
-   * form does not pre-judge filenames.
+   * things the form knows before spending a round trip. The size cap is the
+   * presign route's to answer and the bytes are process's, and either refusal
+   * arrives on the same `rejected` list with a reason the user can act on. The
+   * extension a saved object gets is the server's decision from the content
+   * type, so the form does not pre-judge filenames.
    *
    * The pool — three files in flight, appended in drop order once the batch
    * has settled — is `useUploadPool`'s.

@@ -23,6 +23,7 @@ import {
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
+import { encodeStagedName } from "../src/media/stagedName";
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 const USER = `u-${stamp}`;
@@ -124,6 +125,41 @@ describe("presigned PUT", () => {
     );
     expect(upload.headers["content-type"]).toBe("image/png");
     expect(params.get("X-Amz-Expires")).toBe(String(PRESIGNED_PUT_TTL_SECONDS));
+  });
+
+  // The original's filename has to survive the direct hop: the process call
+  // carries only the entry id, so the name is recorded on the object itself
+  // and read back when the bytes are validated. It rides as a SIGNED header,
+  // not a query parameter — a name in the URL is a name in every access log
+  // and in the session replay, and signing it means a client cannot rewrite
+  // it between the presign and the PUT.
+  it("round-trips a staged name through a signed metadata header", async () => {
+    const key = track(stagingOriginalKey(USER, CID, AID, "named", "jpg"));
+    const name = encodeStagedName("résumé scan.jpg");
+    const upload = await presignPut(key, "image/jpeg", { name });
+
+    const params = new URL(upload.url).searchParams;
+    expect(params.get("X-Amz-SignedHeaders")?.split(";")).toContain(
+      "x-amz-meta-name",
+    );
+    expect(params.has("x-amz-meta-name")).toBe(false);
+    expect(upload.headers["x-amz-meta-name"]).toBe(name);
+
+    const res = await fetch(upload.url, {
+      method: "PUT",
+      headers: upload.headers,
+      body: BANNER,
+    });
+    expect(res.status).toBe(200);
+
+    // What process reads back: the stored type and the recorded name, off the
+    // same object the client wrote.
+    const head = await headObject(key);
+    expect(head.ContentType).toBe("image/jpeg");
+    expect(head.Metadata?.name).toBe(name);
+    const read = await readObject(key);
+    expect(read.contentType).toBe("image/jpeg");
+    expect(read.metadata?.name).toBe(name);
   });
 });
 

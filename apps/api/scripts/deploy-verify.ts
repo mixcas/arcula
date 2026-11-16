@@ -4,12 +4,14 @@
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
 // link + cache headers), sign-up (and that its cookie is `Secure`), /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
-// real 12 MP photo through stage → process → save (Sharp + S3 on the
-// deploy target), a visitor read, and a reset request (the Resend call
-// path). The catalogue cap is covered by the API integration suite, not
-// here: reaching it would mean ten creates per run. One account is
-// created per run under verify-<ts>@example.test; nothing is printed that
-// is a credential. Exit code 0 = every step passed.
+// real 12 MP photo through presign → direct PUT → process → save (the
+// presigner, the bucket's CORS rule and Sharp on the deploy target), a
+// visitor read, and a reset request (the Resend call path). The catalogue cap
+// is covered by the API integration suite, not here: reaching it would mean
+// ten creates per run. One account is created per run under
+// verify-<ts>@example.test; nothing is printed that is a credential — and the
+// presigned upload URL is a bearer token, so it is never printed either. Exit
+// code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { IMAGE_VARIANTS, variantSize } from "../src/media/variants";
@@ -132,14 +134,19 @@ let catalogueId: string | null;
   step("create catalogue", res.status === 201 && catalogueId !== null);
 }
 
-// 7. A real 12 MP photo through stage → process → save. The process
-//    number is the Sharp-on-the-deploy-target measurement (S3's smoke
-//    measured it on the stand-in; this is the real runtime).
+// 7. A real 12 MP photo through presign → PUT → process → save. The bytes
+//    go straight to the media bucket, so this is the one place the direct hop
+//    is exercised against the deployed CORS rule and the real presigner; the
+//    process number is the Sharp-on-the-deploy-target measurement, and the
+//    dimensions are the ones the server read back off the stored object
+//    (presign never saw a byte). The presigned URL is a bearer token: it is
+//    never printed.
 if (catalogueId) {
   const artworkId = hex();
   const entryId = hex();
   const W = 4000;
   const H = 3000;
+  const name = "verify-12mp.jpg";
   const sample = await sharp({
     create: {
       width: W,
@@ -151,27 +158,50 @@ if (catalogueId) {
     .jpeg({ quality: 90 })
     .toBuffer();
 
-  const form = new FormData();
-  form.append("entryId", entryId);
-  form.append(
-    "file",
-    new File([new Uint8Array(sample)], "verify-12mp.jpg", {
-      type: "image/jpeg",
-    }),
+  const presign = await post(
+    `/api/v1/catalogues/${catalogueId}/artworks/${artworkId}/photos/stage`,
+    { entryId, contentType: "image/jpeg", size: sample.length, name },
+    true,
   );
-  const stage = await fetch(
-    `${base}/api/v1/catalogues/${catalogueId}/artworks/${artworkId}/photos/stage`,
-    { method: "POST", headers: { cookie: sessionCookie! }, body: form },
-  );
-  const stageBody = (await stage.json()) as {
-    width?: number;
-    height?: number;
-    entryId?: string;
+  const target = (await presign.json()) as {
+    uploadUrl?: string;
+    method?: string;
+    headers?: Record<string, string>;
+    url?: string;
   };
   step(
-    "stage 12 MP photo",
-    stage.status === 200 && stageBody.width === W && stageBody.height === H,
-    `${stageBody.width}x${stageBody.height}, ${sample.length} bytes`,
+    "presign the 12 MP photo",
+    presign.status === 200 &&
+      target.method === "PUT" &&
+      typeof target.uploadUrl === "string" &&
+      typeof target.headers?.["content-type"] === "string",
+    `${sample.length} bytes`,
+  );
+
+  let uploadStatus = 0;
+  try {
+    // `credentials: "omit"` as the browser does: the URL is the whole
+    // authority for this one object, and the session cookie belongs to the
+    // app's origin, not the bucket's.
+    const put = await fetch(target.uploadUrl!, {
+      method: "PUT",
+      headers: target.headers,
+      body: new Uint8Array(sample),
+      credentials: "omit",
+    });
+    uploadStatus = put.status;
+  } catch (error) {
+    // The browser hop's failure mode: a CORS rule that does not admit the
+    // PUT rejects the fetch itself, with no status to report. The message
+    // names the origin, never the URL.
+    console.log(
+      `    direct PUT failed before a response: ${(error as Error).message}`,
+    );
+  }
+  step(
+    "PUT the photo straight to storage (the bucket's CORS rule)",
+    uploadStatus === 200,
+    `status ${uploadStatus}`,
   );
 
   const t0 = Date.now();
@@ -181,8 +211,26 @@ if (catalogueId) {
     true,
   );
   const procBody = (await proc.json()) as {
+    name?: string;
+    width?: number | null;
+    height?: number | null;
+    size?: number;
+    contentType?: string;
     variants?: { key: string; width: number; height: number; size: number }[];
   };
+  // The original's metadata is the process answer's now: presign declared a
+  // length and a type, and only the stored object can say what they are.
+  step(
+    "process measures the stored original (Sharp on the deploy target)",
+    proc.status === 200 &&
+      procBody.width === W &&
+      procBody.height === H &&
+      procBody.size === sample.length &&
+      procBody.contentType === "image/jpeg" &&
+      procBody.name === name,
+    `${procBody.width}x${procBody.height}, ${procBody.size} bytes, ${procBody.name}`,
+  );
+
   const variants = procBody.variants ?? [];
   // The expected set comes from the recipe the encoder reads, so a variant
   // added or renamed in the recipe propagates here instead of stranding the
@@ -208,7 +256,7 @@ if (catalogueId) {
       artworkId,
       title: "Verification Study",
       artistName: "Arcula Verify",
-      photos: [{ entryId, name: "verify-12mp.jpg" }],
+      photos: [{ entryId, name }],
       documents: [],
     },
     true,

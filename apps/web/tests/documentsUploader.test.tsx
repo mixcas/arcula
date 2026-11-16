@@ -21,6 +21,7 @@ import {
   type UseArtworkDocuments,
 } from "@/hooks/useArtworkDocuments";
 import { mediaService } from "@/services/mediaService";
+import { MediaUploadError } from "@/services/uploadError";
 import { MAX_ARTWORK_DOCUMENTS, MAX_DOCUMENT_BYTES } from "@arcula/shared";
 import type { ArtworkDocument } from "@arcula/shared";
 
@@ -158,60 +159,72 @@ const fileInput = (): HTMLInputElement => {
 };
 
 /**
- * Every entry id that passed through the stage mock, in arrival order.
+ * Every entry id that passed through the staging mock, in arrival order.
  *
  * The ids are minted by the hook with `crypto.randomUUID` and its hyphens
  * removed, so a test cannot predict them; capturing them is what makes the
  * discard assertions name the exact object the server is being asked to drop.
+ * The file is kept alongside it because the process call carries only the id —
+ * the mock's answer reconstructs what the server measured from the stored
+ * object, the way the real process call does.
  */
 let stagedDocumentIds: string[];
+let stagedFiles: Map<string, File>;
 
 beforeEach(() => {
   stagedDocumentIds = [];
+  stagedFiles = new Map();
 
-  // A PDF is the one document the stage route answers without dimensions:
-  // nothing to decode, so nulls are the honest shape.
+  // `stageDocument` is presign + the direct PUT: the hook sees the staged
+  // object's proxy path, never the presigned storage URL.
   vi.mocked(mediaService.stageDocument).mockImplementation(
     (_cid, _aid, entryId, file) => {
       stagedDocumentIds.push(entryId);
-      const isImage = file.type !== "application/pdf";
+      stagedFiles.set(entryId, file);
       return Promise.resolve({
         entryId,
-        name: file.name,
-        width: isImage ? 2000 : null,
-        height: isImage ? 1500 : null,
-        size: file.size,
-        contentType: file.type,
         url: `https://media.test/staging-doc/${entryId}/original`,
       });
     },
   );
-  // The two variants a document image actually gets — `square_sm` for the
-  // row thumbnail, `large` for the preview modal. Named urls, not blobs:
-  // there is no object-URL lifecycle left to test against.
+  // Process runs for both kinds now: an image gets the two variants it
+  // actually has — `square_sm` for the row thumbnail, `large` for the preview
+  // modal — and a PDF answers no variants and no dimensions, which is the
+  // server's byte validation rather than a skip.
   vi.mocked(mediaService.processDocument).mockImplementation(
-    (_cid, _aid, entryId) =>
-      Promise.resolve({
+    (_cid, _aid, entryId) => {
+      const file = stagedFiles.get(entryId);
+      const isImage = file?.type !== "application/pdf";
+      return Promise.resolve({
         entryId,
-        variants: [
-          {
-            key: "square_sm",
-            url: `https://media.test/variants-doc/${entryId}/square_sm.webp`,
-            width: 400,
-            height: 400,
-            size: 100,
-            contentType: "image/webp",
-          },
-          {
-            key: "large",
-            url: `https://media.test/variants-doc/${entryId}/large.webp`,
-            width: 1200,
-            height: 800,
-            size: 200,
-            contentType: "image/webp",
-          },
-        ],
-      }),
+        name: file?.name ?? "untitled",
+        width: isImage ? 2000 : null,
+        height: isImage ? 1500 : null,
+        size: file?.size ?? 0,
+        contentType: file?.type ?? "application/pdf",
+        url: `https://media.test/staging-doc/${entryId}/original`,
+        variants: isImage
+          ? [
+              {
+                key: "square_sm",
+                url: `https://media.test/variants-doc/${entryId}/square_sm.webp`,
+                width: 400,
+                height: 400,
+                size: 100,
+                contentType: "image/webp",
+              },
+              {
+                key: "large",
+                url: `https://media.test/variants-doc/${entryId}/large.webp`,
+                width: 1200,
+                height: 800,
+                size: 200,
+                contentType: "image/webp",
+              },
+            ]
+          : [],
+      });
+    },
   );
   vi.mocked(mediaService.discardDocument).mockResolvedValue(undefined);
 });
@@ -282,17 +295,25 @@ describe("DocumentsUploader", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("adds a PDF without asking the server for variants", async () => {
+  it("processes a PDF, which answers no variants", async () => {
     const user = userEvent.setup();
     renderHarness();
 
     await user.upload(fileInput(), pdfFile("provenance.pdf"));
 
     expect(await screen.findByText("provenance.pdf")).toBeInTheDocument();
-    // A PDF has no pixels: the client skips the process call on purpose, and
-    // the row's link points at the staged original's proxy url.
-    expect(mediaService.processDocument).not.toHaveBeenCalled();
+    // Process is the server's only look at the bytes, so a PDF is processed
+    // too — it just has nothing to generate. Skipping it would mean a staged
+    // document whose real type and size were never checked.
+    expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
+    expect(mediaService.processDocument).toHaveBeenCalledWith(
+      CATALOGUE_ID,
+      ARTWORK_ID,
+      stagedDocumentIds[0],
+    );
     expect(mediaService.stageDocument).toHaveBeenCalledTimes(1);
+    // The row's link points at the staged original's proxy url, which the
+    // process answer carries.
     expect(
       screen.getByRole("link", { name: /provenance.pdf/i }),
     ).toHaveAttribute(
@@ -301,7 +322,45 @@ describe("DocumentsUploader", () => {
     );
   });
 
-  it("adds an image and asks the server for its variants", async () => {
+  it("stages the file before asking the server to process it", async () => {
+    // The order is the flow: presign + PUT (one call from the hook's side),
+    // then process. A swapped pair would make every upload fail at process,
+    // which only a real stack would show.
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.upload(fileInput(), jpegFile("scan.jpg"));
+    await screen.findByText("scan.jpg");
+
+    const stagedAt = vi.mocked(mediaService.stageDocument).mock
+      .invocationCallOrder[0];
+    const processedAt = vi.mocked(mediaService.processDocument).mock
+      .invocationCallOrder[0];
+    expect(stagedAt).toBeLessThan(processedAt);
+  });
+
+  it("rejects the file when the direct upload to storage fails", async () => {
+    // The PUT has no API envelope: expired URL, refused headers, a dropped
+    // connection. The person gets a reason, nothing is added, and there is no
+    // object to discard.
+    vi.mocked(mediaService.stageDocument).mockRejectedValue(
+      new MediaUploadError(),
+    );
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.upload(fileInput(), pdfFile("provenance.pdf"));
+
+    expect(
+      await screen.findByText(
+        "provenance.pdf: The file could not be uploaded to storage",
+      ),
+    ).toBeInTheDocument();
+    expect(mediaService.processDocument).not.toHaveBeenCalled();
+    expect(mediaService.discardDocument).not.toHaveBeenCalled();
+  });
+
+  it("adds an image and renders the server's thumbnail for it", async () => {
     const user = userEvent.setup();
     renderHarness();
 
@@ -312,9 +371,9 @@ describe("DocumentsUploader", () => {
 
     expect(await screen.findByText("scan.jpg")).toBeInTheDocument();
     expect(screen.getByText("receipt.pdf")).toBeInTheDocument();
-    // One call, and only for the image's entry — the file is not a second
-    // argument to the same call, and the pdf is not in it at all.
-    expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
+    // One process call per file — both are validated — and the image's entry
+    // id is the one the thumbnail url is built from.
+    expect(mediaService.processDocument).toHaveBeenCalledTimes(2);
     expect(mediaService.processDocument).toHaveBeenCalledWith(
       CATALOGUE_ID,
       ARTWORK_ID,
@@ -484,8 +543,8 @@ describe("addFiles", () => {
 
     // The kind is the one the save's promotion branches on, so the two stay in
     // step without either side inspecting a MIME type. The image carries the
-    // server's dimensions and variants; the file is complete after staging
-    // alone.
+    // server's dimensions and variants; the file is complete after process
+    // answers no variants for it.
     expect(result.added.map((entry) => entry.document.kind)).toEqual([
       "image",
       "file",
@@ -496,11 +555,13 @@ describe("addFiles", () => {
       height: 1500,
     });
     // A file document has no geometry at all: the fields are absent, not
-    // null. (The stage route answers nulls for it, and the entry shape drops
-    // them on the way in.)
+    // null. (Process answers nulls for it, and the entry shape drops them on
+    // the way in.)
     expect("width" in fileEntry.document).toBe(false);
     expect("height" in fileEntry.document).toBe(false);
-    expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
+    // Both files are processed: process is the byte validation, not just the
+    // variant generator.
+    expect(mediaService.processDocument).toHaveBeenCalledTimes(2);
   });
 
   it("refuses a type the allowlist does not admit, without staging", async () => {
@@ -576,13 +637,9 @@ describe("addFiles", () => {
           return Promise.reject(new Error("staging failed"));
         }
         stagedDocumentIds.push(entryId);
+        stagedFiles.set(entryId, file);
         return Promise.resolve({
           entryId,
-          name: file.name,
-          width: null,
-          height: null,
-          size: file.size,
-          contentType: file.type,
           url: `https://media.test/staging-doc/${entryId}/original`,
         });
       },
