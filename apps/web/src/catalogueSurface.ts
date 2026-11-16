@@ -35,8 +35,8 @@ export type CatalogueKindColor = "orange" | "lime" | "indigo";
 /** The three kinds, in the order a selector offers them. */
 export const CATALOGUE_KINDS = [
   "portfolio",
-  "collection",
   "inventory",
+  "collection",
 ] as const satisfies readonly CatalogueKind[];
 
 // Every kind the type knows is in the list above — adding a member to
