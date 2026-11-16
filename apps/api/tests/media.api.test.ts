@@ -27,7 +27,11 @@ import {
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
-import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from "@arcula/shared";
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  STAGED_PUT_SIGNED_HEADERS,
+} from "@arcula/shared";
 import { listObjects, putObject } from "../src/storage";
 import { API, freshUser, json } from "./helpers/api";
 import {
@@ -92,6 +96,20 @@ describe("POST …/photos/stage", () => {
     );
     // The expiry is an instant in the future, not the lifetime.
     expect(new Date(target.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    // The signed set is the contract the bucket's CORS rule must allow: a
+    // header the URL signs but the preflight refuses fails the browser's PUT
+    // before storage is ever reached. `host` is browser-managed, so it is the
+    // one signed header a CORS rule cannot carry. `infra/cdk/tests` pins the
+    // bucket's rule to the same list, from the deployment side, because that
+    // package cannot import this one.
+    const signed =
+      new URL(target.uploadUrl).searchParams
+        .get("X-Amz-SignedHeaders")
+        ?.split(";")
+        .filter((header) => header !== "host")
+        .sort() ?? [];
+    expect(signed).toEqual([...STAGED_PUT_SIGNED_HEADERS].sort());
 
     const put = await putEntry(target, bytes);
     expect(put.status).toBe(200);

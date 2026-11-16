@@ -19,9 +19,11 @@
 // is percent-encoded on the way in and decoded on the way back, and the pair
 // below is the one place that happens — the presign route and the process
 // route cannot disagree about it.
-
-/** The signed metadata header's name, `x-amz-meta-` prefixed by S3's rules. */
-export const STAGED_NAME_HEADER = "x-amz-meta-name";
+//
+// The header's name lives in the shared contract beside the complete signed
+// set (`@arcula/shared`'s `stagedUpload.ts`): the bucket's CORS rule has to
+// allow that same set, and `infra/cdk` is not a workspace member, so the list
+// is declared where both suites can pin it. This module owns the VALUE.
 
 /** The name the form shows and the row records, as a header-safe value. */
 export const encodeStagedName = (name: string): string =>
