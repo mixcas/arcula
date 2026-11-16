@@ -514,20 +514,20 @@ A side panel on a collection's manage page that opens an artwork without leaving
 the list: the full record, with shortcuts to its public page and its Edit form.
 A reading and navigation aid, not a second editor.
 
-### Catalogues
+### Selections
 
-A **Catalogue** is a curated subset of a Collection's artworks, published on its
-own address with its own audience. It would reuse the Collection's model —
+A **Selection** is a curated subset of a Catalogue's artworks, published on its
+own address with its own audience. It would reuse the Catalogue's model —
 Public or Private, an optional password, collaborators — and have its own PDF.
-It selects from the Collection rather than copying or owning the works.
+It selects from the Catalogue rather than copying or owning the works.
 
 - A collector shortlisting works for a gallery considering an exhibition,
   shared as a password-protected link or a PDF.
 - A collector or gallerist taking five works to an art fair, with a public page
   carrying those works' information.
 
-Giving a Catalogue its own public address would make it the first public surface
-besides a Collection, so its access model needs its own decision before
+Giving a Selection its own public address would make it the first public surface
+besides a Catalogue, so its access model needs its own decision before
 implementation.
 
 ### Artwork location
