@@ -136,6 +136,9 @@ const RLS_SQL = readMigration("0006_enable_rls");
 // The committed stamp that retires a whole catalogue.
 const DELETION_SQL = readMigration("0007_collection_deletion_stamp");
 
+// The committed kind: whose art a catalogue holds and why.
+const KIND_SQL = readMigration("0009_catalogue_kind");
+
 describe("the thirteen-table schema", () => {
   it("declares exactly the thirteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
@@ -294,6 +297,22 @@ describe("the thirteen-table schema", () => {
     expect(c.deletedAt.dataType).toBe("date");
     expect(c.deletedAt.notNull).toBe(false);
     expect(c.deletedAt.hasDefault).toBe(false);
+  });
+
+  it("catalogues carries a kind, required and defaulting to collection", () => {
+    const c = cols(catalogues);
+    // Every row that existed before the column was a collector's, so the
+    // constant default is the truth, not a placeholder awaiting a backfill.
+    expect(c.kind.dataType).toBe("string");
+    expect(c.kind.notNull).toBe(true);
+    expect(c.kind.default).toBe("collection");
+  });
+
+  it("catalogues restricts `kind` to portfolio, collection or inventory", () => {
+    expect(checksOf(catalogues)).toContainEqual({
+      name: "collections_kind_check",
+      sql: "\"kind\" in ('portfolio', 'collection', 'inventory')",
+    });
   });
 
   it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
@@ -724,6 +743,26 @@ describe("the committed deletion-stamp migration (as it will actually be applied
     expect(dataWrites(DELETION_SQL)).toEqual([]);
     expect(DELETION_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(DELETION_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed kind migration (as it will actually be applied)", () => {
+  it("adds `kind` required, defaulting to collection, checked to the three kinds", () => {
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD COLUMN "kind" text DEFAULT 'collection' NOT NULL;`,
+    );
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD CONSTRAINT "collections_kind_check" CHECK ("kind" in ('portfolio', 'collection', 'inventory'));`,
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no default to backfill", () => {
+    // The column ships alone, ahead of the code that reads it: every existing
+    // row takes the constant default, so there is nothing to backfill and
+    // nothing to reverse.
+    expect(dataWrites(KIND_SQL)).toEqual([]);
+    expect(KIND_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(KIND_SQL).not.toMatch(/ALTER COLUMN/);
   });
 });
 

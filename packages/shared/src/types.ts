@@ -61,6 +61,12 @@ export type Collection = Catalogue;
 // before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
 
+// What a catalogue is, which decides whose art it holds and why: a Portfolio
+// is an artist's own work, a Collection is what a collector owns, an Inventory
+// is what a gallery represents (ADR-0010). Fixed at creation; every artwork
+// field stays valid on every kind, and the kind only shapes the surface.
+export type CatalogueKind = "portfolio" | "collection" | "inventory";
+
 // What an account is to a catalogue: the one whose `userId` it is, or one of
 // its collaborators. Both read and write everything inside — a collaborator
 // changes every setting, public/private included, and every work. Only access
