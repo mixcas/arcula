@@ -176,4 +176,38 @@ describe("the legacy Collection alias", () => {
     expect(aliased.status).toBe(legacy.status);
     expect(await json(aliased)).toEqual(await json(legacy));
   });
+
+  it("imports through the legacy path and reads the work under /catalogues", async () => {
+    const imported = await req(
+      "POST",
+      `/api/v1/collections/${collectionId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: {
+          rows: [
+            {
+              title: "Imported Under the Legacy Alias",
+              artistName: "A. Artist",
+            },
+          ],
+        },
+      },
+    );
+    expect(imported.status).toBe(200);
+    expect(await json<{ inserted: number }>(imported)).toEqual({
+      inserted: 1,
+      rejected: [],
+    });
+
+    const list = await req(
+      "GET",
+      `/api/v1/catalogues/${collectionId}/artworks`,
+      { cookies: owner.cookies },
+    );
+    expect(list.status).toBe(200);
+    const titles = (await json<{ title: string }[]>(list)).map(
+      (work) => work.title,
+    );
+    expect(titles).toContain("Imported Under the Legacy Alias");
+  });
 });
