@@ -4,10 +4,9 @@
 // single restore — driven in-process with app.request() against the
 // real stack.
 //
-// The beta cap is one catalogue per free account, so the users in this
-// file each get exactly one catalogue through the API; where a test
-// needs a second row it inserts one directly, which keeps the cap test
-// about the route and not the table.
+// The beta cap is ten catalogues per free account. Extra rows a test still
+// needs are inserted directly through drizzle, so each fixture's shape is
+// chosen by the test rather than by the cap — the cap has its own case.
 
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,10 +16,11 @@ import {
   catalogues as cataloguesTable,
   user as userTable,
 } from "@arcula/db";
-import { MINTED_ID_RE } from "@arcula/shared";
+import { CATALOGUE_LIMITS, MINTED_ID_RE } from "@arcula/shared";
 import { canSeeCatalogue, membershipOf } from "../src/access";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { seedCatalogues } from "./helpers/fixtures";
 
 /** The wire timestamp is `{ seconds, nanoseconds }`. */
 function isWireTimestamp(value: unknown): void {
@@ -42,9 +42,9 @@ let protOwner: { cookies: string; userId: string; email: string };
 let protMate: { cookies: string; userId: string };
 let protectedId = "";
 
-// Module-level ids, set by the test that creates them: the cap leaves
-// each user one catalogue, so the later describes reuse what the
-// earlier ones made.
+// Module-level ids, set by the test that creates them: each fixture user
+// creates one catalogue through the API, and the later describes reuse
+// what the earlier ones made.
 let studyWallId = "";
 let sharedBoardId = "";
 let redId = "";
@@ -88,7 +88,7 @@ afterAll(async () => {
 });
 
 describe("POST /catalogues", () => {
-  it("creates with the exact document shape and stops the owner at the cap", async () => {
+  it("creates with the exact document shape", async () => {
     const res = await req("POST", "/api/v1/catalogues", {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Study Wall", description: "" }),
@@ -113,16 +113,42 @@ describe("POST /catalogues", () => {
     expect(body.isPublic).toBe(true);
     isWireTimestamp(body.createdAt);
     isWireTimestamp(body.updatedAt);
-
-    const second = await req("POST", "/api/v1/catalogues", {
-      cookies: owner.cookies,
-      body: JSON.stringify({ name: "Second Wall" }),
-    });
-    expect(second.status).toBe(409);
-    expect((await err(second)).code).toBe("limit-reached");
   });
 
-  it("honours explicit values; a blank name 400s even at the cap", async () => {
+  it("stops an account at the free-tier cap, and validates before it does", async () => {
+    const capped = await freshUser("Cap");
+    // Fill to one below the cap directly: the cap is the route's rule, so
+    // the fixture must not spend a create proving the table works.
+    await seedCatalogues(capped.userId, CATALOGUE_LIMITS.free - 1);
+
+    // The last create the cap allows.
+    const atCap = await req("POST", "/api/v1/catalogues", {
+      cookies: capped.cookies,
+      body: JSON.stringify({ name: "The Cap Wall" }),
+    });
+    expect(atCap.status).toBe(201);
+
+    // Validation runs before the cap check: at the cap the failure is about
+    // the body, not the quota.
+    const blank = await req("POST", "/api/v1/catalogues", {
+      cookies: capped.cookies,
+      body: JSON.stringify({ name: "   " }),
+    });
+    expect(blank.status).toBe(400);
+    const e = await err(blank);
+    expect(e.code).toBe("validation");
+    expect(e.fields?.name).toBeTruthy();
+
+    // One over the cap is refused.
+    const over = await req("POST", "/api/v1/catalogues", {
+      cookies: capped.cookies,
+      body: JSON.stringify({ name: "Over The Cap" }),
+    });
+    expect(over.status).toBe(409);
+    expect((await err(over)).code).toBe("limit-reached");
+  });
+
+  it("honours explicit values", async () => {
     const res = await req("POST", "/api/v1/catalogues", {
       cookies: stranger.cookies,
       body: JSON.stringify({
@@ -135,24 +161,13 @@ describe("POST /catalogues", () => {
     const body = await json<Record<string, unknown>>(res);
     expect(body.description).toBe("About the wall");
     expect(body.isPublic).toBe(false);
-
-    // Validation runs before the cap check: the failure is about the
-    // body, not the quota.
-    const blank = await req("POST", "/api/v1/catalogues", {
-      cookies: stranger.cookies,
-      body: JSON.stringify({ name: "   " }),
-    });
-    expect(blank.status).toBe(400);
-    const e = await err(blank);
-    expect(e.code).toBe("validation");
-    expect(e.fields?.name).toBeTruthy();
   });
 });
 
 describe("GET /catalogues", () => {
   it("lists each caller's own catalogues name-ordered; anon sees only the public, unprotected ones", async () => {
-    // A second, private catalogue the API cap would refuse: inserted
-    // directly so the cap stays a route property, not a table property.
+    // A second, private catalogue inserted directly: this test controls the
+    // list's names and order, and the create route has its own case.
     await db.insert(cataloguesTable).values({
       id: uuid(),
       userId: owner.userId,

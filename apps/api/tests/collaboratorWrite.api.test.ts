@@ -543,8 +543,8 @@ describe("staging as a collaborator", () => {
 
 describe("POST …/maintenance/sweep", () => {
   it("sweeps only the caller's staged objects, and keeps an entry that has a row", async () => {
-    // A catalogue of its own and an owner of its own — the free tier allows
-    // one owned catalogue per account — so the counts below are exact.
+    // A catalogue of its own and an owner of its own, so the counts below are
+    // exact.
     const sweepOwner = await freshUser("WriteSweepOwner");
     const created = await req("POST", "/api/v1/catalogues", {
       cookies: sweepOwner.cookies,

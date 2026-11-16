@@ -239,8 +239,8 @@ describe("GET /catalogues/{cid}/deleted-artworks", () => {
 // restored do not count. Its own catalogue keeps these assertions independent
 // of the single-restore tests below, which mutate the shared one.
 describe("POST /catalogues/{cid}/artworks/bulk-restore", () => {
-  // The free tier owns one catalogue per account, so this suite signs up its
-  // own owner and its own stranger rather than reusing the pair above.
+  // This suite signs up its own owner and its own stranger rather than
+  // reusing the pair above, keeping this describe's rows independent.
   let bulkOwner: { cookies: string; userId: string };
   let bulkStranger: { cookies: string; userId: string };
   let bulkCatalogueId = "";

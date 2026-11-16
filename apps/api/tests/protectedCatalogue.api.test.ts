@@ -197,8 +197,8 @@ beforeAll(async () => {
   draftPhotoUrl = originalUrl(await ownerRead(draftId));
 
   // The two catalogues the isolation and "not unlockable" cases need. Both
-  // written straight through drizzle: the tier cap gives each account one
-  // catalogue, and the cap is not what this file is about.
+  // written straight through drizzle: this file is about password behaviour,
+  // not catalogue creation.
   otherId = await makeCatalogue(owner.userId, {
     isPublic: true,
     name: "Other Protected",

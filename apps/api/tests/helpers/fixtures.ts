@@ -49,6 +49,17 @@ export async function makeCatalogue(
   return id;
 }
 
+/** Insert `count` owned catalogues for `userId`, for a test that needs an
+ *  account at or near its cap without spending API creates on setup. */
+export async function seedCatalogues(
+  userId: string,
+  count: number,
+): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    await makeCatalogue(userId, { name: `Seed ${uuid()}`, isPublic: false });
+  }
+}
+
 export async function makeArtwork(
   userId: string,
   catalogueId: string,

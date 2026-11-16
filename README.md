@@ -59,34 +59,34 @@ is yours to argue with.
 
 Early, and honest about what is missing:
 
-| Area                                        | State                                                        |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| Email/password auth, protected routes       | ✅                                                           |
-| Sign up                                     | ✅                                                           |
-| Sign in / sign out, password reset by email | ✅                                                           |
-| Account profile (name), change password     | ✅                                                           |
-| Create, list, view, rename catalogues       | ✅                                                           |
-| Choose a catalogue's kind at creation       | ✅ Portfolio, Collection or Inventory; fixed afterwards      |
-| Kind-specific field labels                  | ✅ Artist name/Bio, Name/Description, Gallery name/About     |
-| Share a catalogue with collaborators        | ✅                                                           |
-| Catalogues per account                      | Free tier cap: one owned catalogue; shared ones do not count |
-| Public/private flag per catalogue           | ✅                                                           |
-| List a catalogue's artworks                 | ✅                                                           |
-| Search a catalogue                          | ✅                                                           |
-| Artwork list                                | ✅                                                           |
-| Add and edit an artwork                     | ✅                                                           |
-| Published/draft status per artwork          | ✅                                                           |
-| Record a work's availability                | ✅ Portfolio and Inventory only; never a visitor gate        |
-| Public catalogue and single-artwork pages   | ✅                                                           |
-| Catalogue PDF                               | ✅                                                           |
-| Photo uploads                               | ✅                                                           |
-| "Other Documents" uploads (images and PDFs) | ✅                                                           |
-| Soft delete of artworks (in bulk)           | ✅                                                           |
-| Restore a soft-deleted artwork              | ✅                                                           |
-| CSV import of artworks                      | ✅                                                           |
-| Protected catalogues (password on Public)   | ✅                                                           |
-| Delete a catalogue                          | ✅                                                           |
-| Portable data export                        | Not implemented (see the roadmap)                            |
+| Area                                        | State                                                         |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| Email/password auth, protected routes       | ✅                                                            |
+| Sign up                                     | ✅                                                            |
+| Sign in / sign out, password reset by email | ✅                                                            |
+| Account profile (name), change password     | ✅                                                            |
+| Create, list, view, rename catalogues       | ✅                                                            |
+| Choose a catalogue's kind at creation       | ✅ Portfolio, Collection or Inventory; fixed afterwards       |
+| Kind-specific field labels                  | ✅ Artist name/Bio, Name/Description, Gallery name/About      |
+| Share a catalogue with collaborators        | ✅                                                            |
+| Catalogues per account                      | Free tier cap: ten owned catalogues; shared ones do not count |
+| Public/private flag per catalogue           | ✅                                                            |
+| List a catalogue's artworks                 | ✅                                                            |
+| Search a catalogue                          | ✅                                                            |
+| Artwork list                                | ✅                                                            |
+| Add and edit an artwork                     | ✅                                                            |
+| Published/draft status per artwork          | ✅                                                            |
+| Record a work's availability                | ✅ Portfolio and Inventory only; never a visitor gate         |
+| Public catalogue and single-artwork pages   | ✅                                                            |
+| Catalogue PDF                               | ✅                                                            |
+| Photo uploads                               | ✅                                                            |
+| "Other Documents" uploads (images and PDFs) | ✅                                                            |
+| Soft delete of artworks (in bulk)           | ✅                                                            |
+| Restore a soft-deleted artwork              | ✅                                                            |
+| CSV import of artworks                      | ✅                                                            |
+| Protected catalogues (password on Public)   | ✅                                                            |
+| Delete a catalogue                          | ✅                                                            |
+| Portable data export                        | Not implemented (see the roadmap)                             |
 
 ### How access control works
 

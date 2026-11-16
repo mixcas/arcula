@@ -9,10 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ManagePage from "@/components/manage/ManagePage";
 import { catalogueService } from "@/services/catalogueService";
-import type { Catalogue, SessionUserRead } from "@arcula/shared";
+import {
+  CATALOGUE_LIMITS,
+  type Catalogue,
+  type SessionUserRead,
+} from "@arcula/shared";
 
 /**
- * The dashboard's cap reflection: the "N of 1" counter, the
+ * The dashboard's cap reflection: the "N of the cap" counter, the
  * New-catalogue button's link, and its disabled state at the cap.
  *
  * Enforcement is the API's (409 limit-reached — pinned by
@@ -116,6 +120,14 @@ const sharedCatalogue: Catalogue = {
   updatedAt: { seconds: 1, nanoseconds: 0 },
 };
 
+/** `count` distinct owned catalogues, so an at-cap case can fill the cap. */
+const ownedCatalogues = (count: number): Catalogue[] =>
+  Array.from({ length: count }, (_, i) => ({
+    ...catalogue,
+    id: `owned-${i}`,
+    name: `Owned ${i}`,
+  }));
+
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
   const location = useLocation();
@@ -162,7 +174,7 @@ describe("the dashboard's cap reflection", () => {
     renderPage([]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 catalogue/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
     const link = newCatalogueLink();
     expect(link).toHaveAttribute("href", "/manage/catalogue/new");
@@ -176,11 +188,11 @@ describe("the dashboard's cap reflection", () => {
     );
   });
 
-  it("shows 1 of 1 at the cap, and the control is a disabled button that goes nowhere", async () => {
-    renderPage([catalogue]);
+  it("shows the cap at the cap, and the control is a disabled button that goes nowhere", async () => {
+    renderPage(ownedCatalogues(CATALOGUE_LIMITS.free));
 
     await waitFor(() =>
-      expect(screen.getByText(/1 of 1 catalogue/i)).toBeInTheDocument(),
+      expect(screen.getByText(/10 of 10 catalogues/i)).toBeInTheDocument(),
     );
     // The failure this test exists for is a control that looks capped but
     // still navigates to a form the server would refuse: a disabled anchor
@@ -205,27 +217,27 @@ describe("the dashboard's cap reflection", () => {
     renderPage([]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 catalogue/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
     expect(newCatalogueLink()).toHaveAttribute("href", "/manage/catalogue/new");
   });
 
   it("counts owned catalogues only, so a shared row does not cap the account", async () => {
-    // The failure this test exists for: one shared catalogue beside no owned
-    // one counting as "1 of 1" and disabling a create the API would allow.
+    // The failure this test exists for: a shared row counted as owned would
+    // read "1 of 10" here, not "0 of 10".
     renderPage([sharedCatalogue]);
 
     await waitFor(() =>
-      expect(screen.getByText(/0 of 1 catalogue/i)).toBeInTheDocument(),
+      expect(screen.getByText(/0 of 10 catalogues/i)).toBeInTheDocument(),
     );
     expect(newCatalogueLink()).toHaveAttribute("href", "/manage/catalogue/new");
   });
 
   it("caps on the owned count even when shared rows are present", async () => {
-    renderPage([catalogue, sharedCatalogue]);
+    renderPage([...ownedCatalogues(CATALOGUE_LIMITS.free), sharedCatalogue]);
 
     await waitFor(() =>
-      expect(screen.getByText(/1 of 1 catalogue/i)).toBeInTheDocument(),
+      expect(screen.getByText(/10 of 10 catalogues/i)).toBeInTheDocument(),
     );
     expect(newCatalogueButton()).toBeDisabled();
   });

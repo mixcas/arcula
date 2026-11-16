@@ -556,10 +556,11 @@ restated here.
   goal; a test that fails only when we change something is.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 17-step end-to-end
-  pass (health, SPA, sign-up, the `Secure` session cookie, the tier cap, a real
-  12 MP photo through stage → process → save, a visitor read, and the
-  reset-mail path). It takes the URL, not an environment, so it runs against
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 16-step end-to-end
+  pass (health, SPA, sign-up, the `Secure` session cookie, a real 12 MP photo
+  through stage → process → save, a visitor read, and the reset-mail path).
+  The catalogue cap is covered by the API integration suite instead, since
+  reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
   either one by hand. It creates a throwaway `verify-<ts>@example.test` account
   per run, so treat it as a write against the environment. A deploy whose host
   does not resolve yet prints the DNS records and exits successfully instead of

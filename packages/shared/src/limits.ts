@@ -10,12 +10,12 @@ export type CatalogueTier = "free";
 /**
  * Catalogues per account, by tier.
  *
- * The beta cap: one catalogue per free account. The API enforces this on
+ * The beta cap: ten catalogues per free account. The API enforces this on
  * create (409 when reached) and the client reads it to reflect the cap in the
  * UI — one map, imported by both sides, so the two cannot disagree.
  */
 export const CATALOGUE_LIMITS: Record<CatalogueTier, number> = {
-  free: 1,
+  free: 10,
 };
 
 /**

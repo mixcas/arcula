@@ -2,8 +2,8 @@
 // and fixed afterwards. Driven in-process with app.request() against the real
 // stack, where the Zod contract, the insert and the serializer meet.
 //
-// Every user here owns one catalogue at most — the free tier's cap — so each
-// kind gets its own fresh account.
+// Each account here creates one catalogue through the API, so each kind gets
+// its own fresh account.
 
 import { describe, expect, it } from "vitest";
 import { err, freshUser, json, req } from "./helpers/api";

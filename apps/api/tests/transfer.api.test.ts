@@ -21,6 +21,7 @@ import {
   catalogueCollaborators as collaboratorsTable,
   catalogues as cataloguesTable,
 } from "@arcula/db";
+import { CATALOGUE_LIMITS } from "@arcula/shared";
 import type {
   ArtworkRead,
   Catalogue,
@@ -36,6 +37,7 @@ import {
   makeCatalogue,
   makeJpeg,
   processEntry,
+  seedCatalogues,
   stageDocument,
   stagePhoto,
 } from "./helpers/fixtures";
@@ -351,10 +353,10 @@ describe("POST /catalogues/{cid}/transfer", () => {
   });
 
   it("never checks the recipient's tier, and creation stays blocked over the cap", async () => {
-    // A dedicated recipient: it already owns the free tier's one catalogue,
-    // so the transfer is what takes it over the cap.
+    // A dedicated recipient already at the cap before the transfer, so
+    // receiving the catalogue is what takes it over.
     const capped = await freshUser("TransferCapped");
-    await makeCatalogue(capped.userId, { name: "Capped's Own" });
+    await seedCatalogues(capped.userId, CATALOGUE_LIMITS.free);
 
     const { cid } = await sharedCatalogue([capped]);
     const res = await transferAs(cid, owner.cookies, capped.userId);
@@ -363,7 +365,7 @@ describe("POST /catalogues/{cid}/transfer", () => {
       transferred: true,
     });
 
-    // Two owned catalogues now, and the cap still gates creation.
+    // One over the cap now, and the cap still gates creation.
     const dashboard = await json<Catalogue[]>(
       await req("GET", "/api/v1/catalogues", { cookies: capped.cookies }),
     );

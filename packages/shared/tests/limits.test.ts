@@ -3,7 +3,7 @@ import { CATALOGUE_LIMITS, catalogueLimitForTier } from "../src/limits";
 
 /**
  * The cap's number and its fallback, pure (tier 1): the UI reads
- * `catalogueLimitForTier` to render "N of 1" and disable the button, and
+ * `catalogueLimitForTier` to render the counter and disable the button, and
  * the API's create check reads the same function, so a drift between "what
  * the UI offers" and "what the API admits" is a change this test fails.
  */
@@ -20,7 +20,7 @@ describe("catalogueLimitForTier", () => {
     // An unknown tier must fall to `free` — the same fallback the API's
     // create check makes — never to a higher number, which would show a
     // button the server would then refuse, and never to `undefined`, which
-    // would render "undefined of 1" and disable create outright.
+    // would render a blank count and disable create outright.
     expect(catalogueLimitForTier("gold")).toBe(CATALOGUE_LIMITS.free);
     expect(catalogueLimitForTier("")).toBe(CATALOGUE_LIMITS.free);
     expect(catalogueLimitForTier(null)).toBe(CATALOGUE_LIMITS.free);

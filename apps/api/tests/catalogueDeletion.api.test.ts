@@ -29,6 +29,7 @@ import {
   catalogueInvitations as invitationsTable,
   catalogues as cataloguesTable,
 } from "@arcula/db";
+import { CATALOGUE_LIMITS } from "@arcula/shared";
 import type {
   InvitationCreateResponse,
   InvitationInboxEntry,
@@ -47,6 +48,7 @@ import {
   makeInvitation,
   makeJpeg,
   processEntry,
+  seedCatalogues,
   stageDocument,
   stagePhoto,
 } from "./helpers/fixtures";
@@ -182,8 +184,8 @@ async function catalogueWithMedia(name: string): Promise<MediaFixture> {
 }
 
 /** A public catalogue shared with `mate`. Written straight through drizzle:
- *  the tier cap gives each account one created catalogue, and the cap is
- *  the subject of its own case, not of every fixture. */
+ *  fixtures choose their own rows, and the cap is the subject of its own
+ *  case, not of every fixture. */
 async function sharedCatalogue(name: string): Promise<string> {
   const cid = await makeCatalogue(owner.userId, { isPublic: true, name });
   await db
@@ -585,13 +587,17 @@ describe("DELETE /catalogues/{cid}", () => {
 
   it("frees the tier slot immediately, so the capped account can create again", async () => {
     const capped = await freshUser("DeleteCapped");
+    // Fill to one below the cap directly: the slot is what this test is
+    // about, not the cap's number.
+    await seedCatalogues(capped.userId, CATALOGUE_LIMITS.free - 1);
     const create = (name: string) =>
       req("POST", "/api/v1/catalogues", {
         cookies: capped.cookies,
         body: { name },
       });
 
-    const first = await create("The Only Wall");
+    // The last create the cap allows.
+    const first = await create("The Cap Wall");
     expect(first.status).toBe(201);
     const firstId = (await json<{ id: string }>(first)).id;
 
@@ -611,13 +617,16 @@ describe("DELETE /catalogues/{cid}", () => {
     expect(created.status).toBe(201);
     const createdId = (await json<{ id: string }>(created)).id;
 
-    // The dashboard reads the same filtered list: one live owned catalogue,
-    // and the deleted one is not it.
+    // The dashboard reads the same filtered list: the freed slot took the
+    // new catalogue, and the deleted one is not it.
     const dashboard = await json<{ id: string; role: string }[]>(
       await req("GET", "/api/v1/catalogues", { cookies: capped.cookies }),
     );
-    expect(dashboard.map((row) => row.id)).toEqual([createdId]);
-    expect(dashboard[0].role).toBe("owner");
+    const ids = dashboard.map((row) => row.id);
+    expect(ids).toHaveLength(CATALOGUE_LIMITS.free);
+    expect(ids).toContain(createdId);
+    expect(ids).not.toContain(firstId);
+    expect(dashboard.every((row) => row.role === "owner")).toBe(true);
   });
 
   it("ends the unlock route and closes the Access grants", async () => {

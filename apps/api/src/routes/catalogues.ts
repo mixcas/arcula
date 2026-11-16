@@ -197,8 +197,9 @@ catalogueRoutes.get("/catalogues", async (c) => {
   );
 });
 
-// POST /catalogues — the cap check comes FIRST: the count is over the
-// caller's own catalogues, the limit is read off the caller's tier.
+// POST /catalogues — the body validates first, then the cap is checked
+// before the row is written: the count is over the caller's own catalogues,
+// the limit is read off the caller's tier.
 catalogueRoutes.post("/catalogues", requireSession, async (c) => {
   const user = c.get("user");
   const payload: CatalogueCreatePayload = await parseBody(

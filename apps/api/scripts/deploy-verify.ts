@@ -3,10 +3,11 @@
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
 // link + cache headers), sign-up (and that its cookie is `Secure`), /me,
-// the duplicate sign-up (the 422 over the gateway), create-catalogue,
-// the CAP (409 limit-reached on the second), a real 12 MP photo through
-// stage → process → save (Sharp + S3 on the deploy target), a visitor
-// read, and a reset request (the Resend call path). One account is
+// the duplicate sign-up (the 422 over the gateway), create-catalogue, a
+// real 12 MP photo through stage → process → save (Sharp + S3 on the
+// deploy target), a visitor read, and a reset request (the Resend call
+// path). The catalogue cap is covered by the API integration suite, not
+// here: reaching it would mean ten creates per run. One account is
 // created per run under verify-<ts>@example.test; nothing is printed that
 // is a credential. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
@@ -122,21 +123,13 @@ const post = (path: string, body: unknown, authed = false) =>
   step("/me", res.status === 200 && body.email === email, `tier: ${body.tier}`);
 }
 
-// 6. Create a catalogue, then hit the cap.
+// 6. Create a catalogue.
 let catalogueId: string | null;
 {
   const res = await post("/api/v1/catalogues", { name: `Verify ${ts}` }, true);
   const body = (await res.json()) as { id?: string };
   catalogueId = body.id ?? null;
   step("create catalogue", res.status === 201 && catalogueId !== null);
-
-  const cap = await post("/api/v1/catalogues", { name: "Verify cap" }, true);
-  const capBody = (await cap.json()) as { error?: { code?: string } };
-  step(
-    "cap: the second catalogue is 409 limit-reached",
-    cap.status === 409 && capBody.error?.code === "limit-reached",
-    `status ${cap.status}`,
-  );
 }
 
 // 7. A real 12 MP photo through stage → process → save. The process

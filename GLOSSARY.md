@@ -294,5 +294,5 @@ owns, not those shared with it.
 _Avoid_: Plan, subscription, level
 
 **Free tier**:
-The tier every account starts on: the one that allows a single owned Catalogue.
+The tier every account starts on: the one that allows ten owned Catalogues.
 _Avoid_: Basic plan, default plan

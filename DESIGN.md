@@ -22,7 +22,7 @@ implementation-ready contracts for individual features are in `docs/specs/`.
 ## What the product is
 
 A catalogue manager for independent collectors, artists and galleries.
-Accounts sign themselves up, own a catalogue (one on the free tier), invite
+Accounts sign themselves up, own catalogues (ten on the free tier), invite
 collaborators by email, and record the artworks in it: title, artist, and the
 descriptive fields a real catalogue needs — with photos and other documents
 attached. A catalogue can be shared with collaborators, who edit it alongside
@@ -634,7 +634,7 @@ reflect the cap in the UI. The cap counts owned catalogues that are **live**;
 collaborations do not count, a transfer may take the recipient over the cap
 without being refused, and a deleted catalogue frees its slot immediately
 ([ADR-0008](docs/adr/0008-a-collection-is-deleted-by-its-owner.md)). The free
-tier is one owned catalogue.
+tier is ten owned catalogues.
 
 ## What is not built
 
