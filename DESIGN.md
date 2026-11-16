@@ -381,8 +381,9 @@ An artwork save carries `availability` like any other optional field: create
 writes the value it names and null when it names none; PATCH sets a value,
 clears it with `null`, and leaves the column alone when the key is absent. The
 API never checks it against the catalogue's kind — the kind shapes the form,
-not the schema — so a Collection's work may carry a state and keeps it. The
-serializer always emits the key, null included, and no route gates on it.
+not the schema — so a Collection's work may carry a state and keeps it. A
+member read always emits the key, null included; a visitor's document does not
+carry it at all, and no route gates on it.
 
 Sharing is built. The owner creates an invitation; the mail is the only place
 the raw token exists, and the invited account previews, accepts or declines it.
@@ -535,28 +536,34 @@ offering decline only — acceptance is the mailed link, and the card says so.
 
 One pure module answers what a kind means for the surface.
 `src/catalogueSurface.ts` returns, for a kind, the kind's own label, the labels
-of `name` and `description`, whether availability is in play, and the artwork
-form's fields with their `visible` and `required` rules. v1 shows every
-existing artwork field on every kind and requires only `title` and
-`artistName`; only the words and the availability axis differ, so a later
-per-kind hiding is a data change in that one module. The create form offers a
-**Kind** selector defaulting to Collection and asks its two fields with the
+of `name` and `description`, the market states that kind offers, and the
+artwork form's field table with `visible` and `required` rules. The table is
+v1's whole rule — every existing artwork field visible on every kind, only
+`title` and `artistName` required — and it is the data a later per-kind hiding
+will read; no v1 screen consumes the rules yet. What screens do read is the
+labels, the availability values and `availabilityFor`, the one default that
+starts a surfaced work at `available` and hands a Collection nothing. The
+create form offers a **Kind** selector defaulting to Collection and asks its
+two fields with the
 surface's labels (Artist name/Bio, Name/Description, Gallery name/About). The
 General tab relabels from the catalogue's stored kind and shows it as a fixed
 badge, so what the catalogue is stays clear after creation; the dashboard
 badges every row with its kind. Nothing writes the kind after creation.
 
-Availability is the one artwork field the kind gates. On a Portfolio and an
-Inventory the artwork form shows a **Select** beside Status — Available,
-Reserved, Sold, On consignment — and a work with no stored state starts
-Available; a stored value is shown as it is and never overwritten by opening
-the form. A Collection's form renders nothing for it and sends no key, so its
-works keep a null. The manage list and the grid badge a work's availability
-beside its Draft badge on the two kinds only: the page derives one
-`showAvailability` from the catalogue's kind and passes it down, so a value a
-Collection's work happens to carry is never shown. The public views render none
-of it — availability is a member-facing market fact, never a second gate, so a
-sold published work stays visible to a visitor.
+Availability is the one artwork field the kind gates. On a Portfolio the
+artwork form offers Available, Reserved and Sold beside Status — a Portfolio
+sells the artist's own work, so it never offers on-consignment — and an
+Inventory offers those three plus On consignment, for work it represents but
+does not own. A work with no stored state starts Available; a stored value is
+shown as it is and never overwritten by opening the form. A Collection's form
+renders nothing for it and sends no key, so its works keep a null. The manage
+list, the grid and the Deleted view badge a work's availability beside its
+Draft badge on the two kinds only: the page derives one `showAvailability` from
+the catalogue's kind and passes it down, so a value a Collection's work happens
+to carry is never shown. The public views render none of it — availability is a
+member-facing market fact, never a second gate, so a sold published work stays
+visible to a visitor and the API leaves the key off a visitor's document
+altogether.
 
 The catalogue page's search is address state, not component state: `q` in the
 URL is the source of truth. The query is written as the collector types,

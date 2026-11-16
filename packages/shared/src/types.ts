@@ -115,8 +115,9 @@ export interface Artwork {
   status?: ArtworkStatus;
   // A member-facing market state on a Portfolio or an Inventory. Null (or
   // absent on an old document) means the work carries none — every Collection
-  // work. Never a second gate: a published work stays visible whatever this
-  // says.
+  // work. The key is emitted on a member read only, so a visitor's document
+  // never carries it. Never a second gate: a published work stays visible
+  // whatever this says.
   availability?: ArtworkAvailability | null;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the

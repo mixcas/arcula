@@ -32,10 +32,15 @@ import type {
   ArtworkPayload,
 } from "@arcula/shared";
 
-/** The four states, in the surface's order, as the Select's options. */
-const AVAILABILITY_OPTIONS = (
-  Object.keys(ARTWORK_AVAILABILITY_LABELS) as ArtworkAvailability[]
-).map((value) => ({ value, label: ARTWORK_AVAILABILITY_LABELS[value] }));
+/** The states this form offers, in the surface's order, as the Select's
+ *  options. The surface decides the list — a Portfolio has no
+ *  on-consignment, a Collection has none at all — and the labels are the one
+ *  place the words live. */
+const availabilityOptions = (values: readonly ArtworkAvailability[]) =>
+  values.map((value) => ({
+    value,
+    label: ARTWORK_AVAILABILITY_LABELS[value],
+  }));
 
 interface ArtworkFieldsProps {
   /** The page's own form instance — the fields read and write through it. */
@@ -45,12 +50,12 @@ interface ArtworkFieldsProps {
   /** The caller's Artist Name suggestions, fetched once by the page. */
   artistNames: UseArtistNames;
   /**
-   * Whether this catalogue's kind carries a work's market state. A Portfolio
-   * and an Inventory do; a Collection does not, and its form renders nothing
-   * (and saves nothing) for it. The page derives this from the catalogue's
-   * kind through `catalogueSurface`.
+   * The market states this catalogue's kind offers, in the surface's order.
+   * Empty (the default) means the kind carries none — a Collection — so the
+   * form renders nothing (and saves nothing) for it. The page derives this
+   * from the catalogue's kind through `catalogueSurface`.
    */
-  availabilityInPlay?: boolean;
+  availabilityValues?: readonly ArtworkAvailability[];
   /**
    * Hide the two uploaders. The Edit page sets this while the work is deleted:
    * staging is a server write, and media staged for a work whose Save is shut
@@ -66,7 +71,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   photos,
   documents,
   artistNames,
-  availabilityInPlay = false,
+  availabilityValues = [],
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
@@ -222,12 +227,12 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         is visible only to you.
       </Text>
 
-      {availabilityInPlay ? (
+      {availabilityValues.length > 0 ? (
         <>
           <Select
             key={form.key("availability")}
             label="Availability"
-            data={AVAILABILITY_OPTIONS}
+            data={availabilityOptions(availabilityValues)}
             allowDeselect={false}
             mb={6}
             {...form.getInputProps("availability")}

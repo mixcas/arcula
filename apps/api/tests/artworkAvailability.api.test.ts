@@ -1,7 +1,7 @@
-// A work's market state: the save routes record it, the serializer carries it,
-// and it is never a gate. The kind decides only whether the form surfaces the
-// field (ADR-0010); the API accepts availability on every kind and validates
-// it against nothing but the four-word enum.
+// A work's market state: the save routes record it, a member read carries it,
+// a visitor read does not, and it is never a gate. The kind decides only
+// whether the form surfaces the field (ADR-0010); the API accepts availability
+// on every kind and validates it against nothing but the four-word enum.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ArtworkRead } from "@arcula/shared";
@@ -106,7 +106,7 @@ describe.each([
     expect(patched.status).toBe(200);
     expect((await json<ArtworkRead>(patched)).availability).toBe("sold");
 
-    const read = await getArtwork(cid, aid);
+    const read = await getArtwork(cid, aid, owner.cookies);
     expect(read.status).toBe(200);
     expect((await json<ArtworkRead>(read)).availability).toBe("sold");
   });
@@ -123,7 +123,7 @@ describe("a Collection's work", () => {
     const body = await json<ArtworkRead>(created);
     expect(body.availability).toBeNull();
 
-    const read = await getArtwork(collection, body.id);
+    const read = await getArtwork(collection, body.id, owner.cookies);
     expect((await json<ArtworkRead>(read)).availability).toBeNull();
   });
 
@@ -156,7 +156,7 @@ describe("PATCH and the three states of a market state", () => {
       "on-consignment",
     );
 
-    const read = await getArtwork(inventory, aid);
+    const read = await getArtwork(inventory, aid, owner.cookies);
     expect((await json<ArtworkRead>(read)).availability).toBe("on-consignment");
   });
 
@@ -177,13 +177,13 @@ describe("PATCH and the three states of a market state", () => {
     expect(patched.status).toBe(200);
     expect((await json<ArtworkRead>(patched)).availability).toBeNull();
 
-    const read = await getArtwork(inventory, aid);
+    const read = await getArtwork(inventory, aid, owner.cookies);
     expect((await json<ArtworkRead>(read)).availability).toBeNull();
   });
 });
 
 describe("a visitor and a work's market state", () => {
-  it("still sees a published sold work, on the read and on the list", async () => {
+  it("sees the published work but not its member-facing market state", async () => {
     const aid = uuid();
     const created = await createArtwork(portfolio, {
       artworkId: aid,
@@ -193,16 +193,28 @@ describe("a visitor and a work's market state", () => {
     });
     expect(created.status).toBe(201);
 
-    // No session: availability is a member-facing fact, never a second gate.
+    // No session: the work is still visible — availability is a member-facing
+    // fact, never a second gate — but the document does not carry the key.
     const read = await getArtwork(portfolio, aid);
     expect(read.status).toBe(200);
-    expect((await json<ArtworkRead>(read)).availability).toBe("sold");
+    expect(await json<ArtworkRead>(read)).not.toHaveProperty("availability");
 
     const list = await listArtworks(portfolio);
     expect(list.status).toBe(200);
     const rows = await json<ArtworkRead[]>(list);
     const row = rows.find((entry) => entry.id === aid);
-    expect(row?.availability).toBe("sold");
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("availability");
+
+    // The member read still carries it, and the row still stores it.
+    const memberRead = await getArtwork(portfolio, aid, owner.cookies);
+    expect((await json<ArtworkRead>(memberRead)).availability).toBe("sold");
+    const memberRows = await json<ArtworkRead[]>(
+      await listArtworks(portfolio, owner.cookies),
+    );
+    expect(memberRows.find((entry) => entry.id === aid)?.availability).toBe(
+      "sold",
+    );
   });
 
   it("still refuses a draft, whatever its availability", async () => {

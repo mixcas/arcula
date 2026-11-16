@@ -21,6 +21,11 @@
 // answers `not-found` for every refusal (a Private Catalogue included) so the
 // refusal discloses nothing.
 //
+// Each document is serialized for the viewer's audience: a member read
+// carries a work's `availability`, a visitor's does not. It is a member-facing
+// market fact and never a gate, so a visitor still sees a published work that
+// happens to be sold.
+//
 // No transaction spans the reads: a work or child added or removed between
 // them is a torn read the product tolerates, and no caller may assume a
 // snapshot. Ordering is part of the document: the live list is creation time
@@ -54,7 +59,7 @@ import {
   searchQueryOverflow,
   type SearchQueryOverflow,
 } from "@arcula/shared";
-import { canSeeArtwork, canSeeCatalogue, isMember } from "./access";
+import { audienceOf, canSeeArtwork, canSeeCatalogue, isMember } from "./access";
 import {
   loadArtworkInCatalogue,
   loadCatalogue,
@@ -194,6 +199,7 @@ export async function readArtwork(
     artwork: serializeArtwork(
       { artwork, ...children },
       mediaNamespaceOf(catalogue),
+      audienceOf(membership),
     ),
   };
 }
@@ -312,6 +318,7 @@ async function readArtworkListInMode(
           ...(grouped.get(work.id) ?? noChildren()),
         },
         mediaNamespaceOf(catalogue),
+        audienceOf(member),
       ),
     ),
   };

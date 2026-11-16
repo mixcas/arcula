@@ -4,17 +4,25 @@
  * One module answers the questions a screen would otherwise answer inline:
  * what to call the catalogue's kind, what its two existing fields mean
  * (`name` names whose art it is, `description` says what it is), whether a
- * work carries an availability at all, and which artwork fields the form
- * shows and requires.
+ * work carries an availability at all (and which states that kind's form
+ * offers), and the v1 artwork field table.
  *
- * It is data, not components: the create form, the settings General tab and
- * the dashboard read it, and the artwork form follows it in #252. A later
- * per-kind field-hiding is a change to `ARTWORK_FIELDS` here, not a branch in
- * every screen.
+ * It carries the v1 field table whole — every artwork field visible, only
+ * `title` and `artistName` required — as the data a later per-kind hiding
+ * would read. No v1 screen reads `visible`/`required` yet: the artwork form
+ * renders every field it always has, so a per-kind hiding is a change to
+ * `ARTWORK_FIELDS` here plus the one screen that consumes it, not a branch in
+ * every screen. What v1 screens do read is the labels and the availability
+ * axis: the create form, the settings General tab and the dashboard use the
+ * words, the artwork form offers the availability values, and the manage views
+ * read whether availability is in play at all.
  */
 
-import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
-import type { ArtworkFormValues } from "@arcula/shared";
+import type {
+  ArtworkAvailability,
+  ArtworkFormValues,
+  CatalogueKind,
+} from "@arcula/shared";
 
 /** The three kinds, in the order a selector offers them. */
 export const CATALOGUE_KINDS = [
@@ -59,8 +67,13 @@ export interface CatalogueSurface {
   readonly nameLabel: string;
   /** What the catalogue's `description` asks for on this kind. */
   readonly descriptionLabel: string;
-  /** Whether a work in this kind carries a market state. */
+  /** Whether a work in this kind carries a market state. Derived from
+   *  `availabilityValues`, so the two cannot disagree. */
   readonly availabilityInPlay: boolean;
+  /** The market states this kind's form offers, in order; empty for a kind
+   *  with no market state. The API accepts all four on every kind — this is a
+   *  presentation rule, not a validation one. */
+  readonly availabilityValues: readonly ArtworkAvailability[];
   /** The artwork form's fields, in form order, with their v1 rules. */
   readonly artworkFields: readonly ArtworkFieldSurface[];
 }
@@ -108,32 +121,56 @@ export const ARTWORK_AVAILABILITY_LABELS: Record<ArtworkAvailability, string> =
     "on-consignment": "On consignment",
   };
 
-/** The words and the availability axis, per kind. */
+/** The words and the market states, per kind. ADR-0010: a Portfolio sells the
+ *  artist's own work, an Inventory sells what a gallery represents — including
+ *  work it holds on consignment — and a Collection records what the collector
+ *  owns, so it has no market state at all. */
 const SURFACES: Record<
   CatalogueKind,
-  Omit<CatalogueSurface, "kind" | "artworkFields">
+  Omit<CatalogueSurface, "kind" | "availabilityInPlay" | "artworkFields">
 > = {
   portfolio: {
     kindLabel: "Portfolio",
     nameLabel: "Artist name",
     descriptionLabel: "Bio",
-    availabilityInPlay: true,
+    availabilityValues: ["available", "reserved", "sold"],
   },
   collection: {
     kindLabel: "Collection",
     nameLabel: "Name",
     descriptionLabel: "Description",
-    availabilityInPlay: false,
+    availabilityValues: [],
   },
   inventory: {
     kindLabel: "Inventory",
     nameLabel: "Gallery name",
     descriptionLabel: "About",
-    availabilityInPlay: true,
+    availabilityValues: ["available", "reserved", "sold", "on-consignment"],
   },
 };
 
 /** Everything the surface derives from one kind. */
 export function catalogueSurface(kind: CatalogueKind): CatalogueSurface {
-  return { kind, ...SURFACES[kind], artworkFields: ARTWORK_FIELDS };
+  const surface = SURFACES[kind];
+  return {
+    kind,
+    ...surface,
+    availabilityInPlay: surface.availabilityValues.length > 0,
+    artworkFields: ARTWORK_FIELDS,
+  };
+}
+
+/**
+ * The market state a form starts a work with: the stored one when there is
+ * one, `available` on a kind that carries a state, and `null` on a kind that
+ * does not. Shared by the Add and Edit pages so neither invents its own
+ * default — and so a Collection can never be handed a value it does not show.
+ */
+export function availabilityFor(
+  kind: CatalogueKind,
+  stored: ArtworkAvailability | null | undefined,
+): ArtworkAvailability | null {
+  const surface = catalogueSurface(kind);
+  if (surface.availabilityValues.length === 0) return null;
+  return stored ?? "available";
 }

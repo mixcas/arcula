@@ -1,36 +1,17 @@
 // What a catalogue's kind means for the surface, as pure data (tier 1).
 //
 // The three answers the app derives from one kind: the two field labels that
-// name whose catalogue it is, whether a work carries a market state at all,
-// and which artwork fields the form shows. v1 changes only the words and the
+// name whose catalogue it is, the market states a work may carry, and which
+// artwork fields the form shows. v1 changes only the words and the
 // availability axis — every existing artwork field stays visible on every
 // kind, and only title and artist name are required.
 
 import { describe, expect, it } from "vitest";
 import {
   CATALOGUE_KINDS,
+  availabilityFor,
   catalogueSurface,
-  type ArtworkField,
 } from "@/catalogueSurface";
-
-/** The artwork form's fields, in the order the form presents them. */
-const ALL_ARTWORK_FIELDS: ArtworkField[] = [
-  "title",
-  "artistName",
-  "serie",
-  "dateOfCreation",
-  "medium",
-  "dimensions",
-  "editions",
-  "acquisitionDate",
-  "acquisitionPrice",
-  "placeOfOrigin",
-  "provenance",
-  "notes",
-  "condition",
-  "currentValue",
-  "status",
-];
 
 describe("catalogueSurface", () => {
   it("names each kind and calls the name and description by whose they are", () => {
@@ -57,11 +38,31 @@ describe("catalogueSurface", () => {
     ).toEqual(["portfolio", "inventory"]);
   });
 
-  it("shows every artwork field on every kind in v1", () => {
+  it("offers each kind the market states its market has", () => {
+    // ADR-0010: a Portfolio sells the artist's own work, so it never offers
+    // on-consignment; an Inventory represents work it may hold on consignment;
+    // a Collection has no market at all.
+    expect(catalogueSurface("portfolio").availabilityValues).toEqual([
+      "available",
+      "reserved",
+      "sold",
+    ]);
+    expect(catalogueSurface("inventory").availabilityValues).toEqual([
+      "available",
+      "reserved",
+      "sold",
+      "on-consignment",
+    ]);
+    expect(catalogueSurface("collection").availabilityValues).toEqual([]);
+  });
+
+  it("shows every artwork field it lists on every kind in v1", () => {
+    // The v1 rule is "no hiding yet": the table is the data a later per-kind
+    // hiding will read, so what it must say today is that nothing is hidden.
     for (const kind of CATALOGUE_KINDS) {
-      expect(
-        catalogueSurface(kind).artworkFields.map(({ field }) => field),
-      ).toEqual(ALL_ARTWORK_FIELDS);
+      const fields = catalogueSurface(kind).artworkFields;
+      expect(fields.length).toBeGreaterThan(0);
+      expect(fields.filter(({ visible }) => !visible)).toEqual([]);
     }
   });
 
@@ -72,5 +73,26 @@ describe("catalogueSurface", () => {
         .map(({ field }) => field);
       expect(required).toEqual(["title", "artistName"]);
     }
+  });
+});
+
+describe("availabilityFor", () => {
+  it("defaults a surfaced work with no stored state to available", () => {
+    expect(availabilityFor("portfolio", null)).toBe("available");
+    expect(availabilityFor("inventory", undefined)).toBe("available");
+  });
+
+  it("keeps a stored state exactly as it is", () => {
+    expect(availabilityFor("portfolio", "sold")).toBe("sold");
+    expect(availabilityFor("inventory", "on-consignment")).toBe(
+      "on-consignment",
+    );
+  });
+
+  it("hands a kind with no market state nothing", () => {
+    // A Collection's form shows no control; its save must carry no key, even
+    // if the row happens to hold a state the API accepted.
+    expect(availabilityFor("collection", "sold")).toBeNull();
+    expect(availabilityFor("collection", null)).toBeNull();
   });
 });

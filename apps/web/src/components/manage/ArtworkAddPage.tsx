@@ -9,7 +9,7 @@ import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
-import { catalogueSurface } from "@/catalogueSurface";
+import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
 import { withoutAvailability } from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
@@ -82,14 +82,16 @@ const ArtworkAddPage: React.FC = () => {
   const artistNames = useArtistNames();
 
   // The catalogue's kind is what decides whether this work carries a market
-  // state at all. The page loads it before showing the form, so the control is
-  // either present from the first paint or absent — never a flicker.
+  // state at all, and which states the form offers. The page loads it before
+  // showing the form, so the control is either present from the first paint or
+  // absent — never a flicker.
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const availabilityInPlay = catalogue
-    ? catalogueSurface(catalogue.kind).availabilityInPlay
-    : false;
+  const availabilityValues = catalogue
+    ? catalogueSurface(catalogue.kind).availabilityValues
+    : [];
+  const availabilityInPlay = availabilityValues.length > 0;
   // Destructured so the effect depends on the stable callback rather than on
   // the `form` object, which is rebuilt every render.
   const { initialize } = form;
@@ -105,11 +107,13 @@ const ArtworkAddPage: React.FC = () => {
           return;
         }
         setCatalogue(fetched);
-        // A newly surfaced work starts Available: on the two kinds that sell
+        // A newly surfaced work starts Available: on the kinds that sell
         // work, a work with no market state is the exception, not the default.
-        // Edits never come through here — this form is the empty one.
-        if (catalogueSurface(fetched.kind).availabilityInPlay) {
-          initialize({ ...EMPTY_ARTWORK_FORM, availability: "available" });
+        // A kind with no market state is handed nothing. Edits never come
+        // through here — this form is the empty one.
+        const availability = availabilityFor(fetched.kind, null);
+        if (availability !== null) {
+          initialize({ ...EMPTY_ARTWORK_FORM, availability });
         }
       } catch (err) {
         console.error("Error fetching catalogue:", err);
@@ -196,7 +200,7 @@ const ArtworkAddPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
-          availabilityInPlay={availabilityInPlay}
+          availabilityValues={availabilityValues}
         />
 
         {error ? (
