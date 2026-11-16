@@ -2,7 +2,7 @@
 // documents — driven in-process with app.request() against the real
 // stack (real Postgres rows, real S3 objects, real Sharp).
 //
-// Collections and artworks are inserted directly through drizzle: the
+// Catalogues and artworks are inserted directly through drizzle: the
 // resource routes that create them have their own suites, and this suite
 // is about the staging contract.
 
@@ -22,7 +22,7 @@ import { API, ORIGIN, freshUser, json } from "./helpers/api";
 import {
   discardEntry,
   makeArtwork,
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageDocument,
@@ -43,10 +43,10 @@ describe("POST …/photos/stage", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
     stranger = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
@@ -148,7 +148,7 @@ describe("POST …/photos/stage", () => {
       form.append("entryId", entryId);
       form.append("file", new File([bytes], "x.jpg", { type: "image/jpeg" }));
       const res = await app.request(
-        `${API}/api/v1/collections/${cid}/artworks/${aid}/photos/stage`,
+        `${API}/api/v1/catalogues/${cid}/artworks/${aid}/photos/stage`,
         {
           method: "POST",
           headers: { Cookie: owner.cookies, Origin: ORIGIN },
@@ -162,7 +162,7 @@ describe("POST …/photos/stage", () => {
   it("requires a session, and refuses a non-owner", async () => {
     const bytes = await makeJpeg(10, 10);
     const anon = await app.request(
-      `${API}/api/v1/collections/${cid}/artworks/${aid}/photos/stage`,
+      `${API}/api/v1/catalogues/${cid}/artworks/${aid}/photos/stage`,
       { method: "POST", headers: { Origin: ORIGIN }, body: new FormData() },
     );
     expect(anon.status).toBe(401);
@@ -183,22 +183,22 @@ describe("POST …/photos/stage", () => {
     ).toBe("forbidden");
   });
 
-  it("404s an unknown collection; an unknown artwork id still stages", async () => {
+  it("404s an unknown catalogue; an unknown artwork id still stages", async () => {
     const bytes = await makeJpeg(10, 10);
     const file = new File([bytes], "x.jpg", { type: "image/jpeg" });
-    const badCollection = await stagePhoto(
+    const badCatalogue = await stagePhoto(
       owner.cookies,
       "nope",
       aid,
       "e",
       file,
     );
-    expect(badCollection.status).toBe(404);
+    expect(badCatalogue.status).toBe(404);
 
     // Staging does not require the artwork row: the Add flow mints the
     // artwork id and creates the row at save. The artwork segment only has
     // to be id-shaped — its existence is the save route's check.
-    const otherCid = await makeCollection(owner.userId);
+    const otherCid = await makeCatalogue(owner.userId);
     const unknownArtwork = await stagePhoto(
       owner.cookies,
       otherCid,
@@ -220,9 +220,9 @@ describe("POST …/documents/stage", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
@@ -321,9 +321,9 @@ describe("POST …/photos/process", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
@@ -448,9 +448,9 @@ describe("POST …/documents/process", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
@@ -507,9 +507,9 @@ describe("DELETE …/{population}/{entryId}", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
@@ -585,9 +585,9 @@ describe("re-staging replaces", () => {
   let cid: string;
   let aid: string;
 
-  it("sets up an owned collection and artwork", async () => {
+  it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
-    cid = await makeCollection(owner.userId);
+    cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 

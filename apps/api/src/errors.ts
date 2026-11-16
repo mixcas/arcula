@@ -29,7 +29,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   validation: 400,
   unauthorized: 401,
   forbidden: 403,
-  // A Protected collection a non-member holds no grant for. Distinct from
+  // A Protected catalogue a non-member holds no grant for. Distinct from
   // `forbidden` on purpose: it is not a refusal but a challenge, and the lock
   // screen it opens is the only thing that can pass it (ADR-0005).
   "password-required": 403,
@@ -37,7 +37,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   // reason: the prompt has to be able to say "that is not it".
   "invalid-password": 403,
   // An unlock attempt refused unread, because this address has spent the
-  // window's failures on this collection. The window, never the countdown —
+  // window's failures on this catalogue. The window, never the countdown —
   // see the unlock route.
   "too-many-attempts": 429,
   "not-found": 404,

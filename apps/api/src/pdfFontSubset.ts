@@ -1,4 +1,4 @@
-// The Collection PDF's fallback face, subset on demand.
+// The Catalogue PDF's fallback face, subset on demand.
 //
 // Darker Grotesque is Latin-only, and the PDF renderer embeds its own font
 // data, so the browser's fallback never runs: a glyph the brand face lacks

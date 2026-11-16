@@ -1,6 +1,6 @@
 // Pure: the invitation mail. These read the message an invitee receives —
 // subject, both parts, the call to action and the footer reason — with the
-// names of the person and the collection as the user-controlled facts they
+// names of the person and the catalogue as the user-controlled facts they
 // are. The composer is the seam: the route supplies facts, never copy.
 
 import { describe, expect, it } from "vitest";
@@ -13,11 +13,11 @@ const INVITE_URL = `${ORIGIN}/invite/token-123`;
 const DAYS = Math.round(INVITATION_TTL_MS / (24 * 60 * 60 * 1000));
 
 describe("invitation mail", () => {
-  it("names the inviter and the collection and carries the expiry in both parts", () => {
+  it("names the inviter and the catalogue and carries the expiry in both parts", () => {
     const mail = invitationMail({
       to: "ada@example.test",
       inviterName: "Carlos",
-      collectionName: "Summer in Lisbon",
+      catalogueName: "Summer in Lisbon",
       url: INVITE_URL,
       hasReplyPath: true,
     });
@@ -41,11 +41,11 @@ describe("invitation mail", () => {
 
   it("escapes hostile names in the HTML and keeps them whole in the text", () => {
     const inviterName = `Carlos <script>alert("x & y")</script>`;
-    const collectionName = `Studio "Quotes" & <b>bold</b>\nsecond line`;
+    const catalogueName = `Studio "Quotes" & <b>bold</b>\nsecond line`;
     const mail = invitationMail({
       to: "ada@example.test",
       inviterName,
-      collectionName,
+      catalogueName,
       url: INVITE_URL,
       hasReplyPath: true,
     });
@@ -63,18 +63,18 @@ describe("invitation mail", () => {
 
     // The text part is not HTML, so it keeps the names as they were written.
     expect(mail.text).toContain(inviterName);
-    expect(mail.text).toContain(collectionName);
+    expect(mail.text).toContain(catalogueName);
 
     // No name can forge a header, whatever it carries.
     expect(controlChars(mail.subject)).toEqual([]);
   });
 
-  it("flattens the inviter and truncates a long collection name in the subject only", () => {
-    const collectionName = "A".repeat(60);
+  it("flattens the inviter and truncates a long catalogue name in the subject only", () => {
+    const catalogueName = "A".repeat(60);
     const mail = invitationMail({
       to: "ada@example.test",
       inviterName: "Carlos\r\nBcc: evil@example.test",
-      collectionName,
+      catalogueName,
       url: INVITE_URL,
       hasReplyPath: true,
     });
@@ -84,15 +84,15 @@ describe("invitation mail", () => {
     );
     expect(mail.subject).not.toMatch(/[\r\n]/);
     // The body has the whole name, not the shortened one.
-    expect(mail.text).toContain(collectionName);
-    expect(mail.html).toContain(collectionName);
+    expect(mail.text).toContain(catalogueName);
+    expect(mail.html).toContain(catalogueName);
   });
 
   it("puts the CTA, the visible URL and the wordmark on the client origin", () => {
     const { html, text } = invitationMail({
       to: "ada@example.test",
       inviterName: "Carlos",
-      collectionName: "Summer in Lisbon",
+      catalogueName: "Summer in Lisbon",
       url: INVITE_URL,
       hasReplyPath: true,
     });
@@ -112,7 +112,7 @@ describe("invitation mail", () => {
     const facts = {
       to: "ada@example.test",
       inviterName: "Carlos",
-      collectionName: "Summer in Lisbon",
+      catalogueName: "Summer in Lisbon",
       url: INVITE_URL,
       hasReplyPath: true,
     };

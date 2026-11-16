@@ -19,7 +19,7 @@ import {
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import type { StagedEntry } from "@arcula/shared";
-import type { CollectionRow } from "../authorize";
+import type { CatalogueRow } from "../authorize";
 import { db } from "../db";
 import { ApiError } from "../errors";
 import type { Tx } from "../http";
@@ -143,14 +143,14 @@ const ORDER_SENTINEL_BASE = 100_000;
  */
 export async function writePhotoSequence(
   tx: Tx,
-  collection: CollectionRow,
+  catalogue: CatalogueRow,
   uploaderId: string,
   artworkId: string,
   next: StagedEntry[],
   current: { id: string; order: number }[],
 ): Promise<{ stagedKeys: string[]; removedIds: string[] }> {
-  const collectionId = collection.id;
-  const namespaceId = mediaNamespaceOf(collection);
+  const catalogueId = catalogue.id;
+  const namespaceId = mediaNamespaceOf(catalogue);
   const finalIndex = new Map(next.map((e, i) => [e.entryId, i]));
   const stored = new Set(current.map((row) => row.id));
   const stagedKeys: string[] = [];
@@ -208,7 +208,7 @@ export async function writePhotoSequence(
       population: "photo",
       namespaceId,
       uploaderId,
-      collectionId,
+      catalogueId,
       artworkId,
       entryId: entry.entryId,
     });
@@ -239,14 +239,14 @@ export async function writePhotoSequence(
 /** The document sequence: no `order` — documents have no sequence. */
 export async function writeDocumentSequence(
   tx: Tx,
-  collection: CollectionRow,
+  catalogue: CatalogueRow,
   uploaderId: string,
   artworkId: string,
   next: StagedEntry[],
   storedIds: Set<string>,
 ): Promise<{ stagedKeys: string[]; removedIds: string[] }> {
-  const collectionId = collection.id;
-  const namespaceId = mediaNamespaceOf(collection);
+  const catalogueId = catalogue.id;
+  const namespaceId = mediaNamespaceOf(catalogue);
   const stagedKeys: string[] = [];
   for (const entry of next) {
     if (!storedIds.has(entry.entryId)) {
@@ -254,7 +254,7 @@ export async function writeDocumentSequence(
         population: "document",
         namespaceId,
         uploaderId,
-        collectionId,
+        catalogueId,
         artworkId,
         entryId: entry.entryId,
       });
@@ -319,15 +319,15 @@ export async function writeDocumentSequence(
  * entry `abc_d`'s objects).
  */
 export async function deleteFinalEntryObjects(
-  collection: CollectionRow,
+  catalogue: CatalogueRow,
   artworkId: string,
   kind: PopulationKind,
   entryIds: string[],
 ): Promise<void> {
   const { finalPrefix } = POPULATIONS[kind];
-  const namespaceId = mediaNamespaceOf(collection);
+  const namespaceId = mediaNamespaceOf(catalogue);
   for (const entryId of entryIds) {
-    const prefix = finalPrefix(namespaceId, collection.id, artworkId, entryId);
+    const prefix = finalPrefix(namespaceId, catalogue.id, artworkId, entryId);
     const keys = await listObjects(prefix);
     for (const key of keys) {
       const parsed = parseMediaKey(key);

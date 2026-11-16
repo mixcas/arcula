@@ -1,10 +1,10 @@
-// The visitor's half of collection passwords, end to end on the real stack:
+// The visitor's half of catalogue passwords, end to end on the real stack:
 // the unlock route, the Access grant cookie it sets, and the verdict every read
 // and the media proxy ask.
 //
 // This is the one place the wire, the schema, the proxy and the cookie meet.
 // The pieces are each tested on their own — access.test.ts for the verdict,
-// collectionGrants.test.ts for the grant's algebra, publicCollectionState.test.ts
+// catalogueGrants.test.ts for the grant's algebra, publicCatalogueState.test.ts
 // for the lock screen's fold — and what is only visible here is whether they
 // compose: a stranger is refused the row and the bytes alike without a grant,
 // gets both with one, and loses them the moment the password changes.
@@ -26,36 +26,36 @@ import {
   vi,
 } from "vitest";
 import {
-  collectionAccessGrants as grantsTable,
-  collections as collectionsTable,
+  catalogueAccessGrants as grantsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import {
   GRANT_TTL_MS,
   grantCookieName,
   hashGrantToken,
   mintGrantToken,
-} from "../src/collectionGrants";
+} from "../src/catalogueGrants";
 import { CLIENT_ADDRESS_HEADER } from "../src/clientAddress";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageEntry,
 } from "./helpers/fixtures";
 
 const PASSWORD = "open-sesame";
-/** The collection the throttle cases spend their windows on. */
+/** The catalogue the throttle cases spend their windows on. */
 const THROTTLED_PASSWORD = "throttle-me";
 
 let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
-/** A second Protected collection: proof that a grant is scoped by name. */
+/** A second Protected catalogue: proof that a grant is scoped by name. */
 let otherId = "";
-/** A public collection nobody has protected: there is nothing to unlock. */
+/** A public catalogue nobody has protected: there is nothing to unlock. */
 let openId = "";
-/** A protected collection the throttle cases spend their windows on. */
+/** A protected catalogue the throttle cases spend their windows on. */
 let throttledId = "";
 let cid = "";
 /** The published work, with one photo and one document. */
@@ -76,13 +76,13 @@ function grantCookie(res: Response, collectionId = cid): string {
 }
 
 const unlock = (collectionId: string, password: string) =>
-  req("POST", `/api/v1/collections/${collectionId}/unlock`, {
+  req("POST", `/api/v1/catalogues/${collectionId}/unlock`, {
     body: { password },
   });
 
-/** A protected collection's password, written through the settings route. */
+/** A protected catalogue's password, written through the settings route. */
 async function protect(collectionId: string, password: string) {
-  const res = await req("PATCH", `/api/v1/collections/${collectionId}`, {
+  const res = await req("PATCH", `/api/v1/catalogues/${collectionId}`, {
     cookies: owner.cookies,
     body: { name: "Protected Wall", isPublic: true, password },
   });
@@ -134,7 +134,7 @@ async function createWork(
   photos: { entryId: string; name: string }[],
   documents: { entryId: string; name: string }[] = [],
 ): Promise<void> {
-  const res = await req("POST", `/api/v1/collections/${cid}/artworks`, {
+  const res = await req("POST", `/api/v1/catalogues/${cid}/artworks`, {
     cookies: owner.cookies,
     body: {
       artworkId,
@@ -152,7 +152,7 @@ async function createWork(
 async function ownerRead(artworkId: string): Promise<Record<string, unknown>> {
   const res = await req(
     "GET",
-    `/api/v1/collections/${cid}/artworks/${artworkId}`,
+    `/api/v1/catalogues/${cid}/artworks/${artworkId}`,
     { cookies: owner.cookies },
   );
   expect(res.status).toBe(200);
@@ -166,7 +166,7 @@ beforeAll(async () => {
   owner = await freshUser("Gate");
   stranger = await freshUser("Gate");
 
-  const created = await req("POST", "/api/v1/collections", {
+  const created = await req("POST", "/api/v1/catalogues", {
     cookies: owner.cookies,
     body: { name: "Protected Wall" },
   });
@@ -196,19 +196,19 @@ beforeAll(async () => {
     .original.url;
   draftPhotoUrl = originalUrl(await ownerRead(draftId));
 
-  // The two collections the isolation and "not unlockable" cases need. Both
+  // The two catalogues the isolation and "not unlockable" cases need. Both
   // written straight through drizzle: the tier cap gives each account one
-  // collection, and the cap is not what this file is about.
-  otherId = await makeCollection(owner.userId, {
+  // catalogue, and the cap is not what this file is about.
+  otherId = await makeCatalogue(owner.userId, {
     isPublic: true,
     name: "Other Protected",
   });
   await protect(otherId, "another-password");
-  openId = await makeCollection(owner.userId, {
+  openId = await makeCatalogue(owner.userId, {
     isPublic: true,
     name: "Open Wall",
   });
-  throttledId = await makeCollection(owner.userId, {
+  throttledId = await makeCatalogue(owner.userId, {
     isPublic: true,
     name: "Throttled Wall",
   });
@@ -219,10 +219,10 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("a protected collection's visitor half", () => {
-  it("keeps the collection out of the anonymous list", async () => {
+describe("a protected catalogue's visitor half", () => {
+  it("keeps the catalogue out of the anonymous list", async () => {
     const list = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections"),
+      await req("GET", "/api/v1/catalogues"),
     );
     expect(list.some((row) => row.id === cid)).toBe(false);
     // The open one still lists: the filter is "not protected", not "not
@@ -230,11 +230,11 @@ describe("a protected collection's visitor half", () => {
     expect(list.some((row) => row.id === openId)).toBe(true);
   });
 
-  it("refuses the collection read without a grant, and names the collection", async () => {
-    const res = await req("GET", `/api/v1/collections/${cid}`);
+  it("refuses the catalogue read without a grant, and names the catalogue", async () => {
+    const res = await req("GET", `/api/v1/catalogues/${cid}`);
     expect(res.status).toBe(403);
     const body = await json<{ error: Record<string, unknown> }>(res);
-    // A challenge, not a private collection's refusal: the lock screen has to
+    // A challenge, not a private catalogue's refusal: the lock screen has to
     // be able to say what it is unlocking (ADR-0005).
     expect(body.error.code).toBe("password-required");
     // Nested in `details`, which is where the client reads it: `errorResponse`
@@ -265,7 +265,7 @@ describe("a protected collection's visitor half", () => {
 
     // The ADR's decisions, not Hono's serialisation: no script reads the
     // token, it rides the API's own path (the media proxy is one route for
-    // every collection, so no narrower prefix covers it), and it lapses with
+    // every catalogue, so no narrower prefix covers it), and it lapses with
     // the row.
     const raw = res.headers.getSetCookie()[0];
     expect(raw).toContain(`${grantCookieName(cid)}=`);
@@ -276,7 +276,7 @@ describe("a protected collection's visitor half", () => {
 
     const cookie = grantCookie(res);
 
-    const read = await req("GET", `/api/v1/collections/${cid}`, {
+    const read = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: cookie,
     });
     expect(read.status).toBe(200);
@@ -285,7 +285,7 @@ describe("a protected collection's visitor half", () => {
     // Still a visitor's document: the password state is a member's.
     expect("isPasswordProtected" in body).toBe(false);
 
-    const list = await req("GET", `/api/v1/collections/${cid}/artworks`, {
+    const list = await req("GET", `/api/v1/catalogues/${cid}/artworks`, {
       cookies: cookie,
     });
     expect(list.status).toBe(200);
@@ -296,7 +296,7 @@ describe("a protected collection's visitor half", () => {
 
     const single = await req(
       "GET",
-      `/api/v1/collections/${cid}/artworks/${workId}`,
+      `/api/v1/catalogues/${cid}/artworks/${workId}`,
       { cookies: cookie },
     );
     expect(single.status).toBe(200);
@@ -318,7 +318,7 @@ describe("a protected collection's visitor half", () => {
     expect((await granted.arrayBuffer()).byteLength).toBeGreaterThan(0);
 
     // A document is a member's at every status: the grant buys entry through
-    // the collection's gate and nothing more.
+    // the catalogue's gate and nothing more.
     expect((await req("GET", documentUrl, { cookies: cookie })).status).toBe(
       403,
     );
@@ -331,7 +331,7 @@ describe("a protected collection's visitor half", () => {
     const cookie = grantCookie(await unlock(cid, PASSWORD));
     const single = await req(
       "GET",
-      `/api/v1/collections/${cid}/artworks/${draftId}`,
+      `/api/v1/catalogues/${cid}/artworks/${draftId}`,
       { cookies: cookie },
     );
     expect(single.status).toBe(404);
@@ -340,13 +340,13 @@ describe("a protected collection's visitor half", () => {
     );
   });
 
-  it("never consults another collection's grant", async () => {
+  it("never consults another catalogue's grant", async () => {
     const other = grantCookie(
       await unlock(otherId, "another-password"),
       otherId,
     );
-    // Named for the other collection, so this one's routes never read it.
-    const read = await req("GET", `/api/v1/collections/${cid}`, {
+    // Named for the other catalogue, so this one's routes never read it.
+    const read = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: other,
     });
     expect(read.status).toBe(403);
@@ -354,9 +354,9 @@ describe("a protected collection's visitor half", () => {
     expect((await req("GET", photoUrl, { cookies: other })).status).toBe(404);
   });
 
-  it("does not admit a token minted for another collection, even under this collection's name", async () => {
-    // The name is the first line, the row's own collection the second: a
-    // working grant for someone else's collection is not a way into this one,
+  it("does not admit a token minted for another catalogue, even under this catalogue's name", async () => {
+    // The name is the first line, the row's own catalogue the second: a
+    // working grant for someone else's catalogue is not a way into this one,
     // whichever cookie name it arrives under.
     const token = mintGrantToken();
     const now = new Date();
@@ -367,7 +367,7 @@ describe("a protected collection's visitor half", () => {
       expiresAt: new Date(now.getTime() + GRANT_TTL_MS),
     });
     const cookie = `${grantCookieName(cid)}=${token}`;
-    const read = await req("GET", `/api/v1/collections/${cid}`, {
+    const read = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: cookie,
     });
     expect(read.status).toBe(403);
@@ -384,7 +384,7 @@ describe("a protected collection's visitor half", () => {
       createdAt: new Date(now - GRANT_TTL_MS),
       expiresAt: new Date(now - 1),
     });
-    const read = await req("GET", `/api/v1/collections/${cid}`, {
+    const read = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: `${grantCookieName(cid)}=${token}`,
     });
     // The challenge again, not an error: the page goes back to the lock
@@ -396,13 +396,13 @@ describe("a protected collection's visitor half", () => {
   it("revokes the outstanding grant when the password changes", async () => {
     const cookie = grantCookie(await unlock(cid, PASSWORD));
     expect(
-      (await req("GET", `/api/v1/collections/${cid}`, { cookies: cookie }))
+      (await req("GET", `/api/v1/catalogues/${cid}`, { cookies: cookie }))
         .status,
     ).toBe(200);
 
     await protect(cid, "a-new-password");
 
-    const after = await req("GET", `/api/v1/collections/${cid}`, {
+    const after = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: cookie,
     });
     expect(after.status).toBe(403);
@@ -420,12 +420,12 @@ describe("a protected collection's visitor half", () => {
     expect((await unlock(cid, "a-new-password")).status).toBe(201);
   });
 
-  it("leaves the collection table's password state the settings page reads", async () => {
+  it("leaves the catalogue table's password state the settings page reads", async () => {
     // The hash is the only thing that survives, and never the plaintext.
     const [row] = await db
-      .select({ passwordHash: collectionsTable.passwordHash })
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .select({ passwordHash: cataloguesTable.passwordHash })
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(row.passwordHash).toMatch(/^scrypt\$/);
     expect(row.passwordHash).not.toContain("a-new-password");
   });
@@ -433,7 +433,7 @@ describe("a protected collection's visitor half", () => {
 
 // Guessing at a password, end to end: the counter the route writes, the 429 it
 // answers past the window, and the two things that make the counter safe to
-// live with — a right password clears the debt, and one collection's throttle
+// live with — a right password clears the debt, and one catalogue's throttle
 // never becomes another's weapon. Each case invents its own address, so the
 // cases cannot spend each other's windows.
 describe("the unlock throttle", () => {
@@ -450,7 +450,7 @@ describe("the unlock throttle", () => {
 
   /** One attempt from an address the gateway would have named. */
   const attempt = (address: string, collectionId: string, password: string) =>
-    req("POST", `/api/v1/collections/${collectionId}/unlock`, {
+    req("POST", `/api/v1/catalogues/${collectionId}/unlock`, {
       body: { password },
       headers: { [CLIENT_ADDRESS_HEADER]: address },
     });
@@ -513,20 +513,20 @@ describe("the unlock throttle", () => {
     ).toBe(429);
   });
 
-  it("keys the window by address and collection, so neither throttles the other", async () => {
+  it("keys the window by address and catalogue, so neither throttles the other", async () => {
     const spent = "198.51.100.13";
     await spendWindow(spent);
     expect((await attempt(spent, throttledId, THROTTLED_PASSWORD)).status).toBe(
       429,
     );
 
-    // The same address against someone else's protected collection is still
+    // The same address against someone else's protected catalogue is still
     // answered — a shared address (a gallery's wifi, a proxy) is not a way to
     // close every lock in the product.
     expect((await attempt(spent, otherId, "another-password")).status).toBe(
       201,
     );
-    // And a different address against the spent collection still is.
+    // And a different address against the spent catalogue still is.
     expect(
       (await attempt("198.51.100.14", throttledId, THROTTLED_PASSWORD)).status,
     ).toBe(201);

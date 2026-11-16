@@ -2,7 +2,7 @@
 //
 // One module owns every object operation the app performs — put, get,
 // head, delete, copy, list. It knows nothing about photos, documents or
-// collections: keys are built by `media/keys.ts`, and everything above
+// catalogues: keys are built by `media/keys.ts`, and everything above
 // this layer reads them back through that module's parser.
 //
 // The client reads its config at import time, like env.ts. The `test`

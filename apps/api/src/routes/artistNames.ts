@@ -1,11 +1,11 @@
 // GET /api/v1/artist-names — the caller's artist vocabulary, for the artwork
 // form's Artist Name suggestions.
 //
-// Deliberately not nested under /collections/{cid}: the resource is the
-// caller's vocabulary, not a collection's, and the caller comes from the
+// Deliberately not nested under /catalogues/{cid}: the resource is the
+// caller's vocabulary, not a catalogue's, and the caller comes from the
 // session. The module owns the aggregate and the collapse; this route owns the
 // wire and the status code, so a caller with no session is the one refusal and
-// a caller with no collections is an empty list, not an error.
+// a caller with no catalogues is an empty list, not an error.
 
 import { Hono } from "hono";
 import { artistNamesSchema } from "@arcula/shared";

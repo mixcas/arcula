@@ -1,15 +1,15 @@
 // The media fixtures: rows inserted straight through drizzle, and the two
 // staging calls that hang off them.
 //
-// Collections and artworks go in through drizzle rather than the API — the
+// Catalogues and artworks go in through drizzle rather than the API — the
 // routes that create them have their own suites, and these ones are about what
 // happens to the media afterwards.
 
 import sharp from "sharp";
 import {
   artworks as artworksTable,
-  collectionInvitations as invitationsTable,
-  collections as collectionsTable,
+  catalogueInvitations as invitationsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import { app } from "../../src/app";
 import { db } from "../../src/db";
@@ -20,7 +20,7 @@ import {
 } from "../../src/invitations";
 import { API, ORIGIN, req, uuid } from "./api";
 
-export async function makeCollection(
+export async function makeCatalogue(
   userId: string,
   opts: {
     isPublic?: boolean;
@@ -29,14 +29,14 @@ export async function makeCollection(
   } = {},
 ): Promise<string> {
   const id = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id,
     userId,
     // Required since 0004. The default is the owner's id — the shape 0004's
     // backfill leaves on a pre-existing row, and the key segment the media
     // fixtures build against. A suite that needs the minted shape passes one.
     mediaNamespaceId: opts.mediaNamespaceId ?? userId,
-    name: opts.name ?? "Test Collection",
+    name: opts.name ?? "Test Catalogue",
     isPublic: opts.isPublic ?? true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -99,7 +99,7 @@ export async function stageEntry(
   form.append("entryId", entryId);
   form.append("file", file);
   return await app.request(
-    `${API}/api/v1/collections/${cid}/artworks/${aid}/${population}/stage`,
+    `${API}/api/v1/catalogues/${cid}/artworks/${aid}/${population}/stage`,
     {
       method: "POST",
       headers: { Cookie: cookies, Origin: ORIGIN },
@@ -137,7 +137,7 @@ export async function processEntry(
 ): Promise<Response> {
   return req(
     "POST",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/process`,
+    `/api/v1/catalogues/${cid}/artworks/${aid}/${population}/process`,
     {
       cookies,
       headers: { "Content-Type": "application/json" },
@@ -155,7 +155,7 @@ export async function discardEntry(
 ): Promise<Response> {
   return req(
     "DELETE",
-    `/api/v1/collections/${cid}/artworks/${aid}/${population}/${entryId}`,
+    `/api/v1/catalogues/${cid}/artworks/${aid}/${population}/${entryId}`,
     {
       cookies,
     },

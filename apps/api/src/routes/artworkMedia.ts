@@ -5,24 +5,25 @@
 //   DELETE …/photos/{entryId}   — discard a staged entry
 //   … and the same three under /documents
 //
-// Staging needs only MEMBERSHIP of the collection, not an existing artwork
+// Staging needs only MEMBERSHIP of the catalogue, not an existing artwork
 // row: the Add flow mints the artwork id client-side, stages under it, and
 // the save route creates the row and promotes the entries in one
 // transaction. The artwork id is validated as an id-shaped segment and
 // used as the staging key's segment; nothing else is asked of it here.
 //
-// The uploader segment is always the CALLER, never the collection's owner:
+// The uploader segment is always the CALLER, never the catalogue's owner:
 // staging is per uploader (ADR-0004), so a collaborator's stage, process and
 // discard reach only their own staged objects and one member can neither
 // process nor discard another's unsaved upload.
 //
-// The mount below carries both names: `/collections/…` and `/catalogues/…`
-// (ADR-0010, #244), from one route app and one set of handlers.
+// The mount below carries both names: `/catalogues/…` and the legacy
+// `/collections/…` (ADR-0010, #246), from one route app and one set of
+// handlers.
 
 import { MINTED_ID_RE } from "@arcula/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { requireMemberCollection } from "../authorize";
+import { requireMemberCatalogue } from "../authorize";
 import { errorResponse, ApiError } from "../errors";
 import { param } from "../http";
 import { requireSession } from "../session";
@@ -47,7 +48,7 @@ import {
   WEBP_TYPE,
 } from "../media/pipeline";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
-import { cataloguePath } from "./paths";
+import { legacyCollectionPath } from "./paths";
 
 // Ids are client-minted and become key segments: letters and digits only —
 // nothing that could carry a path separator, a dot or a hyphen (the route
@@ -114,10 +115,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Stage
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/stage`, requireSession, limit, async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -171,11 +169,11 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
     // Re-staging replaces: a failed re-upload of the same entry must
     // not leave the previous original (or its variants, under a
     // different extension) to be swept into the save.
-    await discardEntry(c.get("user").id, collection.id, artworkId, entryId);
+    await discardEntry(c.get("user").id, catalogue.id, artworkId, entryId);
 
     const key = stagingOriginalKey(
       c.get("user").id,
-      collection.id,
+      catalogue.id,
       artworkId,
       entryId,
       ext,
@@ -197,10 +195,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Process
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/process`, requireSession, async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -219,7 +214,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
 
     const userId = c.get("user").id;
     const originals = await listObjects(
-      stagedOriginalPrefix(userId, collection.id, artworkId, entryId),
+      stagedOriginalPrefix(userId, catalogue.id, artworkId, entryId),
     );
     if (originals.length === 0) {
       throw new ApiError(
@@ -247,7 +242,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
     for (const variant of generated) {
       const key = stagingVariantKey(
         userId,
-        collection.id,
+        catalogue.id,
         artworkId,
         entryId,
         variant.key,
@@ -270,10 +265,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Discard
   // ------------------------------------------------------------------
   r.delete(`/${pop.population}/:entryId`, requireSession, async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -285,7 +277,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
 
     const deleted = await discardEntry(
       c.get("user").id,
-      collection.id,
+      catalogue.id,
       artworkId,
       entryId,
     );
@@ -302,7 +294,7 @@ export const artworkMediaRoutes = new Hono();
 
 for (const kind of POPULATION_KINDS) {
   const routes = buildMediaRoutes(kind);
-  const path = "/collections/:collectionId/artworks/:artworkId";
+  const path = "/catalogues/:collectionId/artworks/:artworkId";
   artworkMediaRoutes.route(path, routes);
-  artworkMediaRoutes.route(cataloguePath(path), routes);
+  artworkMediaRoutes.route(legacyCollectionPath(path), routes);
 }

@@ -1,13 +1,13 @@
-// The Catalogue alias, which exists only during the rename's expand window
-// (ADR-0010, #244): every Collection path is also registered under
-// `/api/v1/catalogues`, with the same handlers, and nothing about the old name
-// changes. These tests drive both spellings against the real stack and compare
-// the wire answers, so a path that was not aliased shows up as a 404 rather
-// than as a rename that half landed.
+// The legacy Collection alias, which exists only during the rename's contract
+// window (ADR-0010, #246): the API mounts `/api/v1/catalogues`, and every
+// `/api/v1/collections` path keeps answering with the same handlers until the
+// contract step removes it. These tests drive both spellings against the real
+// stack and compare the wire answers, so a path that lost its legacy twin
+// shows up as a 404 rather than as a rename that half landed.
 //
-// The bodies are compared whole rather than field by field: "the alias answers
-// identically" is the requirement, and a difference in either direction means
-// the two spellings are not the same resource.
+// The bodies are compared whole rather than field by field: "the legacy path
+// answers identically" is the requirement, and a difference in either
+// direction means the two spellings are not the same resource.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb } from "../src/db";
@@ -19,8 +19,8 @@ let collectionId = "";
 beforeAll(async () => {
   owner = await freshUser("Alias");
 
-  // Created through the Collection spelling: the alias has to reach rows the
-  // old name made, not only rows it made itself.
+  // Created through the legacy Collection spelling: the alias has to reach
+  // rows the old name made, not only rows it made itself.
   const created = await req("POST", "/api/v1/collections", {
     cookies: owner.cookies,
     body: { name: "Aliased Catalogue" },
@@ -33,8 +33,8 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("the Catalogue alias", () => {
-  it("lists the same Catalogues as the Collection path", async () => {
+describe("the legacy Collection alias", () => {
+  it("lists the same Catalogues under /collections as /catalogues", async () => {
     const legacy = await req("GET", "/api/v1/collections", {
       cookies: owner.cookies,
     });
@@ -175,5 +175,39 @@ describe("the Catalogue alias", () => {
     expect(legacy.status).toBe(200);
     expect(aliased.status).toBe(legacy.status);
     expect(await json(aliased)).toEqual(await json(legacy));
+  });
+
+  it("imports through the legacy path and reads the work under /catalogues", async () => {
+    const imported = await req(
+      "POST",
+      `/api/v1/collections/${collectionId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: {
+          rows: [
+            {
+              title: "Imported Under the Legacy Alias",
+              artistName: "A. Artist",
+            },
+          ],
+        },
+      },
+    );
+    expect(imported.status).toBe(200);
+    expect(await json<{ inserted: number }>(imported)).toEqual({
+      inserted: 1,
+      rejected: [],
+    });
+
+    const list = await req(
+      "GET",
+      `/api/v1/catalogues/${collectionId}/artworks`,
+      { cookies: owner.cookies },
+    );
+    expect(list.status).toBe(200);
+    const titles = (await json<{ title: string }[]>(list)).map(
+      (work) => work.title,
+    );
+    expect(titles).toContain("Imported Under the Legacy Alias");
   });
 });

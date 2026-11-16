@@ -1,11 +1,11 @@
-// The membership scope shared by the reads that ask "which collections may
-// this caller read?": the signed-in `/collections` list and the Artist Name
+// The membership scope shared by the reads that ask "which catalogues may
+// this caller read?": the signed-in `/catalogues` list and the Artist Name
 // aggregate. One definition, so the two cannot drift into two answers.
 
 import { and, eq, isNull, or, type SQL } from "drizzle-orm";
 import {
-  collectionCollaborators as collectionCollaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as catalogueCollaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 
 /**
@@ -15,25 +15,25 @@ import {
  */
 export const collaboratorJoin = (userId: string): SQL | undefined =>
   and(
-    eq(collectionCollaboratorsTable.collectionId, collectionsTable.id),
-    eq(collectionCollaboratorsTable.userId, userId),
+    eq(catalogueCollaboratorsTable.collectionId, cataloguesTable.id),
+    eq(catalogueCollaboratorsTable.userId, userId),
   );
 
 /**
- * The live collections the caller owns or collaborates on, optionally narrowed
+ * The live catalogues the caller owns or collaborates on, optionally narrowed
  * by the reading query's own conditions — the Artist Name aggregate adds the
  * live-works filter. `deletedAt` is the whole deletion record, so a deleted
- * collection is in neither branch.
+ * catalogue is in neither branch.
  */
-export const readableCollectionsWhere = (
+export const readableCataloguesWhere = (
   userId: string,
   ...conditions: (SQL | undefined)[]
 ): SQL | undefined =>
   and(
-    isNull(collectionsTable.deletedAt),
+    isNull(cataloguesTable.deletedAt),
     ...conditions,
     or(
-      eq(collectionsTable.userId, userId),
-      eq(collectionCollaboratorsTable.userId, userId),
+      eq(cataloguesTable.userId, userId),
+      eq(catalogueCollaboratorsTable.userId, userId),
     ),
   );

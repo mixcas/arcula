@@ -1,24 +1,24 @@
-// The collection resource routes: list/create with the tier cap, the
+// The catalogue resource routes: list/create with the tier cap, the
 // owner/visitor reads, the settings-form PATCH (absent-leave / null-clear),
 // the CSV import's mixed-batch contract, the bulk soft delete, and the
 // single restore — driven in-process with app.request() against the
 // real stack.
 //
-// The beta cap is one collection per free account, so the users in this
-// file each get exactly one collection through the API; where a test
+// The beta cap is one catalogue per free account, so the users in this
+// file each get exactly one catalogue through the API; where a test
 // needs a second row it inserts one directly, which keeps the cap test
 // about the route and not the table.
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  collectionAccessGrants as grantsTable,
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueAccessGrants as grantsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
   user as userTable,
 } from "@arcula/db";
 import { MINTED_ID_RE } from "@arcula/shared";
-import { canSeeCollection, membershipOf } from "../src/access";
+import { canSeeCatalogue, membershipOf } from "../src/access";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 
@@ -34,7 +34,7 @@ let owner: { cookies: string; userId: string; email: string };
 let stranger: { cookies: string; userId: string };
 let mate: { cookies: string; userId: string };
 
-// The Protected fixture the list tests share: a public collection with a
+// The Protected fixture the list tests share: a public catalogue with a
 // password, made through the settings write path. It is created before any
 // list reads so the anonymous list is always exercised with a protected row
 // in the database.
@@ -43,7 +43,7 @@ let protMate: { cookies: string; userId: string };
 let protectedId = "";
 
 // Module-level ids, set by the test that creates them: the cap leaves
-// each user one collection, so the later describes reuse what the
+// each user one catalogue, so the later describes reuse what the
 // earlier ones made.
 let studyWallId = "";
 let sharedBoardId = "";
@@ -58,7 +58,7 @@ beforeAll(async () => {
 
   protOwner = await freshUser("Prot");
   protMate = await freshUser("Prot");
-  const created = await req("POST", "/api/v1/collections", {
+  const created = await req("POST", "/api/v1/catalogues", {
     cookies: protOwner.cookies,
     body: JSON.stringify({ name: "Protected By Link" }),
   });
@@ -66,7 +66,7 @@ beforeAll(async () => {
   protectedId = String((await json<Record<string, unknown>>(created)).id);
   // Through the settings write path, not a hand-written row: the fixture is
   // what the product actually stores when an owner sets a password.
-  const locked = await req("PATCH", `/api/v1/collections/${protectedId}`, {
+  const locked = await req("PATCH", `/api/v1/catalogues/${protectedId}`, {
     cookies: protOwner.cookies,
     body: JSON.stringify({
       name: "Protected By Link",
@@ -87,16 +87,16 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("POST /collections", () => {
+describe("POST /catalogues", () => {
   it("creates with the exact document shape and stops the owner at the cap", async () => {
-    const res = await req("POST", "/api/v1/collections", {
+    const res = await req("POST", "/api/v1/catalogues", {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Study Wall", description: "" }),
     });
     expect(res.status).toBe(201);
     const body = await json<Record<string, unknown>>(res);
     // The exact wire document shape: no blank keys, no extras. A brand-new
-    // collection is a member read, so it carries the password state.
+    // catalogue is a member read, so it carries the password state.
     expect(Object.keys(body).sort()).toEqual([
       "createdAt",
       "id",
@@ -113,7 +113,7 @@ describe("POST /collections", () => {
     isWireTimestamp(body.createdAt);
     isWireTimestamp(body.updatedAt);
 
-    const second = await req("POST", "/api/v1/collections", {
+    const second = await req("POST", "/api/v1/catalogues", {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Second Wall" }),
     });
@@ -122,7 +122,7 @@ describe("POST /collections", () => {
   });
 
   it("honours explicit values; a blank name 400s even at the cap", async () => {
-    const res = await req("POST", "/api/v1/collections", {
+    const res = await req("POST", "/api/v1/catalogues", {
       cookies: stranger.cookies,
       body: JSON.stringify({
         name: "Private Wall",
@@ -137,7 +137,7 @@ describe("POST /collections", () => {
 
     // Validation runs before the cap check: the failure is about the
     // body, not the quota.
-    const blank = await req("POST", "/api/v1/collections", {
+    const blank = await req("POST", "/api/v1/catalogues", {
       cookies: stranger.cookies,
       body: JSON.stringify({ name: "   " }),
     });
@@ -148,11 +148,11 @@ describe("POST /collections", () => {
   });
 });
 
-describe("GET /collections", () => {
-  it("lists each caller's own collections name-ordered; anon sees only the public, unprotected ones", async () => {
-    // A second, private collection the API cap would refuse: inserted
+describe("GET /catalogues", () => {
+  it("lists each caller's own catalogues name-ordered; anon sees only the public, unprotected ones", async () => {
+    // A second, private catalogue the API cap would refuse: inserted
     // directly so the cap stays a route property, not a table property.
-    await db.insert(collectionsTable).values({
+    await db.insert(cataloguesTable).values({
       id: uuid(),
       userId: owner.userId,
       mediaNamespaceId: uuid(),
@@ -161,66 +161,72 @@ describe("GET /collections", () => {
     });
 
     const own = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: owner.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: owner.cookies }),
     );
     expect(own.map((c) => c.name)).toEqual(["AAA Test Wall", "Study Wall"]);
 
     const theirs = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: stranger.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: stranger.cookies }),
     );
     expect(theirs.map((c) => c.name)).toEqual(["Private Wall"]);
 
     // The test stack persists across runs, so the anon public list also
-    // holds earlier runs' public collections: assert membership, not the
+    // holds earlier runs' public catalogues: assert membership, not the
     // exact list.
     const anon = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections"),
+      await req("GET", "/api/v1/catalogues"),
     );
     const anonNames = anon.map((c) => c.name);
     expect(anonNames).toContain("Study Wall");
     expect(anonNames).not.toContain("AAA Test Wall");
     expect(anonNames).not.toContain("Private Wall");
-    // A Protected collection is excluded exactly as a Private one is, and the
+    // A Protected catalogue is excluded exactly as a Private one is, and the
     // same fixture is refused by the pure verdict: the SQL filter and
-    // canSeeCollection agree on that row.
+    // canSeeCatalogue agree on that row.
     expect(anonNames).not.toContain("Protected By Link");
     const [protectedRow] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, protectedId));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, protectedId));
     if (!protectedRow) {
       throw new Error("the protected fixture is not stored");
     }
     expect(
-      canSeeCollection(membershipOf(null, protectedRow, null), protectedRow),
+      canSeeCatalogue(membershipOf(null, protectedRow, null), protectedRow),
     ).toBe(false);
 
     // The public list's SQL filter is the anonymous verdict in access.ts
-    // spelled in SQL: every row it returns is one canSeeCollection admits.
-    // Assert against the stored row, not the wire row, so a listed Protected
-    // collection would be caught by the verdict's own password check.
-    for (const row of anon) {
-      const [stored] = await db
-        .select()
-        .from(collectionsTable)
-        .where(eq(collectionsTable.id, row.id as string));
-      if (!stored) {
-        throw new Error(`the list returned ${String(row.id)}, not stored`);
-      }
-      expect(canSeeCollection(membershipOf(null, stored, null), stored)).toBe(
-        true,
+    // spelled in SQL: every row it returns is one canSeeCatalogue admits.
+    // Assert against the stored rows, not the wire rows, so a listed Protected
+    // catalogue would be caught by the verdict's own password check. One
+    // read for the whole list: a per-row read would time out once earlier runs
+    // have filled the shared dev database.
+    const storedRows = await db
+      .select()
+      .from(cataloguesTable)
+      .where(
+        inArray(
+          cataloguesTable.id,
+          anon.map((row) => row.id as string),
+        ),
       );
+    expect(storedRows).toHaveLength(anon.length);
+    for (const stored of storedRows) {
+      expect(
+        canSeeCatalogue(membershipOf(null, stored, null), stored),
+        `the anonymous list returned ${stored.name}`,
+      ).toBe(true);
     }
   });
 
-  it("returns owned and shared collections in one name-ordered list, each row with its role", async () => {
-    // One collection of the owner's, shared with `mate`, who also owns one of
+  it("returns owned and shared catalogues in one name-ordered list, each row with its role", async () => {
+    // One catalogue of the owner's, shared with `mate`, who also owns one of
     // their own: the list is one list, distinguished by the row's role. The
     // two names are chosen so the order can only come from the sort — "Aaa"
     // is the SHARED one — because the route builds owned rows first and a
     // list that forgot to sort would answer them the other way round.
     sharedBoardId = uuid();
-    await db.insert(collectionsTable).values({
+    await db.insert(cataloguesTable).values({
       id: sharedBoardId,
       userId: owner.userId,
       mediaNamespaceId: uuid(),
@@ -231,14 +237,14 @@ describe("GET /collections", () => {
       collectionId: sharedBoardId,
       userId: mate.userId,
     });
-    const own = await req("POST", "/api/v1/collections", {
+    const own = await req("POST", "/api/v1/catalogues", {
       cookies: mate.cookies,
       body: JSON.stringify({ name: "Zzz Mate Owned" }),
     });
     expect(own.status).toBe(201);
 
     const theirs = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: mate.cookies }),
     );
     expect(theirs.map((c) => c.name)).toEqual([
       "Aaa Shared Board",
@@ -256,7 +262,7 @@ describe("GET /collections", () => {
 
     // The owner's own list carries the same roles from the other side.
     const owners = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: owner.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: owner.cookies }),
     );
     const board = owners.find((c) => c.name === "Aaa Shared Board")!;
     expect(board.role).toBe("owner");
@@ -271,7 +277,7 @@ describe("GET /collections", () => {
       .where(eq(userTable.id, owner.userId));
     try {
       const theirs = await json<Record<string, unknown>[]>(
-        await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+        await req("GET", "/api/v1/catalogues", { cookies: mate.cookies }),
       );
       const shared = theirs.find((c) => c.name === "Aaa Shared Board")!;
       expect(shared.ownerName).toBe(owner.email);
@@ -285,7 +291,7 @@ describe("GET /collections", () => {
 
   it("keeps the anonymous list's shape: public rows only, no role or ownerName", async () => {
     const anon = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections"),
+      await req("GET", "/api/v1/catalogues"),
     );
     expect(anon.map((c) => c.name)).toContain("Study Wall");
     for (const row of anon) {
@@ -294,28 +300,28 @@ describe("GET /collections", () => {
     }
   });
 
-  it("does not put another account's shared collection on a signed-in visitor's list", async () => {
+  it("does not put another account's shared catalogue on a signed-in visitor's list", async () => {
     const theirs = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: stranger.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: stranger.cookies }),
     );
     expect(theirs.map((c) => c.name)).toEqual(["Private Wall"]);
   });
 });
 
-describe("GET /collections/{cid}", () => {
-  it("serves a public collection to anyone and 404s a missing one", async () => {
+describe("GET /catalogues/{cid}", () => {
+  it("serves a public catalogue to anyone and 404s a missing one", async () => {
     const own = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: owner.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: owner.cookies }),
     );
     studyWallId = String(own.find((c) => c.name === "Study Wall")?.id);
     expect(studyWallId).toMatch(MINTED_ID_RE);
 
-    const missing = await req("GET", `/api/v1/collections/${uuid()}`);
+    const missing = await req("GET", `/api/v1/catalogues/${uuid()}`);
     expect(missing.status).toBe(404);
     expect((await err(missing)).code).toBe("not-found");
 
     for (const cookies of [owner.cookies, stranger.cookies, undefined]) {
-      const res = await req("GET", `/api/v1/collections/${studyWallId}`, {
+      const res = await req("GET", `/api/v1/catalogues/${studyWallId}`, {
         cookies,
       });
       expect(res.status).toBe(200);
@@ -325,30 +331,30 @@ describe("GET /collections/{cid}", () => {
     }
   });
 
-  it("403s a visitor on a private collection and still serves the owner", async () => {
-    const off = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+  it("403s a visitor on a private catalogue and still serves the owner", async () => {
+    const off = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Study Wall", isPublic: false }),
     });
     expect(off.status).toBe(200);
     expect((await json<Record<string, unknown>>(off)).isPublic).toBe(false);
 
-    const visitor = await req("GET", `/api/v1/collections/${studyWallId}`, {
+    const visitor = await req("GET", `/api/v1/catalogues/${studyWallId}`, {
       cookies: stranger.cookies,
     });
     expect(visitor.status).toBe(403);
     expect((await err(visitor)).code).toBe("forbidden");
 
-    const anon = await req("GET", `/api/v1/collections/${studyWallId}`);
+    const anon = await req("GET", `/api/v1/catalogues/${studyWallId}`);
     expect(anon.status).toBe(403);
 
-    const own = await req("GET", `/api/v1/collections/${studyWallId}`, {
+    const own = await req("GET", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
     });
     expect(own.status).toBe(200);
 
     // Back to public: the later describes read it as a visitor.
-    const on = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const on = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Study Wall", isPublic: true }),
     });
@@ -357,9 +363,9 @@ describe("GET /collections/{cid}", () => {
   });
 });
 
-describe("PATCH /collections/{cid}", () => {
+describe("PATCH /catalogues/{cid}", () => {
   it("sets present fields, leaves absent ones, clears nulls", async () => {
-    const set = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const set = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({
         name: "Renamed",
@@ -378,7 +384,7 @@ describe("PATCH /collections/{cid}", () => {
 
     // Absent keys leave the columns alone — the settings form's
     // "write only what changed" payloads depend on exactly this.
-    const noChange = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const noChange = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "Renamed", isPublic: true }),
     });
@@ -389,7 +395,7 @@ describe("PATCH /collections/{cid}", () => {
     expect(body.skinOptions).toEqual({ transitionSeconds: 1 });
 
     // null clears: the key is gone from the document, not set to null.
-    const clear = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const clear = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({
         name: "Study Wall",
@@ -404,7 +410,7 @@ describe("PATCH /collections/{cid}", () => {
     expect("skin" in body).toBe(false);
     expect(body.skinOptions).toEqual({ transitionSeconds: 1 });
 
-    await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({
         name: "Study Wall",
@@ -416,14 +422,14 @@ describe("PATCH /collections/{cid}", () => {
 
   it("leaves every other column alone for a body that names one field", async () => {
     const before = await json<Record<string, unknown>>(
-      await req("GET", `/api/v1/collections/${studyWallId}`, {
+      await req("GET", `/api/v1/catalogues/${studyWallId}`, {
         cookies: owner.cookies,
       }),
     );
 
     // One key only: what the body does not name stays exactly as it was —
     // the settings tabs' per-tab saves are built on exactly this.
-    const one = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const one = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ description: "One field only" }),
     });
@@ -439,7 +445,7 @@ describe("PATCH /collections/{cid}", () => {
     expect("skinOptions" in after).toBe("skinOptions" in before);
 
     // Leave the fixture as the next describes find it.
-    await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ description: null }),
     });
@@ -447,12 +453,12 @@ describe("PATCH /collections/{cid}", () => {
 
   it("answers a valid no-op for a body that names nothing", async () => {
     const before = await json<Record<string, unknown>>(
-      await req("GET", `/api/v1/collections/${studyWallId}`, {
+      await req("GET", `/api/v1/catalogues/${studyWallId}`, {
         cookies: owner.cookies,
       }),
     );
 
-    const noop = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const noop = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({}),
     });
@@ -464,7 +470,7 @@ describe("PATCH /collections/{cid}", () => {
   });
 
   it("rejects a blank name with the failed field", async () => {
-    const res = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const res = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: owner.cookies,
       body: JSON.stringify({ name: "  ", isPublic: true }),
     });
@@ -475,7 +481,7 @@ describe("PATCH /collections/{cid}", () => {
   });
 
   it("403s a non-owner", async () => {
-    const res = await req("PATCH", `/api/v1/collections/${studyWallId}`, {
+    const res = await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
       cookies: stranger.cookies,
       body: JSON.stringify({ name: "Hijacked", isPublic: true }),
     });
@@ -484,11 +490,11 @@ describe("PATCH /collections/{cid}", () => {
   });
 });
 
-describe("POST /collections/{cid}/import/csv", () => {
+describe("POST /catalogues/{cid}/import/csv", () => {
   it("inserts the valid rows and reports broken ones by index", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/import/csv`,
+      `/api/v1/catalogues/${studyWallId}/import/csv`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({
@@ -517,7 +523,7 @@ describe("POST /collections/{cid}/import/csv", () => {
     expect(Object.keys(body.rejected[0].errors)).toEqual(["title"]);
 
     const list = await json<Record<string, unknown>[]>(
-      await req("GET", `/api/v1/collections/${studyWallId}/artworks`, {
+      await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),
     );
@@ -532,7 +538,7 @@ describe("POST /collections/{cid}/import/csv", () => {
     // A blank optional field is an absent key, not an empty one.
     expect("medium" in red).toBe(false);
     // A row that names a status is not obeyed: an import is the owner adding
-    // works to a collection, so every imported work is published.
+    // works to a catalogue, so every imported work is published.
     expect(red.status).toBe("published");
     expect(red.deletedAt).toBeNull();
     expect(byTitle.get("Blue No. 9")!.status).toBe("published");
@@ -540,7 +546,7 @@ describe("POST /collections/{cid}/import/csv", () => {
 
   it("puts every imported work on the visitor list, since all are published", async () => {
     const visitor = await json<Record<string, unknown>[]>(
-      await req("GET", `/api/v1/collections/${studyWallId}/artworks`),
+      await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`),
     );
     expect(visitor.map((w) => w.title).sort()).toEqual([
       "Blue No. 9",
@@ -551,7 +557,7 @@ describe("POST /collections/{cid}/import/csv", () => {
   it("403s a non-owner, 401s an anonymous call, 400s a non-array rows", async () => {
     const foreign = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/import/csv`,
+      `/api/v1/catalogues/${studyWallId}/import/csv`,
       {
         cookies: stranger.cookies,
         body: JSON.stringify({ rows: [{ title: "X", artistName: "Y" }] }),
@@ -561,7 +567,7 @@ describe("POST /collections/{cid}/import/csv", () => {
 
     const anon = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/import/csv`,
+      `/api/v1/catalogues/${studyWallId}/import/csv`,
       {
         body: JSON.stringify({ rows: [] }),
       },
@@ -570,7 +576,7 @@ describe("POST /collections/{cid}/import/csv", () => {
 
     const notArray = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/import/csv`,
+      `/api/v1/catalogues/${studyWallId}/import/csv`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({ rows: "nope" }),
@@ -581,18 +587,18 @@ describe("POST /collections/{cid}/import/csv", () => {
   });
 });
 
-describe("POST /collections/{cid}/artworks/bulk-delete", () => {
+describe("POST /catalogues/{cid}/artworks/bulk-delete", () => {
   it("tombstones the live works in one go and counts only what moved", async () => {
-    // A work in another user's collection, for the foreign-id case.
+    // A work in another user's catalogue, for the foreign-id case.
     const strangerWall = (
       await json<Record<string, unknown>[]>(
-        await req("GET", "/api/v1/collections", { cookies: stranger.cookies }),
+        await req("GET", "/api/v1/catalogues", { cookies: stranger.cookies }),
       )
     )[0];
     const strangerWallId = String(strangerWall.id);
     const foreignCreate = await req(
       "POST",
-      `/api/v1/collections/${strangerWallId}/artworks`,
+      `/api/v1/catalogues/${strangerWallId}/artworks`,
       {
         cookies: stranger.cookies,
         body: JSON.stringify({
@@ -607,32 +613,32 @@ describe("POST /collections/{cid}/artworks/bulk-delete", () => {
 
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/bulk-delete`,
+      `/api/v1/catalogues/${studyWallId}/artworks/bulk-delete`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({ artworkIds: [redId, blueId, foreignId] }),
       },
     );
     expect(res.status).toBe(200);
-    // The foreign id is not in this collection: it is not counted.
+    // The foreign id is not in this catalogue: it is not counted.
     expect(await json(res)).toEqual({ deleted: 2 });
 
     // Both are tombstoned: the owner can still read one, a visitor cannot.
     const red = await req(
       "GET",
-      `/api/v1/collections/${studyWallId}/artworks/${redId}`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${redId}`,
       { cookies: owner.cookies },
     );
     expect(red.status).toBe(200);
     isWireTimestamp((await json<Record<string, unknown>>(red)).deletedAt);
     const visitor = await req(
       "GET",
-      `/api/v1/collections/${studyWallId}/artworks/${redId}`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${redId}`,
     );
     expect(visitor.status).toBe(404);
 
     const live = await json<Record<string, unknown>[]>(
-      await req("GET", `/api/v1/collections/${studyWallId}/artworks`, {
+      await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),
     );
@@ -642,7 +648,7 @@ describe("POST /collections/{cid}/artworks/bulk-delete", () => {
   it("counts zero on ids that are already tombstoned", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/bulk-delete`,
+      `/api/v1/catalogues/${studyWallId}/artworks/bulk-delete`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({ artworkIds: [redId] }),
@@ -655,7 +661,7 @@ describe("POST /collections/{cid}/artworks/bulk-delete", () => {
   it("rejects an empty selection", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/bulk-delete`,
+      `/api/v1/catalogues/${studyWallId}/artworks/bulk-delete`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({ artworkIds: [] }),
@@ -670,7 +676,7 @@ describe("POST /collections/{cid}/artworks/bulk-delete", () => {
   it("403s a non-owner", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/bulk-delete`,
+      `/api/v1/catalogues/${studyWallId}/artworks/bulk-delete`,
       {
         cookies: stranger.cookies,
         body: JSON.stringify({ artworkIds: [redId] }),
@@ -680,11 +686,11 @@ describe("POST /collections/{cid}/artworks/bulk-delete", () => {
   });
 });
 
-describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
+describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
   it("clears the tombstone", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/${redId}/restore`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${redId}/restore`,
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(200);
@@ -692,13 +698,13 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
 
     const red = await req(
       "GET",
-      `/api/v1/collections/${studyWallId}/artworks/${redId}`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${redId}`,
       { cookies: owner.cookies },
     );
     expect((await json<Record<string, unknown>>(red)).deletedAt).toBeNull();
 
     const live = await json<Record<string, unknown>[]>(
-      await req("GET", `/api/v1/collections/${studyWallId}/artworks`, {
+      await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),
     );
@@ -708,7 +714,7 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
   it("404s a missing work and 403s a non-owner", async () => {
     const missing = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/${uuid()}/restore`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${uuid()}/restore`,
       { cookies: owner.cookies },
     );
     expect(missing.status).toBe(404);
@@ -716,26 +722,26 @@ describe("POST /collections/{cid}/artworks/{aid}/restore", () => {
 
     const foreign = await req(
       "POST",
-      `/api/v1/collections/${studyWallId}/artworks/${blueId}/restore`,
+      `/api/v1/catalogues/${studyWallId}/artworks/${blueId}/restore`,
       { cookies: stranger.cookies },
     );
     expect(foreign.status).toBe(403);
   });
 });
 
-// The owner's half of collection passwords: the settings PATCH sets,
-// overwrites and removes a password, revokes the collection's outstanding
+// The owner's half of catalogue passwords: the settings PATCH sets,
+// overwrites and removes a password, revokes the catalogue's outstanding
 // Access grants in the same write, and keeps the hash on a private/public
 // round trip. The hash itself is never on the wire, under any read.
 //
 // This lives in the same file as the anonymous-list tests on purpose: the
-// shared test database is one, and a protected public collection left in it
+// shared test database is one, and a protected public catalogue left in it
 // while those tests run must still be absent from the list — the exclusion
 // T6 pins below. Files run in parallel, tests in a file do not.
 //
 // The visitor's half — unlock, the grant cookie and the lock screen — is in
-// protectedCollection.api.test.ts, end to end on the real stack.
-describe("the collection password write", () => {
+// protectedCatalogue.api.test.ts, end to end on the real stack.
+describe("the catalogue password write", () => {
   let pwdOwner: { cookies: string; userId: string };
   let pwdMate: { cookies: string; userId: string };
   let protectedId = "";
@@ -748,9 +754,9 @@ describe("the collection password write", () => {
   /** The stored hash, read directly: the one fact the wire must never carry. */
   const storedHash = async (): Promise<string | null> => {
     const [row] = await db
-      .select({ passwordHash: collectionsTable.passwordHash })
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, protectedId));
+      .select({ passwordHash: cataloguesTable.passwordHash })
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, protectedId));
     return row?.passwordHash ?? null;
   };
 
@@ -763,10 +769,10 @@ describe("the collection password write", () => {
   };
 
   const patch = (cookies: string, body: Record<string, unknown>) =>
-    req("PATCH", `/api/v1/collections/${protectedId}`, { cookies, body });
+    req("PATCH", `/api/v1/catalogues/${protectedId}`, { cookies, body });
 
   it("sets a password, marks the member read protected, and never emits the hash", async () => {
-    const created = await req("POST", "/api/v1/collections", {
+    const created = await req("POST", "/api/v1/catalogues", {
       cookies: pwdOwner.cookies,
       body: JSON.stringify({ name: "Protected Wall" }),
     });
@@ -795,7 +801,7 @@ describe("the collection password write", () => {
     expect(hash).not.toContain("first-password");
 
     // The single member read.
-    const single = await req("GET", `/api/v1/collections/${protectedId}`, {
+    const single = await req("GET", `/api/v1/catalogues/${protectedId}`, {
       cookies: pwdOwner.cookies,
     });
     expect(single.status).toBe(200);
@@ -805,16 +811,16 @@ describe("the collection password write", () => {
 
     // The dashboard list's row.
     const list = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: pwdOwner.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: pwdOwner.cookies }),
     );
     const row = list.find((c) => c.id === protectedId)!;
     expect(row.isPasswordProtected).toBe(true);
     expectNoHash(row, hash);
 
-    // An anonymous read is the challenge: a Protected collection is not
+    // An anonymous read is the challenge: a Protected catalogue is not
     // readable to a non-member without a grant, and the refusal carries
     // neither the flag nor the hash.
-    const anon = await req("GET", `/api/v1/collections/${protectedId}`);
+    const anon = await req("GET", `/api/v1/catalogues/${protectedId}`);
     expect(anon.status).toBe(403);
     const anonBody = await json<Record<string, unknown>>(anon);
     expect("isPasswordProtected" in anonBody).toBe(false);
@@ -822,7 +828,7 @@ describe("the collection password write", () => {
 
     // The anonymous list's rows carry no flag either.
     const anonList = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections"),
+      await req("GET", "/api/v1/catalogues"),
     );
     for (const anonRow of anonList) {
       expect("isPasswordProtected" in anonRow).toBe(false);
@@ -843,7 +849,7 @@ describe("the collection password write", () => {
     expectNoHash(body, before);
   });
 
-  it("overwrites the password and revokes the collection's grants in one write", async () => {
+  it("overwrites the password and revokes the catalogue's grants in one write", async () => {
     const before = await storedHash();
     await db.insert(grantsTable).values({
       collectionId: protectedId,
@@ -879,14 +885,14 @@ describe("the collection password write", () => {
     expect(await storedHash()).toBeNull();
 
     const single = await json<Record<string, unknown>>(
-      await req("GET", `/api/v1/collections/${protectedId}`, {
+      await req("GET", `/api/v1/catalogues/${protectedId}`, {
         cookies: pwdOwner.cookies,
       }),
     );
     expect(single.isPasswordProtected).toBe(false);
   });
 
-  it("keeps the password when the collection is made private and public again", async () => {
+  it("keeps the password when the catalogue is made private and public again", async () => {
     const set = await patch(pwdOwner.cookies, {
       name: "Renamed Wall",
       isPublic: true,
@@ -960,36 +966,36 @@ describe("the collection password write", () => {
   });
 });
 
-// T6: a Protected collection is shared as a link, not found in an index
+// T6: a Protected catalogue is shared as a link, not found in an index
 // (ADR-0005). The anonymous exclusion is pinned by the list test above, on
 // the same fixture the verdict refuses; these are the member's side and the
-// artwork list's agreement with the collection read.
-describe("a protected collection's members", () => {
+// artwork list's agreement with the catalogue read.
+describe("a protected catalogue's members", () => {
   it("still see it in their own lists, with the password flag", async () => {
     const own = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: protOwner.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: protOwner.cookies }),
     );
     const ownerRow = own.find((c) => c.id === protectedId);
     expect(ownerRow?.role).toBe("owner");
     expect(ownerRow?.isPasswordProtected).toBe(true);
 
     const shared = await json<Record<string, unknown>[]>(
-      await req("GET", "/api/v1/collections", { cookies: protMate.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: protMate.cookies }),
     );
     const mateRow = shared.find((c) => c.id === protectedId);
     expect(mateRow?.role).toBe("collaborator");
     expect(mateRow?.isPasswordProtected).toBe(true);
   });
 
-  it("refuses a non-member's artwork list too, though only the collection read can name the challenge", async () => {
+  it("refuses a non-member's artwork list too, though only the catalogue read can name the challenge", async () => {
     // Anonymous and signed-in stranger are one answer: membership is what
-    // admits, and neither holds it. The collection read is the challenge point
-    // — it names the collection so the lock screen can ask — while the list
+    // admits, and neither holds it. The catalogue read is the challenge point
+    // — it names the catalogue so the lock screen can ask — while the list
     // has no lock screen to open and stays the plain refusal. The public page
-    // never sees the second: it asks for the list only once the collection
+    // never sees the second: it asks for the list only once the catalogue
     // read has answered, and this one refuses first.
     for (const cookies of [undefined, stranger.cookies]) {
-      const read = await req("GET", `/api/v1/collections/${protectedId}`, {
+      const read = await req("GET", `/api/v1/catalogues/${protectedId}`, {
         cookies,
       });
       expect(read.status).toBe(403);
@@ -997,7 +1003,7 @@ describe("a protected collection's members", () => {
 
       const list = await req(
         "GET",
-        `/api/v1/collections/${protectedId}/artworks`,
+        `/api/v1/catalogues/${protectedId}/artworks`,
         { cookies },
       );
       expect(list.status).toBe(403);

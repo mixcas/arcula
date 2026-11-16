@@ -4,19 +4,19 @@
 // Two prefixes, both self-describing — every segment is an id or a
 // variant key, and no user-supplied filename ever reaches a path:
 //
-//   final:    artworks/{namespaceId}/{collectionId}/{artworkId}/photos/{entryId}_{key}.{ext}
-//             artworks/{namespaceId}/{collectionId}/{artworkId}/documents/{entryId}_{key}.{ext}
-//   staging:  staging/{uploaderId}/{collectionId}/{artworkId}/{entryId}[_{key}].{ext}
+//   final:    artworks/{namespaceId}/{catalogueId}/{artworkId}/photos/{entryId}_{key}.{ext}
+//             artworks/{namespaceId}/{catalogueId}/{artworkId}/documents/{entryId}_{key}.{ext}
+//   staging:  staging/{uploaderId}/{catalogueId}/{artworkId}/{entryId}[_{key}].{ext}
 //
 // The second segment is not the same fact in the two shapes. A final object
-// belongs to the collection, so it is named by the collection's fixed
+// belongs to the catalogue, so it is named by the catalogue's fixed
 // `mediaNamespaceId`: a transfer changes the owner and moves no byte. A
 // staged object belongs to whoever uploaded it, so it is named by their
 // account id and one collaborator never lists another's uploads.
 //
 // `staging/` leads the staged key on purpose: lifecycle rules match
 // literal prefixes, so one `staging/` rule covers every staged object in
-// every collection, while no such rule can exist over the nested final
+// every catalogue, while no such rule can exist over the nested final
 // form. The parser is what makes the proxy's per-request authz and the
 // sweep work from the key alone — nothing else is asked of a key.
 
@@ -42,18 +42,18 @@ export const OBJECT_KEYS = [
 export type MediaPopulation = "photos" | "documents";
 
 /**
- * The collection's fixed media namespace.
+ * The catalogue's fixed media namespace.
  *
- * `mediaNamespaceId` is set when a collection is created and never moves. It
+ * `mediaNamespaceId` is set when a catalogue is created and never moves. It
  * is nullable until `0004_media_namespace_not_null` has run: the deploy puts
- * the Lambda before the migrations, so a collection created by the old code
+ * the Lambda before the migrations, so a catalogue created by the old code
  * in the gap still resolves — to its owner, which is the segment the old
  * code used for every key.
  */
-export const mediaNamespaceOf = (collection: {
+export const mediaNamespaceOf = (catalogue: {
   mediaNamespaceId: string | null;
   userId: string;
-}): string => collection.mediaNamespaceId ?? collection.userId;
+}): string => catalogue.mediaNamespaceId ?? catalogue.userId;
 
 /**
  * The final entry's base. The two populations differ by this one segment —
@@ -63,70 +63,70 @@ export const mediaNamespaceOf = (collection: {
 const finalBase = (
   population: MediaPopulation,
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `artworks/${namespaceId}/${collectionId}/${artworkId}/${population}/${entryId}`;
+  `artworks/${namespaceId}/${catalogueId}/${artworkId}/${population}/${entryId}`;
 
 export const finalPhotoKey = (
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `${finalBase("photos", namespaceId, collectionId, artworkId, entryId)}_${key}.${ext}`;
+  `${finalBase("photos", namespaceId, catalogueId, artworkId, entryId)}_${key}.${ext}`;
 
 export const finalDocumentKey = (
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `${finalBase("documents", namespaceId, collectionId, artworkId, entryId)}_${key}.${ext}`;
+  `${finalBase("documents", namespaceId, catalogueId, artworkId, entryId)}_${key}.${ext}`;
 
 /**
  * The two prefixes the staging routes list against — one artwork's staged
- * space, and the caller's whole staged space in a collection (the sweep's).
+ * space, and the caller's whole staged space in a catalogue (the sweep's).
  *
- * Both carry the uploader's id, never the collection's alone: staging is per
+ * Both carry the uploader's id, never the catalogue's alone: staging is per
  * uploader (ADR-0004), so listing either reaches the caller's own unsaved
  * uploads and nobody else's. A builder rather than a template at the call
  * site, because that property is the sweep's whole safety.
  */
 export const stagedArtworkPrefix = (
   uploaderId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
-): string => `staging/${uploaderId}/${collectionId}/${artworkId}/`;
+): string => `staging/${uploaderId}/${catalogueId}/${artworkId}/`;
 
-export const stagedCollectionPrefix = (
+export const stagedCataloguePrefix = (
   uploaderId: string,
-  collectionId: string,
-): string => `staging/${uploaderId}/${collectionId}/`;
+  catalogueId: string,
+): string => `staging/${uploaderId}/${catalogueId}/`;
 
 export const stagingOriginalKey = (
   uploaderId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
   ext: string,
 ): string =>
-  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}.${ext}`;
+  `${stagedArtworkPrefix(uploaderId, catalogueId, artworkId)}${entryId}.${ext}`;
 
 export const stagingVariantKey = (
   uploaderId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
   key: string,
   ext: string,
 ): string =>
-  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}_${key}.${ext}`;
+  `${stagedArtworkPrefix(uploaderId, catalogueId, artworkId)}${entryId}_${key}.${ext}`;
 
 /**
  * The final prefixes that address one entry's objects. Deleting a removed
@@ -137,19 +137,19 @@ export const stagingVariantKey = (
  */
 export const finalPhotoPrefix = (
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${finalBase("photos", namespaceId, collectionId, artworkId, entryId)}_`;
+  `${finalBase("photos", namespaceId, catalogueId, artworkId, entryId)}_`;
 
 export const finalDocumentPrefix = (
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${finalBase("documents", namespaceId, collectionId, artworkId, entryId)}_`;
+  `${finalBase("documents", namespaceId, catalogueId, artworkId, entryId)}_`;
 
 /**
  * The prefixes that address one staged entry without its siblings.
@@ -163,26 +163,26 @@ export const finalDocumentPrefix = (
  */
 export const stagedOriginalPrefix = (
   uploaderId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}.`;
+  `${stagedArtworkPrefix(uploaderId, catalogueId, artworkId)}${entryId}.`;
 
 export const stagedVariantPrefix = (
   uploaderId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): string =>
-  `${stagedArtworkPrefix(uploaderId, collectionId, artworkId)}${entryId}_`;
+  `${stagedArtworkPrefix(uploaderId, catalogueId, artworkId)}${entryId}_`;
 
 /** The unmodified source: no key suffix, so a staged entry is at most
  *  one original plus its generated variants. */
 export type ParsedStagingKey = {
   kind: "staging";
   uploaderId: string;
-  collectionId: string;
+  catalogueId: string;
   artworkId: string;
   entryId: string;
   /** `null` for the original, the variant key otherwise. */
@@ -194,7 +194,7 @@ export type ParsedFinalKey = {
   kind: "final";
   population: MediaPopulation;
   namespaceId: string;
-  collectionId: string;
+  catalogueId: string;
   artworkId: string;
   entryId: string;
   key: string;
@@ -261,7 +261,7 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
       kind: "final",
       population: segments[4],
       namespaceId: segments[1],
-      collectionId: segments[2],
+      catalogueId: segments[2],
       artworkId: segments[3],
       entryId,
       key: objectKey,
@@ -277,7 +277,7 @@ export const parseMediaKey = (key: string): ParsedMediaKey | null => {
     return {
       kind: "staging",
       uploaderId: segments[1],
-      collectionId: segments[2],
+      catalogueId: segments[2],
       artworkId: segments[3],
       entryId,
       key: objectKey,

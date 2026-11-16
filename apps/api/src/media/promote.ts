@@ -3,7 +3,7 @@
 // Promoting is two things: the S3 `COPY` of the entry's staged objects
 // onto their final keys, and the metadata the save transaction records
 // as rows. The staged keys name their uploader; the final keys name the
-// collection's fixed media namespace, so a later transfer moves no byte.
+// catalogue's fixed media namespace, so a later transfer moves no byte.
 // Two properties hold:
 //
 //   - **Idempotent.** Re-saving the same entry copies onto the same final
@@ -54,11 +54,11 @@ export interface PromotedEntry {
 
 export async function promoteEntry(params: {
   population: PopulationKind;
-  /** The collection's fixed media namespace: every final key's segment. */
+  /** The catalogue's fixed media namespace: every final key's segment. */
   namespaceId: string;
   /** The account that staged the entry: every staged key's segment. */
   uploaderId: string;
-  collectionId: string;
+  catalogueId: string;
   artworkId: string;
   entryId: string;
 }): Promise<PromotedEntry> {
@@ -66,7 +66,7 @@ export async function promoteEntry(params: {
     population,
     namespaceId,
     uploaderId,
-    collectionId,
+    catalogueId,
     artworkId,
     entryId,
   } = params;
@@ -75,7 +75,7 @@ export async function promoteEntry(params: {
   // 1. The staged original: stage writes exactly one, so anything else
   //    means the entry does not exist (any more).
   const originals = await listObjects(
-    stagedOriginalPrefix(uploaderId, collectionId, artworkId, entryId),
+    stagedOriginalPrefix(uploaderId, catalogueId, artworkId, entryId),
   );
   if (originals.length !== 1) {
     throw new ApiError(
@@ -114,7 +114,7 @@ export async function promoteEntry(params: {
   // 2. The staged variants (none for a `file` document: process is a
   //    no-op for a PDF).
   const stagedVariantKeys = await listObjects(
-    stagedVariantPrefix(uploaderId, collectionId, artworkId, entryId),
+    stagedVariantPrefix(uploaderId, catalogueId, artworkId, entryId),
   );
 
   const variantCopies: { stagedKey: string; object: PromotedObject }[] = [];
@@ -186,7 +186,7 @@ export async function promoteEntry(params: {
     originalKey,
     finalKey(
       namespaceId,
-      collectionId,
+      catalogueId,
       artworkId,
       entryId,
       "original",
@@ -203,7 +203,7 @@ export async function promoteEntry(params: {
     }
     await copyObject(
       stagedKey,
-      finalKey(namespaceId, collectionId, artworkId, entryId, object.key, ext),
+      finalKey(namespaceId, catalogueId, artworkId, entryId, object.key, ext),
       object.contentType,
     );
   }

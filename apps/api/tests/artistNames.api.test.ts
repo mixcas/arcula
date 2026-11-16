@@ -6,13 +6,13 @@
 // truncation permutations. This suite pins their effect at the wire — the
 // spec's Testing Decisions ask for the case/accent collapse and by-use order to
 // be visible through the real app — and the scope only the wire can show: which
-// collections the aggregate reads, which works inside them count, and that one
+// catalogues the aggregate reads, which works inside them count, and that one
 // caller's list is never another's.
 
 import {
   artworks as artworksTable,
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "../src/db";
@@ -25,12 +25,12 @@ let collaborator: Account;
 let outsider: Account;
 let emptyCaller: Account;
 
-/** The owner's collection, shared with the collaborator. */
-let sharedCollectionId = "";
-/** The collaborator's own collection: invisible to the owner. */
-let collaboratorCollectionId = "";
-/** A stranger's collection: nobody here may read its names. */
-let foreignCollectionId = "";
+/** The owner's catalogue, shared with the collaborator. */
+let sharedCatalogueId = "";
+/** The collaborator's own catalogue: invisible to the owner. */
+let collaboratorCatalogueId = "";
+/** A stranger's catalogue: nobody here may read its names. */
+let foreignCatalogueId = "";
 
 interface WorkValues {
   artistName: string;
@@ -73,9 +73,9 @@ beforeAll(async () => {
   emptyCaller = await freshUser("NameEmpty");
 
   const now = new Date();
-  sharedCollectionId = uuid();
-  await db.insert(collectionsTable).values({
-    id: sharedCollectionId,
+  sharedCatalogueId = uuid();
+  await db.insert(cataloguesTable).values({
+    id: sharedCatalogueId,
     userId: owner.userId,
     mediaNamespaceId: uuid(),
     name: "The Shared Studio",
@@ -84,83 +84,83 @@ beforeAll(async () => {
     updatedAt: now,
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: sharedCollectionId,
+    collectionId: sharedCatalogueId,
     userId: collaborator.userId,
   });
 
   // Four works under one artist in two spellings: the draft counts, and the
   // majority spelling wins the collapse.
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Pablo Picasso",
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Pablo Picasso",
     updatedAt: new Date("2026-01-02T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Pablo Picasso",
     updatedAt: new Date("2026-01-03T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "pablo picasso",
     status: "draft",
     updatedAt: new Date("2026-01-04T00:00:00.000Z"),
   });
 
   // Accents collapse too, and the two spellings are one option.
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "María López",
     updatedAt: new Date("2026-01-05T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "María López",
     updatedAt: new Date("2026-01-06T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Maria Lopez",
     updatedAt: new Date("2026-01-07T00:00:00.000Z"),
   });
 
   // The count-one tail, including the case-insensitive name order: "alice"
   // belongs before "Bob" although the plain byte order would say otherwise.
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Claude Monet",
     updatedAt: new Date("2026-01-07T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Draft Discovery",
     status: "draft",
     updatedAt: new Date("2026-01-08T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "alice",
     updatedAt: new Date("2026-01-09T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Bob",
     updatedAt: new Date("2026-01-10T00:00:00.000Z"),
   });
 
   // Neither the deleted work nor the blank spellings may reach the list.
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "Deleted Artist",
     deleted: true,
     updatedAt: new Date("2026-01-11T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "",
     updatedAt: new Date("2026-01-12T00:00:00.000Z"),
   });
-  await insertWork(sharedCollectionId, owner.userId, {
+  await insertWork(sharedCatalogueId, owner.userId, {
     artistName: "   ",
     updatedAt: new Date("2026-01-13T00:00:00.000Z"),
   });
 
-  // A deleted collection keeps its rows, and keeps contributing nothing.
-  const deletedCollectionId = uuid();
-  await db.insert(collectionsTable).values({
-    id: deletedCollectionId,
+  // A deleted catalogue keeps its rows, and keeps contributing nothing.
+  const deletedCatalogueId = uuid();
+  await db.insert(cataloguesTable).values({
+    id: deletedCatalogueId,
     userId: owner.userId,
     mediaNamespaceId: uuid(),
     name: "The Stamped Studio",
@@ -169,14 +169,14 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await insertWork(deletedCollectionId, owner.userId, {
+  await insertWork(deletedCatalogueId, owner.userId, {
     artistName: "Ghost Artist",
     updatedAt: new Date("2026-01-14T00:00:00.000Z"),
   });
 
-  collaboratorCollectionId = uuid();
-  await db.insert(collectionsTable).values({
-    id: collaboratorCollectionId,
+  collaboratorCatalogueId = uuid();
+  await db.insert(cataloguesTable).values({
+    id: collaboratorCatalogueId,
     userId: collaborator.userId,
     mediaNamespaceId: uuid(),
     name: "The Collaborator's Own",
@@ -184,14 +184,14 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await insertWork(collaboratorCollectionId, collaborator.userId, {
+  await insertWork(collaboratorCatalogueId, collaborator.userId, {
     artistName: "Vincent van Gogh",
     updatedAt: new Date("2026-01-15T00:00:00.000Z"),
   });
 
-  foreignCollectionId = uuid();
-  await db.insert(collectionsTable).values({
-    id: foreignCollectionId,
+  foreignCatalogueId = uuid();
+  await db.insert(cataloguesTable).values({
+    id: foreignCatalogueId,
     userId: outsider.userId,
     mediaNamespaceId: uuid(),
     name: "Someone Else's Studio",
@@ -199,7 +199,7 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await insertWork(foreignCollectionId, outsider.userId, {
+  await insertWork(foreignCatalogueId, outsider.userId, {
     artistName: "Secret Artist",
     updatedAt: new Date("2026-01-16T00:00:00.000Z"),
   });
@@ -209,7 +209,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-/** The names the owner's own collection contributes, in the list's order. */
+/** The names the owner's own catalogue contributes, in the list's order. */
 const OWNER_NAMES = [
   "Pablo Picasso",
   "María López",
@@ -220,20 +220,20 @@ const OWNER_NAMES = [
 ];
 
 describe("the caller's vocabulary", () => {
-  it("gives an owner the names in their own collection, drafts included", async () => {
+  it("gives an owner the names in their own catalogue, drafts included", async () => {
     expect(await namesFor(owner.cookies)).toEqual(OWNER_NAMES);
   });
 
-  it("gives a collaborator the shared collection's names plus their own", async () => {
+  it("gives a collaborator the shared catalogue's names plus their own", async () => {
     expect(await namesFor(collaborator.cookies)).toEqual([
       ...OWNER_NAMES,
       "Vincent van Gogh",
     ]);
   });
 
-  it("never crosses into a collection the caller cannot read", async () => {
+  it("never crosses into a catalogue the caller cannot read", async () => {
     // The outsider's own list is the only name they may see; the owner's and
-    // the collaborator's collections are closed books.
+    // the collaborator's catalogues are closed books.
     expect(await namesFor(outsider.cookies)).toEqual(["Secret Artist"]);
   });
 });
@@ -245,7 +245,7 @@ describe("the wire", () => {
     expect((await err(res)).code).toBe("unauthorized");
   });
 
-  it("answers an empty 200 for a caller with no collections", async () => {
+  it("answers an empty 200 for a caller with no catalogues", async () => {
     expect(await namesFor(emptyCaller.cookies)).toEqual([]);
   });
 });

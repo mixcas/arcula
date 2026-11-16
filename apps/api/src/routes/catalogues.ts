@@ -1,32 +1,32 @@
-// The collection resource routes:
+// The catalogue resource routes:
 //
-//   GET    /collections                              the owner's list / the public list
-//   POST   /collections                              create (cap check first)
-//   GET    /collections/{cid}                        one collection
-//   PATCH  /collections/{cid}                        update
-//   DELETE /collections/{cid}                        delete (owner only)
-//   POST   /collections/{cid}/unlock                 the lock screen's password attempt
-//   POST   /collections/{cid}/import/csv             the CSV import's bulk write
-//   GET    /collections/{cid}/deleted-artworks       the Deleted view's list
-//   POST   /collections/{cid}/artworks/bulk-delete   the batch soft delete
-//   POST   /collections/{cid}/artworks/bulk-restore  the batch restore
-//   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
+//   GET    /catalogues                              the owner's list / the public list
+//   POST   /catalogues                              create (cap check first)
+//   GET    /catalogues/{cid}                        one catalogue
+//   PATCH  /catalogues/{cid}                        update
+//   DELETE /catalogues/{cid}                        delete (owner only)
+//   POST   /catalogues/{cid}/unlock                 the lock screen's password attempt
+//   POST   /catalogues/{cid}/import/csv             the CSV import's bulk write
+//   GET    /catalogues/{cid}/deleted-artworks       the Deleted view's list
+//   POST   /catalogues/{cid}/artworks/bulk-delete   the batch soft delete
+//   POST   /catalogues/{cid}/artworks/bulk-restore  the batch restore
+//   POST   /catalogues/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
 //
-// Every path below is also registered under `/catalogues/…` (`routes`):
-// the Catalogue name exists beside the Collection name during the rename's
-// expand window (ADR-0010, #244), and the old paths keep answering unchanged.
+// Every path below is also registered under `/collections/…` (`routes`): the
+// legacy Collection spelling keeps answering unchanged until the contract
+// step removes it (ADR-0010, #246).
 //
-// A collection is deleted by its owner alone, and the stamp is the whole
+// A catalogue is deleted by its owner alone, and the stamp is the whole
 // record: `deletedAt` makes the loader refuse the row, so every address that
 // named it answers not-found. Nothing cascades — the works, their media and
-// the collaborator rows stay — and the cap counts only live collections, so a
+// the collaborator rows stay — and the cap counts only live catalogues, so a
 // delete frees its slot immediately.
 //
-// Writer access: every route below that changes a collection or its works —
+// Writer access: every route below that changes a catalogue or its works —
 // the settings, the import, the batch delete, the restore and the sweep — is
 // open to any member, the owner or a collaborator (ADR-0004); the delete is
-// the one that is the owner's alone. The cap still counts OWNED collections
-// that are live: creating one is the caller's own, a shared collection does
+// the one that is the owner's alone. The cap still counts OWNED catalogues
+// that are live: creating one is the caller's own, a shared catalogue does
 // not consume their slot, and a deleted one frees it.
 
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
@@ -34,11 +34,11 @@ import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
-  collectionAccessGrants as grantsTable,
-  collectionCollaborators as collectionCollaboratorsTable,
-  collectionInvitations as collectionInvitationsTable,
-  collectionUnlockAttempts as unlockAttemptsTable,
-  collections as collectionsTable,
+  catalogueAccessGrants as grantsTable,
+  catalogueCollaborators as catalogueCollaboratorsTable,
+  catalogueInvitations as catalogueInvitationsTable,
+  catalogueUnlockAttempts as unlockAttemptsTable,
+  catalogues as cataloguesTable,
   user as userTable,
 } from "@arcula/db";
 import {
@@ -46,28 +46,28 @@ import {
   artworkBulkDeleteSchema,
   artworkBulkRestoreSchema,
   artworkImportSchema,
-  collectionCreateSchema,
-  collectionUnlockSchema,
-  collectionUpdateSchema,
-  collectionLimitForTier,
+  catalogueCreateSchema,
+  catalogueUnlockSchema,
+  catalogueUpdateSchema,
+  catalogueLimitForTier,
   artworkSchema,
   IMPORTED_WORK_STATUS,
   type ArtworkBulkDeletePayload,
   type ArtworkBulkRestorePayload,
   type ArtworkImportPayload,
-  type CollectionCreatePayload,
-  type CollectionUnlockPayload,
-  type CollectionUpdatePayload,
+  type CatalogueCreatePayload,
+  type CatalogueUnlockPayload,
+  type CatalogueUpdatePayload,
 } from "@arcula/shared";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { readDeletedArtworkList } from "../artworkRead";
 import {
-  loadCollection,
+  loadCatalogue,
   requireMemberArtwork,
-  requireMemberCollection,
-  requireOwnerCollection,
-  requireReadableCollection,
+  requireMemberCatalogue,
+  requireOwnerCatalogue,
+  requireReadableCatalogue,
 } from "../authorize";
 import { CLIENT_ADDRESS_HEADER, clientAddress } from "../clientAddress";
 import {
@@ -76,32 +76,32 @@ import {
   grantCookieName,
   hashGrantToken,
   mintGrantToken,
-} from "../collectionGrants";
-import { hashPassword, verifyPassword } from "../collectionPassword";
-import { collaboratorJoin, readableCollectionsWhere } from "../collectionScope";
+} from "../catalogueGrants";
+import { hashPassword, verifyPassword } from "../cataloguePassword";
+import { collaboratorJoin, readableCataloguesWhere } from "../catalogueScope";
 import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
 import { mintId } from "../ids";
-import { parseMediaKey, stagedCollectionPrefix } from "../media/keys";
+import { parseMediaKey, stagedCataloguePrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
-import { displayName, serializeCollection } from "../serialize";
+import { displayName, serializeCatalogue } from "../serialize";
 import {
   UNLOCK_MAX_FAILURES,
   UNLOCK_WINDOW_MINUTES,
   unlockWindowStart,
 } from "../unlockThrottle";
-import { withCatalogueAlias } from "./paths";
+import { withLegacyCollectionAlias } from "./paths";
 
-export const collectionRoutes = new Hono();
+export const catalogueRoutes = new Hono();
 
 // Every registration below mounts under both names.
-const routes = withCatalogueAlias(collectionRoutes);
+const routes = withLegacyCollectionAlias(catalogueRoutes);
 
 /**
- * The one write behind both batch routes: move a collection's deletion stamp
+ * The one write behind both batch routes: move a catalogue's deletion stamp
  * for the selected ids and answer how many rows moved.
  *
  * Delete stamps the ids that are live; restore clears the ones that are
@@ -138,65 +138,65 @@ async function moveDeletionStamp(
   return result.length;
 }
 
-// GET /collections — signed in: the collections the caller owns *and* those
+// GET /catalogues — signed in: the catalogues the caller owns *and* those
 // shared with them, together, name-ordered, each row carrying its `role`
 // (and, on a shared row, the owner's display name); anonymous: the public
-// list, which excludes a Protected collection exactly as it excludes a
-// Private one, so a collection with a password is reachable only by its
+// list, which excludes a Protected catalogue exactly as it excludes a
+// Private one, so a catalogue with a password is reachable only by its
 // direct link (ADR-0005). A signed-in visitor never sees other people's
-// collections through this route.
+// catalogues through this route.
 //
 // The two are one list on purpose (ADR-0004): a separate `/shared` endpoint
 // would split one list into two client paths and make the dashboard merge
 // them.
 //
-// The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
-// access.ts — public AND not protected — and collections.api.test.ts asserts
+// The anonymous filter is the SQL form of `canSeeCatalogue(null, row)` in
+// access.ts — public AND not protected — and catalogues.api.test.ts asserts
 // the two agree.
-routes.get("/collections", async (c) => {
+routes.get("/catalogues", async (c) => {
   const session = await resolveSession(c);
   if (session === null) {
     const rows = await db
       .select()
-      .from(collectionsTable)
+      .from(cataloguesTable)
       .where(
         and(
-          eq(collectionsTable.isPublic, true),
-          isNull(collectionsTable.passwordHash),
-          isNull(collectionsTable.deletedAt),
+          eq(cataloguesTable.isPublic, true),
+          isNull(cataloguesTable.passwordHash),
+          isNull(cataloguesTable.deletedAt),
         ),
       )
-      .orderBy(asc(collectionsTable.name));
-    return c.json(rows.map((row) => serializeCollection(row)));
+      .orderBy(asc(cataloguesTable.name));
+    return c.json(rows.map((row) => serializeCatalogue(row)));
   }
 
   const userId = session.user.id;
   // One query, so the two halves share one collation and a stray membership
-  // row for the owner cannot list the collection twice: the owner column
+  // row for the owner cannot list the catalogue twice: the owner column
   // decides the role, and the join only says "shared with this account".
   const rows = await db
     .select({
-      collection: collectionsTable,
+      catalogue: cataloguesTable,
       ownerName: userTable.name,
       ownerEmail: userTable.email,
     })
-    .from(collectionsTable)
-    .innerJoin(userTable, eq(userTable.id, collectionsTable.userId))
-    .leftJoin(collectionCollaboratorsTable, collaboratorJoin(userId))
-    .where(readableCollectionsWhere(userId))
-    .orderBy(asc(collectionsTable.name));
+    .from(cataloguesTable)
+    .innerJoin(userTable, eq(userTable.id, cataloguesTable.userId))
+    .leftJoin(catalogueCollaboratorsTable, collaboratorJoin(userId))
+    .where(readableCataloguesWhere(userId))
+    .orderBy(asc(cataloguesTable.name));
 
   return c.json(
-    rows.map(({ collection, ownerName, ownerEmail }) => {
-      if (collection.userId === userId) {
-        return serializeCollection(collection, {
+    rows.map(({ catalogue, ownerName, ownerEmail }) => {
+      if (catalogue.userId === userId) {
+        return serializeCatalogue(catalogue, {
           role: "owner",
           audience: "member",
         });
       }
       // The glossary's "the owner's display name, falling back to email": an
       // account with no usable name is named by its address.
-      return serializeCollection(collection, {
+      return serializeCatalogue(catalogue, {
         role: "collaborator",
         ownerName: displayName(ownerName, ownerEmail),
         audience: "member",
@@ -205,40 +205,40 @@ routes.get("/collections", async (c) => {
   );
 });
 
-// POST /collections — the cap check comes FIRST: the count is over the
-// caller's own collections, the limit is read off the caller's tier.
-routes.post("/collections", requireSession, async (c) => {
+// POST /catalogues — the cap check comes FIRST: the count is over the
+// caller's own catalogues, the limit is read off the caller's tier.
+routes.post("/catalogues", requireSession, async (c) => {
   const user = c.get("user");
-  const payload: CollectionCreatePayload = await parseBody(
+  const payload: CatalogueCreatePayload = await parseBody(
     c,
-    collectionCreateSchema,
+    catalogueCreateSchema,
   );
 
-  const limit = collectionLimitForTier(user.tier);
+  const limit = catalogueLimitForTier(user.tier);
   const owned = await db
-    .select({ id: collectionsTable.id })
-    .from(collectionsTable)
+    .select({ id: cataloguesTable.id })
+    .from(cataloguesTable)
     .where(
       and(
-        eq(collectionsTable.userId, user.id),
-        // A deleted collection frees its slot the moment it is stamped.
-        isNull(collectionsTable.deletedAt),
+        eq(cataloguesTable.userId, user.id),
+        // A deleted catalogue frees its slot the moment it is stamped.
+        isNull(cataloguesTable.deletedAt),
       ),
     );
   if (owned.length >= limit) {
     throw new ApiError(
       "limit-reached",
-      `Your plan allows at most ${limit} collection${limit === 1 ? "" : "s"}`,
+      `Your plan allows at most ${limit} catalogue${limit === 1 ? "" : "s"}`,
     );
   }
 
   const id = mintId();
   const now = new Date();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id,
     userId: user.id,
     // Fixed at creation: the second segment of every final media key, so a
-    // later transfer of the collection moves no object. A fresh opaque id,
+    // later transfer of the catalogue moves no object. A fresh opaque id,
     // not the owner's — the owner may change, the namespace may not.
     mediaNamespaceId: mintId(),
     name: payload.name,
@@ -248,24 +248,24 @@ routes.post("/collections", requireSession, async (c) => {
     updatedAt: now,
   });
   // The insert just committed; read-back failure is a server bug.
-  const row = await loadCollection(id);
+  const row = await loadCatalogue(id);
   if (!row) {
     throw new ApiError(
       "internal",
-      "The created collection could not be read back",
+      "The created catalogue could not be read back",
     );
   }
-  return c.json(serializeCollection(row, { audience: "member" }), 201);
+  return c.json(serializeCatalogue(row, { audience: "member" }), 201);
 });
 
-// GET one — a member always; a visitor when the collection is public. The
+// GET one — a member always; a visitor when the catalogue is public. The
 // password flag is the member's alone: a visitor's document does not carry it.
-routes.get("/collections/:collectionId", async (c) => {
-  const { collection, audience } = await requireReadableCollection(
+routes.get("/catalogues/:collectionId", async (c) => {
+  const { catalogue, audience } = await requireReadableCatalogue(
     c,
     param(c, "collectionId"),
   );
-  return c.json(serializeCollection(collection, { audience }));
+  return c.json(serializeCatalogue(catalogue, { audience }));
 });
 
 // PATCH — any member: the owner or a collaborator, exactly as the settings
@@ -274,18 +274,18 @@ routes.get("/collections/:collectionId", async (c) => {
 // only what changed" payload safe. A body that names nothing writes nothing:
 // no column moves, and `updatedAt` is left alone, so "updated" continues to
 // mean something was.
-routes.patch("/collections/:collectionId", requireSession, async (c) => {
-  const collection = await requireMemberCollection(c, param(c, "collectionId"));
-  const payload: CollectionUpdatePayload = await parseBody(
+routes.patch("/catalogues/:collectionId", requireSession, async (c) => {
+  const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+  const payload: CatalogueUpdatePayload = await parseBody(
     c,
-    collectionUpdateSchema,
+    catalogueUpdateSchema,
   );
 
   // A password present means a write: a string sets (or overwrites) it,
   // `null` removes it. Hashing happens before the transaction — it touches
   // no row — and the update plus the grant revocation share one, so a
   // change can never leave a reader holding a grant to the old password.
-  // An absent key leaves the column alone, which is why making a collection
+  // An absent key leaves the column alone, which is why making a catalogue
   // private and public again returns it to Protected.
   const passwordHash =
     payload.password === undefined
@@ -297,7 +297,7 @@ routes.patch("/collections/:collectionId", requireSession, async (c) => {
   // Build the update only from the keys the body carried: an absent key
   // leaves its column alone, and a body that names nothing is a successful
   // no-op that moves no column and no timestamp.
-  const set: Partial<typeof collectionsTable.$inferInsert> = {};
+  const set: Partial<typeof cataloguesTable.$inferInsert> = {};
   if (payload.name !== undefined) {
     set.name = payload.name;
   }
@@ -320,97 +320,97 @@ routes.patch("/collections/:collectionId", requireSession, async (c) => {
     set.updatedAt = new Date();
     await safeTx(async (tx) => {
       await tx
-        .update(collectionsTable)
+        .update(cataloguesTable)
         .set(set)
-        .where(eq(collectionsTable.id, collection.id));
+        .where(eq(cataloguesTable.id, catalogue.id));
       if (passwordHash !== undefined) {
         // Revocation, in the same transaction: setting and changing are one
         // operation, and removing has nothing left to admit.
         await tx
           .delete(grantsTable)
-          .where(eq(grantsTable.collectionId, collection.id));
+          .where(eq(grantsTable.collectionId, catalogue.id));
       }
     });
   }
 
-  const row = await loadCollection(collection.id);
+  const row = await loadCatalogue(catalogue.id);
   if (!row) {
     throw new ApiError(
       "internal",
-      "The saved collection could not be read back",
+      "The saved catalogue could not be read back",
     );
   }
-  return c.json(serializeCollection(row, { audience: "member" }));
+  return c.json(serializeCatalogue(row, { audience: "member" }));
 });
 
 // DELETE — owner-only. One transaction stamps `deletedAt`/`updatedAt`,
-// withdraws the collection's pending invitations (resolved history stays the
+// withdraws the catalogue's pending invitations (resolved history stays the
 // history it is) and closes its Access grants, so nothing can observe a
-// deleted collection that still holds a live offer or a valid grant.
+// deleted catalogue that still holds a live offer or a valid grant.
 //
 // The update is guarded on `deletedAt IS NULL` as well as the loader's
 // refusal: two deletes racing get one stamp, and the loser answers not-found
 // rather than moving the timestamp twice. Nothing else is written — that is
 // what keeps the operator's restore to clearing one column.
-routes.delete("/collections/:collectionId", requireSession, async (c) => {
-  const collection = await requireOwnerCollection(
+routes.delete("/catalogues/:collectionId", requireSession, async (c) => {
+  const catalogue = await requireOwnerCatalogue(
     c,
     param(c, "collectionId"),
-    "Only the collection's owner can delete it",
+    "Only the catalogue's owner can delete it",
   );
   const now = new Date();
   await safeTx(async (tx) => {
     const stamped = await tx
-      .update(collectionsTable)
+      .update(cataloguesTable)
       .set({ deletedAt: now, updatedAt: now })
       .where(
         and(
-          eq(collectionsTable.id, collection.id),
-          isNull(collectionsTable.deletedAt),
+          eq(cataloguesTable.id, catalogue.id),
+          isNull(cataloguesTable.deletedAt),
         ),
       )
-      .returning({ id: collectionsTable.id });
+      .returning({ id: cataloguesTable.id });
     if (stamped.length === 0) {
-      throw new ApiError("not-found", "The collection does not exist");
+      throw new ApiError("not-found", "The catalogue does not exist");
     }
     await tx
-      .update(collectionInvitationsTable)
+      .update(catalogueInvitationsTable)
       .set({ status: "revoked", resolvedAt: now })
       .where(
         and(
-          eq(collectionInvitationsTable.collectionId, collection.id),
-          eq(collectionInvitationsTable.status, "pending"),
+          eq(catalogueInvitationsTable.collectionId, catalogue.id),
+          eq(catalogueInvitationsTable.status, "pending"),
         ),
       );
     await tx
       .delete(grantsTable)
-      .where(eq(grantsTable.collectionId, collection.id));
+      .where(eq(grantsTable.collectionId, catalogue.id));
   });
   return c.body(null, 204);
 });
 
 // POST …/unlock — the lock screen's password attempt, and the one route a
-// non-member reaches a Protected collection through.
+// non-member reaches a Protected catalogue through.
 //
 // A right password mints an Access grant: a 32-byte token whose only stored
 // form is its SHA-256 hash, in a row that expires in twelve hours, handed back
-// as the cookie named for this collection on the API path. The cookie is
+// as the cookie named for this catalogue on the API path. The cookie is
 // `HttpOnly` because no script needs it, and `SameSite=Lax` because one
-// collection's page fetching another's bytes is not a case the product has.
+// catalogue's page fetching another's bytes is not a case the product has.
 //
 // A wrong password is `403 invalid-password`, deliberately distinct from the
 // uniform `not-found` an invitation token gets: the reader already has the
-// lock screen, which named the collection, so a uniform refusal would buy no
+// lock screen, which named the catalogue, so a uniform refusal would buy no
 // secrecy and only cost the prompt the ability to say "that is not it"
 // (ADR-0005).
 //
-// A collection with no password, or a private one, is not unlockable at all:
+// A catalogue with no password, or a private one, is not unlockable at all:
 // there is nothing in front of it to get past. The attempt is answered `409`
 // — the state the request does not suit, rather than a permission question.
 //
 // **The throttle.** This is the one route whose purpose is to be guessed at,
 // so its attempts are counted in `collection_unlock_attempts`, per address and
-// per collection, in a **fixed** ten-minute window (unlockThrottle.ts has the
+// per catalogue, in a **fixed** ten-minute window (unlockThrottle.ts has the
 // arithmetic and the reason it is fixed). The count is spent *before* the
 // secret is read, in one atomic claim: an INSERT that opens the window's row,
 // or an UPDATE that adds this failure to it while the window still has room
@@ -423,24 +423,24 @@ routes.delete("/collections/:collectionId", requireSession, async (c) => {
 // The refusal states the window and nothing about the time left in it, and
 // carries no `Retry-After` for the same reason: a countdown would tell a
 // guesser exactly when their next ten attempts open.
-routes.post("/collections/:collectionId/unlock", async (c) => {
-  const collection = await loadCollection(param(c, "collectionId"));
-  if (!collection) {
-    throw new ApiError("not-found", "The collection does not exist");
+routes.post("/catalogues/:collectionId/unlock", async (c) => {
+  const catalogue = await loadCatalogue(param(c, "collectionId"));
+  if (!catalogue) {
+    throw new ApiError("not-found", "The catalogue does not exist");
   }
-  if (!collection.isPublic || collection.passwordHash === null) {
-    throw new ApiError("conflict", "This collection is not protected");
+  if (!catalogue.isPublic || catalogue.passwordHash === null) {
+    throw new ApiError("conflict", "This catalogue is not protected");
   }
-  const payload: CollectionUnlockPayload = await parseBody(
+  const payload: CatalogueUnlockPayload = await parseBody(
     c,
-    collectionUnlockSchema,
+    catalogueUnlockSchema,
   );
 
   const ip = clientAddress(c.req.header(CLIENT_ADDRESS_HEADER));
   const windowStart = unlockWindowStart(new Date());
   const [claim] = await db
     .insert(unlockAttemptsTable)
-    .values({ ip, collectionId: collection.id, windowStart, attempts: 1 })
+    .values({ ip, collectionId: catalogue.id, windowStart, attempts: 1 })
     .onConflictDoUpdate({
       target: [
         unlockAttemptsTable.ip,
@@ -461,12 +461,12 @@ routes.post("/collections/:collectionId/unlock", async (c) => {
     );
   }
 
-  if (!(await verifyPassword(payload.password, collection.passwordHash))) {
+  if (!(await verifyPassword(payload.password, catalogue.passwordHash))) {
     throw new ApiError("invalid-password", "That is not the password");
   }
 
   // A right password leaves no debt: every counter row for this address and
-  // collection goes, so the next attempt starts the window from zero even if
+  // catalogue goes, so the next attempt starts the window from zero even if
   // this one was the ninth. Deleting all of them, not just this window's, is
   // what makes "clears the counter" be true of the pair rather than of a span.
   await db
@@ -474,20 +474,20 @@ routes.post("/collections/:collectionId/unlock", async (c) => {
     .where(
       and(
         eq(unlockAttemptsTable.ip, ip),
-        eq(unlockAttemptsTable.collectionId, collection.id),
+        eq(unlockAttemptsTable.collectionId, catalogue.id),
       ),
     );
 
   const now = new Date();
   const token = mintGrantToken();
   await db.insert(grantsTable).values({
-    collectionId: collection.id,
+    collectionId: catalogue.id,
     tokenHash: hashGrantToken(token),
     createdAt: now,
     expiresAt: new Date(now.getTime() + GRANT_TTL_MS),
   });
   // One number for both clocks: the cookie lapses when the row does.
-  setCookie(c, grantCookieName(collection.id), token, {
+  setCookie(c, grantCookieName(catalogue.id), token, {
     httpOnly: true,
     sameSite: "Lax",
     path: GRANT_COOKIE_PATH,
@@ -504,13 +504,10 @@ routes.post("/collections/:collectionId/unlock", async (c) => {
 // client's review step has no say in them, and the shared schema is the
 // only place a row's validity is decided.
 routes.post(
-  "/collections/:collectionId/import/csv",
+  "/catalogues/:collectionId/import/csv",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const payload: ArtworkImportPayload = await parseBody(
       c,
       artworkImportSchema,
@@ -542,10 +539,10 @@ routes.post(
       const values = parsed.data;
       const inserted: typeof artworksTable.$inferInsert = {
         id: mintId(),
-        // The mirror of the collection's owner: an import adds the
-        // collection's works, whoever ran it (ADR-0004).
-        userId: collection.userId,
-        collectionId: collection.id,
+        // The mirror of the catalogue's owner: an import adds the
+        // catalogue's works, whoever ran it (ADR-0004).
+        userId: catalogue.userId,
+        collectionId: catalogue.id,
         title: values.title,
         artistName: values.artistName,
         status: values.status,
@@ -573,14 +570,14 @@ routes.post(
   },
 );
 
-// GET …/deleted-artworks — the collection's deleted works, most recently
+// GET …/deleted-artworks — the catalogue's deleted works, most recently
 // deleted first. Member-only: a non-member gets the same `forbidden` as every
-// other member-only collection route, even when the collection is public. The
-// path sits at the collection level because a static segment under `artworks`
+// other member-only catalogue route, even when the catalogue is public. The
+// path sits at the catalogue level because a static segment under `artworks`
 // would be shadowed by the single-artwork route (Hono matches in registration
 // order).
 routes.get(
-  "/collections/:collectionId/deleted-artworks",
+  "/catalogues/:collectionId/deleted-artworks",
   requireSession,
   async (c) => {
     const read = await readDeletedArtworkList(
@@ -588,12 +585,12 @@ routes.get(
       c.get("user").id,
     );
     if (read.status === "not-found") {
-      throw new ApiError("not-found", "The collection does not exist");
+      throw new ApiError("not-found", "The catalogue does not exist");
     }
     if (read.status === "forbidden") {
       throw new ApiError(
         "forbidden",
-        "You do not have access to this collection",
+        "You do not have access to this catalogue",
       );
     }
     return c.json(read.artworks);
@@ -605,13 +602,10 @@ routes.get(
 // result and do not count: the response is how many works this call
 // actually moved.
 routes.post(
-  "/collections/:collectionId/artworks/bulk-delete",
+  "/catalogues/:collectionId/artworks/bulk-delete",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const payload: ArtworkBulkDeletePayload = await parseBody(
       c,
       artworkBulkDeleteSchema,
@@ -619,7 +613,7 @@ routes.post(
 
     return c.json({
       deleted: await moveDeletionStamp(
-        collection.id,
+        catalogue.id,
         payload.artworkIds,
         "delete",
       ),
@@ -629,17 +623,14 @@ routes.post(
 
 // POST …/artworks/bulk-restore — the inverse of the batch soft delete: one
 // transaction clears `deletedAt` for the ids this call actually moves. A live
-// id, an id from another collection and an id a previous call already restored
+// id, an id from another catalogue and an id a previous call already restored
 // are not in the WHERE clause's result and do not count, so a repeated call is
 // a no-op rather than an error and the response is the number restored.
 routes.post(
-  "/collections/:collectionId/artworks/bulk-restore",
+  "/catalogues/:collectionId/artworks/bulk-restore",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
     const payload: ArtworkBulkRestorePayload = await parseBody(
       c,
       artworkBulkRestoreSchema,
@@ -647,7 +638,7 @@ routes.post(
 
     return c.json({
       restored: await moveDeletionStamp(
-        collection.id,
+        catalogue.id,
         payload.artworkIds,
         "restore",
       ),
@@ -660,12 +651,12 @@ routes.post(
 // The path both UIs use for one work: a row in the Deleted view, and the banner
 // on a deleted work's Edit page.
 routes.post(
-  "/collections/:collectionId/artworks/:artworkId/restore",
+  "/catalogues/:collectionId/artworks/:artworkId/restore",
   requireSession,
   async (c) => {
     const collectionId = param(c, "collectionId");
     const artworkId = param(c, "artworkId");
-    const { collection, artwork } = await requireMemberArtwork(
+    const { catalogue, artwork } = await requireMemberArtwork(
       c,
       collectionId,
       artworkId,
@@ -676,33 +667,30 @@ routes.post(
       .where(
         and(
           eq(artworksTable.id, artwork.id),
-          eq(artworksTable.collectionId, collection.id),
+          eq(artworksTable.collectionId, catalogue.id),
         ),
       );
     return c.json({ restored: true });
   },
 );
 
-// POST …/maintenance/sweep — delete this collection's staged objects
+// POST …/maintenance/sweep — delete this catalogue's staged objects
 // whose entryId has no row. An entry that DOES have a row keeps its staged
 // objects even under a soft-deleted work: the row is what a restore would
 // point at, and the staged object may be the entry's newest version.
 routes.post(
-  "/collections/:collectionId/maintenance/sweep",
+  "/catalogues/:collectionId/maintenance/sweep",
   requireSession,
   async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
+    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
 
     // Every staged object under the caller's prefix. Staging names the
-    // uploader, not the collection owner, so this is the caller's own
+    // uploader, not the catalogue owner, so this is the caller's own
     // space — a collaborator's sweep cannot reach the owner's unsaved upload,
     // nor the other way round; the parser still does the entry-id recovery,
     // never the character-wise prefix (sibling entry ids share prefixes).
     const keys = await listObjects(
-      stagedCollectionPrefix(c.get("user").id, collection.id),
+      stagedCataloguePrefix(c.get("user").id, catalogue.id),
     );
     const byEntry = new Map<string, string[]>();
     for (const key of keys) {

@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   artworks as artworksTable,
-  collectionCollaborators as collaboratorsTable,
+  catalogueCollaborators as collaboratorsTable,
 } from "@arcula/db";
 import { closeDb, db } from "../src/db";
 import {
@@ -23,7 +23,7 @@ import {
 import { deleteObject, listObjects, putObject } from "../src/storage";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageEntry,
@@ -53,7 +53,7 @@ let mate: { cookies: string; userId: string };
 let cid = "";
 let privCid = "";
 
-/** Share `collection` with the mate: one membership row, no API for it yet. */
+/** Share `catalogue` with the mate: one membership row, no API for it yet. */
 async function shareWith(collectionId: string, userId: string) {
   await db.insert(collaboratorsTable).values({ collectionId, userId });
 }
@@ -91,7 +91,7 @@ async function createWork(
     documents?: { entryId: string; name: string }[];
   } = {},
 ): Promise<void> {
-  const res = await req("POST", `/api/v1/collections/${cid}/artworks`, {
+  const res = await req("POST", `/api/v1/catalogues/${cid}/artworks`, {
     cookies: owner.cookies,
     body: JSON.stringify({
       artworkId: aid,
@@ -116,8 +116,8 @@ beforeAll(async () => {
   owner = await freshUser("Media");
   stranger = await freshUser("Media");
   mate = await freshUser("Media");
-  cid = await makeCollection(owner.userId, { isPublic: true });
-  privCid = await makeCollection(owner.userId, { isPublic: false });
+  cid = await makeCatalogue(owner.userId, { isPublic: true });
+  privCid = await makeCatalogue(owner.userId, { isPublic: false });
   await shareWith(cid, mate.userId);
   await shareWith(privCid, mate.userId);
 
@@ -173,14 +173,14 @@ beforeAll(async () => {
     .set({ deletedAt: new Date() })
     .where(eq(artworksTable.id, delWorkId));
 
-  // privCollWork: a public work inside a PRIVATE collection.
+  // privCollWork: a public work inside a PRIVATE catalogue.
   privCollWorkId = uuid();
   await stagePhotosIn(privCid, privCollWorkId, pD);
   await createWorkIn(privCid, privCollWorkId, [{ entryId: pD, name: "d.jpg" }]);
 });
 
-// The two helpers above are collection-scoped; these are the variants
-// that stage/create in a specific collection.
+// The two helpers above are catalogue-scoped; these are the variants
+// that stage/create in a specific catalogue.
 async function stagePhotosIn(
   c: string,
   aid: string,
@@ -209,7 +209,7 @@ async function createWorkIn(
   aid: string,
   photos: { entryId: string; name: string }[],
 ): Promise<void> {
-  const res = await req("POST", `/api/v1/collections/${c}/artworks`, {
+  const res = await req("POST", `/api/v1/catalogues/${c}/artworks`, {
     cookies: owner.cookies,
     body: JSON.stringify({
       artworkId: aid,
@@ -246,7 +246,7 @@ describe("GET /api/v1/media — final photos", () => {
     // The exact source bytes, and the row's recorded size as the length.
     expect(Array.from(bytes)).toEqual(Array.from(await sourceJpeg));
     const wire = await json<Record<string, unknown>>(
-      await req("GET", `/api/v1/collections/${cid}/artworks/${pubWorkId}`, {
+      await req("GET", `/api/v1/catalogues/${cid}/artworks/${pubWorkId}`, {
         cookies: owner.cookies,
       }),
     );
@@ -256,7 +256,7 @@ describe("GET /api/v1/media — final photos", () => {
 
   it("streams a variant key from its own recorded row", async () => {
     const wire = await json<Record<string, unknown>>(
-      await req("GET", `/api/v1/collections/${cid}/artworks/${pubWorkId}`, {
+      await req("GET", `/api/v1/catalogues/${cid}/artworks/${pubWorkId}`, {
         cookies: owner.cookies,
       }),
     );
@@ -313,9 +313,9 @@ describe("GET /api/v1/media — final photos", () => {
     expect(own.status).toBe(200);
   });
 
-  it("is the collection's gate on the bytes: a public work inside a private collection 404s", async () => {
+  it("is the catalogue's gate on the bytes: a public work inside a private catalogue 404s", async () => {
     // ADR-0003's case, from the bytes side: the work's own `published`
-    // status does not open a key its collection keeps closed. Before this
+    // status does not open a key its catalogue keeps closed. Before this
     // change the proxy already refused these bytes while the single-work
     // read admitted the row — the divergence the ADR removes.
     const key = finalPhotoKey(
@@ -335,9 +335,9 @@ describe("GET /api/v1/media — final photos", () => {
     expect(own.status).toBe(200);
   });
 
-  it("admits a collaborator to a draft, a deleted work and a private collection", async () => {
+  it("admits a collaborator to a draft, a deleted work and a private catalogue", async () => {
     // The membership matrix, on the bytes: a collaborator is inside the
-    // collection, so the visitor rule's three refusals do not apply to them.
+    // catalogue, so the visitor rule's three refusals do not apply to them.
     const keys = [
       finalPhotoKey(owner.userId, cid, draftWorkId, pB, "original", "jpg"),
       finalPhotoKey(owner.userId, cid, delWorkId, pC, "original", "jpg"),
@@ -388,7 +388,7 @@ describe("GET /api/v1/media — final documents", () => {
   });
 
   it("refuses a draft's document exactly as it refuses a published one's", async () => {
-    // The documents verdict ignores status and the collection's flag: a
+    // The documents verdict ignores status and the catalogue's flag: a
     // draft hides its bytes no further than a published work does.
     const key = finalDocumentKey(
       owner.userId,
@@ -468,12 +468,12 @@ describe("GET /api/v1/media — staged objects", () => {
     );
     expect((await get(variantKey, owner.cookies)).status).toBe(200);
 
-    // No row exists yet: the collection's ownership is the whole of the
+    // No row exists yet: the catalogue's ownership is the whole of the
     // authorisation.
     expect((await get(originalKey, stranger.cookies)).status).toBe(403);
     expect((await get(originalKey)).status).toBe(401);
 
-    // A collaborator is inside the collection but not under this prefix: the
+    // A collaborator is inside the catalogue but not under this prefix: the
     // key names the owner as its uploader, so the other member reads nothing.
     expect((await get(originalKey, mate.cookies)).status).toBe(403);
 
@@ -509,7 +509,7 @@ describe("GET /api/v1/media — staged objects", () => {
     // under pubWork, so it is promoted by extending pubWork's sequence.
     const saved = await req(
       "PATCH",
-      `/api/v1/collections/${cid}/artworks/${pubWorkId}`,
+      `/api/v1/catalogues/${cid}/artworks/${pubWorkId}`,
       {
         cookies: owner.cookies,
         body: JSON.stringify({
@@ -546,7 +546,7 @@ describe("GET /api/v1/media — keys that name nothing", () => {
   });
 });
 
-describe("POST /collections/{cid}/maintenance/sweep", () => {
+describe("POST /catalogues/{cid}/maintenance/sweep", () => {
   it("deletes the staged entries that have no row and keeps the rest", async () => {
     // orph: staged, never saved — no row.
     await stage(
@@ -576,7 +576,7 @@ describe("POST /collections/{cid}/maintenance/sweep", () => {
 
     const res = await req(
       "POST",
-      `/api/v1/collections/${cid}/maintenance/sweep`,
+      `/api/v1/catalogues/${cid}/maintenance/sweep`,
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(200);
@@ -605,7 +605,7 @@ describe("POST /collections/{cid}/maintenance/sweep", () => {
     // Idempotent: a second sweep finds nothing to remove.
     const again = await req(
       "POST",
-      `/api/v1/collections/${cid}/maintenance/sweep`,
+      `/api/v1/catalogues/${cid}/maintenance/sweep`,
       { cookies: owner.cookies },
     );
     expect(await json(again)).toEqual({ swept: 0 });
@@ -614,7 +614,7 @@ describe("POST /collections/{cid}/maintenance/sweep", () => {
   it("403s a non-owner", async () => {
     const res = await req(
       "POST",
-      `/api/v1/collections/${cid}/maintenance/sweep`,
+      `/api/v1/catalogues/${cid}/maintenance/sweep`,
       { cookies: stranger.cookies },
     );
     expect(res.status).toBe(403);

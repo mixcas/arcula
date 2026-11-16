@@ -1,4 +1,4 @@
-// API integration: the Collection PDF's fallback font.
+// API integration: the Catalogue PDF's fallback font.
 //
 // The route is public and answers a TrueType subset of the bundled Noto Sans
 // SC. The magic number is a correctness floor, not a subsetter test: the PDF

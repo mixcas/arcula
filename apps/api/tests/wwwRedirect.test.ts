@@ -16,13 +16,13 @@ describe("the configured origin's www alias", () => {
   it("308-redirects to the origin, preserving path, query and method", async () => {
     // POST on purpose: a 308 re-issues the same method, where a 301/302
     // would let a client downgrade the body to a GET.
-    const res = await app.request("/collections/flores-solares?a=1&b=2", {
+    const res = await app.request("/catalogues/flores-solares?a=1&b=2", {
       method: "POST",
       headers: { Host: aliasHost },
     });
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe(
-      `${clientOrigin}/collections/flores-solares?a=1&b=2`,
+      `${clientOrigin}/catalogues/flores-solares?a=1&b=2`,
     );
   });
 

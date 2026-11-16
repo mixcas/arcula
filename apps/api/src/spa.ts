@@ -9,7 +9,7 @@
  *  2. A file that exists in the dist tree is served, containment-checked:
  *     the resolved path must stay inside the dist root, so a traversal
  *     path is a 404, never a read and never the app shell.
- *  3. Anything else is a client route (/collection/x, /manage/profile, a
+ *  3. Anything else is a client route (/catalogue/x, /manage/profile, a
  *     pasted /reset-password/<token>): serve index.html and let the
  *     router decide. A mistyped URL gets the shell too — the in-app
  *     404 is the SPA's to show, not this layer's.
@@ -52,7 +52,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".map": "application/json",
   ".txt": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
-  // The Collection PDF's brand statics. Without this the file is served as
+  // The Catalogue PDF's brand statics. Without this the file is served as
   // application/octet-stream, not a font.
   ".ttf": "font/ttf",
 };

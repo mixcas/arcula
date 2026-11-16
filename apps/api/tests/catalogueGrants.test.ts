@@ -7,7 +7,7 @@ import {
   hashGrantToken,
   isGrantUsable,
   mintGrantToken,
-} from "../src/collectionGrants";
+} from "../src/catalogueGrants";
 
 const NOW = new Date("2026-01-01T00:00:00Z");
 

@@ -52,7 +52,7 @@ describe("the adapter declaration and the schema agree", () => {
 
   it("defaults a new account to a tier the quota table keys on", () => {
     // The default must be a key of COLLECTION_LIMITS: a default outside the
-    // table falls through `collectionLimitForTier` to `undefined` (limits.ts),
+    // table falls through `catalogueLimitForTier` to `undefined` (limits.ts),
     // so every new account would be uncapped and nothing would raise.
     expect(userAdditionalFields.tier.defaultValue).toBe(
       userColumns.tier.default,

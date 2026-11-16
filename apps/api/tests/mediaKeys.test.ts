@@ -15,12 +15,12 @@ import {
   mediaNamespaceOf,
   parseMediaKey,
   stagedArtworkPrefix,
-  stagedCollectionPrefix,
+  stagedCataloguePrefix,
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
 
-// The final key names the collection's namespace; the staging key names the
+// The final key names the catalogue's namespace; the staging key names the
 // account that uploaded. These start as different strings on purpose: a key
 // builder that swapped them would still round-trip, and only the segment
 // assertions below would notice.
@@ -52,7 +52,7 @@ describe("final keys", () => {
         kind: "final",
         population: "photos",
         namespaceId: NAMESPACE,
-        collectionId: CID,
+        catalogueId: CID,
         artworkId: AID,
         entryId: ENTRY,
         key,
@@ -66,7 +66,7 @@ describe("final keys", () => {
         kind: "final",
         population: "documents",
         namespaceId: NAMESPACE,
-        collectionId: CID,
+        catalogueId: CID,
         artworkId: AID,
         entryId: ENTRY,
         key,
@@ -103,7 +103,7 @@ describe("staging keys", () => {
     expect(parsed).toMatchObject({
       kind: "staging",
       uploaderId: UPLOADER,
-      collectionId: CID,
+      catalogueId: CID,
       artworkId: AID,
       entryId: ENTRY,
       key: null,
@@ -131,22 +131,22 @@ describe("staging keys", () => {
 
   it("sits under its own uploader's prefixes, and no one else's", () => {
     // The per-uploader fact is what makes a sweep and a discard safe: a prefix
-    // built from the collection alone (or from `staging/`) would let one
+    // built from the catalogue alone (or from `staging/`) would let one
     // member's cleanup reach another member's unsaved upload. Both the
-    // collection-wide and the artwork-wide prefix are checked, because those
+    // catalogue-wide and the artwork-wide prefix are checked, because those
     // are the two the routes list against.
     expect(stagedArtworkPrefix(UPLOADER, CID, AID)).toBe(
       `staging/${UPLOADER}/${CID}/${AID}/`,
     );
-    expect(stagedCollectionPrefix(UPLOADER, CID)).toBe(
+    expect(stagedCataloguePrefix(UPLOADER, CID)).toBe(
       `staging/${UPLOADER}/${CID}/`,
     );
 
     const key = stagingOriginalKey(UPLOADER, CID, AID, ENTRY, "jpg");
     const OTHER_UPLOADER = "uploader-2";
 
-    expect(key.startsWith(stagedCollectionPrefix(UPLOADER, CID))).toBe(true);
-    expect(key.startsWith(stagedCollectionPrefix(OTHER_UPLOADER, CID))).toBe(
+    expect(key.startsWith(stagedCataloguePrefix(UPLOADER, CID))).toBe(true);
+    expect(key.startsWith(stagedCataloguePrefix(OTHER_UPLOADER, CID))).toBe(
       false,
     );
 
@@ -158,14 +158,14 @@ describe("staging keys", () => {
 });
 
 describe("mediaNamespaceOf", () => {
-  it("answers the fixed namespace when the collection has one", () => {
+  it("answers the fixed namespace when the catalogue has one", () => {
     expect(
       mediaNamespaceOf({ mediaNamespaceId: NAMESPACE, userId: UPLOADER }),
     ).toBe(NAMESPACE);
   });
 
-  it("falls back to the owner for a collection created between 0003 and 0004", () => {
-    // The deploy puts the Lambda before the migrations, so a collection
+  it("falls back to the owner for a catalogue created between 0003 and 0004", () => {
+    // The deploy puts the Lambda before the migrations, so a catalogue
     // written by the old code in the gap has no namespace yet. Its existing
     // keys were built from the owner, and that is what resolves them.
     expect(mediaNamespaceOf({ mediaNamespaceId: null, userId: UPLOADER })).toBe(
