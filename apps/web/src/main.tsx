@@ -15,6 +15,11 @@ import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import App from "./App";
 import { mantineTheme } from "@/theme";
+import { initTelemetry } from "@/telemetry/logRocket";
+
+// Before the first render, so the recording opens on the page that was
+// actually requested rather than on the shell this call returns into.
+initTelemetry();
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,

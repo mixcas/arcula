@@ -83,6 +83,16 @@ mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
 # 2. The SPA the Lambda serves (spa.ts reads WEB_DIST, which the deploy
 #    sets to /var/task/web/dist). A fresh build: a stale dist would
 #    ship an old app under the new API.
+#
+#    Session replay is production-only, and the SPA is built per
+#    environment, so the switch is the environment's: prod's bundle
+#    enables it, dev's is built with it off and never initialises the
+#    recorder. Vite inlines the VITE_-prefixed value at build time.
+if [ "$ENV" = prod ]; then
+  export VITE_LOGROCKET_ENABLED=true
+else
+  export VITE_LOGROCKET_ENABLED=false
+fi
 echo "==> building web"
 bun run build
 rm -rf "$STAGE/web"
