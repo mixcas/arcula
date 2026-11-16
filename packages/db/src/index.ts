@@ -28,6 +28,7 @@
 // every query.
 
 import { sql } from "drizzle-orm";
+import type { CatalogueKind } from "@arcula/shared";
 import {
   boolean,
   check,
@@ -140,6 +141,12 @@ export const catalogues = pgTable(
     // the Lambda still deploys before that migration runs.
     mediaNamespaceId: text("mediaNamespaceId").notNull(),
     name: text("name").notNull(),
+    // Whose art this catalogue holds and why, fixed at creation (ADR-0010).
+    // Every existing row is a collector's, so the constant default is the
+    // truth and no backfill is owed. The check spells the three values out, as
+    // `artworks.status` does, so the database refuses an unknown kind even when
+    // it arrives from outside the typed reader.
+    kind: text("kind").$type<CatalogueKind>().notNull().default("collection"),
     description: text("description"),
     // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
     // backfill — the deliberate contrast with `deletedAt`.
@@ -158,7 +165,13 @@ export const catalogues = pgTable(
     createdAt: timestamptz("createdAt"),
     updatedAt: timestamptz("updatedAt"),
   },
-  (table) => [index("collections_user_id_idx").on(table.userId)],
+  (table) => [
+    index("collections_user_id_idx").on(table.userId),
+    check(
+      "collections_kind_check",
+      sql`"kind" in ('portfolio', 'collection', 'inventory')`,
+    ),
+  ],
 ).enableRLS();
 
 // The export's older name, alias-kept while the API and web migrate
