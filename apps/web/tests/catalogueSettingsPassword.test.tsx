@@ -87,6 +87,7 @@ const CATALOGUE_ID = "cccccccccccccccccccc";
 const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
   id: CATALOGUE_ID,
   name: "Flores Solares",
+  kind: "collection",
   userId: "u-owner",
   isPublic: true,
   role: "owner",
@@ -174,7 +175,7 @@ describe("the settings page's password control", () => {
 
     // A clean tab keeps its Save off, so the rename is what offers it —
     // and the password's stored value is not what the save should carry.
-    const name = await screen.findByLabelText(/catalogue name/i);
+    const name = await screen.findByLabelText(/^name/i);
     expect(await screen.findByRole("button", { name: /save/i })).toBeDisabled();
     await userEvent.clear(name);
     await userEvent.type(name, "Renamed Flores");

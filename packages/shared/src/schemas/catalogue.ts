@@ -1,5 +1,29 @@
 import { z } from "zod";
+import type { CatalogueKind } from "../types";
 import { MINTED_ID_RE } from "./artwork";
+
+/**
+ * What a catalogue is — an artist's Portfolio, a collector's Collection or a
+ * gallery's Inventory — as ADR-0010 names the three. The row's meaning is
+ * fixed at creation; only the create schema accepts it.
+ */
+export const catalogueKindSchema = z.enum([
+  "portfolio",
+  "collection",
+  "inventory",
+]);
+
+// The enum and the client type are the same three words. The first direction
+// catches a member added to one and not the other; the second catches a word
+// the type knows and the schema refuses.
+type KindEnumIsKind =
+  z.output<typeof catalogueKindSchema> extends CatalogueKind
+    ? CatalogueKind extends z.output<typeof catalogueKindSchema>
+      ? true
+      : never
+    : never;
+const kindEnumIsKind: KindEnumIsKind = true;
+void kindEnumIsKind;
 
 /**
  * The /api/v1 catalogue payloads. The form side of
@@ -10,10 +34,13 @@ import { MINTED_ID_RE } from "./artwork";
 
 /**
  * POST /catalogues. The id is minted server-side; the client sends only
- * name/description.
+ * name/description — and the kind, once, at creation. An absent kind is
+ * `collection`: the shape every pre-kind client sends, and the collector's
+ * case the product started with.
  */
 export const catalogueCreateSchema = z.object({
   name: z.string().trim().min(1, "Catalogue name is required"),
+  kind: catalogueKindSchema.default("collection"),
   description: z
     .string()
     .trim()
@@ -57,6 +84,9 @@ export const passwordSchema = z
  * form needs: a string sets (or overwrites) it, `null` removes it, and an
  * absent key leaves it alone. Setting and overwriting are the same write, and
  * every password write revokes the catalogue's outstanding grants.
+ *
+ * `kind` is deliberately absent: a catalogue never changes meaning underneath
+ * the works it holds, so a header naming it is dropped as an unknown key.
  */
 export const catalogueUpdateSchema = z.object({
   name: z.string().trim().min(1, "Catalogue name is required").optional(),

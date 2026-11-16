@@ -48,7 +48,7 @@ export const catalogueService = {
    * rejects with 409 `limit-reached` — its message is the one the form shows.
    */
   async createCatalogue(
-    payload: Pick<CatalogueCreatePayload, "name" | "description">,
+    payload: Pick<CatalogueCreatePayload, "name" | "kind" | "description">,
   ): Promise<Catalogue> {
     const row = await apiRequest<unknown>(BASE, {
       method: "POST",

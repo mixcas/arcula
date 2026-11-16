@@ -57,6 +57,7 @@ const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const catalogue: Catalogue = {
   id: CATALOGUE_ID,
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };

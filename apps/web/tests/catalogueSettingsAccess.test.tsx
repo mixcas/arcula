@@ -86,6 +86,7 @@ const CATALOGUE_ID = "cccccccccccccccccccc";
 const catalogue: Catalogue = {
   id: CATALOGUE_ID,
   name: "Flores Solares",
+  kind: "collection",
   userId: "u-owner",
   isPublic: false,
   role: "collaborator",
@@ -148,7 +149,7 @@ describe("the settings page's access card", () => {
     expect(await screen.findByTestId("address")).toHaveTextContent(
       /\/settings\/general$/,
     );
-    expect(await screen.findByLabelText(/catalogue name/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/^name/i)).toBeInTheDocument();
     expect(getAccess).not.toHaveBeenCalled();
 
     // Choosing another tab changes the address as well as the panel.

@@ -76,6 +76,7 @@ vi.mock("@/skins/basicx/useActiveSection", () => ({
 const catalogue: Catalogue = {
   id: "catalogue-1",
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };

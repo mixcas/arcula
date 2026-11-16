@@ -234,6 +234,7 @@ catalogueRoutes.post("/catalogues", requireSession, async (c) => {
     // not the owner's — the owner may change, the namespace may not.
     mediaNamespaceId: mintId(),
     name: payload.name,
+    kind: payload.kind,
     description: payload.description ?? null,
     isPublic: payload.isPublic,
     createdAt: now,

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Artwork, Catalogue } from "../types";
 import { artworkStatusSchema } from "./artwork";
+import { catalogueKindSchema } from "./catalogue";
 
 /**
  * The wire shape of the API's GET responses, parsed at the service boundary.
@@ -141,6 +142,8 @@ export const artworkReadSchema = z.object({
 export const catalogueReadSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** What the catalogue is; chosen at creation and never rewritten. */
+  kind: catalogueKindSchema,
   userId: z.string(),
   description: z.string().optional(),
   isPublic: z.boolean(),

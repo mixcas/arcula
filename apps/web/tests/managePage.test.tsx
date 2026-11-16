@@ -95,6 +95,7 @@ const freeMe: SessionUserRead = {
 const catalogue: Catalogue = {
   id: "cccccccccccccccccccc",
   name: "Flores Solares",
+  kind: "collection",
   userId: "u1",
   isPublic: true,
   role: "owner",
@@ -106,6 +107,7 @@ const catalogue: Catalogue = {
 const sharedCatalogue: Catalogue = {
   id: "dddddddddddddddddddd",
   name: "Estudio Compartido",
+  kind: "collection",
   userId: "u2",
   isPublic: false,
   role: "collaborator",

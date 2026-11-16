@@ -23,6 +23,7 @@ vi.mock("@mantine/carousel", async () => {
 const catalogue: Catalogue = {
   id: "AAAAAAAAAAAAAAAAAAAA",
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };
