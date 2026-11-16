@@ -36,7 +36,11 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "@/hooks/useAuth";
 import { catalogueSlug, type CatalogueKind } from "@arcula/shared";
-import { CATALOGUE_KINDS, catalogueSurface } from "@/catalogueSurface";
+import {
+  CATALOGUE_KINDS,
+  catalogueSurface,
+  kindColorVar,
+} from "@/catalogueSurface";
 import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
 
@@ -71,8 +75,8 @@ interface KindCardProps {
 const KindCard: React.FC<KindCardProps> = ({ kind, selected, onSelect }) => {
   const { kindLabel, kindColor } = catalogueSurface(kind);
   const Icon = KIND_ICONS[kind];
-  const fill = `var(--mantine-color-${kindColor}-3)`;
-  const glyph = `var(--mantine-color-${kindColor}-7)`;
+  const fill = kindColorVar(kindColor, 3);
+  const glyph = kindColorVar(kindColor, 7);
 
   return (
     <Box
@@ -91,8 +95,11 @@ const KindCard: React.FC<KindCardProps> = ({ kind, selected, onSelect }) => {
         cursor: "pointer",
       }}
     >
-      {/* The input covers the card, so the browser's own focus ring is the
-          ring around the card; a clipped input would hide focus. */}
+      {/* The input covers the card, and the browser paints its focus ring
+          around that box — so the ring lands on the card. The control itself
+          is made invisible by styling (no appearance, no background, no
+          border, no padding) rather than by `opacity: 0`, which would fade the
+          ring with it; clipping it would hide the ring too. */}
       <input
         type="radio"
         name="kind"
@@ -105,7 +112,10 @@ const KindCard: React.FC<KindCardProps> = ({ kind, selected, onSelect }) => {
           width: "100%",
           height: "100%",
           margin: 0,
-          opacity: 0,
+          padding: 0,
+          appearance: "none",
+          background: "transparent",
+          border: 0,
           cursor: "pointer",
         }}
       />

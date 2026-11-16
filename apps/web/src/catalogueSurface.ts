@@ -27,10 +27,19 @@ import type {
 
 /**
  * The colour a kind wears, as a name rather than a Mantine type: this module
- * stays free of React and of Mantine, and a screen composes the CSS variable
- * from the name (`--mantine-color-{kindColor}-3`) instead of writing a hex.
+ * stays free of React and of Mantine, and a screen turns the name into a CSS
+ * variable through `kindColorVar` instead of writing a hex.
  */
 export type CatalogueKindColor = "orange" | "lime" | "indigo";
+
+/**
+ * The CSS variable for a kind's colour at one shade. The one place the
+ * `--mantine-color-…` spelling lives, so a screen names a colour and a shade
+ * rather than repeating the variable's shape at every call site.
+ */
+export function kindColorVar(color: CatalogueKindColor, shade: 3 | 7): string {
+  return `var(--mantine-color-${color}-${shade})`;
+}
 
 /** The three kinds, in the order a selector offers them. */
 export const CATALOGUE_KINDS = [
