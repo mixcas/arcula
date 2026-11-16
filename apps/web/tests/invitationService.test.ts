@@ -51,6 +51,7 @@ const preview = {
 const catalogue = {
   id: "c1",
   name: "Flores Solares",
+  kind: "collection",
   userId: "u-owner",
   isPublic: false,
   createdAt: { seconds: 1, nanoseconds: 0 },

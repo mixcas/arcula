@@ -3,6 +3,7 @@ import {
   Text,
   Button,
   Group,
+  Select,
   TextInput,
   Textarea,
   Alert,
@@ -10,7 +11,8 @@ import {
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { catalogueSlug } from "@arcula/shared";
+import { catalogueSlug, type CatalogueKind } from "@arcula/shared";
+import { CATALOGUE_KINDS, catalogueSurface } from "@/catalogueSurface";
 import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
 
@@ -18,10 +20,16 @@ const NewCataloguePage: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<CatalogueKind>("collection");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // The words the form asks with follow the kind: an artist is asked for their
+  // name and bio, a gallery for its name and about, a collector for the
+  // catalogue's name and description.
+  const surface = catalogueSurface(kind);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +40,7 @@ const NewCataloguePage: React.FC = () => {
     }
 
     if (!name.trim()) {
-      setError("Catalogue name is required");
+      setError(`${surface.nameLabel} is required`);
       return;
     }
 
@@ -44,6 +52,7 @@ const NewCataloguePage: React.FC = () => {
       // redirect slugs from the server's record rather than the form's.
       const created = await catalogueService.createCatalogue({
         name: name.trim(),
+        kind,
         description: description.trim(),
       });
 
@@ -109,9 +118,26 @@ const NewCataloguePage: React.FC = () => {
           void handleSubmit(e);
         }}
       >
+        {/* Fixed after creation: the kind decides what the catalogue means, so
+            it is asked once, here, and never edited again. */}
+        <Select
+          label="Kind"
+          description="What this catalogue holds. It cannot be changed later."
+          data={CATALOGUE_KINDS.map((value) => ({
+            value,
+            label: catalogueSurface(value).kindLabel,
+          }))}
+          value={kind}
+          onChange={(value) => {
+            if (value !== null) setKind(value);
+          }}
+          allowDeselect={false}
+          mb="md"
+        />
+
         <TextInput
-          label="Catalogue Name"
-          placeholder="Enter catalogue name"
+          label={surface.nameLabel}
+          placeholder={`Enter ${surface.nameLabel.toLowerCase()}`}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -119,8 +145,8 @@ const NewCataloguePage: React.FC = () => {
         />
 
         <Textarea
-          label="Description"
-          placeholder="Enter catalogue description (optional)"
+          label={surface.descriptionLabel}
+          placeholder={`Enter ${surface.descriptionLabel.toLowerCase()} (optional)`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           mb="md"

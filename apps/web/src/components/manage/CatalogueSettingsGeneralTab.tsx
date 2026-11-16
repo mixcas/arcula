@@ -15,6 +15,7 @@
 import React, { useState } from "react";
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Card,
@@ -27,6 +28,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import type { Catalogue } from "@arcula/shared";
+import { catalogueSurface } from "@/catalogueSurface";
 import { passwordControlMode } from "./cataloguePassword";
 import {
   resolveGeneralSave,
@@ -90,8 +92,22 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
     removing: removingPassword,
   });
 
+  // The kind is fixed, so its only job here is to name the two fields and to
+  // stay visible: after creation this is where a member confirms what the
+  // catalogue is.
+  const surface = catalogueSurface(catalogue.kind);
+
   return (
     <Card shadow="sm" p="lg">
+      <Group mb="md" gap="sm">
+        <Badge variant="light" color="gray">
+          Kind: {surface.kindLabel}
+        </Badge>
+        <Text size="sm" c="dim">
+          The kind is fixed at creation.
+        </Text>
+      </Group>
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -99,8 +115,8 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
         }}
       >
         <TextInput
-          label="Catalogue Name"
-          placeholder="Name of your catalogue"
+          label={surface.nameLabel}
+          placeholder={`Enter ${surface.nameLabel.toLowerCase()}`}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -108,8 +124,8 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
         />
 
         <Textarea
-          label="Description"
-          placeholder="Enter catalogue description"
+          label={surface.descriptionLabel}
+          placeholder={`Enter ${surface.descriptionLabel.toLowerCase()}`}
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
           autosize

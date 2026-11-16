@@ -108,6 +108,7 @@ const preview: InvitationPreview = {
 const catalogue: Catalogue = {
   id: preview.catalogue.id,
   name: preview.catalogue.name,
+  kind: "collection",
   userId: "u-owner",
   isPublic: false,
   createdAt: { seconds: 1, nanoseconds: 0 },

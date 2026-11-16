@@ -84,6 +84,7 @@ const CANONICAL_PATH = `/manage/catalogue/${CATALOGUE_PARAM}`;
 const catalogue: Catalogue = {
   id: CATALOGUE_ID,
   name: CATALOGUE_NAME,
+  kind: "collection",
   userId: "u1",
   isPublic: true,
   role: "owner",
