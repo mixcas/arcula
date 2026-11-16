@@ -13,17 +13,19 @@
  *
  * ## What changed when the pipeline moved server-side
  *
- * A photo that lands in the form is PUT to staging **the moment it is
+ * A photo that lands in the form is uploaded to staging **the moment it is
  * added** — not at save — so the save has nothing left to generate or
  * upload: it sends the sequence of entry ids and the server promotes the
  * staged objects into rows in the same transaction as the fields it writes.
- * The consequences worth keeping straight:
+ * The upload is a direct hop (presign, PUT the file to storage, process); the
+ * consequences worth keeping straight:
  *
  * - there is no object-URL lifecycle; every url the tile renders is a server
  *   proxy path, and there is nothing to revoke on removal or unmount;
  * - there is no format probe and no worker: the server owns the encoder and
- *   answers with the variants it actually wrote, so a photo that cannot be
- *   decoded is rejected by the stage route, not by a canvas here;
+ *   answers with the variants it actually wrote, and the process call is the
+ *   first place it sees the bytes — so a photo that cannot be decoded is
+ *   rejected there, not by a canvas here;
  * - an entry the user drops is `discard`ed on removal, best-effort: the
  *   staging lifecycle and the sweep are what keep a dropped object from
  *   lingering, and neither of them is this hook's job to verify.
@@ -31,17 +33,17 @@
 
 import { useCallback, useState } from "react";
 import {
-  isAcceptedImageType,
+  checkDeclaredUpload,
   MAX_ARTWORK_PHOTOS,
   sortPhotos,
   type ArtworkPhoto,
-  type ImageVariant,
   type StagedEntry,
 } from "@arcula/shared";
 import { mediaService } from "@/services/mediaService";
-import { ApiRequestError } from "@/services/api";
 import {
   keySequence,
+  localRejectionReason,
+  rejectionReason,
   useUploadPool,
   type Rejection,
   type StageOutcome,
@@ -90,9 +92,9 @@ type StagedPhotoEntry = Extract<PhotoEntry, { status: "staged" }>;
 const nextKey = keySequence("photo");
 
 /**
- * One file through stage + process. Resolves to the finished entry on
+ * One file through presign → PUT → process. Resolves to the finished entry on
  * success, or to the rejection on any failure — and discards the staged
- * original when the stage succeeded but the variants did not, so a failed
+ * original when the upload succeeded but the variants did not, so a failed
  * batch does not leave objects behind that no save will ever promote.
  */
 async function stageAndProcess(
@@ -105,19 +107,19 @@ async function stageAndProcess(
   // UUID's hyphens come off before it reaches the wire.
   const entryId = crypto.randomUUID().replace(/-/g, "");
   try {
-    const staged = await mediaService.stagePhoto(
-      catalogueId,
-      artworkId,
-      entryId,
-      file,
-    );
-    let variants: ImageVariant[];
+    // `stagePhoto` is the presign plus the direct PUT: on return the object is
+    // in storage and no byte of it has passed through the API.
+    await mediaService.stagePhoto(catalogueId, artworkId, entryId, file);
+    let processed;
     try {
-      ({ variants } = await mediaService.processPhoto(
+      // Process is the server's first look at the bytes, so it is where the
+      // real type, size, decodability and measurements come from — and its
+      // answer, not the declaration, is what the entry records.
+      processed = await mediaService.processPhoto(
         catalogueId,
         artworkId,
         entryId,
-      ));
+      );
     } catch (error) {
       // The original is up and no save will ever name it: discard it now,
       // idempotently, and let the error report the failure.
@@ -126,10 +128,10 @@ async function stageAndProcess(
         .catch(() => {});
       throw error;
     }
-    if (staged.width === null || staged.height === null) {
-      // The stage route decodes every photo it admits, so a null dimension
-      // is a server bug, not a file condition: discard what is up and say
-      // the upload failed rather than render a photo with no geometry.
+    if (processed.width === null || processed.height === null) {
+      // Process decodes every photo it admits, so a null dimension is a server
+      // bug, not a file condition: discard what is up and say the upload
+      // failed rather than render a photo with no geometry.
       void mediaService
         .discardPhoto(catalogueId, artworkId, entryId)
         .catch(() => {});
@@ -143,27 +145,24 @@ async function stageAndProcess(
         id: entryId,
         // Filled when the entry is appended; 0 is only ever a placeholder.
         order: 0,
-        name: staged.name,
-        size: staged.size,
-        contentType: staged.contentType,
-        width: staged.width,
-        height: staged.height,
+        name: processed.name,
+        size: processed.size,
+        contentType: processed.contentType,
+        width: processed.width,
+        height: processed.height,
         original: {
-          url: staged.url,
-          size: staged.size,
-          contentType: staged.contentType,
+          url: processed.url,
+          size: processed.size,
+          contentType: processed.contentType,
         },
-        variants,
+        variants: processed.variants,
       },
     };
     return { entry, rejection: null };
   } catch (error) {
     return {
       entry: null,
-      rejection:
-        error instanceof ApiRequestError
-          ? (error.fields?.file ?? error.message)
-          : "The image could not be uploaded",
+      rejection: rejectionReason(error, "The image could not be uploaded"),
     };
   }
 }
@@ -205,11 +204,12 @@ export const useArtworkPhotos = ({
   /**
    * Add files, staging each one as it is accepted.
    *
-   * The pre-checks here are the count cap and the type allowlist — the two
-   * things the form knows before spending a round trip. The size cap and the
-   * decode are the stage route's to answer, and its refusal arrives on the
-   * same `rejected` list with a reason the user can act on, which is why a
-   * too-large file does not need a client-side size check of its own.
+   * The pre-checks are the count cap and the shared `checkDeclaredUpload`
+   * guard — the same function the presign route asks, so the form and the API
+   * agree on the allowlist and the size cap by construction rather than by a
+   * second copy here. Its verdict maps to the wording the API's own refusal
+   * carries, so a file refused locally reads the way it always did; the decode
+   * is still process's, and that refusal arrives on the same `rejected` list.
    *
    * The pool — three files in flight, appended in drop order once the batch
    * has settled — is `useUploadPool`'s; what stays here is the sequence the
@@ -232,8 +232,12 @@ export const useArtworkPhotos = ({
           });
           continue;
         }
-        if (!isAcceptedImageType(file.type)) {
-          rejected.push({ file, reason: "Not a supported image" });
+        const verdict = checkDeclaredUpload("photo", file.type, file.size);
+        if (verdict !== "allowed") {
+          rejected.push({
+            file,
+            reason: localRejectionReason(verdict, "Not a supported image"),
+          });
           continue;
         }
         accepted.push(file);

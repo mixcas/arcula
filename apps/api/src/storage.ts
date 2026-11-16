@@ -1,9 +1,10 @@
 // The app's single S3 client.
 //
 // One module owns every object operation the app performs — put, get,
-// head, delete, copy, list. It knows nothing about photos, documents or
-// catalogues: keys are built by `media/keys.ts`, and everything above
-// this layer reads them back through that module's parser.
+// head, delete, copy, list, and the presigned upload URL that lets a
+// browser write straight to storage. It knows nothing about photos,
+// documents or catalogues: keys are built by `media/keys.ts`, and everything
+// above this layer reads them back through that module's parser.
 //
 // The client reads its config at import time, like env.ts. The `test`
 // and `dev` scripts source the root .env first, so every entry point
@@ -27,6 +28,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Readable } from "node:stream";
 
 function required(name: string): string {
@@ -36,12 +38,19 @@ function required(name: string): string {
 }
 
 // S3_FORCE_PATH_STYLE defaults to on: the local SeaweedFS stand-in
-// requires it, and prod sets it to "false" explicitly for real S3 — so
-// the missing-value failure is a virtual-hosted URL to the wrong place,
-// not a quiet misroute.
+// requires it, and the deployed environment inherits the same path-style
+// address (its S3_ENDPOINT is the regional endpoint), so the presigned
+// URL names the bucket as the first path segment in both. A
+// virtual-hosted deployment has to set it to "false" explicitly.
 export const BUCKET = process.env.S3_BUCKET ?? "arcula";
 
-export const s3 = new S3Client({
+/**
+ * The one set of facts every client below is built from. It is a value rather
+ * than a constructor argument because presigning needs a *second* client (see
+ * `presigningS3`), and two configurations drifting apart would be exactly the
+ * bug this module exists to prevent.
+ */
+const clientConfig = {
   endpoint: required("S3_ENDPOINT"),
   region: process.env.S3_REGION ?? "us-east-1",
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
@@ -54,6 +63,26 @@ export const s3 = new S3Client({
           secretAccessKey: process.env.S3_SECRET_KEY,
         }
       : undefined,
+};
+
+export const s3 = new S3Client(clientConfig);
+
+/**
+ * The presigner's client: the same configuration, with one difference.
+ *
+ * The SDK computes a CRC32 checksum for every request by default, and a
+ * presigned PUT has no body yet — it would sign the checksum of an empty
+ * string, and the real object's bytes then fail `BadDigest` at upload time.
+ * `WHEN_REQUIRED` leaves checksums off unless an operation demands one.
+ *
+ * It is a second client rather than a setting on the first so the price is
+ * paid only where it must be: ordinary puts, copies and downloads keep the
+ * SDK's checksum, and with it the integrity check on every object this app
+ * writes.
+ */
+const presigningS3 = new S3Client({
+  ...clientConfig,
+  requestChecksumCalculation: "WHEN_REQUIRED",
 });
 
 /**
@@ -79,10 +108,14 @@ export const putObject = (
 export const streamObject = (key: string) =>
   s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
 
-/** The bytes and the recorded content type, in one request. */
-export async function readObject(
-  key: string,
-): Promise<{ bytes: Uint8Array; contentType: string | null }> {
+/** The bytes, the recorded content type and the object's metadata, in one
+ *  request. The metadata is what `presignPut` recorded at upload time — the
+ *  staged original's name, read back when the bytes are validated. */
+export async function readObject(key: string): Promise<{
+  bytes: Uint8Array;
+  contentType: string | null;
+  metadata: Record<string, string> | undefined;
+}> {
   const res = await streamObject(key);
   const body: unknown = res.Body;
   let bytes: Uint8Array;
@@ -95,7 +128,11 @@ export async function readObject(
   } else {
     throw new Error("unconsumable S3 response body");
   }
-  return { bytes, contentType: res.ContentType ?? null };
+  return {
+    bytes,
+    contentType: res.ContentType ?? null,
+    metadata: res.Metadata,
+  };
 }
 
 /** Read an object back as bytes. Rejects on a missing object — see `isObjectMissing`. */
@@ -128,6 +165,89 @@ export const copyObject = (
       ContentType: contentType,
     }),
   );
+
+/**
+ * Mint a short-lived, single-object `PUT` URL for a staged upload.
+ *
+ * This is the same client, bucket and credentials every other operation
+ * uses — endpoint, region and path style all come from `s3`, so local and
+ * production sign the same way (static keys locally, the Lambda's role in
+ * production).
+ *
+ * The URL is a bearer token with write authority over one key until it
+ * expires: **never log it**, and never put it in an error message. If it
+ * leaks it can overwrite that one staged object and nothing else.
+ *
+ * The signature pins the declared content type, so a client cannot obtain
+ * a URL for `image/jpeg` and upload `text/html`: the object is stored with
+ * the type the media proxy will later serve. Two details make that work:
+ *
+ * - `signableHeaders` re-adds `content-type` to the signed set. The SDK's
+ *   presigner marks it unsignable by default, which would leave the type
+ *   free to differ from the signature.
+ * - The declared length is deliberately **not** signed. `content-length`
+ *   is a forbidden header for `fetch`: the browser sets it itself, or
+ *   omits it entirely under HTTP/2, so a signed value would make the
+ *   upload flaky. The size is enforced from the declaration at presign
+ *   time and, authoritatively, from the stored object's own length when
+ *   the bytes are processed.
+ *
+ * SeaweedFS (the local stand-in) runs anonymous and does not verify the
+ * signature, so it accepts a PUT to these URLs with any content type; real
+ * S3 rejects a mismatch. The staged object is therefore always validated
+ * again at process time, never trusted from the presign call.
+ *
+ * `metadata` is recorded ON the object (`x-amz-meta-{key}`) and signed the
+ * same way as the content type, which is what makes the object
+ * self-describing across the hop. The values must be header-safe — ASCII is
+ * all a header carries — so a caller with a human string encodes it first.
+ * `unhoistableHeaders` is load-bearing: without it the SDK moves `x-amz-meta-*`
+ * into the URL's query string, where a filename would join the bearer token in
+ * every access log. Signed headers stay in the request, and the client sends
+ * them verbatim because `headers` below is the whole signed set.
+ *
+ * Five minutes is long enough for a phone photograph on a slow connection
+ * and short enough that a leaked URL is worth little. It is the one number
+ * behind the URL's `X-Amz-Expires`.
+ */
+export const PRESIGNED_PUT_TTL_SECONDS = 300;
+
+export type PresignedPut = {
+  url: string;
+  /** The headers to send verbatim with the `PUT`: every signed one. */
+  headers: Record<string, string>;
+};
+
+export async function presignPut(
+  key: string,
+  contentType: string,
+  metadata: Record<string, string> = {},
+): Promise<PresignedPut> {
+  // The SDK names the headers itself (`x-amz-meta-{key}`), so the map is
+  // keyed by the bare name and built once, here, for both the command and
+  // the signed set — the two cannot drift.
+  const metaHeaders: Record<string, string> = {};
+  for (const [name, value] of Object.entries(metadata)) {
+    metaHeaders[`x-amz-meta-${name}`] = value;
+  }
+  const signed = ["content-type", ...Object.keys(metaHeaders)];
+
+  const url = await getSignedUrl(
+    presigningS3,
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+      ...(Object.keys(metadata).length > 0 ? { Metadata: metadata } : {}),
+    }),
+    {
+      expiresIn: PRESIGNED_PUT_TTL_SECONDS,
+      signableHeaders: new Set(signed),
+      unhoistableHeaders: new Set(Object.keys(metaHeaders)),
+    },
+  );
+  return { url, headers: { "content-type": contentType, ...metaHeaders } };
+}
 
 /** Every object under a prefix, fully paginated. */
 export async function listObjects(prefix: string): Promise<string[]> {

@@ -11,6 +11,7 @@ import sharp from "sharp";
 import { OBJECT_KEYS } from "../src/media/keys";
 import {
   generateVariants,
+  hasPdfSignature,
   orientSource,
   sourceDimensions,
   WEBP_TYPE,
@@ -226,5 +227,34 @@ describe("key spaces agree", () => {
     expect(DOCUMENT_VARIANT_SPECS.map((spec) => spec.key)).toEqual([
       ...DOCUMENT_IMAGE_VARIANT_KEYS,
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The PDF's own header
+// ---------------------------------------------------------------------------
+
+describe("hasPdfSignature", () => {
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+  it("accepts a file that begins with the format's header", () => {
+    expect(hasPdfSignature(bytes("%PDF-1.7\n…"))).toBe(true);
+  });
+
+  it("accepts a header a few junk bytes in, which careless writers emit", () => {
+    // ISO 32000 puts the header first, but a file that opens fine is not
+    // refused over a preamble, so the check reads the first kilobyte.
+    expect(hasPdfSignature(bytes("\u0000\u0000junk%PDF-1.4"))).toBe(true);
+  });
+
+  it("refuses text that merely mentions the format", () => {
+    expect(hasPdfSignature(bytes("<p>not a pdf at all</p>"))).toBe(false);
+    expect(hasPdfSignature(bytes(""))).toBe(false);
+  });
+
+  it("refuses a header beyond the window, where no reader would find it", () => {
+    const late = new Uint8Array(2048);
+    late.set(bytes("%PDF-1.4"), 1500);
+    expect(hasPdfSignature(late)).toBe(false);
   });
 });

@@ -1,14 +1,25 @@
-// The staged-media routes: stage, process, discard — photos and
-// documents — driven in-process with app.request() against the real
-// stack (real Postgres rows, real S3 objects, real Sharp).
+// The staged-media routes: presign, process, discard — photos and documents —
+// driven in-process with app.request() against the real stack (real Postgres
+// rows, real S3 objects, real Sharp), and with a real `fetch` PUT for the
+// bytes because that is the browser's half of the hop.
 //
-// Catalogues and artworks are inserted directly through drizzle: the
-// resource routes that create them have their own suites, and this suite
-// is about the staging contract.
+// **What a green test here does and does not prove.** The local storage
+// stand-in (SeaweedFS) runs anonymous and does not verify presigned
+// signatures: it accepts a PUT with a mismatched content type, a tampered
+// signature, or no signature at all. So the suite proves the URL our client
+// mints is usable, that the headers it answers are the ones that make the
+// object store with the declared type and name, and that process re-derives
+// the truth from the stored object. The REFUSAL half — real S3 rejecting a
+// wrong `content-type` or a missing signed metadata header — is the
+// signature's job and is asserted on the URL's signed-header set in
+// `storage.test.ts`; it cannot be exercised here.
+//
+// Catalogues and artworks are inserted directly through drizzle: the resource
+// routes that create them have their own suites, and this suite is about the
+// staging contract.
 
 import { afterAll, describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { app } from "../src/app";
 import { closeDb } from "../src/db";
 import {
   stagedOriginalPrefix,
@@ -16,25 +27,36 @@ import {
   stagingOriginalKey,
   stagingVariantKey,
 } from "../src/media/keys";
-import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from "@arcula/shared";
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_IMAGE_BYTES,
+  STAGED_PUT_SIGNED_HEADERS,
+} from "@arcula/shared";
 import { listObjects, putObject } from "../src/storage";
-import { API, ORIGIN, freshUser, json } from "./helpers/api";
+import { API, freshUser, json } from "./helpers/api";
 import {
   discardEntry,
   makeArtwork,
   makeCatalogue,
   makeJpeg,
+  presignEntry,
   processEntry,
+  putEntry,
   stageDocument,
   stagePhoto,
+  type PresignedEntry,
 } from "./helpers/fixtures";
 
 afterAll(async () => {
   await closeDb();
 });
 
+// The two staged originals' keys, named the way the routes name them.
+const originalKeyOf = (url: string): string =>
+  new URL(url, API).searchParams.get("key") ?? "";
+
 // ---------------------------------------------------------------------------
-// Stage
+// Stage: presign
 // ---------------------------------------------------------------------------
 
 describe("POST …/photos/stage", () => {
@@ -50,38 +72,47 @@ describe("POST …/photos/stage", () => {
     aid = await makeArtwork(owner.userId, cid);
   });
 
-  it("stores the original under the staged key and answers with its metadata", async () => {
+  it("answers a usable upload target and stores the PUT under the staged key", async () => {
     const bytes = await makeJpeg(400, 300);
-    const res = await stagePhoto(
-      owner.cookies,
-      cid,
-      aid,
-      "photo1",
-      new File([bytes], "scan.jpg", { type: "image/jpeg" }),
-    );
-    expect(res.status).toBe(200);
-    const body = await json<{
-      entryId: string;
-      name: string;
-      width: number;
-      height: number;
-      size: number;
-      contentType: string;
-      url: string;
-    }>(res);
-    expect(body.entryId).toBe("photo1");
-    expect(body.name).toBe("scan.jpg");
-    expect({ width: body.width, height: body.height }).toEqual({
-      width: 400,
-      height: 300,
+    const res = await presignEntry("photos", owner.cookies, cid, aid, {
+      entryId: "photo1",
+      contentType: "image/jpeg",
+      size: bytes.length,
+      name: "scan.jpg",
     });
-    expect(body.size).toBe(bytes.length);
-    expect(body.contentType).toBe("image/jpeg");
-    // mediaUrl percent-encodes the key; the proxy decodes it via
-    // c.req.query, so assert the decoded key is exactly the staged one.
-    expect(new URL(body.url, API).searchParams.get("key")).toBe(
+    expect(res.status).toBe(200);
+    const target = await json<PresignedEntry>(res);
+
+    expect(target.entryId).toBe("photo1");
+    expect(target.method).toBe("PUT");
+    // The type is pinned in the headers the client must send, and the name
+    // rides the same way (see storage.test.ts for the signed-header proof).
+    expect(target.headers["content-type"]).toBe("image/jpeg");
+    expect(target.headers["x-amz-meta-name"]).toBe("scan.jpg");
+    // The proxy path names the staged original: the form renders the entry
+    // before the bytes are processed, and the save addresses it the same way.
+    expect(originalKeyOf(target.url)).toBe(
       stagingOriginalKey(owner.userId, cid, aid, "photo1", "jpg"),
     );
+    // The expiry is an instant in the future, not the lifetime.
+    expect(new Date(target.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    // The signed set is the contract the bucket's CORS rule must allow: a
+    // header the URL signs but the preflight refuses fails the browser's PUT
+    // before storage is ever reached. `host` is browser-managed, so it is the
+    // one signed header a CORS rule cannot carry. `infra/cdk/tests` pins the
+    // bucket's rule to the same list, from the deployment side, because that
+    // package cannot import this one.
+    const signed =
+      new URL(target.uploadUrl).searchParams
+        .get("X-Amz-SignedHeaders")
+        ?.split(";")
+        .filter((header) => header !== "host")
+        .sort() ?? [];
+    expect(signed).toEqual([...STAGED_PUT_SIGNED_HEADERS].sort());
+
+    const put = await putEntry(target, bytes);
+    expect(put.status).toBe(200);
 
     const originals = await listObjects(
       stagedOriginalPrefix(owner.userId, cid, aid, "photo1"),
@@ -90,18 +121,18 @@ describe("POST …/photos/stage", () => {
     expect(originals[0].endsWith("photo1.jpg")).toBe(true);
   });
 
-  it("rejects an unaccepted type before anything is stored", async () => {
-    const res = await stagePhoto(
-      owner.cookies,
-      cid,
-      aid,
-      "photosvg",
-      new File([new Uint8Array(10)], "evil.svg", { type: "image/svg+xml" }),
-    );
+  it("rejects an unaccepted declared type before anything is stored", async () => {
+    const res = await presignEntry("photos", owner.cookies, cid, aid, {
+      entryId: "photosvg",
+      contentType: "image/svg+xml",
+      size: 10,
+      name: "evil.svg",
+    });
     expect(res.status).toBe(400);
     const body = await json<{ error: { code: string; fields?: object } }>(res);
     expect(body.error.code).toBe("validation");
-    expect(body.error.fields).toBeDefined();
+    // The form surfaces `fields.file`; "unsupported type" is its vocabulary.
+    expect(body.error.fields).toMatchObject({ file: "unsupported type" });
     expect(
       await listObjects(
         stagedOriginalPrefix(owner.userId, cid, aid, "photosvg"),
@@ -109,73 +140,65 @@ describe("POST …/photos/stage", () => {
     ).toHaveLength(0);
   });
 
-  it("rejects an oversized photo with the size message, not the decode one", async () => {
-    // Random bytes: if the decode ran before the size check, this would
-    // fail with "could not be decoded" instead.
-    const res = await stagePhoto(
-      owner.cookies,
-      cid,
-      aid,
-      "photobig",
-      new File([new Uint8Array(MAX_IMAGE_BYTES + 1)], "big.jpg", {
-        type: "image/jpeg",
-      }),
-    );
+  it("rejects a declared size over the cap", async () => {
+    const res = await presignEntry("photos", owner.cookies, cid, aid, {
+      entryId: "photobig",
+      contentType: "image/jpeg",
+      size: MAX_IMAGE_BYTES + 1,
+      name: "big.jpg",
+    });
     expect(res.status).toBe(400);
-    const body = await json<{ error: { code: string; message: string } }>(res);
-    expect(body.error.code).toBe("validation");
-    expect(body.error.message).toContain("too large");
+    const body = await json<{ error: { fields?: object } }>(res);
+    expect(body.error.fields).toMatchObject({ file: "too large" });
   });
 
-  it("rejects an undecodable image", async () => {
-    const res = await stagePhoto(
-      owner.cookies,
-      cid,
-      aid,
-      "photobad",
-      new File([new Uint8Array(512)], "not-image.jpg", { type: "image/jpeg" }),
-    );
-    expect(res.status).toBe(400);
-    const body = await json<{ error: { code: string; message: string } }>(res);
-    expect(body.error.code).toBe("validation");
-    expect(body.error.message).toContain("decoded");
+  it("rejects a malformed declared size as malformed, not as too large", async () => {
+    // A byte count of zero or a fraction is not a file that needs shrinking;
+    // reporting "too large" would send someone looking for a smaller file.
+    for (const size of [0, 1.5, -1]) {
+      const res = await presignEntry("photos", owner.cookies, cid, aid, {
+        entryId: "photozero",
+        contentType: "image/jpeg",
+        size,
+      });
+      expect(res.status, String(size)).toBe(400);
+      const body = await json<{ error: { fields?: object } }>(res);
+      expect(body.error.fields).toMatchObject({ file: "invalid size" });
+    }
   });
 
   it("requires a valid entryId", async () => {
-    const bytes = await makeJpeg(10, 10);
     for (const entryId of ["", "bad/slash", "a".repeat(65)]) {
-      const form = new FormData();
-      form.append("entryId", entryId);
-      form.append("file", new File([bytes], "x.jpg", { type: "image/jpeg" }));
-      const res = await app.request(
-        `${API}/api/v1/catalogues/${cid}/artworks/${aid}/photos/stage`,
-        {
-          method: "POST",
-          headers: { Cookie: owner.cookies, Origin: ORIGIN },
-          body: form,
-        },
-      );
+      const res = await presignEntry("photos", owner.cookies, cid, aid, {
+        entryId,
+        contentType: "image/jpeg",
+        size: 100,
+      });
       expect(res.status, entryId).toBe(400);
     }
   });
 
-  it("requires a session, and refuses a non-owner", async () => {
-    const bytes = await makeJpeg(10, 10);
-    const anon = await app.request(
-      `${API}/api/v1/catalogues/${cid}/artworks/${aid}/photos/stage`,
-      { method: "POST", headers: { Origin: ORIGIN }, body: new FormData() },
-    );
+  it("requires a session, and refuses a non-member", async () => {
+    const anon = await presignEntry("photos", "", cid, aid, {
+      entryId: "photonon",
+      contentType: "image/jpeg",
+      size: 100,
+    });
     expect(anon.status).toBe(401);
     expect((await json<{ error: { code: string } }>(anon)).error.code).toBe(
       "unauthorized",
     );
 
-    const strangerRes = await stagePhoto(
+    const strangerRes = await presignEntry(
+      "photos",
       stranger.cookies,
       cid,
       aid,
-      "photox",
-      new File([bytes], "x.jpg", { type: "image/jpeg" }),
+      {
+        entryId: "photox",
+        contentType: "image/jpeg",
+        size: 100,
+      },
     );
     expect(strangerRes.status).toBe(403);
     expect(
@@ -183,15 +206,17 @@ describe("POST …/photos/stage", () => {
     ).toBe("forbidden");
   });
 
-  it("404s an unknown catalogue; an unknown artwork id still stages", async () => {
-    const bytes = await makeJpeg(10, 10);
-    const file = new File([bytes], "x.jpg", { type: "image/jpeg" });
-    const badCatalogue = await stagePhoto(
+  it("404s an unknown catalogue; an unknown artwork id still presigns", async () => {
+    const badCatalogue = await presignEntry(
+      "photos",
       owner.cookies,
       "nope",
       aid,
-      "e",
-      file,
+      {
+        entryId: "e",
+        contentType: "image/jpeg",
+        size: 100,
+      },
     );
     expect(badCatalogue.status).toBe(404);
 
@@ -199,14 +224,17 @@ describe("POST …/photos/stage", () => {
     // artwork id and creates the row at save. The artwork segment only has
     // to be id-shaped — its existence is the save route's check.
     const otherCid = await makeCatalogue(owner.userId);
-    const unknownArtwork = await stagePhoto(
+    const unknownArtwork = await presignEntry(
+      "photos",
       owner.cookies,
       otherCid,
       "nope",
-      "e",
-      file,
+      { entryId: "e", contentType: "image/jpeg", size: 100 },
     );
     expect(unknownArtwork.status).toBe(200);
+    const target = await json<PresignedEntry>(unknownArtwork);
+    const bytes = await makeJpeg(10, 10);
+    await putEntry(target, bytes);
     await discardEntry(owner.cookies, otherCid, "nope", "photos", "e");
   });
 });
@@ -231,103 +259,77 @@ describe("POST …/documents/stage", () => {
     ...Array.from({ length: 64 }, () => 0),
   ]);
 
-  it("stores a PDF with no dimensions", async () => {
-    const res = await stageDocument(
-      owner.cookies,
-      cid,
-      aid,
-      "docpdf",
-      new File([PDF], "condition-report.pdf", { type: "application/pdf" }),
+  it("presigns a PDF, and the bytes land under a .pdf key", async () => {
+    const target = await json<PresignedEntry>(
+      await presignEntry("documents", owner.cookies, cid, aid, {
+        entryId: "docpdf",
+        contentType: "application/pdf",
+        size: PDF.length,
+        name: "condition-report.pdf",
+      }),
     );
-    expect(res.status).toBe(200);
-    const body = await json<{
-      width: number | null;
-      height: number | null;
-      contentType: string;
-      url: string;
-    }>(res);
-    expect(body.width).toBeNull();
-    expect(body.height).toBeNull();
-    expect(body.contentType).toBe("application/pdf");
+    expect(target.headers["content-type"]).toBe("application/pdf");
+
+    expect((await putEntry(target, PDF)).status).toBe(200);
     const originals = await listObjects(
       stagedOriginalPrefix(owner.userId, cid, aid, "docpdf"),
     );
     expect(originals[0].endsWith("docpdf.pdf")).toBe(true);
   });
 
-  it("answers dimensions for an image document", async () => {
-    const bytes = await makeJpeg(200, 150);
-    const res = await stageDocument(
-      owner.cookies,
-      cid,
-      aid,
-      "docimg",
-      new File([bytes], "plate.png", { type: "image/png" }),
-    );
-    // The declared type names the extension; the bytes are what the
-    // pipeline decodes (Sharp sniffs the real format).
-    expect(res.status).toBe(200);
-    const body = await json<{ width: number; height: number }>(res);
-    expect({ width: body.width, height: body.height }).toEqual({
-      width: 200,
-      height: 150,
+  it("enforces the document cap from the declaration", async () => {
+    const atCap = await presignEntry("documents", owner.cookies, cid, aid, {
+      entryId: "doccap",
+      contentType: "application/pdf",
+      size: MAX_DOCUMENT_BYTES,
+      name: "cap.pdf",
     });
-  });
+    expect(atCap.status).toBe(200);
 
-  it("enforces the document cap at the boundary", async () => {
-    const atCap = new Uint8Array(MAX_DOCUMENT_BYTES);
-    const ok = await stageDocument(
-      owner.cookies,
-      cid,
-      aid,
-      "doccap",
-      new File([atCap], "cap.pdf", { type: "application/pdf" }),
-    );
-    expect(ok.status).toBe(200);
-
-    const over = await stageDocument(
-      owner.cookies,
-      cid,
-      aid,
-      "docover",
-      new File([new Uint8Array(MAX_DOCUMENT_BYTES + 1)], "over.pdf", {
-        type: "application/pdf",
-      }),
-    );
+    const over = await presignEntry("documents", owner.cookies, cid, aid, {
+      entryId: "docover",
+      contentType: "application/pdf",
+      size: MAX_DOCUMENT_BYTES + 1,
+      name: "over.pdf",
+    });
     expect(over.status).toBe(400);
     expect(
-      (await json<{ error: { message: string } }>(over)).error.message,
-    ).toContain("too large");
+      (await json<{ error: { fields?: object } }>(over)).error.fields,
+    ).toMatchObject({ file: "too large" });
   });
 
-  it("refuses an image/svg+xml document", async () => {
-    const res = await stageDocument(
-      owner.cookies,
-      cid,
-      aid,
-      "docsvg",
-      new File([new Uint8Array(10)], "a.svg", { type: "image/svg+xml" }),
-    );
+  it("refuses an image/svg+xml document at presign", async () => {
+    const res = await presignEntry("documents", owner.cookies, cid, aid, {
+      entryId: "docsvg",
+      contentType: "image/svg+xml",
+      size: 10,
+      name: "a.svg",
+    });
     expect(res.status).toBe(400);
+    expect(
+      (await json<{ error: { fields?: object } }>(res)).error.fields,
+    ).toMatchObject({ file: "unsupported type" });
   });
 });
 
 // ---------------------------------------------------------------------------
-// Process
+// Process: photos
 // ---------------------------------------------------------------------------
 
 describe("POST …/photos/process", () => {
   let owner: Awaited<ReturnType<typeof freshUser>>;
+  let stranger: Awaited<ReturnType<typeof freshUser>>;
   let cid: string;
   let aid: string;
 
   it("sets up an owned catalogue and artwork", async () => {
     owner = await freshUser("Media");
+    stranger = await freshUser("Media");
     cid = await makeCatalogue(owner.userId);
     aid = await makeArtwork(owner.userId, cid);
   });
 
-  it("generates all six variants into staging, in spec order", async () => {
+  it("generates all six variants and answers the original's measured metadata", async () => {
     const bytes = await makeJpeg(400, 300);
     await stagePhoto(
       owner.cookies,
@@ -347,6 +349,12 @@ describe("POST …/photos/process", () => {
     expect(res.status).toBe(200);
     const body = await json<{
       entryId: string;
+      name: string;
+      width: number | null;
+      height: number | null;
+      size: number;
+      contentType: string;
+      url: string;
       variants: {
         key: string;
         url: string;
@@ -357,6 +365,21 @@ describe("POST …/photos/process", () => {
       }[];
     }>(res);
     expect(body.entryId).toBe("pgen");
+    // The name came back off the object's signed metadata — the process body
+    // carried only the entry id.
+    expect(body.name).toBe("a.jpg");
+    // Measured from the stored object, which is the one thing presign never
+    // saw. A declaration is a claim; this is the fact.
+    expect({ width: body.width, height: body.height }).toEqual({
+      width: 400,
+      height: 300,
+    });
+    expect(body.size).toBe(bytes.length);
+    expect(body.contentType).toBe("image/jpeg");
+    expect(originalKeyOf(body.url)).toBe(
+      stagingOriginalKey(owner.userId, cid, aid, "pgen", "jpg"),
+    );
+
     // 400x300 source: the inside fits are all at source scale, the
     // squares cover the box.
     const expected: [string, number, number][] = [
@@ -385,6 +408,71 @@ describe("POST …/photos/process", () => {
     expect(staged.every((k) => k.endsWith(".webp"))).toBe(true);
   });
 
+  it("accepts an object past the payload a multipart stage could carry", async () => {
+    // The reason for the whole hop: a Lambda's invocation payload is ~6 MB and
+    // a base64 body inflates by a third, so a phone photo used to be refused
+    // before Hono read it. Here the bytes go browser → storage and only the
+    // declaration touches the API. 5 MB is past that old ceiling and inside
+    // the population's cap; the answer's size is the stored object's own.
+    const jpeg = await makeJpeg(400, 300);
+    const padding = new Uint8Array(5 * 1024 * 1024 - jpeg.length).fill(7);
+    const bytes = Uint8Array.from([...jpeg, ...padding]);
+
+    const target = await json<PresignedEntry>(
+      await presignEntry("photos", owner.cookies, cid, aid, {
+        entryId: "pbig",
+        contentType: "image/jpeg",
+        size: bytes.length,
+        name: "phone.jpg",
+      }),
+    );
+    const put = await putEntry(target, bytes);
+    expect(put.status).toBe(200);
+
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "photos",
+      JSON.stringify({ entryId: "pbig" }),
+    );
+    expect(res.status).toBe(200);
+    const body = await json<{
+      size: number;
+      width: number;
+      variants: unknown[];
+    }>(res);
+    expect(body.size).toBe(bytes.length);
+    expect(body.width).toBe(400);
+    expect(body.variants).toHaveLength(6);
+  });
+
+  it("carries a non-ASCII filename through the object's metadata", async () => {
+    // A header is not a place for arbitrary UTF-8: the value is percent-encoded
+    // into the signed metadata and decoded on the way out, so an accented name
+    // survives the hop instead of arriving mangled. Nothing else in the flow
+    // touches the name, so this is the only place the pair is proven.
+    const bytes = await makeJpeg(50, 40);
+    await stagePhoto(
+      owner.cookies,
+      cid,
+      aid,
+      "punicode",
+      new File([bytes], "résumé d'atelier.jpg", { type: "image/jpeg" }),
+    );
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "photos",
+      JSON.stringify({ entryId: "punicode" }),
+    );
+    expect(res.status).toBe(200);
+    expect((await json<{ name: string }>(res)).name).toBe(
+      "résumé d'atelier.jpg",
+    );
+  });
+
   it("is idempotent: re-processing overwrites", async () => {
     const res = await processEntry(
       owner.cookies,
@@ -398,6 +486,68 @@ describe("POST …/photos/process", () => {
     expect(
       await listObjects(stagedVariantPrefix(owner.userId, cid, aid, "pgen")),
     ).toHaveLength(6);
+  });
+
+  it("refuses an object that got bigger than the cap after the presign", async () => {
+    // The declaration said "under the cap" and the presigned URL accepted the
+    // bytes that followed: presign cannot weigh what it never sees. Process
+    // reads the object's own length, so the oversize is caught here. The body
+    // is random on purpose — if the size check ran after the decode, this
+    // would answer "could not be decoded" instead.
+    const target = await json<PresignedEntry>(
+      await presignEntry("photos", owner.cookies, cid, aid, {
+        entryId: "perrbig",
+        contentType: "image/jpeg",
+        size: 512,
+        name: "big.jpg",
+      }),
+    );
+    await putEntry(target, new Uint8Array(MAX_IMAGE_BYTES + 1));
+
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "photos",
+      JSON.stringify({ entryId: "perrbig" }),
+    );
+    expect(res.status).toBe(400);
+    const body = await json<{ error: { message: string; fields?: object } }>(
+      res,
+    );
+    expect(body.error.message).toContain("too large");
+    expect(body.error.fields).toMatchObject({ file: "too large" });
+  });
+
+  it("refuses an object whose stored type is outside the allowlist", async () => {
+    // A declaration of image/jpeg, then a PUT of HTML: the local stand-in does
+    // not verify signatures, so this is exactly the out-of-band object real S3
+    // would have refused at the PUT. Process must refuse it too, because the
+    // object is what a later read would serve.
+    const target = await json<PresignedEntry>(
+      await presignEntry("photos", owner.cookies, cid, aid, {
+        entryId: "perrtype",
+        contentType: "image/jpeg",
+        size: 20,
+        name: "page.jpg",
+      }),
+    );
+    await putEntry(target, new TextEncoder().encode("<script>x</script>"), {
+      ...target.headers,
+      "content-type": "text/html",
+    });
+
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "photos",
+      JSON.stringify({ entryId: "perrtype" }),
+    );
+    expect(res.status).toBe(400);
+    expect(
+      (await json<{ error: { fields?: object } }>(res)).error.fields,
+    ).toMatchObject({ file: "unsupported type" });
   });
 
   it("404s a never-staged entry", async () => {
@@ -414,8 +564,42 @@ describe("POST …/photos/process", () => {
     );
   });
 
+  it("requires a session, refuses a non-member, and 404s an unknown catalogue", async () => {
+    const body = JSON.stringify({ entryId: "pgen" });
+
+    const anon = await processEntry("", cid, aid, "photos", body);
+    expect(anon.status).toBe(401);
+    expect((await json<{ error: { code: string } }>(anon)).error.code).toBe(
+      "unauthorized",
+    );
+
+    // Membership is asked before the object is touched: a stranger's 403 is
+    // not a hint about whether anything was staged.
+    const other = await processEntry(
+      stranger.cookies,
+      cid,
+      aid,
+      "photos",
+      body,
+    );
+    expect(other.status).toBe(403);
+    expect((await json<{ error: { code: string } }>(other)).error.code).toBe(
+      "forbidden",
+    );
+
+    const missing = await processEntry(
+      owner.cookies,
+      "nope",
+      aid,
+      "photos",
+      body,
+    );
+    expect(missing.status).toBe(404);
+  });
+
   it("400s an undecodable staged original", async () => {
-    // Seed the staged object directly: stage would have refused it.
+    // Seed the staged object directly: a presign would have admitted the type
+    // and the size, and only the bytes are wrong.
     const key = `staging/${owner.userId}/${cid}/${aid}/pbad.jpg`;
     await putObject(key, new Uint8Array(256), "image/jpeg");
     const res = await processEntry(
@@ -443,6 +627,10 @@ describe("POST …/photos/process", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Process: documents
+// ---------------------------------------------------------------------------
+
 describe("POST …/documents/process", () => {
   let owner: Awaited<ReturnType<typeof freshUser>>;
   let cid: string;
@@ -454,7 +642,7 @@ describe("POST …/documents/process", () => {
     aid = await makeArtwork(owner.userId, cid);
   });
 
-  it("generates the two document variants for an image", async () => {
+  it("generates the two document variants for an image, with its metadata", async () => {
     const bytes = await makeJpeg(1200, 900);
     await stageDocument(
       owner.cookies,
@@ -471,11 +659,23 @@ describe("POST …/documents/process", () => {
       JSON.stringify({ entryId: "dimg" }),
     );
     expect(res.status).toBe(200);
-    const body = await json<{ variants: { key: string }[] }>(res);
+    const body = await json<{
+      name: string;
+      width: number | null;
+      height: number | null;
+      size: number;
+      variants: { key: string }[];
+    }>(res);
     expect(body.variants.map((v) => v.key)).toEqual(["square_sm", "large"]);
+    expect(body.name).toBe("plate.jpg");
+    expect({ width: body.width, height: body.height }).toEqual({
+      width: 1200,
+      height: 900,
+    });
+    expect(body.size).toBe(bytes.length);
   });
 
-  it("answers no variants for a PDF", async () => {
+  it("processes a PDF to no variants and null dimensions, having still validated it", async () => {
     const PDF = new Uint8Array([
       0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34,
     ]);
@@ -494,7 +694,82 @@ describe("POST …/documents/process", () => {
       JSON.stringify({ entryId: "dpdf" }),
     );
     expect(res.status).toBe(200);
-    expect((await json<{ variants: unknown[] }>(res)).variants).toEqual([]);
+    const body = await json<{
+      name: string;
+      width: number | null;
+      height: number | null;
+      size: number;
+      contentType: string;
+      variants: unknown[];
+    }>(res);
+    expect(body.variants).toEqual([]);
+    expect(body.width).toBeNull();
+    expect(body.height).toBeNull();
+    expect(body.name).toBe("r.pdf");
+    expect(body.size).toBe(PDF.length);
+    expect(body.contentType).toBe("application/pdf");
+  });
+
+  it("refuses a document whose bytes are not a PDF", async () => {
+    // The stored type is the client's declaration — trusted at presign, and
+    // only on real S3 pinned by the signature. So process reads the bytes it
+    // is about to promote: an object stored as application/pdf without the
+    // format's own header is refused rather than promoted and later served
+    // from the app's own origin. A text file is the honest example.
+    const target = await json<PresignedEntry>(
+      await presignEntry("documents", owner.cookies, cid, aid, {
+        entryId: "dpdfjunk",
+        contentType: "application/pdf",
+        size: 20,
+        name: "notes.pdf",
+      }),
+    );
+    await putEntry(
+      target,
+      new TextEncoder().encode("<p>not a pdf at all</p>"),
+      target.headers,
+    );
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "documents",
+      JSON.stringify({ entryId: "dpdfjunk" }),
+    );
+    expect(res.status).toBe(400);
+    expect(
+      (await json<{ error: { fields?: object } }>(res)).error.fields,
+    ).toMatchObject({ file: "undecodable" });
+  });
+
+  it("refuses a document whose PUT exceeded the document cap", async () => {
+    // The declaration said one byte, so presign admitted it; the object that
+    // landed is over the cap. The cap is the population's — judged against the
+    // route the entry was staged for, not against the type.
+    const target = await json<PresignedEntry>(
+      await presignEntry("documents", owner.cookies, cid, aid, {
+        entryId: "dpdfbig",
+        contentType: "application/pdf",
+        size: 1,
+        name: "huge.pdf",
+      }),
+    );
+    await putEntry(
+      target,
+      new Uint8Array(MAX_DOCUMENT_BYTES + 1),
+      target.headers,
+    );
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "documents",
+      JSON.stringify({ entryId: "dpdfbig" }),
+    );
+    expect(res.status).toBe(400);
+    expect(
+      (await json<{ error: { fields?: object } }>(res)).error.fields,
+    ).toMatchObject({ file: "too large" });
   });
 });
 
@@ -591,7 +866,7 @@ describe("re-staging replaces", () => {
     aid = await makeArtwork(owner.userId, cid);
   });
 
-  it("a second stage of the same entry leaves exactly one original", async () => {
+  it("a second presign of the same entry leaves exactly one original", async () => {
     const jpeg = await makeJpeg(100, 100);
     const png = Uint8Array.from(
       (
@@ -651,5 +926,31 @@ describe("re-staging replaces", () => {
     );
     expect(res.status).toBe(200);
     expect((await json<{ variants: unknown[] }>(res)).variants).toHaveLength(6);
+  });
+
+  it("a refused re-declaration leaves the entry that was already staged", async () => {
+    // Discarding runs only once the new declaration is admitted: a mistyped
+    // re-upload must not destroy the upload that is already there.
+    const bytes = await makeJpeg(120, 90);
+    await stagePhoto(
+      owner.cookies,
+      cid,
+      aid,
+      "keepme",
+      new File([bytes], "keep.jpg", { type: "image/jpeg" }),
+    );
+
+    const refused = await presignEntry("photos", owner.cookies, cid, aid, {
+      entryId: "keepme",
+      contentType: "image/svg+xml",
+      size: 10,
+    });
+    expect(refused.status).toBe(400);
+
+    const originals = await listObjects(
+      stagedOriginalPrefix(owner.userId, cid, aid, "keepme"),
+    );
+    expect(originals).toHaveLength(1);
+    expect(originals[0].endsWith("keepme.jpg")).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 // The staged-media routes:
 //
-//   POST   …/photos/stage       — multipart original → the staged key
-//   POST   …/photos/process     — { entryId } → variants into staging
+//   POST   …/photos/stage       — a declaration → a presigned upload target
+//   POST   …/photos/process     — { entryId } → the original's metadata + variants
 //   DELETE …/photos/{entryId}   — discard a staged entry
 //   … and the same three under /documents
 //
@@ -16,15 +16,47 @@
 // discard reach only their own staged objects and one member can neither
 // process nor discard another's unsaved upload.
 //
+// ## The bytes never pass through this app
+//
+// A file used to travel in a multipart body and the stage route held it, so
+// it measured and decoded on the way in. That is what a Lambda's 6 MB
+// invocation payload broke: a phone photo is base64-inflated in transit and
+// refused before Hono ever reads it. So the two routes now split one job:
+//
+//   - **stage presigns.** It reads a DECLARATION — content type, declared
+//     length, name — refuses one the population's allowlist or cap does not
+//     admit, and mints a short-lived PUT URL for the staged key. It never
+//     sees a byte, so nothing it answers is a measurement.
+//   - **process validates.** It is the first point the server sees the
+//     object, so the allowlist and the cap are re-checked against the STORED
+//     content type and the stored length, and an image is decoded. A forged
+//     declaration at presign therefore buys nothing: the only thing it can
+//     reach is a failed process and an object the sweep removes.
+//
+// The presigned URL carries no authority beyond one PUT on one staged key,
+// and the key still names the uploader — a member's URL can only ever write
+// inside their own staging prefix.
+//
+// `name` is recorded on the object at presign (a signed `x-amz-meta-name`
+// header, see `media/stagedName.ts`), because the process body carries only
+// the entry id and the answer still has to name the original.
+//
 // The routes mount under the catalogue's own address, carrying their own
 // segments, from one route app and one set of handlers.
 
-import { MINTED_ID_RE } from "@arcula/shared";
+import {
+  checkDeclaredUpload,
+  MINTED_ID_RE,
+  mediaPresignRequestSchema,
+  STAGED_NAME_METADATA_KEY,
+  type DeclaredUploadVerdict,
+  type MediaPresignResponse,
+  type MediaProcessResponse,
+} from "@arcula/shared";
 import { Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import { requireMemberCatalogue } from "../authorize";
-import { errorResponse, ApiError } from "../errors";
-import { param } from "../http";
+import { ApiError } from "../errors";
+import { param, parseBody } from "../http";
 import { requireSession } from "../session";
 import {
   extensionFor,
@@ -42,11 +74,21 @@ import {
 } from "../media/populations";
 import {
   generateVariants,
+  hasPdfSignature,
   orientSource,
-  sourceDimensions,
   WEBP_TYPE,
 } from "../media/pipeline";
-import { deleteObject, listObjects, putObject, readObject } from "../storage";
+import { decodeStagedName, encodeStagedName } from "../media/stagedName";
+import {
+  deleteObject,
+  headObject,
+  isObjectMissing,
+  listObjects,
+  PRESIGNED_PUT_TTL_SECONDS,
+  presignPut,
+  putObject,
+  readObject,
+} from "../storage";
 
 // Ids are client-minted and become key segments: letters and digits only —
 // nothing that could carry a path separator, a dot or a hyphen (the route
@@ -56,6 +98,34 @@ import { deleteObject, listObjects, putObject, readObject } from "../storage";
 /** A validation failure with the failed fields, per the error envelope. */
 function invalid(message: string, fields?: Record<string, string>) {
   return new ApiError("validation", message, fields ? { fields } : undefined);
+}
+
+/**
+ * A refused declaration or a refused object, as the form reads it.
+ *
+ * One function for both ends of the hop: presign judges the declaration and
+ * process judges the stored object, and the person who forged nothing should
+ * not be told two different things depending on which end caught it. The
+ * `fields.file` values are the vocabulary the uploaders already surface
+ * (`useArtworkPhotos` reads `fields.file` first).
+ */
+function refusal(verdict: DeclaredUploadVerdict): ApiError {
+  switch (verdict) {
+    case "unsupported-type":
+      return invalid("The file type is not accepted", {
+        file: "unsupported type",
+      });
+    case "too-large":
+      return invalid("The file is too large", { file: "too large" });
+    case "invalid-size":
+      // Not the same as too large: a zero, a fraction or a non-finite length
+      // is a malformed request, and saying "too large" would send someone
+      // looking for a smaller file that does not exist.
+      return invalid("The file size is not valid", { file: "invalid size" });
+    case "allowed":
+      // Not reachable through the call sites; the type keeps them honest.
+      throw new Error("A refused upload cannot be allowed");
+  }
 }
 
 const isImage = (contentType: string | null): boolean =>
@@ -97,100 +167,90 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // parent as /api/v1/* — which would 401 every anonymous /api/v1 request
   // (the public reads) the moment this app is mounted.
   //
-  // A coarse guard ahead of parseBody: the exact per-file cap is checked
-  // on the parsed file below (the multipart overhead is the slack here).
-  const limit = bodyLimit({
-    maxSize: pop.cap + 1024 * 1024,
-    onError: (c) => {
-      const { body, status } = errorResponse(
-        new ApiError("validation", "The file is too large"),
-      );
-      return c.json(body, status);
-    },
-  });
+  // There is no body limit any more: the route reads a JSON declaration, and
+  // the bytes go straight to storage. The declared size is capped by the
+  // shared guard, and the stored length by process.
 
   // ------------------------------------------------------------------
-  // Stage
+  // Stage: presign
   // ------------------------------------------------------------------
-  r.post(`/${pop.population}/stage`, requireSession, limit, async (c) => {
+  r.post(`/${pop.population}/stage`, requireSession, async (c) => {
     const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
     }
 
-    const body = await c.req.parseBody();
-    const entryId = body.entryId;
-    const file = body.file;
-    if (typeof entryId !== "string" || !MINTED_ID_RE.test(entryId)) {
-      throw invalid("A valid entryId field is required", {
-        entryId: "required",
-      });
-    }
-    if (!(file instanceof File)) {
-      throw invalid("A file field is required", { file: "required" });
+    const declaration = await parseBody(c, mediaPresignRequestSchema);
+
+    // The declaration is all presign has. The shared guard is the single
+    // owner of the allowlist and the cap; its order (type, then size) is the
+    // old stage route's, so a forged type is still reported as a type failure
+    // rather than as an honest file that is too big.
+    const verdict = checkDeclaredUpload(
+      kind,
+      declaration.contentType,
+      declaration.size,
+    );
+    if (verdict !== "allowed") {
+      throw refusal(verdict);
     }
 
-    // The allowlist runs before the size check: a forged type is a
-    // different failure than an honest one that is too big, and the
-    // extension (hence the object name) is only minted from admitted
-    // types — SVG/HTML reach no key.
-    if (!pop.accepted[file.type]) {
-      throw invalid("The file type is not accepted", {
-        file: "unsupported type",
-      });
-    }
-    if (file.size > pop.cap) {
-      throw invalid("The file is too large", { file: "too large" });
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const ext = extensionFor(file.type);
+    // The allowlist admitted the type, and this map is the one place a type
+    // becomes a name. A `null` here would mean the two tables disagree; the
+    // branch keeps "never a guessed extension" true rather than building a
+    // key ending in `null`.
+    const ext = extensionFor(declaration.contentType);
     if (ext === null) {
-      throw invalid("The file type is not accepted", {
-        file: "unsupported type",
-      });
+      throw refusal("unsupported-type");
     }
 
-    let width: number | null = null;
-    let height: number | null = null;
-    if (isImage(file.type)) {
-      try {
-        ({ width, height } = await sourceDimensions(bytes));
-      } catch {
-        throw invalid("The image could not be decoded", {
-          file: "undecodable",
-        });
-      }
-    }
-
-    // Re-staging replaces: a failed re-upload of the same entry must
-    // not leave the previous original (or its variants, under a
-    // different extension) to be swept into the save.
-    await discardEntry(c.get("user").id, catalogue.id, artworkId, entryId);
+    // Re-staging replaces: a failed re-upload of the same entry must not
+    // leave the previous original (or its variants, under a different
+    // extension) to be swept into the save. It runs AFTER the declaration is
+    // admitted, so a refused re-upload cannot destroy the entry that was
+    // already staged and valid.
+    await discardEntry(
+      c.get("user").id,
+      catalogue.id,
+      artworkId,
+      declaration.entryId,
+    );
 
     const key = stagingOriginalKey(
       c.get("user").id,
       catalogue.id,
       artworkId,
-      entryId,
+      declaration.entryId,
       ext,
     );
-    await putObject(key, bytes, file.type);
-
-    return c.json({
-      entryId,
-      name: file.name || "untitled",
-      width,
-      height,
-      size: bytes.length,
-      contentType: file.type,
-      url: mediaUrl(key),
+    // The name rides the object as a signed metadata header: the process
+    // body carries only the entry id, and its answer still has to name the
+    // original. Encoded because a header is not a place for arbitrary UTF-8.
+    const upload = await presignPut(key, declaration.contentType, {
+      [STAGED_NAME_METADATA_KEY]: encodeStagedName(
+        declaration.name || "untitled",
+      ),
     });
+
+    const answer: MediaPresignResponse = {
+      entryId: declaration.entryId,
+      uploadUrl: upload.url,
+      method: "PUT",
+      headers: upload.headers,
+      url: mediaUrl(key),
+      // The same lifetime the URL was signed with, as an instant: a client
+      // can tell a stale target from a live one instead of finding out at the
+      // PUT. `uploadUrl` itself is never logged.
+      expiresAt: new Date(
+        Date.now() + PRESIGNED_PUT_TTL_SECONDS * 1000,
+      ).toISOString(),
+    };
+    return c.json(answer);
   });
 
   // ------------------------------------------------------------------
-  // Process
+  // Process: the authoritative check
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/process`, requireSession, async (c) => {
     const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
@@ -220,12 +280,58 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
         "The staged entry does not exist or has been discarded",
       );
     }
+    const originalKey = originals[0];
 
-    const { bytes, contentType } = await readObject(originals[0]);
+    // The object's record first, then its bytes. A HEAD is cheap and answers
+    // the two facts presign was only told — the stored content type and the
+    // stored length — so an oversized or wrongly typed object is refused
+    // before it is pulled into the function. The URL carries no signed length
+    // (`content-length` is forbidden to `fetch`), so without this a forged
+    // declaration buys a full download of whatever was PUT to the key.
+    let head;
+    try {
+      head = await headObject(originalKey);
+    } catch (err) {
+      // The entry was listed a moment ago; a 404 here is a discard racing
+      // this call, and the honest answer is the same not-found.
+      if (isObjectMissing(err)) {
+        throw new ApiError(
+          "not-found",
+          "The staged entry does not exist or has been discarded",
+        );
+      }
+      throw err;
+    }
+    const storedType = head.ContentType ?? "";
+    const storedLength = head.ContentLength ?? 0;
+    const verdict = checkDeclaredUpload(kind, storedType, storedLength);
+    if (verdict !== "allowed") {
+      throw refusal(verdict);
+    }
 
-    if (!isImage(contentType)) {
-      // A PDF document has no variants: the original is the whole entry.
-      return c.json({ entryId, variants: [] });
+    const { bytes, metadata } = await readObject(originalKey);
+    const name = decodeStagedName(metadata?.name);
+
+    if (!isImage(storedType)) {
+      // A PDF document has no variants: the original is the whole entry. Its
+      // type and length were validated above, and its bytes are checked for
+      // the PDF header here — process is the byte check even when there is
+      // nothing to generate, so a text file declared as a PDF is refused
+      // rather than promoted and later served from the app's own origin.
+      if (!hasPdfSignature(bytes)) {
+        throw invalid("The file could not be read", { file: "undecodable" });
+      }
+      const answer: MediaProcessResponse = {
+        entryId,
+        name,
+        width: null,
+        height: null,
+        size: bytes.length,
+        contentType: storedType,
+        url: mediaUrl(originalKey),
+        variants: [],
+      };
+      return c.json(answer);
     }
 
     let oriented;
@@ -256,7 +362,17 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
         contentType: variant.contentType,
       });
     }
-    return c.json({ entryId, variants });
+    const answer: MediaProcessResponse = {
+      entryId,
+      name,
+      width: oriented.width,
+      height: oriented.height,
+      size: bytes.length,
+      contentType: storedType,
+      url: mediaUrl(originalKey),
+      variants,
+    };
+    return c.json(answer);
   });
 
   // ------------------------------------------------------------------
