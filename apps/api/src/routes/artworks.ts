@@ -216,6 +216,9 @@ artworkRoutes.post(
         condition: payload.condition ?? null,
         currentValue: payload.currentValue ?? null,
         status: payload.status,
+        // Always written, null included: a save that names no market state
+        // stores the absence, which is what every Collection work carries.
+        availability: payload.availability ?? null,
         // Always written, as null: the list filters on it, and a missing
         // field is not a null (the write-path doctrine).
         deletedAt: null,
@@ -334,6 +337,11 @@ artworkRoutes.patch(
       }
       if (payload.status !== undefined) {
         set.status = payload.status;
+      }
+      // Present sets (or, as null, clears); absent leaves the column — the
+      // same three states the text fields have.
+      if (payload.availability !== undefined) {
+        set.availability = payload.availability;
       }
       await tx
         .update(artworksTable)

@@ -11,6 +11,7 @@ import {
   catalogueInvitations as invitationsTable,
   catalogues as cataloguesTable,
 } from "@arcula/db";
+import type { CatalogueKind } from "@arcula/shared";
 import { app } from "../../src/app";
 import { db } from "../../src/db";
 import {
@@ -26,6 +27,9 @@ export async function makeCatalogue(
     isPublic?: boolean;
     name?: string;
     mediaNamespaceId?: string;
+    /** The kind decides which surface reads the catalogue; the physical
+     *  default is a Collection, as it is for a row written before the column. */
+    kind?: CatalogueKind;
   } = {},
 ): Promise<string> {
   const id = uuid();
@@ -37,6 +41,7 @@ export async function makeCatalogue(
     // fixtures build against. A suite that needs the minted shape passes one.
     mediaNamespaceId: opts.mediaNamespaceId ?? userId,
     name: opts.name ?? "Test Catalogue",
+    kind: opts.kind ?? "collection",
     isPublic: opts.isPublic ?? true,
     createdAt: new Date(),
     updatedAt: new Date(),
