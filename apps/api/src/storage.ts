@@ -38,9 +38,10 @@ function required(name: string): string {
 }
 
 // S3_FORCE_PATH_STYLE defaults to on: the local SeaweedFS stand-in
-// requires it, and prod sets it to "false" explicitly for real S3 — so
-// the missing-value failure is a virtual-hosted URL to the wrong place,
-// not a quiet misroute.
+// requires it, and the deployed environment inherits the same path-style
+// address (its S3_ENDPOINT is the regional endpoint), so the presigned
+// URL names the bucket as the first path segment in both. A
+// virtual-hosted deployment has to set it to "false" explicitly.
 export const BUCKET = process.env.S3_BUCKET ?? "arcula";
 
 export const s3 = new S3Client({
@@ -88,10 +89,14 @@ export const putObject = (
 export const streamObject = (key: string) =>
   s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
 
-/** The bytes and the recorded content type, in one request. */
-export async function readObject(
-  key: string,
-): Promise<{ bytes: Uint8Array; contentType: string | null }> {
+/** The bytes, the recorded content type and the object's metadata, in one
+ *  request. The metadata is what `presignPut` recorded at upload time — the
+ *  staged original's name, read back when the bytes are validated. */
+export async function readObject(key: string): Promise<{
+  bytes: Uint8Array;
+  contentType: string | null;
+  metadata: Record<string, string> | undefined;
+}> {
   const res = await streamObject(key);
   const body: unknown = res.Body;
   let bytes: Uint8Array;
@@ -104,7 +109,11 @@ export async function readObject(
   } else {
     throw new Error("unconsumable S3 response body");
   }
-  return { bytes, contentType: res.ContentType ?? null };
+  return {
+    bytes,
+    contentType: res.ContentType ?? null,
+    metadata: res.Metadata,
+  };
 }
 
 /** Read an object back as bytes. Rejects on a missing object — see `isObjectMissing`. */
@@ -169,6 +178,15 @@ export const copyObject = (
  * S3 rejects a mismatch. The staged object is therefore always validated
  * again at process time, never trusted from the presign call.
  *
+ * `metadata` is recorded ON the object (`x-amz-meta-{key}`) and signed the
+ * same way as the content type, which is what makes the object
+ * self-describing across the hop. The values must be header-safe — ASCII is
+ * all a header carries — so a caller with a human string encodes it first.
+ * `unhoistableHeaders` is load-bearing: without it the SDK moves `x-amz-meta-*`
+ * into the URL's query string, where a filename would join the bearer token in
+ * every access log. Signed headers stay in the request, and the client sends
+ * them verbatim because `headers` below is the whole signed set.
+ *
  * Five minutes is long enough for a phone photograph on a slow connection
  * and short enough that a leaked URL is worth little. It is the one number
  * behind the URL's `X-Amz-Expires`.
@@ -177,27 +195,39 @@ export const PRESIGNED_PUT_TTL_SECONDS = 300;
 
 export type PresignedPut = {
   url: string;
-  /** The headers to send verbatim with the `PUT`; only the signed ones. */
-  headers: { "content-type": string };
+  /** The headers to send verbatim with the `PUT`: every signed one. */
+  headers: Record<string, string>;
 };
 
 export async function presignPut(
   key: string,
   contentType: string,
+  metadata: Record<string, string> = {},
 ): Promise<PresignedPut> {
+  // The SDK names the headers itself (`x-amz-meta-{key}`), so the map is
+  // keyed by the bare name and built once, here, for both the command and
+  // the signed set — the two cannot drift.
+  const metaHeaders: Record<string, string> = {};
+  for (const [name, value] of Object.entries(metadata)) {
+    metaHeaders[`x-amz-meta-${name}`] = value;
+  }
+  const signed = ["content-type", ...Object.keys(metaHeaders)];
+
   const url = await getSignedUrl(
     s3,
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       ContentType: contentType,
+      ...(Object.keys(metadata).length > 0 ? { Metadata: metadata } : {}),
     }),
     {
       expiresIn: PRESIGNED_PUT_TTL_SECONDS,
-      signableHeaders: new Set(["content-type"]),
+      signableHeaders: new Set(signed),
+      unhoistableHeaders: new Set(Object.keys(metaHeaders)),
     },
   );
-  return { url, headers: { "content-type": contentType } };
+  return { url, headers: { "content-type": contentType, ...metaHeaders } };
 }
 
 /** Every object under a prefix, fully paginated. */
