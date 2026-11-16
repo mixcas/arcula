@@ -13,7 +13,7 @@ import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
-import { catalogueSurface } from "@/catalogueSurface";
+import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
@@ -25,6 +25,7 @@ import {
   artworkSchema,
   fromArtwork,
   toArtworkPayload,
+  type ArtworkAvailability,
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
@@ -86,10 +87,12 @@ const ArtworkEditPage: React.FC = () => {
   // but a save failure must leave the user's input on screen.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The catalogue's kind decides whether this form surfaces a market state.
-  // Loaded with the work, so the control and the initial value are settled
-  // before the form mounts.
-  const [availabilityInPlay, setAvailabilityInPlay] = useState(false);
+  // The catalogue's kind decides whether this form surfaces a market state and
+  // which states it offers. Loaded with the work, so the control and the
+  // initial value are settled before the form mounts.
+  const [availabilityValues, setAvailabilityValues] = useState<
+    readonly ArtworkAvailability[]
+  >([]);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
   // so it can be restored from here. Save stays shut while it is deleted, and
@@ -141,15 +144,19 @@ const ArtworkEditPage: React.FC = () => {
           return;
         }
 
-        const inPlay = catalogueSurface(catalogue.kind).availabilityInPlay;
-        setAvailabilityInPlay(inPlay);
+        const surface = catalogueSurface(catalogue.kind);
+        setAvailabilityValues(surface.availabilityValues);
 
         const values = fromArtwork(artwork);
         // A surfaced work with no stored state starts Available; a stored
-        // state is never overwritten, and an in-play kind keeps null for an
-        // explicit clear only after the user acts.
-        if (inPlay && values.availability === null) {
-          values.availability = "available";
+        // state is never overwritten, and a kind with no market state is
+        // handed nothing (its save omits the key entirely).
+        const availability = availabilityFor(
+          catalogue.kind,
+          values.availability,
+        );
+        if (availability !== null) {
+          values.availability = availability;
         }
         setLoadedValues(values);
         setLoadedTitle(values.title);
@@ -291,7 +298,11 @@ const ArtworkEditPage: React.FC = () => {
             const photosCommit = photos.commit();
             const documentsCommit = documents.commit();
             await artworkService.updateArtwork(catalogueId, artworkId, {
-              ...toArtworkUpdate(loadedValues, payload, availabilityInPlay),
+              ...toArtworkUpdate(
+                loadedValues,
+                payload,
+                availabilityValues.length > 0,
+              ),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
             });
@@ -323,7 +334,7 @@ const ArtworkEditPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
-          availabilityInPlay={availabilityInPlay}
+          availabilityValues={availabilityValues}
           uploadsDisabled={isDeleted}
         />
 

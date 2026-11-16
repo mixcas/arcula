@@ -379,7 +379,8 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
   );
 
   it("sends the state the owner picks", async () => {
-    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    // On-consignment is an Inventory's state, so the pick is made there.
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
     const user = userEvent.setup();
     renderPage();
 
@@ -402,6 +403,28 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
     expect(createArtwork.mock.calls[0][1].availability).toBe("on-consignment");
+  });
+
+  it("offers a Portfolio no on-consignment state", async () => {
+    // The surface's per-kind values are what the Select renders: a Portfolio
+    // sells the artist's own work, so an option it does not have must not be
+    // on screen (ADR-0010).
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+
+    const select = await screen.findByRole("combobox", {
+      name: /^Availability/,
+    });
+    await user.click(select);
+    await waitFor(() =>
+      expect(select).toHaveAttribute("aria-expanded", "true"),
+    );
+    const options = screen
+      .queryAllByRole("option", { hidden: true })
+      .map((entry) => entry.textContent);
+    expect(options).toContain("Sold");
+    expect(options).not.toContain("On consignment");
   });
 
   it("offers a Collection no market state and sends none", async () => {
