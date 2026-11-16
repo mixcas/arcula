@@ -2,12 +2,14 @@
  * LogRocket session replay, configured the way this product needs it rather
  * than the way the SDK defaults.
  *
- * Arcula handles credentials and other people's artwork, so recording starts
- * with redaction on, not added later:
+ * Arcula handles credentials, so the recorder never sees a password:
  *
- * - `dom.inputSanitizer` drops every input's value — the login and sign-up
- *   emails, the profile fields and the catalogue unlock password. The SDK
- *   already skips `type="password"`, but an email is just as identifying.
+ * - **DOM:** no `inputSanitizer`. The SDK already skips every
+ *   `input[type="password"]`, and every password field in the app renders
+ *   through Mantine's `PasswordInput` (there is no plain-text password
+ *   field). Names, emails and the rest of the form text are recorded on
+ *   purpose — they are what makes a replay readable. A new password field
+ *   must stay a `PasswordInput` for this to hold.
  * - `network.requestSanitizer` ignores the whole request/response pair for
  *   every route that carries a secret: Better Auth's `/api/auth/*` (sign-in,
  *   sign-up, password change, reset — the new password is in the body), the
@@ -27,9 +29,9 @@
  * a `vite build`. The build script is the one thing that knows which
  * environment it is packaging.
  *
- * `identify` takes the immutable `uid` alone. A name or an email is PII that
- * the session deliberately does not carry, and it would follow the user across
- * every future session.
+ * `identify` carries the name and email the member signed up with, so a
+ * session can be found by either in the LogRocket dashboard. The uid stays
+ * the immutable key; name and email are traits that may change.
  */
 
 type LogRocketSdk = typeof import("logrocket");
@@ -41,6 +43,20 @@ type TrackProperties = Record<
   string | number | boolean | string[] | number[] | boolean[] | null | undefined
 >;
 
+/** What `identify` attaches to the account: the uid plus its searchable traits. */
+interface IdentifyTraits {
+  name?: string;
+  email?: string;
+}
+
+/** Drop absent traits rather than sending nulls the SDK's index signature rejects. */
+function toUserTraits(traits: IdentifyTraits): Record<string, string> {
+  const supplied: Record<string, string> = {};
+  if (traits.name) supplied.name = traits.name;
+  if (traits.email) supplied.email = traits.email;
+  return supplied;
+}
+
 const APP_ID: string =
   (import.meta.env.VITE_LOGROCKET_APP_ID as string | undefined) ??
   "wf0mol/arcula";
@@ -49,11 +65,12 @@ const APP_ID: string =
 let sdk: LogRocketSdk | null = null;
 
 /**
- * The last uid seen before the chunk loaded. A returning member's session can
- * resolve in the tick between `initTelemetry` and the import landing, and that
- * identify must still reach the recorder.
+ * The last identity seen before the chunk loaded. A returning member's session
+ * can resolve in the tick between `initTelemetry` and the import landing, and
+ * that identify must still reach the recorder.
  */
-let pendingUid: string | null = null;
+let pendingIdentify: { uid: string; traits: Record<string, string> } | null =
+  null;
 
 /**
  * The routes whose request/response pairs LogRocket must not see. The check is
@@ -106,11 +123,10 @@ export function initTelemetry(): void {
         (lrMod as unknown as { default?: LogRocketSdk }).default ?? lrMod;
       const setupReact: SetupReact = reactMod.default;
 
+      // No `dom.inputSanitizer`: the SDK already skips `input[type=password]`,
+      // and the name and email fields are deliberately recorded so a replay
+      // reads like the screen the member saw.
       LogRocket.init(APP_ID, {
-        dom: {
-          // Redact every input value, not only password fields.
-          inputSanitizer: true,
-        },
         network: {
           requestSanitizer: (request) => {
             if (isSensitivePath(request.url)) return null;
@@ -124,15 +140,22 @@ export function initTelemetry(): void {
       setupReact();
 
       sdk = LogRocket;
-      if (pendingUid) LogRocket.identify(pendingUid);
+      if (pendingIdentify) {
+        LogRocket.identify(pendingIdentify.uid, pendingIdentify.traits);
+      }
     },
   );
 }
 
-/** Associate the recording with the signed-in account by its immutable id. */
-export function identifyUser(uid: string): void {
-  pendingUid = uid;
-  sdk?.identify(uid);
+/**
+ * Associate the recording with the signed-in account: the uid is the key, the
+ * name and email are the searchable traits. Absent values are omitted rather
+ * than sent as null, so a later identify cannot blank a trait it does not have.
+ */
+export function identifyUser(uid: string, traits: IdentifyTraits = {}): void {
+  const supplied = toUserTraits(traits);
+  pendingIdentify = { uid, traits: supplied };
+  sdk?.identify(uid, supplied);
 }
 
 /**

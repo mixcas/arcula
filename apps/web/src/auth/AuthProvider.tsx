@@ -48,12 +48,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   // departed account and clears the profile, so signing out never leaves the
   // previous account's name in the menu.
   const uid = currentUser?.uid;
+  const displayName = currentUser?.displayName ?? undefined;
+  const email = currentUser?.email ?? undefined;
 
-  // The account whose session this is, by its immutable id. Keyed on the uid
-  // so a different sign-in re-identifies; anonymous visits stay anonymous.
+  // The account whose session this is: the immutable uid, plus the name and
+  // email that make the session findable in the LogRocket dashboard. Keyed on
+  // the scalars, so a profile change re-identifies without a render loop;
+  // anonymous visits stay anonymous.
   useEffect(() => {
-    if (uid) identifyUser(uid);
-  }, [uid]);
+    if (uid) identifyUser(uid, { name: displayName, email });
+  }, [uid, displayName, email]);
 
   useEffect(() => {
     if (!uid) return;

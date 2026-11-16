@@ -7,8 +7,9 @@ they were on, the request that failed, the toast that appeared. Session replay
 answers that in a way server logs cannot. The risk is asymmetric, though: the
 recording is uploaded to a third party, and this product's screens hold the
 member's credentials and other people's artwork. A default install captures
-more than anyone intended — the SDK's own setup page says so, and it ships no
-PII sanitization.
+more than anyone intended: passwords typed into the page are excluded by input
+type, but those same passwords travel in the request bodies the SDK records,
+and the vendor's setup page ships no PII sanitization.
 
 ## Decision
 
@@ -35,21 +36,26 @@ components behind a click so replay can show `ArtworkFields` rather than a
 `div`. It attaches names to the tree the DOM capture already holds, so every
 redaction above still applies.
 
-**The redaction is the feature.** Three facts are true at `init`, not left to
-the defaults:
+**The password is the thing redacted; the rest of the screen is the point.**
+Three facts are true at `init`, not left to the defaults:
 
-- `dom.inputSanitizer` drops every input's value. The SDK already skips
-  `type="password"`, but the login and sign-up **email** is identifying too,
-  and so are the profile fields.
+- **DOM:** `dom.inputSanitizer` is deliberately **not** set. The SDK already
+  skips every `input[type="password"]`, and every password field in the app
+  renders through Mantine's `PasswordInput` — login, sign-up, reset, the
+  profile, the catalogue password control and the unlock screen — so no
+  password reaches the recorder. Names, emails and the rest of the form text
+  are recorded on purpose: they are what lets an engineer read a replay. A new
+  password field must stay a `PasswordInput`; a plain text field holding a
+  password would be captured.
 - `network.requestSanitizer` ignores the whole request/response pair for the
   routes that carry a secret: `/api/auth/*` (sign-in, sign-up, password change,
   password reset — the new password is in the body), `…/catalogues/:id/unlock`
   (the catalogue password), the invitation routes (the raw token is a path
   segment) and the media routes (object keys in the query, user artwork in the
   response). Everywhere else, timing and error data are still recorded.
-- `identify` takes the immutable `uid` alone. A name or email is PII the
-  session deliberately does not carry, and a user trait would follow the
-  account across every future session.
+- `identify` takes the immutable `uid` as the key and the member's **name and
+  email** as traits, so the dashboard can find a session by either. The uid
+  stays the identity; name and email are searchable metadata that may change.
 
 **Track the writes, not the screens.** `sign_up_completed`,
 `artwork_created` and `catalogue_visibility_changed` are emitted after the
