@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { catalogueService } from "@/services/catalogueService";
 import { catalogueLimitForTier, catalogueSlug } from "@arcula/shared";
 import type { Catalogue } from "@arcula/shared";
-import { catalogueSurface } from "@/catalogueSurface";
+import CatalogueKindBadge from "./CatalogueKindBadge";
 import PendingInvitations from "./PendingInvitations";
 
 const ManagePage: React.FC = () => {
@@ -112,10 +112,9 @@ const ManagePage: React.FC = () => {
                 <Text size="h3">{catalogue.name}</Text>
                 {/* The kind is named on every row, owned or shared: a reader
                     must know whether this is a Portfolio, a Collection or an
-                    Inventory before opening it. */}
-                <Badge variant="light">
-                  {catalogueSurface(catalogue.kind).kindLabel}
-                </Badge>
+                    Inventory before opening it, and its colour says so at a
+                    glance. */}
+                <CatalogueKindBadge kind={catalogue.kind} />
                 {/* The role is named, not implied: a shared catalogue sits
                     beside an owned one, and who owns it is the fact the row
                     adds. The owner's name rides the shared row alone. */}

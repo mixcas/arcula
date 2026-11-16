@@ -528,27 +528,35 @@ on the lock screen rather than on an error page.
 
 The dashboard lists owned and shared catalogues together with a kind badge, a
 role badge and the owner's name on a shared row; its cap counter counts owned
-catalogues only. A shared catalogue is readable and editable: the manage page's
-write controls work for a collaborator exactly as for the owner, because the
-server answers them by membership. Above that list sit the pending invitations
-addressed to the signed-in account, each naming its catalogue and inviter and
-offering decline only — acceptance is the mailed link, and the card says so.
+catalogues only. The kind badge wears the kind's colour — Portfolio orange,
+Inventory lime, Collection indigo — while the role badge stays neutral grey, so
+a row carries one colour axis. A shared catalogue is readable and editable: the
+manage page's write controls work for a collaborator exactly as for the owner,
+because the server answers them by membership. Above that list sit the pending
+invitations addressed to the signed-in account, each naming its catalogue and
+inviter and offering decline only — acceptance is the mailed link, and the card
+says so.
 
 One pure module answers what a kind means for the surface.
-`src/catalogueSurface.ts` returns, for a kind, the kind's own label, the labels
-of `name` and `description`, the market states that kind offers, and the
-artwork form's field table with `visible` and `required` rules. The table is
-v1's whole rule — every existing artwork field visible on every kind, only
-`title` and `artistName` required — and it is the data a later per-kind hiding
-will read; no v1 screen consumes the rules yet. What screens do read is the
-labels, the availability values and `availabilityFor`, the one default that
-starts a surfaced work at `available` and hands a Collection nothing. The
+`src/catalogueSurface.ts` returns, for a kind, the kind's own label and colour,
+the labels of `name` and `description`, the market states that kind offers, and
+the artwork form's field table with `visible` and `required` rules. The colour
+is a name from a literal union, never a Mantine type or a hex, and the record's
+key type makes a fourth kind a build error until it has one; one presentational
+badge renders it as a shade-3 fill with dark text, and that badge is the only
+kind badge in the app. The table is v1's whole rule — every existing
+artwork field visible on every kind, only `title` and `artistName` required —
+and it is the data a later per-kind hiding will read; no v1 screen consumes the
+rules yet. What screens do read is the labels, the availability values and
+`availabilityFor`, the one default that starts a surfaced work at `available`
+and hands a Collection nothing. The
 create form offers a **Kind** selector defaulting to Collection and asks its
 two fields with the
 surface's labels (Artist name/Bio, Name/Description, Gallery name/About). The
-General tab relabels from the catalogue's stored kind and shows it as a fixed
-badge, so what the catalogue is stays clear after creation; the dashboard
-badges every row with its kind. Nothing writes the kind after creation.
+General tab relabels from the catalogue's stored kind and shows it as the same
+fixed, colour-coded badge, so what the catalogue is stays clear after creation;
+the dashboard badges every row with that badge. Nothing writes the kind after
+creation.
 
 Availability is the one artwork field the kind gates. On a Portfolio the
 artwork form offers Available, Reserved and Sold beside Status — a Portfolio

@@ -2,7 +2,8 @@
  * What a catalogue's kind means for the surface, as pure data.
  *
  * One module answers the questions a screen would otherwise answer inline:
- * what to call the catalogue's kind, what its two existing fields mean
+ * what to call the catalogue's kind, which colour it wears, what its two
+ * existing fields mean
  * (`name` names whose art it is, `description` says what it is), whether a
  * work carries an availability at all (and which states that kind's form
  * offers), and the v1 artwork field table.
@@ -23,6 +24,13 @@ import type {
   ArtworkFormValues,
   CatalogueKind,
 } from "@arcula/shared";
+
+/**
+ * The colour a kind wears, as a name rather than a Mantine type: this module
+ * stays free of React and of Mantine, and a screen composes the CSS variable
+ * from the name (`--mantine-color-{kindColor}-3`) instead of writing a hex.
+ */
+export type CatalogueKindColor = "orange" | "lime" | "indigo";
 
 /** The three kinds, in the order a selector offers them. */
 export const CATALOGUE_KINDS = [
@@ -63,6 +71,10 @@ export interface CatalogueSurface {
   readonly kind: CatalogueKind;
   /** "Portfolio" | "Collection" | "Inventory" — the kind, named. */
   readonly kindLabel: string;
+  /** The colour this kind wears wherever it is named. The record's key type
+   *  below makes a kind the surface forgot a build error, so a fourth kind
+   *  cannot ship colourless. */
+  readonly kindColor: CatalogueKindColor;
   /** What the catalogue's `name` asks for on this kind. */
   readonly nameLabel: string;
   /** What the catalogue's `description` asks for on this kind. */
@@ -131,18 +143,21 @@ const SURFACES: Record<
 > = {
   portfolio: {
     kindLabel: "Portfolio",
+    kindColor: "orange",
     nameLabel: "Artist name",
     descriptionLabel: "Bio",
     availabilityValues: ["available", "reserved", "sold"],
   },
   collection: {
     kindLabel: "Collection",
+    kindColor: "indigo",
     nameLabel: "Name",
     descriptionLabel: "Description",
     availabilityValues: [],
   },
   inventory: {
     kindLabel: "Inventory",
+    kindColor: "lime",
     nameLabel: "Gallery name",
     descriptionLabel: "About",
     availabilityValues: ["available", "reserved", "sold", "on-consignment"],
