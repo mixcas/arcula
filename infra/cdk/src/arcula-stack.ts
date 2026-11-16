@@ -97,7 +97,7 @@ export class ArculaStack extends cdk.Stack {
         {
           allowedMethods: [s3.HttpMethods.PUT],
           allowedOrigins: [clientOrigin],
-          allowedHeaders: ["content-type"],
+          allowedHeaders: ["content-type", "x-amz-meta-name"],
         },
       ],
       lifecycleRules: [

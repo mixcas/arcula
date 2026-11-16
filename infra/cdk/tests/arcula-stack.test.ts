@@ -121,7 +121,7 @@ describe("the API display name", () => {
 });
 
 describe("the media bucket's browser upload allowance", () => {
-  it("admits a PUT from the public origin with only the signed header", () => {
+  it("admits a PUT from the public origin with exactly the signed headers", () => {
     const origin = "https://arcula.example";
     const stack = stackFor("prod", { PUBLIC_URL: origin });
     const buckets = Template.fromStack(stack).findResources(
@@ -134,7 +134,7 @@ describe("the media bucket's browser upload allowance", () => {
 
     expect(media?.Properties?.CorsConfiguration?.CorsRules).toEqual([
       {
-        AllowedHeaders: ["content-type"],
+        AllowedHeaders: ["content-type", "x-amz-meta-name"],
         AllowedMethods: ["PUT"],
         AllowedOrigins: [origin],
       },
