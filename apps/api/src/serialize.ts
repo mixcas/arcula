@@ -35,6 +35,9 @@ import {
 } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
+  artworkAvailabilitySchema,
+  catalogueKindSchema,
+  type ArtworkAvailability,
   type ArtworkRead,
   type ArtworkStatus,
   type CatalogueKind,
@@ -142,10 +145,26 @@ const kindOf = (kind: string): DocumentRead["kind"] => {
 /** The catalogue kind the schema's check constraint permits. Deliberately
  *  named for the catalogue: `kindOf` above is the document's kind. */
 const catalogueKindOf = (kind: string): CatalogueKind => {
-  if (kind !== "portfolio" && kind !== "collection" && kind !== "inventory") {
+  const parsed = catalogueKindSchema.safeParse(kind);
+  if (!parsed.success) {
     throw new ApiError("internal", `Unrecognized catalogue kind ${kind}`);
   }
-  return kind;
+  return parsed.data;
+};
+
+/** The market state the schema's check constraint permits; null is the
+ *  absence of one, which is a fact the member read carries. A stored value
+ *  outside the four words is a server bug. */
+const availabilityOf = (value: string | null): ArtworkAvailability | null => {
+  if (value === null) return null;
+  const parsed = artworkAvailabilitySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ApiError(
+      "internal",
+      `Unrecognized artwork availability ${value}`,
+    );
+  }
+  return parsed.data;
 };
 
 /** The skin-option value vocabulary `catalogueUpdateSchema` admits. */
@@ -326,10 +345,15 @@ function serializeDocument(
  *
  *  `namespaceId` is the catalogue's fixed media namespace
  *  (`mediaNamespaceOf`), not the artwork's `userId`: a transfer changes the
- *  owner and must leave every URL pointing at the same object. */
+ *  owner and must leave every URL pointing at the same object.
+ *
+ *  `audience` decides whether `availability` — a member-facing market fact —
+ *  is on the document at all: a member read carries the key (null included),
+ *  and a visitor's read does not, though the row stores the value either way. */
 export function serializeArtwork(
   joined: ArtworkJoined,
   namespaceId: string,
+  audience: CatalogueAudience,
 ): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
@@ -339,7 +363,7 @@ export function serializeArtwork(
     else byParent.set(v.parentId, [v]);
   }
 
-  return {
+  const document: ArtworkRead = {
     id: artwork.id,
     userId: artwork.userId,
     title: artwork.title,
@@ -364,15 +388,18 @@ export function serializeArtwork(
     ),
     catalogueId: artwork.catalogueId,
     status: statusOf(artwork.status),
-    // Always on the wire, null included: the absence of a market state is a
-    // fact, not a missing key. It is never a gate.
-    availability: artwork.availability,
     deletedAt: wireTimestampOrNull(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),
     // A blank field is an ABSENT key, not a null value — the document shape.
     ...presentTextFields(artwork),
   };
+  // A member sees the absence of a market state as a fact (null, not a missing
+  // key); a visitor does not see the key at all.
+  if (audience === "member") {
+    document.availability = availabilityOf(artwork.availability);
+  }
+  return document;
 }
 
 /** The exact wire catalogue document shape.

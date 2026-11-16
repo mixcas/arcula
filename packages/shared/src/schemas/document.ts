@@ -120,9 +120,9 @@ export const artworkReadSchema = z.object({
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status: artworkStatusSchema.default("published"),
-  // Always on the wire, null included: the serializer emits it on every read,
-  // so an absent key is a reshaped document rather than a legacy one.
-  availability: artworkAvailabilitySchema.nullable(),
+  // A member read emits it, null included; a visitor's document does not
+  // carry the key at all, so it is optional on the read shape.
+  availability: artworkAvailabilitySchema.nullable().optional(),
   deletedAt: wireTimestamp.nullable(),
   createdAt: wireTimestamp,
   updatedAt: wireTimestamp,

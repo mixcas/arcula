@@ -1,7 +1,7 @@
 // A work's market state on a Portfolio or an Inventory: the four words, the
 // nullable form field, and the two save payloads. The kind decides whether the
-// form surfaces it; the contract carries it on every work, which is what makes
-// the API a superset (ADR-0010).
+// form surfaces it; the contract carries it on every work and every member
+// read, which is what makes the API a superset (ADR-0010).
 
 import { describe, expect, it } from "vitest";
 import {
@@ -123,7 +123,7 @@ describe("availability on the save payloads", () => {
 });
 
 describe("availability on the wire", () => {
-  it("is a required key that reads as null or one of the four", () => {
+  it("carries null or one of the four on a member read", () => {
     expect(artworkReadSchema.parse(wireArtwork()).availability).toBeNull();
     expect(
       artworkReadSchema.parse(wireArtwork({ availability: "sold" }))
@@ -131,10 +131,10 @@ describe("availability on the wire", () => {
     ).toBe("sold");
   });
 
-  it("is refused when the serializer omits it", () => {
-    // The serializer always emits the key, null included, so an absent one is
-    // a reshaped document rather than a legacy read.
+  it("accepts a visitor read, which omits the key", () => {
+    // The serializer emits the key on a member read only, so a document
+    // without it is the visitor's normal shape, not a reshaped one.
     const { availability: _omitted, ...withoutKey } = wireArtwork();
-    expect(artworkReadSchema.safeParse(withoutKey).success).toBe(false);
+    expect(artworkReadSchema.safeParse(withoutKey).success).toBe(true);
   });
 });

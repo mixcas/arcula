@@ -95,7 +95,7 @@ const joined: ArtworkJoined = {
 
 describe("serializeArtwork", () => {
   it("keys every final URL by the catalogue's namespace, not the artwork's userId", () => {
-    const document = serializeArtwork(joined, NAMESPACE);
+    const document = serializeArtwork(joined, NAMESPACE, "member");
 
     expect(document.photos[0].original.url).toBe(
       mediaUrl(finalPhotoKey(NAMESPACE, CID, AID, PHOTO, "original", "jpg")),
