@@ -9,6 +9,7 @@
  */
 import React from "react";
 import {
+  Autocomplete,
   Box,
   Grid,
   SegmentedControl,
@@ -20,6 +21,7 @@ import { DateInput } from "@mantine/dates";
 import type { UseFormReturnType } from "@mantine/form";
 import PhotoUploader from "./PhotoUploader";
 import DocumentsUploader from "./DocumentsUploader";
+import type { UseArtistNames } from "@/hooks/useArtistNames";
 import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import type { UseArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import type { ArtworkFormValues, ArtworkPayload } from "@arcula/shared";
@@ -29,6 +31,8 @@ interface ArtworkFieldsProps {
   form: UseFormReturnType<ArtworkFormValues, ArtworkPayload>;
   photos: UseArtworkPhotos;
   documents: UseArtworkDocuments;
+  /** The caller's Artist Name suggestions, fetched once by the page. */
+  artistNames: UseArtistNames;
   /**
    * Hide the two uploaders. The Edit page sets this while the work is deleted:
    * staging is a server write, and media staged for a work whose Save is shut
@@ -43,6 +47,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   form,
   photos,
   documents,
+  artistNames,
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
@@ -56,12 +61,21 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("title")}
       />
 
-      <TextInput
+      {/*
+        Autocomplete, not Select: a name that has never been recorded must
+        still save exactly as typed. It stays uncontrolled like every field
+        here (`getInputProps` + `key`), so choosing an option only fills this
+        field and the value is the same string the TextInput carried.
+      */}
+      <Autocomplete
         key={form.key("artistName")}
         label="Artist Name"
         placeholder="Artist's full name"
         required
         mb="md"
+        data={artistNames.names}
+        limit={20}
+        loading={artistNames.loading}
         {...form.getInputProps("artistName")}
       />
 

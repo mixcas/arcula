@@ -177,6 +177,10 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   route mints and stores, the read paths load the row and ask this.
 - `collectionPassword.ts` — hashing (`hashPassword`) and the check
   (`verifyPassword`) for a collection's password.
+- `collectionScope.ts` — the membership scope the reads share: the left join
+  to the caller's collaborator row and the live-collections where-clause — the
+  collections the caller owns or collaborates on — used by the signed-in
+  `/collections` list and the Artist Name aggregate so the two cannot drift.
 - `unlockThrottle.ts` — the throttle's policy and nothing else: `UNLOCK_WINDOW_MS`
   (ten minutes, **fixed**, and why not sliding) and `unlockWindowStart`, which
   floors an attempt to the window it belongs to. `clientAddress.ts` — the
@@ -197,6 +201,14 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   request's grant validity handed in as a fact; the module carries no Hono type
   and the route owns the wire code. The save routes read their work back
   through it.
+- `artistNames.ts` — the caller's Artist Name suggestions for the artwork form:
+  the aggregate read over live works in the live collections the caller owns or
+  collaborates on (the caller scope recorded in
+  [ADR-0009](docs/adr/0009-artist-name-suggestions-are-caller-scoped.md)), and
+  the pure collapse of case and accent variants to one most-used spelling,
+  ordered by use then display name and silently capped at 2,000. No Hono type;
+  the route owns the wire and `401`, and the future curated index can replace
+  the module's source behind the same contract.
 - `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
 - `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
   the caller.
@@ -211,8 +223,8 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
-  `me`, `media` (the object proxy), `artworkMedia`
-  (stage/process, under the caller's own staging prefix).
+  `artistNames` (the caller's suggestion read), `me`, `media` (the object
+  proxy), `artworkMedia` (stage/process, under the caller's own staging prefix).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `populations.ts` (what distinguishes photos from documents: caps, types,
   tables, variants and key shape), `variants.ts` (the geometry), `promote.ts`
@@ -223,10 +235,12 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 - `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default).
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
-artworkImport, collection, invitation, document, user), `artworkPhotos.ts` (the
-`order` invariant, `sortPhotos`/`reindexPhotos`, the `photoUrl` ladder),
-`artworkSearch.ts` (the ten-field Collection search predicate, its caps and the
-query suffix helper), `caps.ts` (file caps + accepted types), `limits.ts` (the
+artworkImport, artistNames, collection, invitation, document, user),
+`artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
+`photoUrl` ladder), `artworkSearch.ts` (the ten-field Collection search
+predicate, its caps, the query suffix helper and `normalizeSearchText`, which
+Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
+types), `limits.ts` (the
 per-tier collection cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
 both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access

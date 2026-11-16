@@ -85,6 +85,12 @@ vi.mock("@/services/artworkService", () => ({
   artworkService: { createArtwork: vi.fn() },
 }));
 
+// The page mounts the suggestions hook; an empty list is the ordinary
+// no-collections answer, and keeps these save-path tests off the network.
+vi.mock("@/services/artistNameService", () => ({
+  artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
+}));
+
 // Mantine resolves the colour scheme and responsive props through `matchMedia`,
 // which jsdom has no implementation of. Answering `true` only for the empty
 // query is what Chrome does, and it keeps responsive props from collapsing.
@@ -178,9 +184,14 @@ const save = async (
   title = "Estudio en rojo",
 ) => {
   // Regex, because Mantine appends a required marker and the accessible name
-  // is "Title *" rather than "Title".
+  // is "Title *" rather than "Title". Artist Name is narrowed to the input:
+  // the Autocomplete's listbox is labelled by the same text, so a bare label
+  // query would match the dropdown too.
   await user.type(screen.getByLabelText(/^Title/), title);
-  await user.type(screen.getByLabelText(/^Artist Name/), "María López");
+  await user.type(
+    screen.getByLabelText(/^Artist Name/, { selector: "input" }),
+    "María López",
+  );
   await user.click(screen.getByRole("button", { name: "Save Artwork" }));
 };
 
