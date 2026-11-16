@@ -1,8 +1,13 @@
 // The Drizzle schema: thirteen tables. Four Better Auth core tables (extended
 // with the typed `user` columns), five domain tables, the two sharing tables
 // (`collection_collaborators`, `collection_invitations`) and the two a
-// protected collection needs (`collection_access_grants`,
+// protected catalogue needs (`collection_access_grants`,
 // `collection_unlock_attempts`).
+//
+// The Catalogue entity is exported as `catalogues`; its physical table stays
+// `collections` (ADR-0010), and the old export names stay as aliases of it
+// until the API and web migrate. Physical names — tables, columns, indexes,
+// checks — are storage and never follow a rename.
 //
 // This package is the single source of truth for the schema: the API imports
 // it over a live driver, the migration tooling reads it to generate SQL, and
@@ -119,7 +124,11 @@ export const verification = pgTable("verification", {
 
 // There is no `artworks: string[]` column: it would be a denormalized list the
 // join replaces.
-export const collections = pgTable(
+//
+// The physical table is still `collections`: renaming it is a non-additive
+// migration that collides with deploy-before-migrate, and the name is
+// invisible (ADR-0010).
+export const catalogues = pgTable(
   "collections",
   {
     id: text("id").primaryKey(),
@@ -138,12 +147,12 @@ export const collections = pgTable(
     skinOptions: jsonb("skinOptions"),
     isPublic: boolean("isPublic").notNull().default(true),
     // A one-way hash with its salt and parameters in the string, or NULL for a
-    // collection anyone may read. Nullable on purpose: a collection without a
+    // catalogue anyone may read. Nullable on purpose: a catalogue without a
     // password is the normal state, not a gap to backfill, so this column needs
     // no tightening step. The plaintext is never stored, and there is no
     // read-back path by design (ADR-0005).
     passwordHash: text("passwordHash"),
-    // NULL = live, as on `artworks`. Nullable with no backfill: a collection
+    // NULL = live, as on `artworks`. Nullable with no backfill: a catalogue
     // without a stamp is the normal state, not a gap to tighten later.
     deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
@@ -152,15 +161,14 @@ export const collections = pgTable(
   (table) => [index("collections_user_id_idx").on(table.userId)],
 ).enableRLS();
 
-// The Catalogue name for the same table, while the rename expands (ADR-0010,
-// #244). The physical table stays `collections`, so this is one table object
-// under two export names. Deliberately not in `schema`: drizzle-kit iterates
-// that object and a second reference would render a second table.
-export const catalogues = collections;
+// The export's older name, alias-kept while the API and web migrate
+// (ADR-0010). Deliberately not in `schema`: drizzle-kit iterates that object,
+// and the new name is the one it must see.
+export const collections = catalogues;
 
-// Everyone with access except the owner. The owner is `collections.userId`
+// Everyone with access except the owner. The owner is `catalogues.userId`
 // and is never duplicated here: one owner fact, one place.
-export const collectionCollaborators = pgTable(
+export const catalogueCollaborators = pgTable(
   "collection_collaborators",
   {
     collectionId: text("collectionId").notNull(),
@@ -169,14 +177,16 @@ export const collectionCollaborators = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.collectionId, table.userId] }),
-    // The dashboard list: the collections shared with one account.
+    // The dashboard list: the catalogues shared with one account.
     index("collection_collaborators_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 
+export const collectionCollaborators = catalogueCollaborators;
+
 // The offer: one row per invitation, kept as history after it resolves.
 // Expiry is computed from `expiresAt`, never stored as a status.
-export const collectionInvitations = pgTable(
+export const catalogueInvitations = pgTable(
   "collection_invitations",
   {
     id: text("id").primaryKey(),
@@ -194,7 +204,7 @@ export const collectionInvitations = pgTable(
     resolvedAt: timestamp("resolvedAt", { withTimezone: true }),
   },
   (table) => [
-    // One pending invitation per collection and address. Resolved rows are
+    // One pending invitation per catalogue and address. Resolved rows are
     // history, so they fall outside the partial index.
     uniqueIndex("collection_invitations_pending_collection_email_idx")
       .on(table.collectionId, sql`lower(${table.email})`)
@@ -206,13 +216,15 @@ export const collectionInvitations = pgTable(
   ],
 ).enableRLS();
 
+export const collectionInvitations = catalogueInvitations;
+
 // An Access grant: what a reader holds after entering a protected
-// collection's password. The row keeps the token's hash, never the token, so a
+// catalogue's password. The row keeps the token's hash, never the token, so a
 // database leak is a set of unguessable hashes rather than a set of working
 // grants. Expiry is computed from `expiresAt` rather than stored as a status,
-// and the index below exists so that revoking a collection's grants on a
+// and the index below exists so that revoking a catalogue's grants on a
 // password change is one statement (ADR-0005).
-export const collectionAccessGrants = pgTable(
+export const catalogueAccessGrants = pgTable(
   "collection_access_grants",
   {
     collectionId: text("collectionId").notNull(),
@@ -223,17 +235,19 @@ export const collectionAccessGrants = pgTable(
     expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   },
   (table) => [
-    // Revocation: deleting one collection's grants in a single statement.
+    // Revocation: deleting one catalogue's grants in a single statement.
     index("collection_access_grants_collection_id_idx").on(table.collectionId),
   ],
 ).enableRLS();
 
-// The unlock throttle's counter: one row per address, collection and window.
+export const collectionAccessGrants = catalogueAccessGrants;
+
+// The unlock throttle's counter: one row per address, catalogue and window.
 // `attempts` counts failures, and a window lapses once its start is older than
 // the window length — which is policy the unlock route owns, not the schema.
-// Keying on both identifiers keeps one collection's throttle from locking
+// Keying on both identifiers keeps one catalogue's throttle from locking
 // visitors out of another's through a shared address (ADR-0005).
-export const collectionUnlockAttempts = pgTable(
+export const catalogueUnlockAttempts = pgTable(
   "collection_unlock_attempts",
   {
     ip: text("ip").notNull(),
@@ -247,6 +261,8 @@ export const collectionUnlockAttempts = pgTable(
     primaryKey({ columns: [table.ip, table.collectionId, table.windowStart] }),
   ],
 ).enableRLS();
+
+export const collectionUnlockAttempts = catalogueUnlockAttempts;
 
 // `photos`/`documents` are tables, not array columns. Money stays text —
 // the string that was typed, no float drift.
@@ -271,7 +287,7 @@ export const artworks = pgTable(
     condition: text("condition"),
     currentValue: text("currentValue"),
     // The owner's choice, and the only per-work field a visitor is gated on:
-    // `published` or `draft`. The collection is the whole gate; there is no
+    // `published` or `draft`. The catalogue is the whole gate; there is no
     // per-work visibility flag.
     status: text("status").notNull().default("published"),
     // NULL = live. Soft delete: the column is the sole record of deletion.
@@ -280,19 +296,19 @@ export const artworks = pgTable(
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [
-    // The owner list: a collection's live works, no `userId` filter — the
+    // The owner list: a catalogue's live works, no `userId` filter — the
     // owner and every collaborator see the same list.
     index("artworks_collection_deleted_idx").on(
       table.collectionId,
       table.deletedAt,
     ),
-    // The visitor list: a public collection's published, live works.
+    // The visitor list: a public catalogue's published, live works.
     index("artworks_collection_status_deleted_idx").on(
       table.collectionId,
       table.status,
       table.deletedAt,
     ),
-    // The artwork-by-id-in-collection check (create authorization).
+    // The artwork-by-id-in-catalogue check (create authorization).
     index("artworks_collection_id_idx").on(table.collectionId),
     check("artworks_status_check", sql`"status" in ('draft', 'published')`),
   ],
@@ -370,11 +386,11 @@ export const schema = {
   session,
   account,
   verification,
-  collections,
-  collectionCollaborators,
-  collectionInvitations,
-  collectionAccessGrants,
-  collectionUnlockAttempts,
+  catalogues,
+  catalogueCollaborators,
+  catalogueInvitations,
+  catalogueAccessGrants,
+  catalogueUnlockAttempts,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,

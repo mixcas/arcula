@@ -21,11 +21,11 @@ import {
   artworkPhotoVariants,
   artworkPhotos,
   artworks,
-  collectionAccessGrants,
-  collectionCollaborators,
-  collectionInvitations,
-  collectionUnlockAttempts,
-  collections,
+  catalogueAccessGrants,
+  catalogueCollaborators,
+  catalogueInvitations,
+  catalogueUnlockAttempts,
+  catalogues,
   schema,
   session,
   user,
@@ -90,11 +90,11 @@ const TABLE_NAMES = [
   "session",
   "account",
   "verification",
-  "collections",
-  "collectionCollaborators",
-  "collectionInvitations",
-  "collectionAccessGrants",
-  "collectionUnlockAttempts",
+  "catalogues",
+  "catalogueCollaborators",
+  "catalogueInvitations",
+  "catalogueAccessGrants",
+  "catalogueUnlockAttempts",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -133,7 +133,7 @@ const PASSWORD_SQL = readMigration("0005_collection_passwords");
 // The committed lock-down: RLS on every table, the client grants revoked.
 const RLS_SQL = readMigration("0006_enable_rls");
 
-// The committed stamp that retires a whole collection.
+// The committed stamp that retires a whole catalogue.
 const DELETION_SQL = readMigration("0007_collection_deletion_stamp");
 
 describe("the thirteen-table schema", () => {
@@ -219,7 +219,7 @@ describe("the thirteen-table schema", () => {
     });
   });
 
-  it("artworks carries the visitor index over the collection, the status and the deletion stamp", () => {
+  it("artworks carries the visitor index over the catalogue, the status and the deletion stamp", () => {
     expect(indexesOf(artworks)).toMatchObject({
       artworks_collection_status_deleted_idx: [
         "collectionId",
@@ -264,8 +264,8 @@ describe("the thirteen-table schema", () => {
     expect(c.width.notNull).toBe(false);
   });
 
-  it("collections defaults to public; skin stays nullable (read-time default)", () => {
-    const c = cols(collections);
+  it("catalogues defaults to public; skin stays nullable (read-time default)", () => {
+    const c = cols(catalogues);
     expect(c.isPublic.notNull).toBe(true);
     expect(c.isPublic.default).toBe(true);
     expect(c.skin.notNull).toBe(false);
@@ -276,9 +276,9 @@ describe("the thirteen-table schema", () => {
     expect(c.mediaNamespaceId.notNull).toBe(true);
   });
 
-  it("collections carries a nullable password hash, with no default to hide a gap", () => {
-    const c = cols(collections);
-    // Nullable is the whole point: a collection without a password is the
+  it("catalogues carries a nullable password hash, with no default to hide a gap", () => {
+    const c = cols(catalogues);
+    // Nullable is the whole point: a catalogue without a password is the
     // normal state, so no backfill and no NOT NULL step is owed later. A
     // default would invent a password none was set for.
     expect(c.passwordHash.dataType).toBe("string");
@@ -286,9 +286,9 @@ describe("the thirteen-table schema", () => {
     expect(c.passwordHash.hasDefault).toBe(false);
   });
 
-  it("collections carries a nullable deletion stamp, with no default to hide a gap", () => {
-    const c = cols(collections);
-    // Nullable is the whole point: a collection without a stamp is live, so
+  it("catalogues carries a nullable deletion stamp, with no default to hide a gap", () => {
+    const c = cols(catalogues);
+    // Nullable is the whole point: a catalogue without a stamp is live, so
     // no backfill and no NOT NULL step is owed later. A default would stamp a
     // deletion no owner asked for.
     expect(c.deletedAt.dataType).toBe("date");
@@ -297,7 +297,7 @@ describe("the thirteen-table schema", () => {
   });
 
   it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
-    const c = cols(collectionAccessGrants);
+    const c = cols(catalogueAccessGrants);
     expect(Object.keys(c)).toEqual([
       "collectionId",
       "tokenHash",
@@ -313,14 +313,14 @@ describe("the thirteen-table schema", () => {
     // Expiry is computed from the timestamp, never stored as a status.
     expect(c.expiresAt.dataType).toBe("date");
     expect(c.expiresAt.notNull).toBe(true);
-    // One statement deletes a collection's grants on a password change.
-    expect(indexesOf(collectionAccessGrants)).toMatchObject({
+    // One statement deletes a catalogue's grants on a password change.
+    expect(indexesOf(catalogueAccessGrants)).toMatchObject({
       collection_access_grants_collection_id_idx: ["collectionId"],
     });
   });
 
-  it("collection_unlock_attempts is keyed by address, collection and window", () => {
-    const c = cols(collectionUnlockAttempts);
+  it("collection_unlock_attempts is keyed by address, catalogue and window", () => {
+    const c = cols(catalogueUnlockAttempts);
     expect(Object.keys(c)).toEqual([
       "ip",
       "collectionId",
@@ -334,8 +334,8 @@ describe("the thirteen-table schema", () => {
     expect(c.attempts.dataType).toBe("number");
     expect(c.attempts.notNull).toBe(true);
     expect(c.attempts.default).toBe(0);
-    // The triple is the key: one counter per address, collection and window.
-    const pk = getTableConfig(collectionUnlockAttempts).primaryKeys[0];
+    // The triple is the key: one counter per address, catalogue and window.
+    const pk = getTableConfig(catalogueUnlockAttempts).primaryKeys[0];
     expect(pk.columns.map((col) => col.name)).toEqual([
       "ip",
       "collectionId",
@@ -344,7 +344,7 @@ describe("the thirteen-table schema", () => {
   });
 
   it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
-    const c = cols(collectionCollaborators);
+    const c = cols(catalogueCollaborators);
     // The owner is `collections.userId`; this table holds everyone else.
     expect(Object.keys(c)).toEqual(["collectionId", "userId", "createdAt"]);
     expect(c.collectionId.notNull).toBe(true);
@@ -352,7 +352,7 @@ describe("the thirteen-table schema", () => {
     expect(c.createdAt.dataType).toBe("date");
     expect(c.createdAt.notNull).toBe(true);
     expect(c.createdAt.hasDefault).toBe(true);
-    const pk = getTableConfig(collectionCollaborators).primaryKeys[0];
+    const pk = getTableConfig(catalogueCollaborators).primaryKeys[0];
     expect(pk.getName()).toBe(
       "collection_collaborators_collectionId_userId_pk",
     );
@@ -360,13 +360,13 @@ describe("the thirteen-table schema", () => {
       "collectionId",
       "userId",
     ]);
-    expect(indexesOf(collectionCollaborators)).toMatchObject({
+    expect(indexesOf(catalogueCollaborators)).toMatchObject({
       collection_collaborators_user_id_idx: ["userId"],
     });
   });
 
   it("collection_invitations carries the offer, its status and its unique token hash", () => {
-    const c = cols(collectionInvitations);
+    const c = cols(catalogueInvitations);
     expect(Object.keys(c)).toEqual([
       "id",
       "collectionId",
@@ -397,14 +397,14 @@ describe("the thirteen-table schema", () => {
   });
 
   it("collection_invitations limits status to the four lifecycle values", () => {
-    expect(checksOf(collectionInvitations)).toContainEqual({
+    expect(checksOf(catalogueInvitations)).toContainEqual({
       name: "collection_invitations_status_check",
       sql: "\"status\" in ('pending', 'accepted', 'declined', 'revoked')",
     });
   });
 
   it("collection_invitations allows one pending invitation per collection and address", () => {
-    const pending = getTableConfig(collectionInvitations).indexes.find(
+    const pending = getTableConfig(catalogueInvitations).indexes.find(
       (i) =>
         i.config.name === "collection_invitations_pending_collection_email_idx",
     );
@@ -417,7 +417,7 @@ describe("the thirteen-table schema", () => {
     expect(predicateOf(pending?.config.where)).toContain("'pending'");
   });
 
-  it("artworks' owner list is indexed by collection and deletion, not by user", () => {
+  it("artworks' owner list is indexed by catalogue and deletion, not by user", () => {
     const idx = indexesOf(artworks);
     expect(idx.artworks_collection_deleted_idx).toEqual([
       "collectionId",
@@ -521,7 +521,7 @@ describe("the committed drop migration (as it will actually be applied)", () => 
     );
   });
 
-  it("builds the visitor index over the collection, the status and the deletion stamp", () => {
+  it("builds the visitor index over the catalogue, the status and the deletion stamp", () => {
     expect(DROP_SQL).toMatch(
       /CREATE INDEX "artworks_collection_status_deleted_idx" ON "artworks" USING btree \("collectionId","status","deletedAt"\)/,
     );
@@ -658,7 +658,7 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(PASSWORD_SQL).toContain(
       'ALTER TABLE "collections" ADD COLUMN "passwordHash" text;',
     );
-    // Nullable is load-bearing: a collection without a password is normal.
+    // Nullable is load-bearing: a catalogue without a password is normal.
     expect(PASSWORD_SQL).not.toMatch(/ADD COLUMN "passwordHash" text NOT NULL/);
     expect(PASSWORD_SQL).not.toContain(
       'ALTER COLUMN "passwordHash" SET NOT NULL',
