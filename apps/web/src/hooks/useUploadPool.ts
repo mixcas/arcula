@@ -16,6 +16,8 @@
  */
 
 import { useCallback, useState } from "react";
+import { ApiRequestError } from "@/services/api";
+import { MediaUploadError } from "@/services/uploadError";
 
 /** A file refused, with a reason the user can act on. Never swallowed. */
 export interface Rejection {
@@ -23,9 +25,30 @@ export interface Rejection {
   reason: string;
 }
 
-/** The answer for one file through stage (+ process for an image). */
+/** The answer for one file through stage (+ process). */
 export type StageOutcome<TEntry> =
   { entry: TEntry; rejection: null } | { entry: null; rejection: string };
+
+/**
+ * What to tell the person about a failed upload.
+ *
+ * The API's refusals carry a field-level reason the form shows verbatim
+ * (`fields.file`: "too large", "unsupported type", "undecodable"); the direct
+ * PUT's failure has a message of its own and no fields; anything else is
+ * genuinely unexplained, and a raw runtime message ("Failed to fetch", a
+ * TypeError) is not something to put in front of a person. Both uploaders ask
+ * this, so the vocabulary of a refusal is the same in the photo list and the
+ * document list.
+ */
+export const rejectionReason = (error: unknown, fallback: string): string => {
+  if (error instanceof ApiRequestError) {
+    return error.fields?.file ?? error.message;
+  }
+  if (error instanceof MediaUploadError) {
+    return error.message;
+  }
+  return fallback;
+};
 
 /** How many files a batch stages at a time. */
 const CONCURRENCY = 3;
