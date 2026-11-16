@@ -32,6 +32,7 @@ import {
   searchQueryOverflow,
 } from "@arcula/shared";
 import ArtworksList from "./catalogue/ArtworksList";
+import { catalogueSurface } from "@/catalogueSurface";
 import type { Artwork, Catalogue } from "@arcula/shared";
 
 // Long enough to collect a word, short enough that the list feels live. The
@@ -363,6 +364,7 @@ const CataloguePage: React.FC = () => {
         searchError={searchError}
         onRetry={() => void loadArtworks(query)}
         onClearSearch={clearSearch}
+        showAvailability={catalogueSurface(catalogue.kind).availabilityInPlay}
       />
     </>
   );

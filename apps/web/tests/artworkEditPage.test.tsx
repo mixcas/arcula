@@ -19,7 +19,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ArtworkEditPage from "@/components/manage/ArtworkEditPage";
 import { artworkService } from "@/services/artworkService";
-import type { Artwork, ArtworkUpdatePayload } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
+import type {
+  Artwork,
+  ArtworkUpdatePayload,
+  Catalogue,
+  CatalogueKind,
+} from "@arcula/shared";
 
 /**
  * The Edit save is one PATCH, and the status is one of the fields it may carry.
@@ -82,6 +88,10 @@ vi.mock("@/services/artworkService", () => ({
   },
 }));
 
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getCatalogue: vi.fn() },
+}));
+
 // The page mounts the suggestions hook; an empty list is the ordinary
 // no-catalogues answer, and keeps these save-path tests off the network.
 vi.mock("@/services/artistNameService", () => ({
@@ -130,7 +140,18 @@ const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
 const getArtwork = vi.mocked(artworkService.getArtwork);
 const updateArtwork = vi.mocked(artworkService.updateArtwork);
 const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
+const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
+
+const catalogue = (kind: CatalogueKind): Catalogue => ({
+  id: CATALOGUE_ID,
+  name: "Flores Solares",
+  kind,
+  userId: "owner-1",
+  isPublic: true,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+});
 
 /** The router's own location, so a navigation can be asserted. */
 const LocationProbe: React.FC = () => {
@@ -181,6 +202,9 @@ beforeEach(() => {
   getArtwork.mockResolvedValue(stored());
   updateArtwork.mockResolvedValue(stored());
   restoreArtwork.mockResolvedValue({ restored: true });
+  // A Collection by default: no market-state control. The availability tests
+  // below ask for a Portfolio, which is the kind that carries one.
+  getCatalogue.mockResolvedValue(catalogue("collection"));
 });
 
 afterEach(() => {
@@ -230,6 +254,65 @@ describe("the Edit page — the status the owner chose", () => {
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect((await sentPatch()).status).toBe("published");
+  });
+});
+
+/**
+ * A market state belongs to the kinds that sell work. The Edit page learns the
+ * catalogue's kind, defaults a surfaced work with no stored state to Available,
+ * and never overwrites a stored one. A Collection's form has neither the field
+ * nor a key in the save (ADR-0010).
+ */
+describe("the Edit page — a work's availability", () => {
+  it("defaults a Portfolio work with no stored state to available", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Available");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect((await sentPatch()).availability).toBe("available");
+  });
+
+  it("shows the stored state and sends it without overwriting it", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ availability: "sold" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Sold");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect((await sentPatch()).availability).toBe("sold");
+  });
+
+  it("offers an Inventory the control too", async () => {
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Available");
+  });
+
+  it("offers a Collection no market state and sends none", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    // Absent, not null: the Collection's stored value stays exactly as it
+    // was, which is null for a work this form never surfaces.
+    expect(await sentPatch()).not.toHaveProperty("availability");
   });
 });
 

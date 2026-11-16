@@ -8,6 +8,7 @@ import {
   manageArtworkEditHref,
   publicArtworkHref,
 } from "@/services/artworkLinks";
+import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
 
 export interface ArtworkCardProps {
   artwork: Artwork;
@@ -15,6 +16,8 @@ export interface ArtworkCardProps {
   catalogueParam: string;
   /** The committed Catalogue search; Edit carries it back, View does not. */
   searchQuery?: string;
+  /** Whether this catalogue's kind carries a work's market state. */
+  showAvailability?: boolean;
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;
   /** Ask the list to confirm and soft-delete this work. */
@@ -49,6 +52,7 @@ const ArtworkCard: React.FC<ArtworkCardProps> = ({
   artwork,
   catalogueParam,
   searchQuery = "",
+  showAvailability = false,
   selected,
   onSelectedChange,
   onConfirmDeleteArtwork,
@@ -138,6 +142,11 @@ const ArtworkCard: React.FC<ArtworkCardProps> = ({
           {artwork.status === "draft" ? (
             <Badge color="gray" variant="light" size="sm">
               Draft
+            </Badge>
+          ) : null}
+          {showAvailability && artwork.availability ? (
+            <Badge color="teal" variant="light" size="sm">
+              {ARTWORK_AVAILABILITY_LABELS[artwork.availability]}
             </Badge>
           ) : null}
         </Group>

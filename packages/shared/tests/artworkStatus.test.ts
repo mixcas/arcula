@@ -31,6 +31,7 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
   documents: [],
   photos: [],
   catalogueId: "c1",
+  availability: null,
   deletedAt: null,
   createdAt: { seconds: 0, nanoseconds: 0 },
   updatedAt: { seconds: 0, nanoseconds: 0 },

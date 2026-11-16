@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Alert, Text } from "@mantine/core";
+import React, { useEffect, useState } from "react";
+import { Alert, Loader, Text } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -8,6 +8,9 @@ import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
+import { catalogueSurface } from "@/catalogueSurface";
+import { withoutAvailability } from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
@@ -21,6 +24,7 @@ import {
   toArtworkCreatePayload,
   type ArtworkFormValues,
   type ArtworkPayload,
+  type Catalogue,
 } from "@arcula/shared";
 import {
   artworkSlug,
@@ -77,6 +81,59 @@ const ArtworkAddPage: React.FC = () => {
   const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
 
+  // The catalogue's kind is what decides whether this work carries a market
+  // state at all. The page loads it before showing the form, so the control is
+  // either present from the first paint or absent — never a flicker.
+  const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const availabilityInPlay = catalogue
+    ? catalogueSurface(catalogue.kind).availabilityInPlay
+    : false;
+  // Destructured so the effect depends on the stable callback rather than on
+  // the `form` object, which is rebuilt every render.
+  const { initialize } = form;
+
+  useEffect(() => {
+    if (!catalogueId) return;
+
+    const fetchCatalogue = async () => {
+      try {
+        const fetched = await catalogueService.getCatalogue(catalogueId);
+        if (!fetched) {
+          setLoadError("Catalogue not found");
+          return;
+        }
+        setCatalogue(fetched);
+        // A newly surfaced work starts Available: on the two kinds that sell
+        // work, a work with no market state is the exception, not the default.
+        // Edits never come through here — this form is the empty one.
+        if (catalogueSurface(fetched.kind).availabilityInPlay) {
+          initialize({ ...EMPTY_ARTWORK_FORM, availability: "available" });
+        }
+      } catch (err) {
+        console.error("Error fetching catalogue:", err);
+        setLoadError("Failed to load the catalogue. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchCatalogue();
+  }, [catalogueId, initialize]);
+
+  if (!catalogueId) {
+    return <Alert color="red">Invalid catalogue id</Alert>;
+  }
+
+  if (loading) {
+    return <Loader />;
+  }
+
+  if (loadError) {
+    return <Alert color="red">{loadError}</Alert>;
+  }
+
   return (
     <>
       <Text size="h2" mb="xl">
@@ -91,12 +148,6 @@ const ArtworkAddPage: React.FC = () => {
         // Uncontrolled mode repaints a field by remounting it, which is what
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
-          // Not field validation, so this guard stays out of the schema.
-          if (!catalogueId) {
-            setError("Invalid catalogue id");
-            return;
-          }
-
           setError(null);
 
           try {
@@ -104,7 +155,9 @@ const ArtworkAddPage: React.FC = () => {
             // same transaction. `commit()` answers null when the list is
             // unchanged, which on a new artwork means "nothing staged".
             const body = toArtworkCreatePayload(
-              payload,
+              // A Collection has no market state, so its save says nothing
+              // about one; the API writes null for the absent key.
+              availabilityInPlay ? payload : withoutAvailability(payload),
               artworkId,
               photos.commit() ?? [],
               documents.commit() ?? [],
@@ -143,6 +196,7 @@ const ArtworkAddPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
+          availabilityInPlay={availabilityInPlay}
         />
 
         {error ? (

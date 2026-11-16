@@ -364,6 +364,9 @@ export function serializeArtwork(
     ),
     catalogueId: artwork.catalogueId,
     status: statusOf(artwork.status),
+    // Always on the wire, null included: the absence of a market state is a
+    // fact, not a missing key. It is never a gate.
+    availability: artwork.availability,
     deletedAt: wireTimestampOrNull(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
     updatedAt: wireTimestamp(artwork.updatedAt),

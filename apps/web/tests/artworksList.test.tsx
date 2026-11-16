@@ -84,6 +84,8 @@ interface ListProps {
   searchError?: string | null;
   onRetry?: () => void;
   onClearSearch?: () => void;
+  /** Show each work's market state — the two kinds that carry one. */
+  showAvailability?: boolean;
 }
 
 const ListTree: React.FC<ListProps> = ({
@@ -95,6 +97,7 @@ const ListTree: React.FC<ListProps> = ({
   searchError,
   onRetry,
   onClearSearch,
+  showAvailability,
 }) => (
   <MantineProvider>
     <ModalsProvider>
@@ -110,6 +113,7 @@ const ListTree: React.FC<ListProps> = ({
           searchError={searchError}
           onRetry={onRetry}
           onClearSearch={onClearSearch}
+          showAvailability={showAvailability}
         />
       </MemoryRouter>
     </ModalsProvider>
@@ -1255,5 +1259,64 @@ describe("ArtworksList", () => {
       expect(screen.getByText("Failed to search artworks")).toBeTruthy();
       expect(cardTitles()).toEqual(["Art 1"]);
     });
+  });
+
+  /**
+   * A market state is a member-facing fact of the two kinds that sell work.
+   * The page decides whether this list carries one; the list and both of its
+   * presentations only honour that flag (ADR-0010).
+   */
+  it("shows a work's market state in the Table when the kind carries one", () => {
+    startInTable();
+    renderList({
+      artworks: [artwork({ id: "a", title: "For Sale", availability: "sold" })],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("Sold")).toBeTruthy();
+  });
+
+  it("shows a work's market state on a card in the Grid when the kind carries one", () => {
+    renderList({
+      artworks: [
+        artwork({
+          id: "a",
+          title: "Held",
+          availability: "on-consignment",
+        }),
+      ],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("On consignment")).toBeTruthy();
+  });
+
+  it("shows no market state on a Collection's list", () => {
+    // The API is a superset — a Collection work may carry a value — so the
+    // list must hide it by the flag, not by the row being null.
+    renderList({
+      artworks: [artwork({ id: "a", title: "Owned", availability: "sold" })],
+      showAvailability: false,
+    });
+
+    expect(screen.queryByText("Sold")).toBeNull();
+  });
+
+  it("still marks a draft beside the market state", () => {
+    startInTable();
+    renderList({
+      artworks: [
+        artwork({
+          id: "a",
+          title: "Unfinished",
+          status: "draft",
+          availability: "available",
+        }),
+      ],
+      showAvailability: true,
+    });
+
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("Available")).toBeTruthy();
   });
 });

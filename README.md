@@ -76,6 +76,7 @@ Early, and honest about what is missing:
 | Artwork list                                | ✅                                                           |
 | Add and edit an artwork                     | ✅                                                           |
 | Published/draft status per artwork          | ✅                                                           |
+| Record a work's availability                | ✅ Portfolio and Inventory only; never a visitor gate        |
 | Public catalogue and single-artwork pages   | ✅                                                           |
 | Catalogue PDF                               | ✅                                                           |
 | Photo uploads                               | ✅                                                           |

@@ -13,6 +13,7 @@ import {
   Box,
   Grid,
   SegmentedControl,
+  Select,
   Text,
   Textarea,
   TextInput,
@@ -24,7 +25,17 @@ import DocumentsUploader from "./DocumentsUploader";
 import type { UseArtistNames } from "@/hooks/useArtistNames";
 import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import type { UseArtworkDocuments } from "@/hooks/useArtworkDocuments";
-import type { ArtworkFormValues, ArtworkPayload } from "@arcula/shared";
+import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
+import type {
+  ArtworkAvailability,
+  ArtworkFormValues,
+  ArtworkPayload,
+} from "@arcula/shared";
+
+/** The four states, in the surface's order, as the Select's options. */
+const AVAILABILITY_OPTIONS = (
+  Object.keys(ARTWORK_AVAILABILITY_LABELS) as ArtworkAvailability[]
+).map((value) => ({ value, label: ARTWORK_AVAILABILITY_LABELS[value] }));
 
 interface ArtworkFieldsProps {
   /** The page's own form instance — the fields read and write through it. */
@@ -33,6 +44,13 @@ interface ArtworkFieldsProps {
   documents: UseArtworkDocuments;
   /** The caller's Artist Name suggestions, fetched once by the page. */
   artistNames: UseArtistNames;
+  /**
+   * Whether this catalogue's kind carries a work's market state. A Portfolio
+   * and an Inventory do; a Collection does not, and its form renders nothing
+   * (and saves nothing) for it. The page derives this from the catalogue's
+   * kind through `catalogueSurface`.
+   */
+  availabilityInPlay?: boolean;
   /**
    * Hide the two uploaders. The Edit page sets this while the work is deleted:
    * staging is a server write, and media staged for a work whose Save is shut
@@ -48,6 +66,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   photos,
   documents,
   artistNames,
+  availabilityInPlay = false,
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
@@ -202,6 +221,22 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         Published if the catalogue is public. A draft stays in the catalogue and
         is visible only to you.
       </Text>
+
+      {availabilityInPlay ? (
+        <>
+          <Select
+            key={form.key("availability")}
+            label="Availability"
+            data={AVAILABILITY_OPTIONS}
+            allowDeselect={false}
+            mb={6}
+            {...form.getInputProps("availability")}
+          />
+          <Text size="sm" c="dimmed" mb="md">
+            A member-facing market state. It never changes what a visitor sees.
+          </Text>
+        </>
+      ) : null}
 
       <Box mb="md">
         <Text size="sm" fw={500} mb={4}>

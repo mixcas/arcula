@@ -13,7 +13,7 @@
  * every screen.
  */
 
-import type { CatalogueKind } from "@arcula/shared";
+import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
 import type { ArtworkFormValues } from "@arcula/shared";
 
 /** The three kinds, in the order a selector offers them. */
@@ -37,8 +37,16 @@ void everyKindIsOffered;
  */
 export type ArtworkField = keyof ArtworkFormValues;
 
+/**
+ * The fields this table covers. `availability` is deliberately not among them:
+ * it is not a per-kind field rule but the `availabilityInPlay` axis above,
+ * because the form hides the whole control and the API accepts the value on
+ * every kind.
+ */
+type SurfaceArtworkField = Exclude<ArtworkField, "availability">;
+
 export interface ArtworkFieldSurface {
-  readonly field: ArtworkField;
+  readonly field: SurfaceArtworkField;
   readonly visible: boolean;
   readonly required: boolean;
 }
@@ -81,11 +89,24 @@ const ARTWORK_FIELDS: readonly ArtworkFieldSurface[] = [
 ];
 
 type EveryArtworkFieldIsListed =
-  Exclude<ArtworkField, (typeof ARTWORK_FIELDS)[number]["field"]> extends never
+  Exclude<
+    SurfaceArtworkField,
+    (typeof ARTWORK_FIELDS)[number]["field"]
+  > extends never
     ? true
     : never;
 const everyArtworkFieldIsListed: EveryArtworkFieldIsListed = true;
 void everyArtworkFieldIsListed;
+
+/** The market state's four words, and only those: the record's key type makes
+ *  a value the contract names but the surface forgot a build error. */
+export const ARTWORK_AVAILABILITY_LABELS: Record<ArtworkAvailability, string> =
+  {
+    available: "Available",
+    reserved: "Reserved",
+    sold: "Sold",
+    "on-consignment": "On consignment",
+  };
 
 /** The words and the availability axis, per kind. */
 const SURFACES: Record<
