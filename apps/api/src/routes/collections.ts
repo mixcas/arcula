@@ -12,6 +12,10 @@
 //   POST   /collections/{cid}/artworks/bulk-restore  the batch restore
 //   POST   /collections/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
 //
+// Every path below is also registered under `/catalogues/…` (`routes`):
+// the Catalogue name exists beside the Collection name during the rename's
+// expand window (ADR-0010, #244), and the old paths keep answering unchanged.
+//
 // A collection is deleted by its owner alone, and the stamp is the whole
 // record: `deletedAt` makes the loader refuse the row, so every address that
 // named it answers not-found. Nothing cascades — the works, their media and
@@ -89,8 +93,12 @@ import {
   UNLOCK_WINDOW_MINUTES,
   unlockWindowStart,
 } from "../unlockThrottle";
+import { withCatalogueAlias } from "./paths";
 
 export const collectionRoutes = new Hono();
+
+// Every registration below mounts under both names.
+const routes = withCatalogueAlias(collectionRoutes);
 
 /**
  * The one write behind both batch routes: move a collection's deletion stamp
@@ -145,7 +153,7 @@ async function moveDeletionStamp(
 // The anonymous filter is the SQL form of `canSeeCollection(null, row)` in
 // access.ts — public AND not protected — and collections.api.test.ts asserts
 // the two agree.
-collectionRoutes.get("/collections", async (c) => {
+routes.get("/collections", async (c) => {
   const session = await resolveSession(c);
   if (session === null) {
     const rows = await db
@@ -199,7 +207,7 @@ collectionRoutes.get("/collections", async (c) => {
 
 // POST /collections — the cap check comes FIRST: the count is over the
 // caller's own collections, the limit is read off the caller's tier.
-collectionRoutes.post("/collections", requireSession, async (c) => {
+routes.post("/collections", requireSession, async (c) => {
   const user = c.get("user");
   const payload: CollectionCreatePayload = await parseBody(
     c,
@@ -252,7 +260,7 @@ collectionRoutes.post("/collections", requireSession, async (c) => {
 
 // GET one — a member always; a visitor when the collection is public. The
 // password flag is the member's alone: a visitor's document does not carry it.
-collectionRoutes.get("/collections/:collectionId", async (c) => {
+routes.get("/collections/:collectionId", async (c) => {
   const { collection, audience } = await requireReadableCollection(
     c,
     param(c, "collectionId"),
@@ -266,81 +274,74 @@ collectionRoutes.get("/collections/:collectionId", async (c) => {
 // only what changed" payload safe. A body that names nothing writes nothing:
 // no column moves, and `updatedAt` is left alone, so "updated" continues to
 // mean something was.
-collectionRoutes.patch(
-  "/collections/:collectionId",
-  requireSession,
-  async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
-    const payload: CollectionUpdatePayload = await parseBody(
-      c,
-      collectionUpdateSchema,
-    );
+routes.patch("/collections/:collectionId", requireSession, async (c) => {
+  const collection = await requireMemberCollection(c, param(c, "collectionId"));
+  const payload: CollectionUpdatePayload = await parseBody(
+    c,
+    collectionUpdateSchema,
+  );
 
-    // A password present means a write: a string sets (or overwrites) it,
-    // `null` removes it. Hashing happens before the transaction — it touches
-    // no row — and the update plus the grant revocation share one, so a
-    // change can never leave a reader holding a grant to the old password.
-    // An absent key leaves the column alone, which is why making a collection
-    // private and public again returns it to Protected.
-    const passwordHash =
-      payload.password === undefined
-        ? undefined
-        : payload.password === null
-          ? null
-          : await hashPassword(payload.password);
+  // A password present means a write: a string sets (or overwrites) it,
+  // `null` removes it. Hashing happens before the transaction — it touches
+  // no row — and the update plus the grant revocation share one, so a
+  // change can never leave a reader holding a grant to the old password.
+  // An absent key leaves the column alone, which is why making a collection
+  // private and public again returns it to Protected.
+  const passwordHash =
+    payload.password === undefined
+      ? undefined
+      : payload.password === null
+        ? null
+        : await hashPassword(payload.password);
 
-    // Build the update only from the keys the body carried: an absent key
-    // leaves its column alone, and a body that names nothing is a successful
-    // no-op that moves no column and no timestamp.
-    const set: Partial<typeof collectionsTable.$inferInsert> = {};
-    if (payload.name !== undefined) {
-      set.name = payload.name;
-    }
-    if (payload.isPublic !== undefined) {
-      set.isPublic = payload.isPublic;
-    }
-    if (payload.description !== undefined) {
-      set.description = payload.description ?? null;
-    }
-    if (payload.skin !== undefined) {
-      set.skin = payload.skin ?? null;
-    }
-    if (payload.skinOptions !== undefined) {
-      set.skinOptions = payload.skinOptions ?? null;
-    }
-    if (passwordHash !== undefined) {
-      set.passwordHash = passwordHash;
-    }
-    if (Object.keys(set).length > 0) {
-      set.updatedAt = new Date();
-      await safeTx(async (tx) => {
+  // Build the update only from the keys the body carried: an absent key
+  // leaves its column alone, and a body that names nothing is a successful
+  // no-op that moves no column and no timestamp.
+  const set: Partial<typeof collectionsTable.$inferInsert> = {};
+  if (payload.name !== undefined) {
+    set.name = payload.name;
+  }
+  if (payload.isPublic !== undefined) {
+    set.isPublic = payload.isPublic;
+  }
+  if (payload.description !== undefined) {
+    set.description = payload.description ?? null;
+  }
+  if (payload.skin !== undefined) {
+    set.skin = payload.skin ?? null;
+  }
+  if (payload.skinOptions !== undefined) {
+    set.skinOptions = payload.skinOptions ?? null;
+  }
+  if (passwordHash !== undefined) {
+    set.passwordHash = passwordHash;
+  }
+  if (Object.keys(set).length > 0) {
+    set.updatedAt = new Date();
+    await safeTx(async (tx) => {
+      await tx
+        .update(collectionsTable)
+        .set(set)
+        .where(eq(collectionsTable.id, collection.id));
+      if (passwordHash !== undefined) {
+        // Revocation, in the same transaction: setting and changing are one
+        // operation, and removing has nothing left to admit.
         await tx
-          .update(collectionsTable)
-          .set(set)
-          .where(eq(collectionsTable.id, collection.id));
-        if (passwordHash !== undefined) {
-          // Revocation, in the same transaction: setting and changing are one
-          // operation, and removing has nothing left to admit.
-          await tx
-            .delete(grantsTable)
-            .where(eq(grantsTable.collectionId, collection.id));
-        }
-      });
-    }
+          .delete(grantsTable)
+          .where(eq(grantsTable.collectionId, collection.id));
+      }
+    });
+  }
 
-    const row = await loadCollection(collection.id);
-    if (!row) {
-      throw new ApiError(
-        "internal",
-        "The saved collection could not be read back",
-      );
-    }
-    return c.json(serializeCollection(row, { audience: "member" }));
-  },
-);
+  const row = await loadCollection(collection.id);
+  if (!row) {
+    throw new ApiError(
+      "internal",
+      "The saved collection could not be read back",
+    );
+  }
+  return c.json(serializeCollection(row, { audience: "member" }));
+});
 
 // DELETE — owner-only. One transaction stamps `deletedAt`/`updatedAt`,
 // withdraws the collection's pending invitations (resolved history stays the
@@ -351,46 +352,42 @@ collectionRoutes.patch(
 // refusal: two deletes racing get one stamp, and the loser answers not-found
 // rather than moving the timestamp twice. Nothing else is written — that is
 // what keeps the operator's restore to clearing one column.
-collectionRoutes.delete(
-  "/collections/:collectionId",
-  requireSession,
-  async (c) => {
-    const collection = await requireOwnerCollection(
-      c,
-      param(c, "collectionId"),
-      "Only the collection's owner can delete it",
-    );
-    const now = new Date();
-    await safeTx(async (tx) => {
-      const stamped = await tx
-        .update(collectionsTable)
-        .set({ deletedAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(collectionsTable.id, collection.id),
-            isNull(collectionsTable.deletedAt),
-          ),
-        )
-        .returning({ id: collectionsTable.id });
-      if (stamped.length === 0) {
-        throw new ApiError("not-found", "The collection does not exist");
-      }
-      await tx
-        .update(collectionInvitationsTable)
-        .set({ status: "revoked", resolvedAt: now })
-        .where(
-          and(
-            eq(collectionInvitationsTable.collectionId, collection.id),
-            eq(collectionInvitationsTable.status, "pending"),
-          ),
-        );
-      await tx
-        .delete(grantsTable)
-        .where(eq(grantsTable.collectionId, collection.id));
-    });
-    return c.body(null, 204);
-  },
-);
+routes.delete("/collections/:collectionId", requireSession, async (c) => {
+  const collection = await requireOwnerCollection(
+    c,
+    param(c, "collectionId"),
+    "Only the collection's owner can delete it",
+  );
+  const now = new Date();
+  await safeTx(async (tx) => {
+    const stamped = await tx
+      .update(collectionsTable)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(collectionsTable.id, collection.id),
+          isNull(collectionsTable.deletedAt),
+        ),
+      )
+      .returning({ id: collectionsTable.id });
+    if (stamped.length === 0) {
+      throw new ApiError("not-found", "The collection does not exist");
+    }
+    await tx
+      .update(collectionInvitationsTable)
+      .set({ status: "revoked", resolvedAt: now })
+      .where(
+        and(
+          eq(collectionInvitationsTable.collectionId, collection.id),
+          eq(collectionInvitationsTable.status, "pending"),
+        ),
+      );
+    await tx
+      .delete(grantsTable)
+      .where(eq(grantsTable.collectionId, collection.id));
+  });
+  return c.body(null, 204);
+});
 
 // POST …/unlock — the lock screen's password attempt, and the one route a
 // non-member reaches a Protected collection through.
@@ -426,7 +423,7 @@ collectionRoutes.delete(
 // The refusal states the window and nothing about the time left in it, and
 // carries no `Retry-After` for the same reason: a countdown would tell a
 // guesser exactly when their next ten attempts open.
-collectionRoutes.post("/collections/:collectionId/unlock", async (c) => {
+routes.post("/collections/:collectionId/unlock", async (c) => {
   const collection = await loadCollection(param(c, "collectionId"));
   if (!collection) {
     throw new ApiError("not-found", "The collection does not exist");
@@ -506,7 +503,7 @@ collectionRoutes.post("/collections/:collectionId/unlock", async (c) => {
 // rows are written in one transaction. The ids are minted here — the
 // client's review step has no say in them, and the shared schema is the
 // only place a row's validity is decided.
-collectionRoutes.post(
+routes.post(
   "/collections/:collectionId/import/csv",
   requireSession,
   async (c) => {
@@ -582,7 +579,7 @@ collectionRoutes.post(
 // path sits at the collection level because a static segment under `artworks`
 // would be shadowed by the single-artwork route (Hono matches in registration
 // order).
-collectionRoutes.get(
+routes.get(
   "/collections/:collectionId/deleted-artworks",
   requireSession,
   async (c) => {
@@ -607,7 +604,7 @@ collectionRoutes.get(
 // `updatedAt`. Already-deleted or foreign ids are not in the WHERE clause's
 // result and do not count: the response is how many works this call
 // actually moved.
-collectionRoutes.post(
+routes.post(
   "/collections/:collectionId/artworks/bulk-delete",
   requireSession,
   async (c) => {
@@ -635,7 +632,7 @@ collectionRoutes.post(
 // id, an id from another collection and an id a previous call already restored
 // are not in the WHERE clause's result and do not count, so a repeated call is
 // a no-op rather than an error and the response is the number restored.
-collectionRoutes.post(
+routes.post(
   "/collections/:collectionId/artworks/bulk-restore",
   requireSession,
   async (c) => {
@@ -662,7 +659,7 @@ collectionRoutes.post(
 // live work (restoring it is a no-op the route does not special-case).
 // The path both UIs use for one work: a row in the Deleted view, and the banner
 // on a deleted work's Edit page.
-collectionRoutes.post(
+routes.post(
   "/collections/:collectionId/artworks/:artworkId/restore",
   requireSession,
   async (c) => {
@@ -690,7 +687,7 @@ collectionRoutes.post(
 // whose entryId has no row. An entry that DOES have a row keeps its staged
 // objects even under a soft-deleted work: the row is what a restore would
 // point at, and the staged object may be the entry's newest version.
-collectionRoutes.post(
+routes.post(
   "/collections/:collectionId/maintenance/sweep",
   requireSession,
   async (c) => {
