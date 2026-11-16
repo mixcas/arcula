@@ -13,7 +13,12 @@ import { notifications } from "@mantine/notifications";
 import { Link, useParams } from "react-router-dom";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
+import {
+  ARTWORK_AVAILABILITY_LABELS,
+  catalogueSurface,
+} from "@/catalogueSurface";
 import ArtworkThumbnail from "@/components/manage/catalogue/ArtworkThumbnail";
 import { relativeTime } from "@/utils/relativeTime";
 import { parseId, timestampMillis } from "@arcula/shared";
@@ -58,6 +63,11 @@ const DeletedArtworksPage: React.FC = () => {
   // identity would silently empty itself.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [restoringSelected, setRestoringSelected] = useState(false);
+  // The catalogue's kind decides whether a row badges a market state — the
+  // same rule the live table follows. Read separately: a kind that cannot be
+  // fetched leaves the badge off rather than failing the list, because it only
+  // changes a presentation detail.
+  const [availabilityInPlay, setAvailabilityInPlay] = useState(false);
 
   const selectedRecords = artworks.filter((artwork) =>
     selectedIds.includes(artwork.id),
@@ -96,6 +106,29 @@ const DeletedArtworksPage: React.FC = () => {
     };
     void fetchFirst();
   }, [load]);
+
+  // The kind is a second, independent read: it only decides the badge, so it
+  // must not be able to fail the list. A deleted work still knows its
+  // availability; without the kind the page would not know whether to show it.
+  useEffect(() => {
+    if (!catalogueId) return;
+    let cancelled = false;
+    void catalogueService
+      .getCatalogue(catalogueId)
+      .then((catalogue) => {
+        if (cancelled) return;
+        setAvailabilityInPlay(
+          catalogue !== null &&
+            catalogueSurface(catalogue.kind).availabilityInPlay,
+        );
+      })
+      .catch((err: unknown) => {
+        console.error("Error fetching the catalogue's kind:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogueId]);
 
   const retry = () => {
     setLoading(true);
@@ -179,6 +212,14 @@ const DeletedArtworksPage: React.FC = () => {
           {artwork.status === "draft" ? (
             <Badge color="gray" variant="light" size="sm">
               Draft
+            </Badge>
+          ) : null}
+          {/* The same badge the live table shows, under the same rule: the
+              kind decides whether the catalogue has a market state, and the
+              row only says what this work's is. */}
+          {availabilityInPlay && artwork.availability ? (
+            <Badge color="teal" variant="light" size="sm">
+              {ARTWORK_AVAILABILITY_LABELS[artwork.availability]}
             </Badge>
           ) : null}
         </Group>

@@ -15,8 +15,9 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DeletedArtworksPage from "@/components/manage/catalogue/DeletedArtworksPage";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
 import { ApiRequestError } from "@/services/api";
-import type { Artwork } from "@arcula/shared";
+import type { Artwork, Catalogue, CatalogueKind } from "@arcula/shared";
 
 vi.mock("@/services/artworkService", () => ({
   artworkService: {
@@ -24,6 +25,10 @@ vi.mock("@/services/artworkService", () => ({
     restoreArtwork: vi.fn(),
     bulkRestoreArtworks: vi.fn(),
   },
+}));
+
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: { getCatalogue: vi.fn() },
 }));
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -39,6 +44,19 @@ const getDeletedMock = vi.mocked(artworkService.getDeletedArtworks);
 const restoreMock = vi.mocked(artworkService.restoreArtwork);
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const bulkRestoreMock = vi.mocked(artworkService.bulkRestoreArtworks);
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const getCatalogueMock = vi.mocked(catalogueService.getCatalogue);
+
+/** The catalogue the page reads for the kind that decides the badge. */
+const catalogue = (kind: CatalogueKind): Catalogue => ({
+  id: "catalogue1",
+  name: "Catalogue",
+  kind,
+  userId: "user-1",
+  isPublic: true,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
+});
 
 const CATALOGUE_PARAM = "deleted-view-catalogue1";
 const OTHER_CATALOGUE_PARAM = "deleted-view-catalogue2";
@@ -106,6 +124,8 @@ describe("DeletedArtworksPage", () => {
     getDeletedMock.mockReset();
     restoreMock.mockReset();
     bulkRestoreMock.mockReset();
+    getCatalogueMock.mockReset();
+    getCatalogueMock.mockResolvedValue(catalogue("collection"));
     consoleError.mockClear();
     // `matches: query === ""` mirrors Chrome: mantine-datatable resolves each
     // column through `matchMedia("")`, and a stub answering false for
@@ -188,6 +208,35 @@ describe("DeletedArtworksPage", () => {
       rows().find((row) => row.textContent?.includes("Old Draft"))!,
     );
     expect(draftRow.getByText("Draft")).toBeTruthy();
+  });
+
+  it("badges a deleted work's market state when the kind has one", async () => {
+    // The Deleted view is a manage view: it shows the same availability badge
+    // the live table does, and only on the kinds that carry a market state.
+    getCatalogueMock.mockResolvedValue(catalogue("portfolio"));
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "Sold Out", availability: "sold" }),
+    ]);
+    renderPage();
+
+    const row = within(
+      (await screen.findByText("Sold Out")).closest("tr") as HTMLElement,
+    );
+    expect(await row.findByText("Sold")).toBeTruthy();
+  });
+
+  it("shows no market-state badge on a kind without one", async () => {
+    // A Collection records what is owned; a stored state must not be shown.
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "Owned", availability: "sold" }),
+    ]);
+    renderPage();
+
+    await screen.findByText("Owned");
+    // The kind read has resolved by now: the catalogue's kind settles before
+    // anything could badge.
+    await waitFor(() => expect(getCatalogueMock).toHaveBeenCalled());
+    expect(screen.queryByText("Sold")).toBeNull();
   });
 
   it("restores one row through the single route and refetches the list", async () => {
