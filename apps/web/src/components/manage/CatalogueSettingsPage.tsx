@@ -38,6 +38,7 @@ import {
   type CatalogueUpdatePayload,
 } from "@arcula/shared";
 import { catalogueService } from "../../services/catalogueService";
+import { trackEvent } from "@/telemetry/logRocket";
 import { resolveSkin, resolveSkinOptions } from "@/skins/registry";
 import GeneralTab from "./CatalogueSettingsGeneralTab";
 import PublicTab from "./CatalogueSettingsPublicTab";
@@ -181,6 +182,13 @@ const CatalogueSettingsPage: React.FC = () => {
         payload,
       );
       setCatalogue(saved);
+      // Only the save that actually carried the visibility is a publish or
+      // unpublish; the other tabs' saves leave it alone.
+      if ("isPublic" in payload) {
+        trackEvent("catalogue_visibility_changed", {
+          is_public: saved.isPublic === true,
+        });
+      }
       notifications.show({
         color: "green",
         title: "Saved",

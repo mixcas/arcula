@@ -13,6 +13,7 @@ import { meService } from "../services/meService";
 import { authClient } from "./client";
 import { toAuthError } from "./errors";
 import { toArculaUser, type ArculaUser } from "./user";
+import { identifyUser } from "../telemetry/logRocket";
 
 export interface AuthContextType {
   currentUser: ArculaUser | null;
@@ -47,6 +48,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   // departed account and clears the profile, so signing out never leaves the
   // previous account's name in the menu.
   const uid = currentUser?.uid;
+
+  // The account whose session this is, by its immutable id. Keyed on the uid
+  // so a different sign-in re-identifies; anonymous visits stay anonymous.
+  useEffect(() => {
+    if (uid) identifyUser(uid);
+  }, [uid]);
+
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;

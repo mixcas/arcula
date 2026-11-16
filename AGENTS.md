@@ -270,6 +270,8 @@ data a later per-kind hiding will read; no v1 screen consumes
 `visible`/`required`, and a screen that reads the module uses the labels, the
 availability values and `availabilityFor`'s default. `services/` are the API
 clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
+`telemetry/logRocket.ts` is the session-replay hook, redacted at the client
+([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
 `components/manage` and `components/catalogue`; `skins/` is the public-view
 system. The artwork Add and Edit pages load the catalogue for its kind; a
 Collection's form renders no availability control and sends no key, while a

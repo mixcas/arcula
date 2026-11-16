@@ -12,6 +12,7 @@ import { catalogueService } from "@/services/catalogueService";
 import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
 import { withoutAvailability } from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
+import { trackEvent } from "@/telemetry/logRocket";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
   BAR_HEIGHT,
@@ -170,6 +171,7 @@ const ArtworkAddPage: React.FC = () => {
               catalogueId,
               body,
             );
+            trackEvent("artwork_created", { catalogue_id: catalogueId });
             notifications.show({
               title: "Artwork created",
               message: `"${created.title}" was added to this catalogue.`,
