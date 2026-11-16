@@ -5,7 +5,7 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the two composite PKs, the four CHECKs, the
+// position is the truth", the two composite PKs, the five CHECKs, the
 // composite indexes behind the artwork lists, the partial unique pending-
 // invitation index) missing from either source fails here.
 
@@ -136,6 +136,17 @@ const RLS_SQL = readMigration("0006_enable_rls");
 // The committed stamp that retires a whole catalogue.
 const DELETION_SQL = readMigration("0007_collection_deletion_stamp");
 
+// The committed kind: whose art a catalogue holds and why.
+const KIND_SQL = readMigration("0009_catalogue_kind");
+
+// The committed availability: a work's market state, absent on every Collection
+// work and on every work written before the column existed.
+const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
+
+// The four market states, as the spec names them. Shared by the Drizzle check
+// assertion and the committed migration, so the two cannot disagree.
+const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
+
 describe("the thirteen-table schema", () => {
   it("declares exactly the thirteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
@@ -196,6 +207,7 @@ describe("the thirteen-table schema", () => {
       "notes",
       "condition",
       "currentValue",
+      "availability",
       "status",
       "deletedAt",
       "createdAt",
@@ -212,10 +224,26 @@ describe("the thirteen-table schema", () => {
     expect(c.deletedAt.notNull).toBe(false);
   });
 
+  it("artworks carries a nullable availability, with no default to hide a gap", () => {
+    const c = cols(artworks);
+    // Nullable is the whole point: every existing work, and every Collection
+    // work, has no market state. A default would invent one.
+    expect(c.availability.dataType).toBe("string");
+    expect(c.availability.notNull).toBe(false);
+    expect(c.availability.hasDefault).toBe(false);
+  });
+
   it("artworks restricts `status` to draft or published in the Drizzle object", () => {
     expect(checksOf(artworks)).toContainEqual({
       name: "artworks_status_check",
       sql: "\"status\" in ('draft', 'published')",
+    });
+  });
+
+  it("artworks restricts `availability` to the four market states", () => {
+    expect(checksOf(artworks)).toContainEqual({
+      name: "artworks_availability_check",
+      sql: AVAILABILITY_CHECK,
     });
   });
 
@@ -294,6 +322,22 @@ describe("the thirteen-table schema", () => {
     expect(c.deletedAt.dataType).toBe("date");
     expect(c.deletedAt.notNull).toBe(false);
     expect(c.deletedAt.hasDefault).toBe(false);
+  });
+
+  it("catalogues carries a kind, required and defaulting to collection", () => {
+    const c = cols(catalogues);
+    // Every row that existed before the column was a collector's, so the
+    // constant default is the truth, not a placeholder awaiting a backfill.
+    expect(c.kind.dataType).toBe("string");
+    expect(c.kind.notNull).toBe(true);
+    expect(c.kind.default).toBe("collection");
+  });
+
+  it("catalogues restricts `kind` to portfolio, collection or inventory", () => {
+    expect(checksOf(catalogues)).toContainEqual({
+      name: "collections_kind_check",
+      sql: "\"kind\" in ('portfolio', 'collection', 'inventory')",
+    });
   });
 
   it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
@@ -724,6 +768,47 @@ describe("the committed deletion-stamp migration (as it will actually be applied
     expect(dataWrites(DELETION_SQL)).toEqual([]);
     expect(DELETION_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(DELETION_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed kind migration (as it will actually be applied)", () => {
+  it("adds `kind` required, defaulting to collection, checked to the three kinds", () => {
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD COLUMN "kind" text DEFAULT 'collection' NOT NULL;`,
+    );
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD CONSTRAINT "collections_kind_check" CHECK ("kind" in ('portfolio', 'collection', 'inventory'));`,
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no default to backfill", () => {
+    // The column ships alone, ahead of the code that reads it: every existing
+    // row takes the constant default, so there is nothing to backfill and
+    // nothing to reverse.
+    expect(dataWrites(KIND_SQL)).toEqual([]);
+    expect(KIND_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(KIND_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed availability migration (as it will actually be applied)", () => {
+  it("adds a nullable `availability` with the four-value check and no default", () => {
+    expect(AVAILABILITY_SQL).toContain(
+      `ALTER TABLE "artworks" ADD COLUMN "availability" text;`,
+    );
+    expect(AVAILABILITY_SQL).toContain(
+      `ALTER TABLE "artworks" ADD CONSTRAINT "artworks_availability_check" CHECK (${AVAILABILITY_CHECK});`,
+    );
+    expect(AVAILABILITY_SQL).not.toMatch(/DEFAULT/);
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The column ships alone, ahead of the code that reads it: null is already
+    // the truth for every existing work, so there is nothing to backfill and
+    // nothing to reverse.
+    expect(dataWrites(AVAILABILITY_SQL)).toEqual([]);
+    expect(AVAILABILITY_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(AVAILABILITY_SQL).not.toMatch(/ALTER COLUMN/);
   });
 });
 
