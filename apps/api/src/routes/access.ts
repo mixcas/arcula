@@ -44,6 +44,10 @@
 // named — the deletion and the cleanup are one helper each. `/me` is
 // registered before `/:userId` so the literal segment is never read as an
 // account id.
+//
+// Every path here is registered under `/catalogues/…` too (`routes`): the
+// Catalogue name expands beside the Collection name during the rename
+// (ADR-0010, #244).
 
 import { and, asc, eq, ne } from "drizzle-orm";
 import {
@@ -76,8 +80,12 @@ import {
   serializeMember,
 } from "../serialize";
 import { deleteObject, listObjects } from "../storage";
+import { withCatalogueAlias } from "./paths";
 
 export const accessRoutes = new Hono();
+
+// Every registration below mounts under both names.
+const routes = withCatalogueAlias(accessRoutes);
 
 /** The columns a person is named by, in the queries below. */
 const memberColumns = {
@@ -89,73 +97,63 @@ const memberColumns = {
   firstName: userTable.firstName,
 };
 
-accessRoutes.get(
-  "/collections/:collectionId/access",
-  requireSession,
-  async (c) => {
-    const collection = await requireMemberCollection(
-      c,
-      param(c, "collectionId"),
-    );
-    const user = c.get("user");
-    // Membership is already proven, so the role is the owner column and
-    // nothing else: no second membership query.
-    const role = collection.userId === user.id ? "owner" : "collaborator";
+routes.get("/collections/:collectionId/access", requireSession, async (c) => {
+  const collection = await requireMemberCollection(c, param(c, "collectionId"));
+  const user = c.get("user");
+  // Membership is already proven, so the role is the owner column and
+  // nothing else: no second membership query.
+  const role = collection.userId === user.id ? "owner" : "collaborator";
 
-    const [owner] = await db
-      .select(memberColumns)
-      .from(userTable)
-      .where(eq(userTable.id, collection.userId));
-    // The collection's owner column is not a foreign key; a dangling owner is
-    // a corrupt row, not a permission question.
-    if (!owner) {
-      throw new ApiError("internal", "The collection's owner does not exist");
-    }
+  const [owner] = await db
+    .select(memberColumns)
+    .from(userTable)
+    .where(eq(userTable.id, collection.userId));
+  // The collection's owner column is not a foreign key; a dangling owner is
+  // a corrupt row, not a permission question.
+  if (!owner) {
+    throw new ApiError("internal", "The collection's owner does not exist");
+  }
 
-    // `collaborators` is everyone except the owner: the owner fact is the
-    // column, so a stray row naming the owner (a hand-written seed, a former
-    // transfer's leftover) must not list them twice.
-    const collaborators = await db
-      .select(memberColumns)
-      .from(collectionCollaboratorsTable)
-      .innerJoin(
-        userTable,
-        eq(userTable.id, collectionCollaboratorsTable.userId),
-      )
+  // `collaborators` is everyone except the owner: the owner fact is the
+  // column, so a stray row naming the owner (a hand-written seed, a former
+  // transfer's leftover) must not list them twice.
+  const collaborators = await db
+    .select(memberColumns)
+    .from(collectionCollaboratorsTable)
+    .innerJoin(userTable, eq(userTable.id, collectionCollaboratorsTable.userId))
+    .where(
+      and(
+        eq(collectionCollaboratorsTable.collectionId, collection.id),
+        ne(collectionCollaboratorsTable.userId, collection.userId),
+      ),
+    )
+    .orderBy(asc(collectionCollaboratorsTable.createdAt));
+
+  const access: CollectionAccess = {
+    role,
+    owner: serializeMember(owner),
+    collaborators: collaborators.map(serializeMember),
+  };
+
+  if (role === "owner") {
+    // Pending only — a resolved row is history. An expired row is still
+    // `pending` and still the owner's business: it can be resent or
+    // revoked, and the card reads its liveness off `expiresAt`.
+    const invitations = await db
+      .select()
+      .from(collectionInvitationsTable)
       .where(
         and(
-          eq(collectionCollaboratorsTable.collectionId, collection.id),
-          ne(collectionCollaboratorsTable.userId, collection.userId),
+          eq(collectionInvitationsTable.collectionId, collection.id),
+          eq(collectionInvitationsTable.status, "pending"),
         ),
       )
-      .orderBy(asc(collectionCollaboratorsTable.createdAt));
+      .orderBy(asc(collectionInvitationsTable.createdAt));
+    access.invitations = invitations.map(serializeInvitation);
+  }
 
-    const access: CollectionAccess = {
-      role,
-      owner: serializeMember(owner),
-      collaborators: collaborators.map(serializeMember),
-    };
-
-    if (role === "owner") {
-      // Pending only — a resolved row is history. An expired row is still
-      // `pending` and still the owner's business: it can be resent or
-      // revoked, and the card reads its liveness off `expiresAt`.
-      const invitations = await db
-        .select()
-        .from(collectionInvitationsTable)
-        .where(
-          and(
-            eq(collectionInvitationsTable.collectionId, collection.id),
-            eq(collectionInvitationsTable.status, "pending"),
-          ),
-        )
-        .orderBy(asc(collectionInvitationsTable.createdAt));
-      access.invitations = invitations.map(serializeInvitation);
-    }
-
-    return c.json(access);
-  },
-);
+  return c.json(access);
+});
 
 /**
  * Delete the account's membership row: the access fact. Both callers have
@@ -213,7 +211,7 @@ async function discardStagedUploads(
 // take it: a collection is never left without one, so the owner transfers
 // first. Refusals are the membership check's (`403` for a non-member, `404`
 // for a missing collection) and this handler's one conflict.
-accessRoutes.delete(
+routes.delete(
   "/collections/:collectionId/collaborators/me",
   requireSession,
   async (c) => {
@@ -240,7 +238,7 @@ accessRoutes.delete(
 // collaborator leaves through /me. The owner is not a collaborator row, so
 // naming them is a conflict rather than a no-op, exactly as naming an account
 // that never had access is.
-accessRoutes.delete(
+routes.delete(
   "/collections/:collectionId/collaborators/:userId",
   requireSession,
   async (c) => {
@@ -302,7 +300,7 @@ async function sendTransferMail(mail: TransferMail): Promise<void> {
 // collaborator: a transfer to an arbitrary account would create the membership
 // and the owner in one step, bypassing the invitation's consent. The tier is
 // deliberately not consulted — the cap gates creation, not ownership.
-accessRoutes.post(
+routes.post(
   "/collections/:collectionId/transfer",
   requireSession,
   async (c) => {

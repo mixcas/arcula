@@ -32,6 +32,11 @@
 // The invitation row is committed before the mail is attempted. A provider
 // failure answers `emailSent: false` and leaves the offer pending, so the
 // owner can resend without re-entering the address.
+//
+// The three collection-scoped paths are registered under `/catalogues/…` too
+// (`routes`): the Catalogue name expands beside the Collection name during the
+// rename (ADR-0010, #244). The token and inbox paths name no collection and
+// keep their single spelling.
 
 import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import {
@@ -76,8 +81,13 @@ import {
   type InvitationRow,
 } from "../serialize";
 import { requireSession } from "../session";
+import { withCatalogueAlias } from "./paths";
 
 export const invitationRoutes = new Hono();
+
+// The three collection-scoped registrations below mount under both names; the
+// token and inbox ones keep their single spelling.
+const collectionRoutes = withCatalogueAlias(invitationRoutes);
 
 /** The one answer for every link that cannot be used, whatever the reason. */
 const gone = (): ApiError =>
@@ -180,7 +190,7 @@ async function sendInvitationMail(mail: InvitationMail): Promise<void> {
 // resolved row (accepted, declined, revoked) does not block a fresh one; an
 // expired pending row is reissued on the same row, because the partial unique
 // index keeps it in the pending slot and its old link is already dead.
-invitationRoutes.post(
+collectionRoutes.post(
   "/collections/:collectionId/invitations",
   requireSession,
   async (c) => {
@@ -287,7 +297,7 @@ invitationRoutes.post(
 // token, a fresh seven-day expiry and a fresh issue time, which is both what
 // the link and the 60-second cooldown read. An expired pending row is exactly
 // the offer a resend exists for, so liveness is not part of the check.
-invitationRoutes.post(
+collectionRoutes.post(
   "/collections/:collectionId/invitations/:invitationId/resend",
   requireSession,
   async (c) => {
@@ -356,7 +366,7 @@ invitationRoutes.post(
 
 // DELETE — owner-only. Revoking keeps the row as history: the status says how
 // the offer ended, and the mailed link is dead the moment it is not pending.
-invitationRoutes.delete(
+collectionRoutes.delete(
   "/collections/:collectionId/invitations/:invitationId",
   requireSession,
   async (c) => {

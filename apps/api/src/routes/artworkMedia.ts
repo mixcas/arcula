@@ -15,6 +15,9 @@
 // staging is per uploader (ADR-0004), so a collaborator's stage, process and
 // discard reach only their own staged objects and one member can neither
 // process nor discard another's unsaved upload.
+//
+// The mount below carries both names: `/collections/…` and `/catalogues/…`
+// (ADR-0010, #244), from one route app and one set of handlers.
 
 import { MINTED_ID_RE } from "@arcula/shared";
 import { Hono } from "hono";
@@ -44,6 +47,7 @@ import {
   WEBP_TYPE,
 } from "../media/pipeline";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
+import { cataloguePath } from "./paths";
 
 // Ids are client-minted and become key segments: letters and digits only —
 // nothing that could carry a path separator, a dot or a hyphen (the route
@@ -298,8 +302,7 @@ export const artworkMediaRoutes = new Hono();
 
 for (const kind of POPULATION_KINDS) {
   const routes = buildMediaRoutes(kind);
-  artworkMediaRoutes.route(
-    `/collections/:collectionId/artworks/:artworkId`,
-    routes,
-  );
+  const path = "/collections/:collectionId/artworks/:artworkId";
+  artworkMediaRoutes.route(path, routes);
+  artworkMediaRoutes.route(cataloguePath(path), routes);
 }

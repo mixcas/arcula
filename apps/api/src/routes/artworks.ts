@@ -20,6 +20,10 @@
 // after a save all go through artworkRead.ts, which now owns the list's SQL
 // filter too; a test pins that filter and the verdict together.
 //
+// Every path is registered under `/catalogues/…` too (`routes`): the
+// Catalogue name expands beside the Collection name during the rename
+// (ADR-0010, #244), with identical handlers and no change to the old paths.
+//
 // Writer access: any member, the owner or a collaborator, for every route
 // here (ADR-0004). A save by a collaborator promotes THEIR staged entries
 // onto the collection's final keys, but records `artworks.userId` as the
@@ -66,6 +70,7 @@ import {
   writeDocumentSequence,
   writePhotoSequence,
 } from "./artworkSave";
+import { withCatalogueAlias } from "./paths";
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -91,31 +96,31 @@ async function readSavedArtwork(
 
 export const artworkRoutes = new Hono();
 
+// Every registration below mounts under both names.
+const routes = withCatalogueAlias(artworkRoutes);
+
 // GET one — a member always; a visitor when collection and work both admit it.
-artworkRoutes.get(
-  "/collections/:collectionId/artworks/:artworkId",
-  async (c) => {
-    const session = await resolveSession(c);
-    const collectionId = param(c, "collectionId");
-    // The grant is a fact the route reads off the cookie and the verdict
-    // takes as one; a member's read never needs it (`grantHeld` still costs
-    // nothing without the cookie, and the verdict ignores it for a member).
-    const hasValidGrant = await grantHeld(c, collectionId);
-    const read = await readArtwork(
-      collectionId,
-      param(c, "artworkId"),
-      session?.user.id ?? null,
-      hasValidGrant,
-    );
-    // A draft work, a deleted work and a public work inside a private
-    // collection are one uniform 404 for a visitor: saying which was
-    // refused would be a disclosure.
-    if (read.status !== "ok") {
-      throw new ApiError("not-found", "The artwork does not exist");
-    }
-    return c.json(read.artwork);
-  },
-);
+routes.get("/collections/:collectionId/artworks/:artworkId", async (c) => {
+  const session = await resolveSession(c);
+  const collectionId = param(c, "collectionId");
+  // The grant is a fact the route reads off the cookie and the verdict
+  // takes as one; a member's read never needs it (`grantHeld` still costs
+  // nothing without the cookie, and the verdict ignores it for a member).
+  const hasValidGrant = await grantHeld(c, collectionId);
+  const read = await readArtwork(
+    collectionId,
+    param(c, "artworkId"),
+    session?.user.id ?? null,
+    hasValidGrant,
+  );
+  // A draft work, a deleted work and a public work inside a private
+  // collection are one uniform 404 for a visitor: saying which was
+  // refused would be a disclosure.
+  if (read.status !== "ok") {
+    throw new ApiError("not-found", "The artwork does not exist");
+  }
+  return c.json(read.artwork);
+});
 
 // GET list — member: every live work; non-member: the published ones; a
 // private collection, or a protected one the visitor holds no grant for: 403
@@ -125,7 +130,7 @@ artworkRoutes.get(
 // grant holder included — is 403, and only then is a query past the shared
 // caps a validation error attributed to `q`. Absent, empty or whitespace-only
 // leaves the list exactly as it was.
-artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
+routes.get("/collections/:collectionId/artworks", async (c) => {
   const session = await resolveSession(c);
   const collectionId = param(c, "collectionId");
   const rawQuery = c.req.query("q");
@@ -163,7 +168,7 @@ artworkRoutes.get("/collections/:collectionId/artworks", async (c) => {
 });
 
 // POST — create the row and promote the staged entries, one transaction.
-artworkRoutes.post(
+routes.post(
   "/collections/:collectionId/artworks",
   requireSession,
   async (c) => {
@@ -263,7 +268,7 @@ artworkRoutes.post(
 );
 
 // PATCH — the edit form: fields plus the full new sequences.
-artworkRoutes.patch(
+routes.patch(
   "/collections/:collectionId/artworks/:artworkId",
   requireSession,
   async (c) => {
