@@ -13,8 +13,8 @@ import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  collectionSlug,
-  type Collection,
+  catalogueSlug,
+  type Catalogue,
   type InvitationPreview,
 } from "@arcula/shared";
 
@@ -105,7 +105,7 @@ const preview: InvitationPreview = {
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
 };
 
-const collection: Collection = {
+const catalogue: Catalogue = {
   id: preview.collection.id,
   name: preview.collection.name,
   userId: "u-owner",
@@ -157,7 +157,7 @@ const renderPage = () =>
           <Route path="/login" element={<div />} />
           <Route path="/signup" element={<div />} />
           <Route path="/manage" element={<div />} />
-          <Route path="/manage/collection/:collectionId" element={<div />} />
+          <Route path="/manage/catalogue/:catalogueId" element={<div />} />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -172,7 +172,7 @@ const declineButton = () => screen.queryByRole("button", { name: "Decline" });
 beforeEach(() => {
   authState.currentUser = null;
   getInvitation.mockResolvedValue(preview);
-  acceptInvitation.mockResolvedValue({ status: "accepted", collection });
+  acceptInvitation.mockResolvedValue({ status: "accepted", catalogue });
   declineInvitation.mockResolvedValue(declinedRow);
   signOut.mockResolvedValue({ data: { success: true } });
 });
@@ -238,7 +238,7 @@ describe("the invite page's loading and dead-link states", () => {
 });
 
 describe("the invite page's signed-out preview", () => {
-  it("names the collection, the inviter, the invited address and the expiry, and offers no answer", async () => {
+  it("names the catalogue, the inviter, the invited address and the expiry, and offers no answer", async () => {
     renderPage();
 
     expect(
@@ -293,7 +293,7 @@ describe("the invite page's signed-out preview", () => {
 });
 
 describe("the invite page for the invited account", () => {
-  it("accepts, and lands in the collection", async () => {
+  it("accepts, and lands in the catalogue", async () => {
     signedInAs(preview.email);
     const user = userEvent.setup();
     renderPage();
@@ -307,7 +307,7 @@ describe("the invite page for the invited account", () => {
     await waitFor(() => expect(acceptInvitation).toHaveBeenCalledWith(TOKEN));
     await waitFor(() =>
       expect(location().textContent).toBe(
-        `/manage/collection/${collectionSlug(collection.name, collection.id)}`,
+        `/manage/catalogue/${catalogueSlug(catalogue.name, catalogue.id)}`,
       ),
     );
   });

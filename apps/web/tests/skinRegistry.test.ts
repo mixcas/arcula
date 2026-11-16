@@ -10,17 +10,17 @@ import {
 /**
  * The registry's job is to always produce a skin. Every other guarantee about
  * skins is a property of one skin; this is the only place where a mistake
- * blanks a page for a collection whose data was fine.
+ * blanks a page for a catalogue whose data was fine.
  */
 describe("resolveSkin", () => {
-  it("returns the skin a collection names", () => {
+  it("returns the skin a catalogue names", () => {
     for (const skin of SKINS) {
       expect(resolveSkin(skin.id)).toBe(skin);
     }
   });
 
   it("falls back to the default for an absent or unknown id", () => {
-    // A collection written before skins existed has no `skin` key at all, and a
+    // A catalogue written before skins existed has no `skin` key at all, and a
     // typo in a stored id must not produce a blank page: the caller already
     // holds a document it successfully fetched, so falling back always works.
     expect(resolveSkin(undefined)).toBe(DEFAULT_SKIN);
@@ -49,7 +49,7 @@ describe("the registry", () => {
     // `DEFAULT_SKIN_ID` was asserted to equal `DEFAULT_SKIN.id` here, which is
     // what it is defined as — the two cannot disagree, so the test could only
     // fail by editing the one line it read. The id matters because it is the
-    // value persisted on `Collection.skin`, and the live property of that is
+    // value persisted on `Catalogue.skin`, and the live property of that is
     // already covered above: `resolveSkin` is case-insensitive, so a stored id
     // survives a change of case.
   });
@@ -65,7 +65,7 @@ describe("the registry", () => {
       expect(typeof skin.Artwork, `${skin.id}.Artwork`).toBe("function");
       expect(skin.label.length, `${skin.id}.label`).toBeGreaterThan(0);
       // Lowercase, hyphenated, no whitespace: the id goes in a Select's value
-      // and persists on the collection, and is not something a human reads.
+      // and persists on the catalogue, and is not something a human reads.
       expect(skin.id, `${skin.id}.id`).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     }
   });

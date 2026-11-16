@@ -49,14 +49,14 @@ const docSlug = (name: string, id: string, fallback: string): string =>
   `${urlizeName(name) || fallback}-${id}`;
 
 /**
- * The `:collectionId` route param for a catalogue.
+ * The `:catalogueId` route param for a catalogue.
  *
- * The fallback segment is still `"collection"` — the URL word moves with the
- * routes (#247), and until then this helper must keep producing the params
- * the mounted routes parse.
+ * The fallback segment is `"catalogue"`, the URL word the web's routes carry:
+ * a catalogue whose name has nothing urlizable in it still produces a
+ * well-formed `catalogue-{id}` segment rather than a leading hyphen.
  */
 export const catalogueSlug = (name: string, id: string): string =>
-  docSlug(name, id, "collection");
+  docSlug(name, id, "catalogue");
 
 /** The helper's older spelling, alias-kept while the API and web migrate. */
 export const collectionSlug = catalogueSlug;

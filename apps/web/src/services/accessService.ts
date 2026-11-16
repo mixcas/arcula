@@ -2,7 +2,7 @@
  * The access service: the read the settings card renders, and the ways access
  * changes — transfer, removal and leaving.
  *
- * `GET /collections/{cid}/access` is the one source of the caller's role on an
+ * `GET /catalogues/{cid}/access` is the one source of the caller's role on an
  * administrative screen — the dashboard row's `role` is a badge, not this. The
  * response is parsed through the shared access schema, so a reshaped member or
  * invitation fails at the boundary rather than rendering a nameless row.
@@ -16,28 +16,28 @@
 
 import { z } from "zod";
 import {
-  collectionAccessSchema,
-  collectionTransferResponseSchema,
-  type CollectionAccess,
-  type CollectionTransferResponse,
+  catalogueAccessSchema,
+  catalogueTransferResponseSchema,
+  type CatalogueAccess,
+  type CatalogueTransferResponse,
 } from "@arcula/shared";
 import { apiRequest } from "./api";
 
-const BASE = "/api/v1/collections";
+const BASE = "/api/v1/catalogues";
 
-const collectionPath = (collectionId: string): string =>
-  `${BASE}/${encodeURIComponent(collectionId)}`;
+const cataloguePath = (catalogueId: string): string =>
+  `${BASE}/${encodeURIComponent(catalogueId)}`;
 
 const removedSchema = z.object({ removed: z.literal(true) });
 const leftSchema = z.object({ left: z.literal(true) });
 
 export const accessService = {
   /** Who has access, and — to the owner — every pending invitation. */
-  async getAccess(collectionId: string): Promise<CollectionAccess> {
+  async getAccess(catalogueId: string): Promise<CatalogueAccess> {
     const row = await apiRequest<unknown>(
-      `${collectionPath(collectionId)}/access`,
+      `${cataloguePath(catalogueId)}/access`,
     );
-    return collectionAccessSchema.parse(row);
+    return catalogueAccessSchema.parse(row);
   },
 
   /**
@@ -45,12 +45,9 @@ export const accessService = {
    * already gone (a stale card) is the API's `409`, left for the card to
    * surface with a refresh.
    */
-  async removeCollaborator(
-    collectionId: string,
-    userId: string,
-  ): Promise<void> {
+  async removeCollaborator(catalogueId: string, userId: string): Promise<void> {
     const row = await apiRequest<unknown>(
-      `${collectionPath(collectionId)}/collaborators/${encodeURIComponent(userId)}`,
+      `${cataloguePath(catalogueId)}/collaborators/${encodeURIComponent(userId)}`,
       { method: "DELETE" },
     );
     removedSchema.parse(row);
@@ -60,28 +57,28 @@ export const accessService = {
    * The collaborator's own exit. `/me` is the caller's membership whatever its
    * id is, so no account id travels from here.
    */
-  async leaveCollection(collectionId: string): Promise<void> {
+  async leaveCatalogue(catalogueId: string): Promise<void> {
     const row = await apiRequest<unknown>(
-      `${collectionPath(collectionId)}/collaborators/me`,
+      `${cataloguePath(catalogueId)}/collaborators/me`,
       { method: "DELETE" },
     );
     leftSchema.parse(row);
   },
 
   /**
-   * Owner-only: transfer the collection to a collaborator. Immediate — the answer
+   * Owner-only: transfer the catalogue to a collaborator. Immediate — the answer
    * is the confirmation, not a pending offer — and `emailSent` only says
    * whether the new owner was notified. A target who is not a collaborator (or
    * is the owner) is the API's `409`, for the card to show with a refresh.
    */
-  async transferCollection(
-    collectionId: string,
+  async transferCatalogue(
+    catalogueId: string,
     userId: string,
-  ): Promise<CollectionTransferResponse> {
+  ): Promise<CatalogueTransferResponse> {
     const row = await apiRequest<unknown>(
-      `${collectionPath(collectionId)}/transfer`,
+      `${cataloguePath(catalogueId)}/transfer`,
       { method: "POST", body: { userId } },
     );
-    return collectionTransferResponseSchema.parse(row);
+    return catalogueTransferResponseSchema.parse(row);
   },
 };

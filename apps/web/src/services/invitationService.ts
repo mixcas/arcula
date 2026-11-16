@@ -6,7 +6,7 @@
  * calls — it is not stored, not echoed, and not logged.
  *
  * Every response is parsed through the shared wire schemas (the same doctrine
- * as the collection service): a reshaped document is a parse failure at the
+ * as the catalogue service): a reshaped document is a parse failure at the
  * boundary, not a half-rendered page. That includes the one structured refusal
  * the page reads — a wrong-account acceptance, whose invited address rides
  * `error.details.email` — so a refusal that stops carrying it fails loudly
@@ -15,12 +15,12 @@
 
 import { z } from "zod";
 import {
-  collectionReadSchema,
+  catalogueReadSchema,
   invitationCreateResponseSchema,
   invitationInboxEntrySchema,
   invitationPreviewSchema,
   invitationSummarySchema,
-  type Collection,
+  type Catalogue,
   type InvitationCreateResponse,
   type InvitationInboxEntry,
   type InvitationPreview,
@@ -31,20 +31,20 @@ import { ApiRequestError, apiRequest } from "./api";
 const BASE = "/api/v1/invitations";
 /** The invitee's own offers: listed and declined by id, never accepted here. */
 const INBOX = "/api/v1/me/invitations";
-/** The owner's administration of a collection's offers. */
-const offersPath = (collectionId: string): string =>
-  `/api/v1/collections/${encodeURIComponent(collectionId)}/invitations`;
+/** The owner's administration of a catalogue's offers. */
+const offersPath = (catalogueId: string): string =>
+  `/api/v1/catalogues/${encodeURIComponent(catalogueId)}/invitations`;
 
 /** The forbidden envelope's detail on a wrong-account acceptance. */
 const wrongAccountDetailSchema = z.object({ email: z.string() });
 
 /**
- * The accept route's two meaningful answers: the collection the account now
+ * The accept route's two meaningful answers: the catalogue the account now
  * shares, or the address the invitation was actually for. Every other outcome
  * is an error and stays one.
  */
 export type AcceptInvitationOutcome =
-  | { status: "accepted"; collection: Collection }
+  | { status: "accepted"; catalogue: Catalogue }
   | { status: "wrong-account"; email: string };
 
 const path = (token: string, suffix = ""): string =>
@@ -81,7 +81,7 @@ export const invitationService = {
       });
       return {
         status: "accepted",
-        collection: collectionReadSchema.parse(row),
+        catalogue: catalogueReadSchema.parse(row),
       };
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 403) {
@@ -131,10 +131,10 @@ export const invitationService = {
    * offer) is its `409` prose, for the card to show as written.
    */
   async createInvitation(
-    collectionId: string,
+    catalogueId: string,
     email: string,
   ): Promise<InvitationCreateResponse> {
-    const row = await apiRequest<unknown>(offersPath(collectionId), {
+    const row = await apiRequest<unknown>(offersPath(catalogueId), {
       method: "POST",
       body: { email },
     });
@@ -148,11 +148,11 @@ export const invitationService = {
    * window rather than discovering it here.
    */
   async resendInvitation(
-    collectionId: string,
+    catalogueId: string,
     invitationId: string,
   ): Promise<InvitationCreateResponse> {
     const row = await apiRequest<unknown>(
-      `${offersPath(collectionId)}/${encodeURIComponent(invitationId)}/resend`,
+      `${offersPath(catalogueId)}/${encodeURIComponent(invitationId)}/resend`,
       { method: "POST" },
     );
     return invitationCreateResponseSchema.parse(row);
@@ -164,11 +164,11 @@ export const invitationService = {
    * it from the list.
    */
   async revokeInvitation(
-    collectionId: string,
+    catalogueId: string,
     invitationId: string,
   ): Promise<InvitationSummary> {
     const row = await apiRequest<unknown>(
-      `${offersPath(collectionId)}/${encodeURIComponent(invitationId)}`,
+      `${offersPath(catalogueId)}/${encodeURIComponent(invitationId)}`,
       { method: "DELETE" },
     );
     return invitationSummarySchema.parse(row);

@@ -86,7 +86,7 @@ vi.mock("@/services/artworkService", () => ({
 }));
 
 // The page mounts the suggestions hook; an empty list is the ordinary
-// no-collections answer, and keeps these save-path tests off the network.
+// no-catalogues answer, and keeps these save-path tests off the network.
 vi.mock("@/services/artistNameService", () => ({
   artistNameService: { getArtistNames: vi.fn().mockResolvedValue([]) },
 }));
@@ -109,15 +109,15 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-const COLLECTION_ID = "AAAAAAAAAAAAAAAAAAAA";
+const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
-const COLLECTION_PARAM = `flores-solares-${COLLECTION_ID}`;
+const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
 
 /** The server's answer for a created work. */
 const created = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: COLLECTION_ID,
+  collectionId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -148,7 +148,7 @@ const renderPage = (search = "") =>
         <Notifications />
         <MemoryRouter
           initialEntries={[
-            `/manage/collection/${COLLECTION_PARAM}/artwork/add${search}`,
+            `/manage/catalogue/${CATALOGUE_PARAM}/artwork/add${search}`,
           ]}
         >
           {/* Outside the routes, so it reports wherever the page lands — the Add
@@ -156,7 +156,7 @@ const renderPage = (search = "") =>
           <LocationProbe />
           <Routes>
             <Route
-              path="/manage/collection/:collectionId/artwork/add"
+              path="/manage/catalogue/:catalogueId/artwork/add"
               element={<ArtworkAddPage />}
             />
           </Routes>
@@ -176,7 +176,7 @@ const renderPage = (search = "") =>
  * exactly the change worth being told about.
  */
 const editPath = () =>
-  `/manage/collection/${COLLECTION_PARAM}/artwork/estudio-en-rojo-${ARTWORK_ID}`;
+  `/manage/catalogue/${CATALOGUE_PARAM}/artwork/estudio-en-rojo-${ARTWORK_ID}`;
 
 /** Fills the two required fields and saves. */
 const save = async (
@@ -217,17 +217,17 @@ describe("the Add page — the single write", () => {
     commits.documents = [{ entryId: "d1", name: "report.pdf" }];
     const user = userEvent.setup();
     renderPage();
-    // No search was active, so Cancel is the collection's plain address.
+    // No search was active, so Cancel is the catalogue's plain address.
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}`,
+      `/manage/catalogue/${CATALOGUE_PARAM}`,
     );
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
     expect(createArtwork).toHaveBeenCalledTimes(1);
-    const [collectionId, body] = createArtwork.mock.calls[0];
-    expect(collectionId).toBe(COLLECTION_ID);
+    const [catalogueId, body] = createArtwork.mock.calls[0];
+    expect(catalogueId).toBe(CATALOGUE_ID);
     // The id the page staged under: minted from the shared contract — the
     // same mint the API uses — and ten base62 characters, never a hyphen. The
     // redirect below lands on `{title}-{id}`, and the route recovers the id by
@@ -236,7 +236,7 @@ describe("the Add page — the single write", () => {
     expect(body.title).toBe("Estudio en rojo");
     expect(body.artistName).toBe("María López");
     // A work the owner did not say otherwise about goes in front of the
-    // collection's gate.
+    // catalogue's gate.
     expect(body.status).toBe("published");
     // The staged entries pass through the hook's answer untouched: the page
     // neither reorders nor re-names them.
@@ -258,10 +258,10 @@ describe("the Add page — the single write", () => {
     const user = userEvent.setup();
     renderPage("?q=picasso");
 
-    // Cancel returns to the search the user left, not to the whole collection.
+    // Cancel returns to the search the user left, not to the whole catalogue.
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      `/manage/collection/${COLLECTION_PARAM}?q=picasso`,
+      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
     );
 
     await save(user);

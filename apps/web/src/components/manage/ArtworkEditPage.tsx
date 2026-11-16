@@ -38,13 +38,13 @@ import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
  * from renumbering fifty rows.
  */
 const ArtworkEditPage: React.FC = () => {
-  const { collectionId: collectionParam, artworkId: artworkParam } = useParams<{
-    collectionId: string;
+  const { catalogueId: catalogueParam, artworkId: artworkParam } = useParams<{
+    catalogueId: string;
     artworkId: string;
   }>();
   // Either segment may be a bare id or a "{slug}-{id}" param; the API needs the
   // bare ids.
-  const collectionId = parseId(collectionParam ?? "");
+  const catalogueId = parseId(catalogueParam ?? "");
   const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,10 +99,10 @@ const ArtworkEditPage: React.FC = () => {
   // and it lives inside the banner it failed to dismiss.
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // The hooks stage under the collection and artwork the route names — no load
+  // The hooks stage under the catalogue and artwork the route names — no load
   // has to complete first, because staging needs neither.
-  const photos = useArtworkPhotos({ collectionId, artworkId });
-  const documents = useArtworkDocuments({ collectionId, artworkId });
+  const photos = useArtworkPhotos({ catalogueId, artworkId });
+  const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
   // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each
@@ -111,7 +111,7 @@ const ArtworkEditPage: React.FC = () => {
   const { hydrate: documentsHydrate } = documents;
 
   useEffect(() => {
-    if (!collectionId || !artworkId) {
+    if (!catalogueId || !artworkId) {
       // The render below shows the invalid-id alert before any of this state,
       // so the guard has nothing to set — only the fetch to skip.
       return;
@@ -119,10 +119,7 @@ const ArtworkEditPage: React.FC = () => {
 
     const fetchArtwork = async () => {
       try {
-        const artwork = await artworkService.getArtwork(
-          collectionId,
-          artworkId,
-        );
+        const artwork = await artworkService.getArtwork(catalogueId, artworkId);
         if (!artwork) {
           setLoadError("Artwork not found");
           return;
@@ -151,11 +148,11 @@ const ArtworkEditPage: React.FC = () => {
     };
 
     void fetchArtwork();
-  }, [collectionId, artworkId, initialize, photosHydrate, documentsHydrate]);
+  }, [catalogueId, artworkId, initialize, photosHydrate, documentsHydrate]);
 
   // Put the canonical "{title}-{id}" in the address bar once the title is
-  // known, preserving the collection segment exactly as it arrived — this page
-  // never loads the collection, so it has no name to re-slug it from.
+  // known, preserving the catalogue segment exactly as it arrived — this page
+  // never loads the catalogue, so it has no name to re-slug it from.
   // `replace` swaps the current history entry rather than adding one.
   useEffect(() => {
     if (!artworkParam || loadedTitle === null) {
@@ -167,7 +164,7 @@ const ArtworkEditPage: React.FC = () => {
     }
     void navigate(
       {
-        pathname: `/manage/collection/${collectionParam}/artwork/${canonical}`,
+        pathname: `/manage/catalogue/${catalogueParam}/artwork/${canonical}`,
         // The search came in on the address and must survive the rewrite, or
         // Cancel would lose the result set a moment after the page loaded.
         search: location.search,
@@ -176,7 +173,7 @@ const ArtworkEditPage: React.FC = () => {
     );
   }, [
     artworkParam,
-    collectionParam,
+    catalogueParam,
     artworkId,
     loadedTitle,
     navigate,
@@ -195,7 +192,7 @@ const ArtworkEditPage: React.FC = () => {
     setRestoreError(null);
     setRestoring(true);
     try {
-      await artworkService.restoreArtwork(collectionId, artworkId);
+      await artworkService.restoreArtwork(catalogueId, artworkId);
       setIsDeleted(false);
     } catch (err) {
       // The banner stays, so the retry is the same button; the failure is
@@ -208,7 +205,7 @@ const ArtworkEditPage: React.FC = () => {
     }
   };
 
-  if (!artworkId || !collectionId) {
+  if (!artworkId || !catalogueId) {
     return <Alert color="red">Invalid artwork id</Alert>;
   }
 
@@ -228,10 +225,10 @@ const ArtworkEditPage: React.FC = () => {
       {isDeleted ? (
         <Alert color="orange" title="This artwork is deleted" mb="md">
           <Text size="sm">
-            It is not shown in the collection or on its public page, and Save
+            It is not shown in the catalogue or on its public page, and Save
             stays off until it is back. Restore it here to keep editing;
             anything you have typed is kept. The Deleted view lists the
-            collection&rsquo;s deleted works.
+            catalogue&rsquo;s deleted works.
           </Text>
           {restoreError ? (
             <Alert color="red" title="Restore failed" mt="sm">
@@ -267,7 +264,7 @@ const ArtworkEditPage: React.FC = () => {
             // full new sequences whenever they differ from what was loaded.
             const photosCommit = photos.commit();
             const documentsCommit = documents.commit();
-            await artworkService.updateArtwork(collectionId, artworkId, {
+            await artworkService.updateArtwork(catalogueId, artworkId, {
               ...toArtworkUpdate(loadedValues, payload),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
@@ -317,7 +314,7 @@ const ArtworkEditPage: React.FC = () => {
           submitLabel="Save Changes"
           submitting={form.submitting}
           submitDisabled={isDeleted}
-          cancelTo={`/manage/collection/${collectionParam ?? ""}${searchSuffix}`}
+          cancelTo={`/manage/catalogue/${catalogueParam ?? ""}${searchSuffix}`}
         />
       </form>
     </>

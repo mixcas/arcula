@@ -37,9 +37,9 @@ import {
  * not.
  */
 const ArtworkAddPage: React.FC = () => {
-  const { collectionId: param } = useParams<{ collectionId: string }>();
+  const { catalogueId: param } = useParams<{ catalogueId: string }>();
   // The route carries "{slug}-{id}"; the API needs the bare id.
-  const collectionId = parseId(param ?? "");
+  const catalogueId = parseId(param ?? "");
   const navigate = useNavigate();
   // Add is reached from a search result set; the query travels with the page
   // so Cancel returns to it and the new work's Edit page keeps it. Built from
@@ -72,9 +72,9 @@ const ArtworkAddPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   // Photos and documents live outside the form entirely — see useArtworkPhotos
   // for why a File cannot survive `useForm` in uncontrolled mode. Staging
-  // happens at add time, under the collection the route names.
-  const photos = useArtworkPhotos({ collectionId, artworkId });
-  const documents = useArtworkDocuments({ collectionId, artworkId });
+  // happens at add time, under the catalogue the route names.
+  const photos = useArtworkPhotos({ catalogueId, artworkId });
+  const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
 
   return (
@@ -92,8 +92,8 @@ const ArtworkAddPage: React.FC = () => {
         // form.key is for. It is a function of the field path, not a value.
         onSubmit={form.onSubmit(async (payload) => {
           // Not field validation, so this guard stays out of the schema.
-          if (!collectionId) {
-            setError("Invalid collection id");
+          if (!catalogueId) {
+            setError("Invalid catalogue id");
             return;
           }
 
@@ -110,15 +110,15 @@ const ArtworkAddPage: React.FC = () => {
               documents.commit() ?? [],
             );
             const created = await artworkService.createArtwork(
-              collectionId,
+              catalogueId,
               body,
             );
             notifications.show({
               title: "Artwork created",
-              message: `"${created.title}" was added to this collection.`,
+              message: `"${created.title}" was added to this catalogue.`,
             });
             void navigate(
-              `/manage/collection/${param ?? ""}/artwork/${artworkSlug(
+              `/manage/catalogue/${param ?? ""}/artwork/${artworkSlug(
                 created.title,
                 created.id,
               )}${searchSuffix}`,
@@ -159,7 +159,7 @@ const ArtworkAddPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Artwork"
           submitting={form.submitting}
-          cancelTo={`/manage/collection/${param ?? ""}${searchSuffix}`}
+          cancelTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
         />
       </form>
     </>

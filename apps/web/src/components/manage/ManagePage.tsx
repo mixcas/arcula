@@ -2,14 +2,14 @@ import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader, Badge } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { collectionService } from "@/services/collectionService";
-import { collectionLimitForTier, collectionSlug } from "@arcula/shared";
-import type { Collection } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
+import { catalogueLimitForTier, catalogueSlug } from "@arcula/shared";
+import type { Catalogue } from "@arcula/shared";
 import PendingInvitations from "./PendingInvitations";
 
 const ManagePage: React.FC = () => {
   const { currentUser, me } = useAuth();
-  const [collections, setCollections] = useState<Collection[]>([]);
+  const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,22 +18,22 @@ const ManagePage: React.FC = () => {
   const userId = currentUser?.uid;
 
   useEffect(() => {
-    const fetchCollections = async () => {
+    const fetchCatalogues = async () => {
       if (!userId) return;
 
       try {
-        // The session decides whose collections these are; the client sends
+        // The session decides whose catalogues these are; the client sends
         // nothing but the path.
-        setCollections(await collectionService.getUserCollections());
+        setCatalogues(await catalogueService.getUserCatalogues());
       } catch (err) {
-        console.error("Error fetching collections:", err);
-        setError("Failed to fetch collections");
+        console.error("Error fetching catalogues:", err);
+        setError("Failed to fetch catalogues");
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchCollections();
+    void fetchCatalogues();
   }, [userId]);
 
   if (loading) {
@@ -59,25 +59,25 @@ const ManagePage: React.FC = () => {
   // the disabled button is a security boundary — they must never be
   // described as one.
   //
-  // The count is the collections this account OWNS, not the ones it can see:
-  // a shared collection is not the viewer's to create, and the cap gates
+  // The count is the catalogues this account OWNS, not the ones it can see:
+  // a shared catalogue is not the viewer's to create, and the cap gates
   // creation (ADR-0004). Counting the rows would lock a collaborator out of
-  // their first own collection.
-  const owned = collections.filter((c) => c.role === "owner");
-  const limit = collectionLimitForTier(me?.tier);
+  // their first own catalogue.
+  const owned = catalogues.filter((c) => c.role === "owner");
+  const limit = catalogueLimitForTier(me?.tier);
   const atCap = owned.length >= limit;
 
   return (
     <>
-      {/* Offers addressed to this account sit above the collection list: they
+      {/* Offers addressed to this account sit above the catalogue list: they
           are the one thing on the dashboard that needs an answer. */}
       <PendingInvitations />
 
       <Group mb="xl" justify="space-between" align="center">
-        <Text size="h1">My Collections</Text>
+        <Text size="h1">My Catalogues</Text>
         <Group gap="sm">
           <Text size="sm" c="dim">
-            {owned.length} of {limit} collection
+            {owned.length} of {limit} catalogue
             {limit === 1 ? "" : "s"}
           </Text>
           {atCap ? (
@@ -87,44 +87,42 @@ const ManagePage: React.FC = () => {
             // refuses. A real disabled control cannot, and it is the one
             // that reads as "not offered".
             <Button variant="outline" disabled>
-              New collection
+              New catalogue
             </Button>
           ) : (
             <Button
               component={Link}
-              to="/manage/collection/new"
+              to="/manage/catalogue/new"
               variant="outline"
             >
-              New collection
+              New catalogue
             </Button>
           )}
         </Group>
       </Group>
 
-      {collections.length === 0 ? (
-        <Text>No collections yet. Create your first collection!</Text>
+      {catalogues.length === 0 ? (
+        <Text>No catalogues yet. Create your first catalogue!</Text>
       ) : (
         <div>
-          {collections.map((collection) => (
-            <Card key={collection.id} shadow="sm" p="lg" mb="md">
+          {catalogues.map((catalogue) => (
+            <Card key={catalogue.id} shadow="sm" p="lg" mb="md">
               <Group>
-                <Text size="h3">{collection.name}</Text>
-                {/* The role is named, not implied: a shared collection sits
+                <Text size="h3">{catalogue.name}</Text>
+                {/* The role is named, not implied: a shared catalogue sits
                     beside an owned one, and who owns it is the fact the row
                     adds. The owner's name rides the shared row alone. */}
                 <Badge variant="light" color="gray">
-                  {collection.role === "collaborator"
-                    ? "Collaborator"
-                    : "Owner"}
+                  {catalogue.role === "collaborator" ? "Collaborator" : "Owner"}
                 </Badge>
-                {collection.ownerName && (
+                {catalogue.ownerName && (
                   <Text size="sm" c="dim">
-                    by {collection.ownerName}
+                    by {catalogue.ownerName}
                   </Text>
                 )}
                 <Button
                   component={Link}
-                  to={`/manage/collection/${collectionSlug(collection.name, collection.id)}`}
+                  to={`/manage/catalogue/${catalogueSlug(catalogue.name, catalogue.id)}`}
                 >
                   View
                 </Button>

@@ -33,7 +33,7 @@
  * The nav is left to its two-column row for now; the space for a second line
  * is reserved and deliberately unrendered. An empty box is indistinguishable
  * from no box, and the reserved slot is better recorded here than as markup.
- * (`collection.description` is *not* the thing for it — see the footer
+ * (`catalogue.description` is *not* the thing for it — see the footer
  * below, which is where the description actually lives.)
  */
 
@@ -56,9 +56,9 @@ export interface FooterArtwork {
 }
 
 interface BasicxChromeProps {
-  collectionTitle: string;
-  /** Canonical public path of the collection, for the nav title and the back link. */
-  collectionPath: string;
+  catalogueTitle: string;
+  /** Canonical public path of the catalogue, for the nav title and the back link. */
+  cataloguePath: string;
   view: "home" | "artwork";
   /**
    * The artwork currently in view, or null before the first section reports
@@ -67,7 +67,7 @@ interface BasicxChromeProps {
    */
   artwork: FooterArtwork | null;
   /**
-   * The collection description, already trimmed. Blank means the footer's
+   * The catalogue description, already trimmed. Blank means the footer's
    * left slot renders the artwork and nothing else.
    */
   description: string;
@@ -90,8 +90,8 @@ const DIM_COLOR = "rgba(0, 0, 0, 0.4)";
 const DESCRIPTION_MAX_WIDTH_REM = "22rem";
 
 const BasicxChrome: React.FC<BasicxChromeProps> = ({
-  collectionTitle,
-  collectionPath,
+  catalogueTitle,
+  cataloguePath,
   view,
   artwork,
   description,
@@ -100,7 +100,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
 }) => (
   <>
     {/*
-      Nav. Two columns, gutter 1rem: the collection title on the left where the
+      Nav. Two columns, gutter 1rem: the catalogue title on the left where the
       reference has its site title, links right-aligned where it has
       Information / Index / Email.
       Padding: 1rem at the sides, 0.9rem at the top, and 2.5rem below — the last
@@ -120,7 +120,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
       <Group justify="space-between" align="flex-start" gap="md" wrap="nowrap">
         <Anchor
           component={Link}
-          to={collectionPath}
+          to={cataloguePath}
           underline="never"
           size="bodycopy"
           fw={550}
@@ -128,7 +128,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
           c={LINK_COLOR}
           style={{ pointerEvents: "auto" }}
         >
-          {collectionTitle}
+          {catalogueTitle}
         </Anchor>
 
         <Group gap="md" wrap="nowrap" style={{ pointerEvents: "auto" }}>
@@ -137,7 +137,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
             // one word that names what it returns to.
             <Anchor
               component={Link}
-              to={collectionPath}
+              to={cataloguePath}
               underline="never"
               size="bodycopy"
               fw={550}
@@ -151,14 +151,14 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
             TODO(owner link): this slot is conditional on who is looking, and
             only half of that is built.
 
-            Intended: when the visitor is signed in AND the collection is
-            theirs, show a link to the manage side here — the collection page on
+            Intended: when the visitor is signed in AND the catalogue is
+            theirs, show a link to the manage side here — the catalogue page on
             `home`, and the artwork's edit page on `artwork`, since the two
             public views are about different things. For anyone else, this
             attribution link.
 
             Not built: it needs `useAuth` plus a way to know the viewer owns the
-            collection, and a manage-side path per view. `SkinProps` carries only
+            catalogue, and a manage-side path per view. `SkinProps` carries only
             the public paths, and adding a second pair for one conditional link
             is not a trade worth making before anything needs it. Left as this
             link rather than nothing, so the slot is not dead and the eventual
@@ -181,7 +181,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
     </Box>
 
     {/*
-      Footer: the collection description pinned to the bottom-left of the bar,
+      Footer: the catalogue description pinned to the bottom-left of the bar,
       against the artwork in view on the bottom-right — two stacked lines, the
       title bold on top and the artist beneath it, dimmer because it is the
       quieter of the two. The title links to the artwork's own public view,
@@ -212,7 +212,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
         gap="xl"
       >
         {/*
-          The description, when the collection has one, in the left slot.
+          The description, when the catalogue has one, in the left slot.
           Fades out in place: `visibility` transitions as a discrete step that
           stays `visible` until the end of the duration, so the text is
           readable while it fades and gone (not selectable, not announced)

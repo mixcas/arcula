@@ -1,0 +1,100 @@
+/**
+ * The catalogue service layer.
+ *
+ * One HTTP call per operation, through `apiRequest`; GET bodies are parsed
+ * through `catalogueReadSchema` (the wire contract) so a server reshape is
+ * a parse error at the boundary, not a render of a half-shaped document.
+ * Writes return the server's answer parsed the same way.
+ */
+
+import {
+  catalogueReadSchema,
+  type Catalogue,
+  type CatalogueCreatePayload,
+  type CatalogueUpdatePayload,
+} from "@arcula/shared";
+import { ApiRequestError, apiRequest } from "./api";
+
+const BASE = "/api/v1/catalogues";
+
+export const catalogueService = {
+  /** The catalogues the session owns and those shared with it — the
+   *  /manage dashboard, each row carrying its `role`. */
+  async getUserCatalogues(): Promise<Catalogue[]> {
+    const rows = await apiRequest<unknown[]>(BASE);
+    return rows.map((row) => catalogueReadSchema.parse(row));
+  },
+
+  /**
+   * One catalogue, by id. A missing catalogue resolves `null`; a private
+   * one the caller does not own rejects (403) — the public views map that
+   * refusal to their `private` state, so it must stay an error.
+   */
+  async getCatalogue(id: string): Promise<Catalogue | null> {
+    try {
+      const row = await apiRequest<unknown>(`${BASE}/${id}`);
+      return catalogueReadSchema.parse(row);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  },
+
+  /**
+   * Create. The id is minted server-side; the answer is the created
+   * catalogue, so the redirect needs no second read. Reaching the tier cap
+   * rejects with 409 `limit-reached` — its message is the one the form shows.
+   */
+  async createCatalogue(
+    payload: Pick<CatalogueCreatePayload, "name" | "description">,
+  ): Promise<Catalogue> {
+    const row = await apiRequest<unknown>(BASE, {
+      method: "POST",
+      body: payload,
+    });
+    return catalogueReadSchema.parse(row);
+  },
+
+  /**
+   * The settings save. `null` clears a field; an absent one is left alone —
+   * the settings page builds the payload so that only the changed keys are
+   * present.
+   */
+  async updateCatalogue(
+    id: string,
+    payload: CatalogueUpdatePayload,
+  ): Promise<Catalogue> {
+    const row = await apiRequest<unknown>(`${BASE}/${id}`, {
+      method: "PATCH",
+      body: payload,
+    });
+    return catalogueReadSchema.parse(row);
+  },
+
+  /**
+   * Owner-only: delete the catalogue. The answer is a `204` with no body,
+   * so the act's fact is the resolved call. A catalogue that is absent or
+   * was already deleted rejects `404` — for the caller that is the same
+   * outcome, and the Data tab folds it to success.
+   */
+  async deleteCatalogue(id: string): Promise<void> {
+    await apiRequest<void>(`${BASE}/${id}`, { method: "DELETE" });
+  },
+
+  /**
+   * The lock screen's attempt: a right password sets the Access grant cookie
+   * for this catalogue, and the ordinary read then succeeds. A wrong one
+   * rejects with 403 `invalid-password`; a catalogue with no password (or a
+   * private one) rejects with 409 — there is nothing to unlock; and one too
+   * many failures from this address rejects with 429 `too-many-attempts`,
+   * whose message names the window.
+   */
+  async unlockCatalogue(id: string, password: string): Promise<void> {
+    await apiRequest<unknown>(`${BASE}/${id}/unlock`, {
+      method: "POST",
+      body: { password },
+    });
+  },
+};

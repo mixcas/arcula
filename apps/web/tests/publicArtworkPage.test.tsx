@@ -8,9 +8,9 @@ import { MantineProvider } from "@mantine/core";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import PublicArtworkPage from "@/components/collection/PublicArtworkPage";
+import PublicArtworkPage from "@/components/catalogue/PublicArtworkPage";
 import { ApiRequestError } from "@/services/api";
-import type { Artwork, Collection } from "@arcula/shared";
+import type { Artwork, Catalogue } from "@arcula/shared";
 
 // React 19 requires this flag for act() outside a browser environment.
 (
@@ -46,17 +46,17 @@ vi.mock("@mantine/carousel", async () => {
   return carouselMock();
 });
 
-const getCollection = vi.fn<() => Promise<Collection | null>>();
+const getCatalogue = vi.fn<() => Promise<Catalogue | null>>();
 const getArtwork = vi.fn<() => Promise<Artwork | null>>();
-const getCollectionArtworks = vi.fn<() => Promise<Artwork[]>>();
-const unlockCollection = vi.fn<() => Promise<void>>();
+const getCatalogueArtworks = vi.fn<() => Promise<Artwork[]>>();
+const unlockCatalogue = vi.fn<() => Promise<void>>();
 
-vi.mock("@/services/collectionService", () => ({
-  collectionService: {
-    getCollection: (...args: unknown[]) =>
-      (getCollection as unknown as (...a: unknown[]) => unknown)(...args),
-    unlockCollection: (...args: unknown[]) =>
-      (unlockCollection as unknown as (...a: unknown[]) => unknown)(...args),
+vi.mock("@/services/catalogueService", () => ({
+  catalogueService: {
+    getCatalogue: (...args: unknown[]) =>
+      (getCatalogue as unknown as (...a: unknown[]) => unknown)(...args),
+    unlockCatalogue: (...args: unknown[]) =>
+      (unlockCatalogue as unknown as (...a: unknown[]) => unknown)(...args),
   },
 }));
 
@@ -64,8 +64,8 @@ vi.mock("@/services/artworkService", () => ({
   artworkService: {
     getArtwork: (...args: unknown[]) =>
       (getArtwork as unknown as (...a: unknown[]) => unknown)(...args),
-    getCollectionArtworks: (...args: unknown[]) =>
-      (getCollectionArtworks as unknown as (...a: unknown[]) => unknown)(
+    getCatalogueArtworks: (...args: unknown[]) =>
+      (getCatalogueArtworks as unknown as (...a: unknown[]) => unknown)(
         ...args,
       ),
   },
@@ -74,17 +74,17 @@ vi.mock("@/services/artworkService", () => ({
 /**
  * An opaque, hyphen-free id.
  *
- * Not `"collection-1"`: `parseId` treats everything after the *last* hyphen as
+ * Not `"catalogue-1"`: `parseId` treats everything after the *last* hyphen as
  * the document id, so a hyphenated id would be cut down to `"1"` — and the
- * artwork's own `collectionId` would no longer match the parsed one, failing
+ * artwork's own `catalogueId` would no longer match the parsed one, failing
  * the parent check and rendering "not available". Real ids are 20
  * alphanumeric characters, and a test should use something that cannot be
  * mistaken for a slug.
  */
-const COLLECTION_ID = "AAAAAAAAAAAAAAAAAAAA";
+const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 
-const collection = (overrides: Partial<Collection> = {}): Collection => ({
-  id: COLLECTION_ID,
+const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
+  id: CATALOGUE_ID,
   name: "Flores Solares",
   userId: "owner-1",
   isPublic: true,
@@ -112,7 +112,7 @@ const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: COLLECTION_ID,
+  collectionId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -126,12 +126,12 @@ const renderPage = () =>
     <MantineProvider>
       <MemoryRouter
         initialEntries={[
-          `/collection/flores-solares-${COLLECTION_ID}/artwork/estudio-en-rojo-${ARTWORK_ID}`,
+          `/catalogue/flores-solares-${CATALOGUE_ID}/artwork/estudio-en-rojo-${ARTWORK_ID}`,
         ]}
       >
         <Routes>
           <Route
-            path="/collection/:collectionId/artwork/:artworkId"
+            path="/catalogue/:catalogueId/artwork/:artworkId"
             element={<PublicArtworkPage />}
           />
         </Routes>
@@ -140,10 +140,10 @@ const renderPage = () =>
   );
 
 beforeEach(() => {
-  getCollection.mockReset();
+  getCatalogue.mockReset();
   getArtwork.mockReset();
-  getCollectionArtworks.mockReset();
-  unlockCollection.mockReset();
+  getCatalogueArtworks.mockReset();
+  unlockCatalogue.mockReset();
 });
 
 afterEach(() => {
@@ -151,8 +151,8 @@ afterEach(() => {
 });
 
 describe("PublicArtworkPage — the reachable states", () => {
-  it("renders the artwork's section in a published collection", async () => {
-    getCollection.mockResolvedValue(collection());
+  it("renders the artwork's section in a published catalogue", async () => {
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockResolvedValue(artwork({ photos: [{ ...photo("p1", 0) }] }));
     renderPage();
     // The section carries the artwork's title, so finding it proves the whole
@@ -174,26 +174,24 @@ describe("PublicArtworkPage — the reachable states", () => {
     expect(screen.getByText("María López")).toBeVisible();
   });
 
-  it("says the collection is private when the collection read is denied", async () => {
-    getCollection.mockRejectedValue(
+  it("says the catalogue is private when the catalogue read is denied", async () => {
+    getCatalogue.mockRejectedValue(
       new ApiRequestError(403, "forbidden", "denied"),
     );
     renderPage();
-    // The collection read is the gate, so its answer is the one that shows —
+    // The catalogue read is the gate, so its answer is the one that shows —
     // even though the visitor asked about an artwork.
-    expect(
-      await screen.findByText("This collection is private."),
-    ).toBeVisible();
-    // A private collection's artworks are never requested, so a private
-    // collection's contents cannot leak through this page.
+    expect(await screen.findByText("This catalogue is private.")).toBeVisible();
+    // A private catalogue's artworks are never requested, so a private
+    // catalogue's contents cannot leak through this page.
     expect(getArtwork).not.toHaveBeenCalled();
   });
 
   it("says the artwork is not available when the artwork read returns nothing", async () => {
-    getCollection.mockResolvedValue(collection());
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockResolvedValue(null);
     renderPage();
-    // Not "this collection is private": the collection is public, and the
+    // Not "this catalogue is private": the catalogue is public, and the
     // artwork is the thing that cannot be shown. The API answers 404 for a
     // private, soft-deleted and an absent work alike — saying which was
     // refused would be a disclosure — and the service folds that 404 to null.
@@ -202,12 +200,12 @@ describe("PublicArtworkPage — the reachable states", () => {
     ).toBeVisible();
   });
 
-  it("is not found for a public artwork in a different collection", async () => {
-    getCollection.mockResolvedValue(collection());
+  it("is not found for a public artwork in a different catalogue", async () => {
+    getCatalogue.mockResolvedValue(catalogue());
     // The API serves a public artwork by id whatever its parent, so nothing
     // server-side stops this. The page's own check is the whole guard.
     getArtwork.mockResolvedValue(
-      artwork({ collectionId: "some-other-collection" }),
+      artwork({ collectionId: "some-other-catalogue" }),
     );
     renderPage();
     expect(
@@ -216,7 +214,7 @@ describe("PublicArtworkPage — the reachable states", () => {
   });
 
   it("reports a transport failure as an error, not as a missing artwork", async () => {
-    getCollection.mockResolvedValue(collection());
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockRejectedValue(new ApiRequestError(500, "internal", "down"));
     renderPage();
     // The distinction from the case above is the point: reporting "this
@@ -227,7 +225,7 @@ describe("PublicArtworkPage — the reachable states", () => {
   });
 
   it("offers a way back to the index, which the homepage does not", async () => {
-    getCollection.mockResolvedValue(collection());
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockResolvedValue(artwork());
     renderPage();
     await waitFor(() =>
@@ -235,53 +233,53 @@ describe("PublicArtworkPage — the reachable states", () => {
         screen.getByRole("region", { name: "Estudio en rojo" }),
       ).toBeVisible(),
     );
-    // It appears only here: on the homepage the collection title is already the
+    // It appears only here: on the homepage the catalogue title is already the
     // way back, and two links to the same place would be noise.
     expect(screen.getByRole("link", { name: "Index" })).toHaveAttribute(
       "href",
-      `/collection/flores-solares-${COLLECTION_ID}`,
+      `/catalogue/flores-solares-${CATALOGUE_ID}`,
     );
   });
 
-  it("never requests the collection's whole list", async () => {
-    getCollection.mockResolvedValue(collection());
+  it("never requests the catalogue's whole list", async () => {
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockResolvedValue(artwork());
     renderPage();
     await waitFor(() => expect(getArtwork).toHaveBeenCalled());
     // Only the single work: that saves a round trip, and nothing on this view
-    // needs a neighbour — the page offers a link back to the collection and
+    // needs a neighbour — the page offers a link back to the catalogue and
     // nothing else.
-    expect(getCollectionArtworks).not.toHaveBeenCalled();
+    expect(getCatalogueArtworks).not.toHaveBeenCalled();
   });
 });
 
-describe("PublicArtworkPage — a protected collection", () => {
-  /** The challenge: a Public collection with a password, and no grant held. */
+describe("PublicArtworkPage — a protected catalogue", () => {
+  /** The challenge: a Public catalogue with a password, and no grant held. */
   const passwordRequired = (): ApiRequestError =>
     new ApiRequestError(
       403,
       "password-required",
-      "This collection is protected",
+      "This catalogue is protected",
       undefined,
       { collectionName: "Flores Solares" },
     );
 
   it("asks for the password rather than saying the artwork is gone", async () => {
-    // A work's own link is not a way around the collection's lock (ADR-0005):
-    // the collection read is the gate on this page too, so its challenge is
+    // A work's own link is not a way around the catalogue's lock (ADR-0005):
+    // the catalogue read is the gate on this page too, so its challenge is
     // what the visitor gets.
-    getCollection.mockRejectedValue(passwordRequired());
+    getCatalogue.mockRejectedValue(passwordRequired());
     renderPage();
     expect(await screen.findByText("Flores Solares")).toBeVisible();
     expect(screen.getByRole("button", { name: "Unlock" })).toBeVisible();
     expect(getArtwork).not.toHaveBeenCalled();
   });
 
-  it("re-runs the ordinary load on success, collection first and artwork after", async () => {
-    getCollection.mockRejectedValueOnce(passwordRequired());
-    getCollection.mockResolvedValue(collection());
+  it("re-runs the ordinary load on success, catalogue first and artwork after", async () => {
+    getCatalogue.mockRejectedValueOnce(passwordRequired());
+    getCatalogue.mockResolvedValue(catalogue());
     getArtwork.mockResolvedValue(artwork());
-    unlockCollection.mockResolvedValue(undefined);
+    unlockCatalogue.mockResolvedValue(undefined);
     renderPage();
 
     await userEvent.type(
@@ -295,8 +293,8 @@ describe("PublicArtworkPage — a protected collection", () => {
         screen.getByRole("region", { name: "Estudio en rojo" }),
       ).toBeVisible(),
     );
-    expect(unlockCollection).toHaveBeenCalledWith(COLLECTION_ID, "open-sesame");
-    expect(getCollection.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(unlockCatalogue).toHaveBeenCalledWith(CATALOGUE_ID, "open-sesame");
+    expect(getCatalogue.mock.invocationCallOrder[1]).toBeLessThan(
       getArtwork.mock.invocationCallOrder[0],
     );
   });

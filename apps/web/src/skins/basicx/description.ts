@@ -1,12 +1,12 @@
 /**
- * When the collection description is dismissed on Basicx's home view.
+ * When the catalogue description is dismissed on Basicx's home view.
  *
  * The description sits bottom-left in the fixed footer while the visitor is
  * on the very first photo of the *first* artwork. Two things dismiss it, and
  * once dismissed it never comes back for the visit:
  *
  * - Scrolling to the second artwork onwards — the description is an
- *   introduction to the collection, and the visitor past the first work has
+ *   introduction to the catalogue, and the visitor past the first work has
  *   moved on from the introduction.
  * - On the first artwork, clicking to the second photo — the first photo is
  *   the moment the description accompanies, and the next photo is the visitor

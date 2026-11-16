@@ -67,14 +67,14 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-const COLLECTION_ID = "collection-1";
+const CATALOGUE_ID = "catalogue-1";
 const ARTWORK_ID = "artwork-1";
 
 const Harness: React.FC<{ initialDocuments?: ArtworkDocument[] }> = ({
   initialDocuments,
 }) => {
   const documents = useArtworkDocuments({
-    collectionId: COLLECTION_ID,
+    catalogueId: CATALOGUE_ID,
     artworkId: ARTWORK_ID,
     initialDocuments,
   });
@@ -316,7 +316,7 @@ describe("DocumentsUploader", () => {
     // argument to the same call, and the pdf is not in it at all.
     expect(mediaService.processDocument).toHaveBeenCalledTimes(1);
     expect(mediaService.processDocument).toHaveBeenCalledWith(
-      COLLECTION_ID,
+      CATALOGUE_ID,
       ARTWORK_ID,
       stagedDocumentIds[0],
     );
@@ -393,7 +393,7 @@ describe("DocumentsUploader", () => {
     // Fire-and-forget, so await the assertion rather than the call.
     await waitFor(() => {
       expect(mediaService.discardDocument).toHaveBeenCalledWith(
-        COLLECTION_ID,
+        CATALOGUE_ID,
         ARTWORK_ID,
         entryId,
       );
@@ -447,7 +447,7 @@ const withHook = async (
   let latest: UseArtworkDocuments | null = null;
   const Probe: React.FC = () => {
     const documents = useArtworkDocuments({
-      collectionId: COLLECTION_ID,
+      catalogueId: CATALOGUE_ID,
       artworkId: ARTWORK_ID,
       initialDocuments,
     });
@@ -624,7 +624,7 @@ describe("addFiles", () => {
     expect(result.added).toHaveLength(0);
     await waitFor(() => {
       expect(mediaService.discardDocument).toHaveBeenCalledWith(
-        COLLECTION_ID,
+        CATALOGUE_ID,
         ARTWORK_ID,
         stagedDocumentIds[0],
       );

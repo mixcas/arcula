@@ -23,7 +23,7 @@ import { invitationService } from "@/services/invitationService";
  *
  * The service is stubbed; its wire half is pinned by `invitationService.test`,
  * and the routes by the API's invitation-offer suite. These tests keep the
- * card's own decisions true — that each offer is named by collection and
+ * card's own decisions true — that each offer is named by catalogue and
  * inviter, that decline removes the offer the click named, and that there is no
  * accept control at all (acceptance is the mail's token, ADR-0004).
  */
@@ -108,7 +108,7 @@ afterEach(() => {
 });
 
 describe("the dashboard's pending invitations", () => {
-  it("names each offer by collection and inviter, and points acceptance at the mail", async () => {
+  it("names each offer by catalogue and inviter, and points acceptance at the mail", async () => {
     renderList([
       invitation(),
       invitation({

@@ -2,8 +2,8 @@
  * The Artist Name suggestions service.
  *
  * One read: the caller's own artist vocabulary, parsed through the shared wire
- * schema. It is caller-scoped rather than collection-scoped — the list is the
- * widest set the caller may already read — so the URL names no collection.
+ * schema. It is caller-scoped rather than catalogue-scoped — the list is the
+ * widest set the caller may already read — so the URL names no catalogue.
  */
 
 import { artistNamesSchema, type ArtistNames } from "@arcula/shared";

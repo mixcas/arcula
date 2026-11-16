@@ -10,7 +10,7 @@
  *
  * `Home` and `Artwork` are the same component. They differ only in how many
  * sections there are: the shell hands the artwork view a one-element array, so
- * "the whole collection" and "this one work" are the same code path rather than
+ * "the whole catalogue" and "this one work" are the same code path rather than
  * two that have to be kept in step. That is what makes a skin able to show
  * *more* on the artwork view later without the homepage drifting.
  *
@@ -56,11 +56,11 @@ const DESKTOP_QUERY = "(min-width: 36em)";
 const DESCRIPTION_FADE_MS = 400;
 
 const BasicxSkin: React.FC<SkinProps> = ({
-  collection,
+  catalogue,
   artworks,
   view,
   options,
-  collectionPath,
+  cataloguePath,
   artworkPath,
 }) => {
   const { transitionSeconds } = basicxOptions(options);
@@ -117,9 +117,9 @@ const BasicxSkin: React.FC<SkinProps> = ({
   // shown again" rule is a plain derived value rather than a latch. A latch
   // would have to be written from within a render, which the react-hooks rules
   // correctly refuse. The artwork view never shows it at all: it is the
-  // introduction to the collection, and a visitor on one artwork has already
+  // introduction to the catalogue, and a visitor on one artwork has already
   // stepped past the introduction, so the view gate sits here.
-  const descriptionText = collection.description?.trim() ?? "";
+  const descriptionText = catalogue.description?.trim() ?? "";
   const descriptionVisible =
     view === "home" &&
     descriptionText.length > 0 &&
@@ -131,8 +131,8 @@ const BasicxSkin: React.FC<SkinProps> = ({
   return (
     <Box pos="relative" mih="100dvh">
       <BasicxChrome
-        collectionTitle={collection.name}
-        collectionPath={collectionPath}
+        catalogueTitle={catalogue.name}
+        cataloguePath={cataloguePath}
         view={view}
         artwork={footerArtwork}
         description={descriptionText}
@@ -153,7 +153,7 @@ const BasicxSkin: React.FC<SkinProps> = ({
         component="main"
         h="100dvh"
         tabIndex={0}
-        aria-label="Collection"
+        aria-label="Catalogue"
         style={{
           overflowY: "auto",
           overflowX: "hidden",

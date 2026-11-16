@@ -8,24 +8,25 @@ import ResetRequestPage from "./components/auth/ResetRequestPage";
 import ResetPasswordPage from "./components/auth/ResetPasswordPage";
 import InvitationPage from "./components/invitation/InvitationPage";
 import ManagePage from "./components/manage/ManagePage";
-import CollectionPage from "./components/manage/CollectionPage";
+import CataloguePage from "./components/manage/CataloguePage";
 import ArtworkAddPage from "./components/manage/ArtworkAddPage";
 import ArtworkEditPage from "./components/manage/ArtworkEditPage";
-import CollectionSettingsPage from "./components/manage/CollectionSettingsPage";
+import CatalogueSettingsPage from "./components/manage/CatalogueSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
-import NewCollectionPage from "./components/manage/collection/NewCollectionPage";
-import DeletedArtworksPage from "./components/manage/collection/DeletedArtworksPage";
+import NewCataloguePage from "./components/manage/catalogue/NewCataloguePage";
+import DeletedArtworksPage from "./components/manage/catalogue/DeletedArtworksPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
-import PublicCollectionPage from "./components/collection/PublicCollectionPage";
-import PublicArtworkPage from "./components/collection/PublicArtworkPage";
+import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
+import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
+import LegacyCatalogueRedirect from "./components/LegacyCatalogueRedirect";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./auth/AuthProvider";
 
 // The PDF renderer is a large separate chunk: only this route may import it,
 // so no other page pays for React-PDF in the main bundle.
-const CollectionPdfPage = React.lazy(
-  () => import("./components/pdf/CollectionPdfPage"),
+const CataloguePdfPage = React.lazy(
+  () => import("./components/pdf/CataloguePdfPage"),
 );
 
 const App: React.FC = () => {
@@ -58,11 +59,11 @@ const App: React.FC = () => {
           }
         />
         <Route
-          path="/manage/collection/new"
+          path="/manage/catalogue/new"
           element={
             <ProtectedRoute>
               <ManageLayout>
-                <NewCollectionPage />
+                <NewCataloguePage />
               </ManageLayout>
             </ProtectedRoute>
           }
@@ -78,23 +79,23 @@ const App: React.FC = () => {
           }
         />
         <Route
-          path="/manage/collection/:collectionId"
+          path="/manage/catalogue/:catalogueId"
           element={
             <ProtectedRoute>
               {/* xl, not the default container: the artwork table needs the
                   width for its title, artist and action columns side by side. */}
               <ManageLayout containerProps={{ size: "xl" }}>
-                <CollectionPage />
+                <CataloguePage />
               </ManageLayout>
             </ProtectedRoute>
           }
         />
         <Route
-          path="/manage/collection/:collectionId/deleted"
+          path="/manage/catalogue/:catalogueId/deleted"
           element={
             <ProtectedRoute>
               {/* The Deleted view is its own deep-linkable page, at the
-                  collection's table width. */}
+                  catalogue's table width. */}
               <ManageLayout containerProps={{ size: "xl" }}>
                 <DeletedArtworksPage />
               </ManageLayout>
@@ -102,7 +103,7 @@ const App: React.FC = () => {
           }
         />
         <Route
-          path="/manage/collection/:collectionId/artwork/add"
+          path="/manage/catalogue/:catalogueId/artwork/add"
           element={
             <ProtectedRoute>
               <ManageLayout>
@@ -112,7 +113,7 @@ const App: React.FC = () => {
           }
         />
         <Route
-          path="/manage/collection/:collectionId/artwork/:artworkId"
+          path="/manage/catalogue/:catalogueId/artwork/:artworkId"
           element={
             <ProtectedRoute>
               <ManageLayout containerProps={{ size: "xl" }}>
@@ -126,17 +127,17 @@ const App: React.FC = () => {
             looks like: the page's canonicalisation effect lands old links
             there rather than a redirect route. */}
         <Route
-          path="/manage/collection/:collectionId/settings/:tab?"
+          path="/manage/catalogue/:catalogueId/settings/:tab?"
           element={
             <ProtectedRoute>
               <ManageLayout>
-                <CollectionSettingsPage />
+                <CatalogueSettingsPage />
               </ManageLayout>
             </ProtectedRoute>
           }
         />
         <Route
-          path="/manage/collection/:collectionId/import/csv"
+          path="/manage/catalogue/:catalogueId/import/csv"
           element={
             <ProtectedRoute>
               <ManageLayout containerProps={{ fluid: true }}>
@@ -145,20 +146,20 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
-        {/* Public collection view. Both routes render the collection's skin;
+        {/* Public catalogue view. Both routes render the catalogue's skin;
             see src/skins/registry.ts. */}
         <Route
-          path="/collection/:collectionId"
-          element={<PublicCollectionPage />}
+          path="/catalogue/:catalogueId"
+          element={<PublicCataloguePage />}
         />
         <Route
-          path="/collection/:collectionId/artwork/:artworkId"
+          path="/catalogue/:catalogueId/artwork/:artworkId"
           element={<PublicArtworkPage />}
         />
-        {/* The Collection PDF viewer. Public chrome: the route itself decides
+        {/* The Catalogue PDF viewer. Public chrome: the route itself decides
             access through the ordinary reads, never a ProtectedRoute. */}
         <Route
-          path="/collection/:collectionId/pdf"
+          path="/catalogue/:catalogueId/pdf"
           element={
             <React.Suspense
               fallback={
@@ -167,8 +168,28 @@ const App: React.FC = () => {
                 </Center>
               }
             >
-              <CollectionPdfPage />
+              <CataloguePdfPage />
             </React.Suspense>
+          }
+        />
+
+        {/* The addresses the unit had before the rename: both families move to
+            the catalogue spelling with the rest of the path, the query and the
+            hash kept. Removed in the contract step (#248), once no old link
+            can still be in the wild. */}
+        <Route
+          path="/collection/*"
+          element={
+            <LegacyCatalogueRedirect from="/collection" to="/catalogue" />
+          }
+        />
+        <Route
+          path="/manage/collection/*"
+          element={
+            <LegacyCatalogueRedirect
+              from="/manage/collection"
+              to="/manage/catalogue"
+            />
           }
         />
 

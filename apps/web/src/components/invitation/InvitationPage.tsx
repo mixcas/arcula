@@ -5,7 +5,7 @@
  * invitation? A visitor sees what they would join and the two doors — sign in
  * or create an account — both carrying the invite path, so the auth round trip
  * comes back here. The invited account can accept or decline; another account
- * sees whose invitation it is and can switch. Accepting lands in the collection
+ * sees whose invitation it is and can switch. Accepting lands in the catalogue
  * itself.
  *
  * The token is only ever the route's segment on the request: it is not put in
@@ -30,7 +30,7 @@ import {
 } from "@mantine/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
-import { collectionSlug, type InvitationPreview } from "@arcula/shared";
+import { catalogueSlug, type InvitationPreview } from "@arcula/shared";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
 import { useAuth } from "@/hooks/useAuth";
@@ -121,9 +121,9 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         return;
       }
       void navigate(
-        `/manage/collection/${collectionSlug(
-          outcome.collection.name,
-          outcome.collection.id,
+        `/manage/catalogue/${catalogueSlug(
+          outcome.catalogue.name,
+          outcome.catalogue.id,
         )}`,
         { replace: true },
       );
@@ -133,7 +133,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         return;
       }
       if (err instanceof ApiRequestError && err.status === 409) {
-        setActionError("You already have access to this collection.");
+        setActionError("You already have access to this catalogue.");
         return;
       }
       setActionError("Could not accept the invitation. Please try again.");
@@ -226,7 +226,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
 
             <Text>
               {preview.inviter.name} invited you to collaborate on this
-              collection.
+              catalogue.
             </Text>
             <Text>
               Sent to{" "}
