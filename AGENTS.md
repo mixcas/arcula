@@ -261,16 +261,22 @@ not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
 against the three values (`catalogueKindOf`) before emitting it.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
-means for the surface, as data (labels, availability in play, the artwork
-form's visible/required fields, and the four availability labels both the form
-and the manage badges read); `services/` are the API clients
+means for the surface, as data: the labels, the market states a kind offers
+(a Portfolio's three, an Inventory's four, a Collection's none) with their
+words, and the v1 artwork field table — every field visible, only `title` and
+`artistName` required. The field table is the data a later per-kind hiding will
+read; no v1 screen consumes `visible`/`required`, and a screen that reads the
+module uses the labels, the availability values and `availabilityFor`'s
+default. `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;
 `components/manage` and `components/catalogue`; `skins/` is the public-view
 system. The artwork Add and Edit pages load the catalogue for its kind; a
 Collection's form renders no availability control and sends no key, while a
 Portfolio or an Inventory defaults a surfaced work with no stored state to
-`available`. The manage page passes `showAvailability` down from the kind, and
-no public page renders availability at all.
+`available` through `availabilityFor`, and offers only the states that kind
+carries. The manage page and the Deleted view pass `showAvailability` down from
+the kind; no public page renders availability at all, and the API emits it on a
+member read only.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `catalogues`, `catalogueCollaborators`,
