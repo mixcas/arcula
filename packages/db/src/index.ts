@@ -28,7 +28,7 @@
 // every query.
 
 import { sql } from "drizzle-orm";
-import type { CatalogueKind } from "@arcula/shared";
+import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
 import {
   boolean,
   check,
@@ -299,6 +299,10 @@ export const artworks = pgTable(
     notes: text("notes"),
     condition: text("condition"),
     currentValue: text("currentValue"),
+    // A work's market state on a Portfolio or an Inventory. Null means no
+    // market state — every Collection work, and every work written before the
+    // column existed. The check keeps the four values the shared enum names.
+    availability: text("availability").$type<ArtworkAvailability>(),
     // The owner's choice, and the only per-work field a visitor is gated on:
     // `published` or `draft`. The catalogue is the whole gate; there is no
     // per-work visibility flag.
@@ -324,6 +328,10 @@ export const artworks = pgTable(
     // The artwork-by-id-in-catalogue check (create authorization).
     index("artworks_collection_id_idx").on(table.collectionId),
     check("artworks_status_check", sql`"status" in ('draft', 'published')`),
+    check(
+      "artworks_availability_check",
+      sql`"availability" in ('available', 'reserved', 'sold', 'on-consignment')`,
+    ),
   ],
 ).enableRLS();
 

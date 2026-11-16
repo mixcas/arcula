@@ -61,6 +61,12 @@ export type Collection = Catalogue;
 // before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
 
+// A work's market state on a Portfolio or an Inventory: for sale, held for a
+// buyer, sold, or placed with a gallery. Null means no market state — every
+// Collection work, and every work written before the field existed.
+export type ArtworkAvailability =
+  "available" | "reserved" | "sold" | "on-consignment";
+
 // What a catalogue is, which decides whose art it holds and why: a Portfolio
 // is an artist's own work, a Collection is what a collector owns, an Inventory
 // is what a gallery represents (ADR-0010). Fixed at creation; every artwork
