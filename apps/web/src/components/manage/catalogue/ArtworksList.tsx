@@ -66,6 +66,8 @@ export interface ArtworksListProps {
   onRetry?: () => void;
   /** Leave the search: remove `q` and show the whole catalogue. */
   onClearSearch?: () => void;
+  /** Whether this catalogue's kind carries a work's market state. */
+  showAvailability?: boolean;
 }
 
 /**
@@ -106,6 +108,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
   searchError = null,
   onRetry,
   onClearSearch,
+  showAvailability = false,
 }) => {
   const queryKey = searchQuery.trim();
   const searchActive = queryKey !== "";
@@ -437,6 +440,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           }
           catalogueParam={catalogueParam}
           searchQuery={searchQuery}
+          showAvailability={showAvailability}
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
           emptyLabel={emptyLabel}
@@ -466,6 +470,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           onRecordsPerPageChange={setRecordsPerPage}
           catalogueParam={catalogueParam}
           searchQuery={searchQuery}
+          showAvailability={showAvailability}
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
           emptyLabel={emptyLabel}

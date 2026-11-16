@@ -12,6 +12,8 @@ import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
+import { catalogueSurface } from "@/catalogueSurface";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
@@ -84,6 +86,10 @@ const ArtworkEditPage: React.FC = () => {
   // but a save failure must leave the user's input on screen.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The catalogue's kind decides whether this form surfaces a market state.
+  // Loaded with the work, so the control and the initial value are settled
+  // before the form mounts.
+  const [availabilityInPlay, setAvailabilityInPlay] = useState(false);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
   // so it can be restored from here. Save stays shut while it is deleted, and
@@ -119,13 +125,32 @@ const ArtworkEditPage: React.FC = () => {
 
     const fetchArtwork = async () => {
       try {
-        const artwork = await artworkService.getArtwork(catalogueId, artworkId);
+        // The work and its catalogue together: the catalogue's kind decides
+        // whether this form surfaces a market state, and it is what the
+        // control's initial value is defaulted against.
+        const [artwork, catalogue] = await Promise.all([
+          artworkService.getArtwork(catalogueId, artworkId),
+          catalogueService.getCatalogue(catalogueId),
+        ]);
+        if (!catalogue) {
+          setLoadError("Catalogue not found");
+          return;
+        }
         if (!artwork) {
           setLoadError("Artwork not found");
           return;
         }
 
+        const inPlay = catalogueSurface(catalogue.kind).availabilityInPlay;
+        setAvailabilityInPlay(inPlay);
+
         const values = fromArtwork(artwork);
+        // A surfaced work with no stored state starts Available; a stored
+        // state is never overwritten, and an in-play kind keeps null for an
+        // explicit clear only after the user acts.
+        if (inPlay && values.availability === null) {
+          values.availability = "available";
+        }
         setLoadedValues(values);
         setLoadedTitle(values.title);
         setIsDeleted(artwork.deletedAt != null);
@@ -152,8 +177,9 @@ const ArtworkEditPage: React.FC = () => {
 
   // Put the canonical "{title}-{id}" in the address bar once the title is
   // known, preserving the catalogue segment exactly as it arrived — this page
-  // never loads the catalogue, so it has no name to re-slug it from.
-  // `replace` swaps the current history entry rather than adding one.
+  // loads the catalogue for its kind, but the segment still arrives as it was
+  // and re-slugging it is not this page's job. `replace` swaps the current
+  // history entry rather than adding one.
   useEffect(() => {
     if (!artworkParam || loadedTitle === null) {
       return;
@@ -265,7 +291,7 @@ const ArtworkEditPage: React.FC = () => {
             const photosCommit = photos.commit();
             const documentsCommit = documents.commit();
             await artworkService.updateArtwork(catalogueId, artworkId, {
-              ...toArtworkUpdate(loadedValues, payload),
+              ...toArtworkUpdate(loadedValues, payload, availabilityInPlay),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
             });
@@ -297,6 +323,7 @@ const ArtworkEditPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
+          availabilityInPlay={availabilityInPlay}
           uploadsDisabled={isDeleted}
         />
 

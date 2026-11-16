@@ -15,6 +15,7 @@ import {
   manageArtworkEditHref,
   publicArtworkHref,
 } from "@/services/artworkLinks";
+import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
 import type { Artwork } from "@arcula/shared";
 
 export interface ArtworksTableProps {
@@ -41,6 +42,8 @@ export interface ArtworksTableProps {
   onConfirmDeleteArtwork: (artwork: Artwork) => void;
   /** A list read is in flight. The previous rows stay on screen. */
   fetching?: boolean;
+  /** Whether this catalogue's kind carries a work's market state. */
+  showAvailability?: boolean;
   /** What to say when this page has no rows. The list decides which state that is. */
   emptyLabel: React.ReactNode;
 }
@@ -77,6 +80,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   searchQuery = "",
   onConfirmDeleteArtwork,
   fetching = false,
+  showAvailability = false,
   emptyLabel,
 }) => {
   // Edit returns to the search it came from; View is the public page and
@@ -132,6 +136,13 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
             {artwork.status === "draft" ? (
               <Badge color="gray" variant="light" size="sm">
                 Draft
+              </Badge>
+            ) : null}
+            {/* A market state is the kind's fact: the page says whether this
+                catalogue has one, and the row only says what it is. */}
+            {showAvailability && artwork.availability ? (
+              <Badge color="teal" variant="light" size="sm">
+                {ARTWORK_AVAILABILITY_LABELS[artwork.availability]}
               </Badge>
             ) : null}
           </Group>
@@ -197,7 +208,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
         ),
       },
     ],
-    [catalogueParam, searchQuery, onConfirmDeleteArtwork],
+    [catalogueParam, searchQuery, onConfirmDeleteArtwork, showAvailability],
   );
 
   return (

@@ -30,6 +30,8 @@ export interface ArtworksGridProps {
   catalogueParam: string;
   /** The committed Catalogue search; Edit carries it back. */
   searchQuery?: string;
+  /** Whether this catalogue's kind carries a work's market state. */
+  showAvailability?: boolean;
   /** Ask the list to confirm and soft-delete one work. */
   onConfirmDeleteArtwork: (artwork: Artwork) => void;
   /** A list read is in flight. The previous cards stay on screen, dimmed. */
@@ -103,6 +105,7 @@ const ArtworkCardItem: React.FC<{
   artwork: Artwork;
   catalogueParam: string;
   searchQuery?: string;
+  showAvailability?: boolean;
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;
   onConfirmDeleteArtwork: (artwork: Artwork) => void;
@@ -145,6 +148,7 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   onSelectionChange,
   catalogueParam,
   searchQuery,
+  showAvailability,
   onConfirmDeleteArtwork,
   fetching = false,
   emptyLabel,
@@ -250,6 +254,7 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
               artwork={artwork}
               catalogueParam={catalogueParam}
               searchQuery={searchQuery}
+              showAvailability={showAvailability}
               selected={selectedIds.includes(artwork.id)}
               onSelectedChange={(selected) =>
                 // The list's selection is a flat id list shared with the Table,

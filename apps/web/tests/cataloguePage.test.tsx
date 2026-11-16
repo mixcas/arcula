@@ -604,3 +604,32 @@ describe("Catalogue search", () => {
     expect(screen.queryByText("Blue Nude")).toBeNull();
   });
 });
+
+/**
+ * The page is the one place that knows the catalogue's kind, so it is where
+ * the manage list learns whether a work's market state belongs on screen. The
+ * API is a superset, so the flag — not the row — is what hides it on a
+ * Collection (ADR-0010).
+ */
+describe("the manage view — a work's market state", () => {
+  it("shows it for a Portfolio", async () => {
+    getCatalogue.mockResolvedValue({ ...catalogue, kind: "portfolio" });
+    getCatalogueArtworks.mockResolvedValue([
+      artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("Blue Nude")).toBeInTheDocument();
+    expect(screen.getByText("Sold")).toBeInTheDocument();
+  });
+
+  it("hides it for a Collection, whatever the work carries", async () => {
+    getCatalogueArtworks.mockResolvedValue([
+      artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("Blue Nude")).toBeInTheDocument();
+    expect(screen.queryByText("Sold")).toBeNull();
+  });
+});
