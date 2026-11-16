@@ -117,7 +117,7 @@ const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
 const created = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",

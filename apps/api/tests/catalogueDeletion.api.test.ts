@@ -93,7 +93,7 @@ async function catalogueWithMedia(name: string): Promise<MediaFixture> {
   const cid = await makeCatalogue(owner.userId, { isPublic: true, name });
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: mate.userId });
+    .values({ catalogueId: cid, userId: mate.userId });
 
   const aid = uuid();
   const photoEntry = `photo${uuid()}`;
@@ -188,7 +188,7 @@ async function sharedCatalogue(name: string): Promise<string> {
   const cid = await makeCatalogue(owner.userId, { isPublic: true, name });
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: mate.userId });
+    .values({ catalogueId: cid, userId: mate.userId });
   return cid;
 }
 
@@ -288,7 +288,7 @@ describe("DELETE /catalogues/{cid}", () => {
 
     // A resolved row is history: the delete's withdrawal must not touch it.
     const declined = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: `declined-${RUN}@example.test`,
       status: "declined",
@@ -377,7 +377,7 @@ describe("DELETE /catalogues/{cid}", () => {
     // pending row written by some path that bypassed the owner check must
     // not surface either.
     const stray = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
     });
@@ -502,7 +502,7 @@ describe("DELETE /catalogues/{cid}", () => {
     const artworksBefore = await db
       .select()
       .from(artworksTable)
-      .where(eq(artworksTable.collectionId, cid));
+      .where(eq(artworksTable.catalogueId, cid));
     const photosBefore = await db
       .select()
       .from(artworkPhotosTable)
@@ -546,7 +546,7 @@ describe("DELETE /catalogues/{cid}", () => {
         await db
           .select()
           .from(artworksTable)
-          .where(eq(artworksTable.collectionId, cid)),
+          .where(eq(artworksTable.catalogueId, cid)),
       ),
     ).toEqual(snapshot(artworksBefore));
     expect(
@@ -567,7 +567,7 @@ describe("DELETE /catalogues/{cid}", () => {
       await db
         .select()
         .from(collaboratorsTable)
-        .where(eq(collaboratorsTable.collectionId, cid)),
+        .where(eq(collaboratorsTable.catalogueId, cid)),
     ).toHaveLength(1);
 
     // No storage is reclaimed: every final object is still in the bucket.
@@ -644,7 +644,7 @@ describe("DELETE /catalogues/{cid}", () => {
       await db
         .select()
         .from(grantsTable)
-        .where(eq(grantsTable.collectionId, cid)),
+        .where(eq(grantsTable.catalogueId, cid)),
     ).toHaveLength(1);
 
     expect(
@@ -658,7 +658,7 @@ describe("DELETE /catalogues/{cid}", () => {
       await db
         .select()
         .from(grantsTable)
-        .where(eq(grantsTable.collectionId, cid)),
+        .where(eq(grantsTable.catalogueId, cid)),
     ).toHaveLength(0);
     for (const [role, account] of [
       ["anonymous", null],

@@ -40,14 +40,14 @@ interface WorkValues {
 }
 
 async function insertWork(
-  collectionId: string,
+  catalogueId: string,
   userId: string,
   values: WorkValues,
 ): Promise<void> {
   await db.insert(artworksTable).values({
     id: uuid(),
     userId,
-    collectionId,
+    catalogueId,
     title: values.artistName === "" ? "Untitled" : values.artistName,
     artistName: values.artistName,
     status: values.status ?? "published",
@@ -84,7 +84,7 @@ beforeAll(async () => {
     updatedAt: now,
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: sharedCatalogueId,
+    catalogueId: sharedCatalogueId,
     userId: collaborator.userId,
   });
 

@@ -112,7 +112,7 @@ const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -205,7 +205,7 @@ describe("PublicArtworkPage — the reachable states", () => {
     // The API serves a public artwork by id whatever its parent, so nothing
     // server-side stops this. The page's own check is the whole guard.
     getArtwork.mockResolvedValue(
-      artwork({ collectionId: "some-other-catalogue" }),
+      artwork({ catalogueId: "some-other-catalogue" }),
     );
     renderPage();
     expect(
@@ -261,7 +261,7 @@ describe("PublicArtworkPage — a protected catalogue", () => {
       "password-required",
       "This catalogue is protected",
       undefined,
-      { collectionName: "Flores Solares" },
+      { catalogueName: "Flores Solares" },
     );
 
   it("asks for the password rather than saying the artwork is gone", async () => {

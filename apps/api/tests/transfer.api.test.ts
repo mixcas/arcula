@@ -82,7 +82,7 @@ async function sharedCatalogue(
   for (const account of members) {
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId: cid, userId: account.userId });
+      .values({ catalogueId: cid, userId: account.userId });
   }
   const [row] = await db
     .select()
@@ -110,7 +110,7 @@ async function mintedCatalogue(
   for (const account of members) {
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId: cid, userId: account.userId });
+      .values({ catalogueId: cid, userId: account.userId });
   }
   return { cid, namespace };
 }
@@ -122,7 +122,7 @@ const membership = async (cid: string, userId: string) =>
       .from(collaboratorsTable)
       .where(
         and(
-          eq(collaboratorsTable.collectionId, cid),
+          eq(collaboratorsTable.catalogueId, cid),
           eq(collaboratorsTable.userId, userId),
         ),
       )
@@ -249,7 +249,7 @@ describe("POST /catalogues/{cid}/transfer", () => {
     const works = await db
       .select()
       .from(artworksTable)
-      .where(eq(artworksTable.collectionId, cid));
+      .where(eq(artworksTable.catalogueId, cid));
     expect(works.map((w) => w.userId)).toEqual([mate.userId]);
 
     // The two membership rows swapped: the recipient is the owner fact now,

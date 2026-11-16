@@ -192,7 +192,7 @@ describe("the thirteen-table schema", () => {
     expect(Object.keys(c)).toEqual([
       "id",
       "userId",
-      "collectionId",
+      "catalogueId",
       "title",
       "artistName",
       "serie",
@@ -340,15 +340,15 @@ describe("the thirteen-table schema", () => {
     });
   });
 
-  it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
+  it("catalogue_access_grants keeps the token's hash, and indexes the catalogue for revocation", () => {
     const c = cols(catalogueAccessGrants);
     expect(Object.keys(c)).toEqual([
-      "collectionId",
+      "catalogueId",
       "tokenHash",
       "createdAt",
       "expiresAt",
     ]);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     // The raw token exists only in the reader's cookie, as with an invitation.
     expect(c.tokenHash.notNull).toBe(true);
     expect(c.tokenHash.isUnique).toBe(true);
@@ -363,16 +363,16 @@ describe("the thirteen-table schema", () => {
     });
   });
 
-  it("collection_unlock_attempts is keyed by address, catalogue and window", () => {
+  it("catalogue_unlock_attempts is keyed by address, catalogue and window", () => {
     const c = cols(catalogueUnlockAttempts);
     expect(Object.keys(c)).toEqual([
       "ip",
-      "collectionId",
+      "catalogueId",
       "windowStart",
       "attempts",
     ]);
     expect(c.ip.notNull).toBe(true);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.windowStart.dataType).toBe("date");
     expect(c.windowStart.notNull).toBe(true);
     expect(c.attempts.dataType).toBe("number");
@@ -387,11 +387,11 @@ describe("the thirteen-table schema", () => {
     ]);
   });
 
-  it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
+  it("catalogue_collaborators is keyed by (catalogueId, userId), with the dashboard index on user", () => {
     const c = cols(catalogueCollaborators);
     // The owner is `collections.userId`; this table holds everyone else.
-    expect(Object.keys(c)).toEqual(["collectionId", "userId", "createdAt"]);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(Object.keys(c)).toEqual(["catalogueId", "userId", "createdAt"]);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.userId.notNull).toBe(true);
     expect(c.createdAt.dataType).toBe("date");
     expect(c.createdAt.notNull).toBe(true);
@@ -409,11 +409,11 @@ describe("the thirteen-table schema", () => {
     });
   });
 
-  it("collection_invitations carries the offer, its status and its unique token hash", () => {
+  it("catalogue_invitations carries the offer, its status and its unique token hash", () => {
     const c = cols(catalogueInvitations);
     expect(Object.keys(c)).toEqual([
       "id",
-      "collectionId",
+      "catalogueId",
       "email",
       "invitedByUserId",
       "tokenHash",
@@ -423,7 +423,7 @@ describe("the thirteen-table schema", () => {
       "resolvedAt",
     ]);
     expect(c.id.primary).toBe(true);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.email.notNull).toBe(true);
     expect(c.invitedByUserId.notNull).toBe(true);
     // The raw token lives only in the mail.
@@ -440,14 +440,14 @@ describe("the thirteen-table schema", () => {
     expect(c.resolvedAt.notNull).toBe(false);
   });
 
-  it("collection_invitations limits status to the four lifecycle values", () => {
+  it("catalogue_invitations limits status to the four lifecycle values", () => {
     expect(checksOf(catalogueInvitations)).toContainEqual({
       name: "collection_invitations_status_check",
       sql: "\"status\" in ('pending', 'accepted', 'declined', 'revoked')",
     });
   });
 
-  it("collection_invitations allows one pending invitation per collection and address", () => {
+  it("catalogue_invitations allows one pending invitation per catalogue and address", () => {
     const pending = getTableConfig(catalogueInvitations).indexes.find(
       (i) =>
         i.config.name === "collection_invitations_pending_collection_email_idx",
@@ -630,7 +630,7 @@ describe("the committed sharing migration (as it will actually be applied)", () 
     );
   });
 
-  it("replaces the owner-list index and leaves the visitor and collection indexes alone", () => {
+  it("replaces the owner-list index and leaves the visitor and catalogue indexes alone", () => {
     expect(SHARED_SQL).toContain(
       'DROP INDEX "artworks_collection_user_deleted_idx"',
     );
@@ -715,7 +715,7 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(dataWrites(PASSWORD_SQL)).toEqual([]);
   });
 
-  it("carries the revocation index over the collection", () => {
+  it("carries the revocation index over the catalogue", () => {
     expect(PASSWORD_SQL).toMatch(
       /CREATE INDEX "collection_access_grants_collection_id_idx" ON "collection_access_grants" USING btree \("collectionId"\)/,
     );

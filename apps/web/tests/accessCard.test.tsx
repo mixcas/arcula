@@ -113,7 +113,7 @@ const invitation = (
   overrides: Partial<InvitationSummary> = {},
 ): InvitationSummary => ({
   id: "iiiiiiiiiiiiiiiiiiii",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   email: "invited@example.test",
   invitedByUserId: OWNER.userId,
   status: "pending",

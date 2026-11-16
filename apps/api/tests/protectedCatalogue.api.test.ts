@@ -67,22 +67,22 @@ let draftId = "";
 let draftPhotoUrl = "";
 
 /** The grant cookie exactly as a browser would send it back. */
-function grantCookie(res: Response, collectionId = cid): string {
+function grantCookie(res: Response, catalogueId = cid): string {
   const raw = res.headers
     .getSetCookie()
-    .find((header) => header.startsWith(`${grantCookieName(collectionId)}=`));
+    .find((header) => header.startsWith(`${grantCookieName(catalogueId)}=`));
   expect(raw).toBeDefined();
   return raw!.split(";")[0];
 }
 
-const unlock = (collectionId: string, password: string) =>
-  req("POST", `/api/v1/catalogues/${collectionId}/unlock`, {
+const unlock = (catalogueId: string, password: string) =>
+  req("POST", `/api/v1/catalogues/${catalogueId}/unlock`, {
     body: { password },
   });
 
 /** A protected catalogue's password, written through the settings route. */
-async function protect(collectionId: string, password: string) {
-  const res = await req("PATCH", `/api/v1/catalogues/${collectionId}`, {
+async function protect(catalogueId: string, password: string) {
+  const res = await req("PATCH", `/api/v1/catalogues/${catalogueId}`, {
     cookies: owner.cookies,
     body: { name: "Protected Wall", isPublic: true, password },
   });
@@ -240,7 +240,7 @@ describe("a protected catalogue's visitor half", () => {
     // Nested in `details`, which is where the client reads it: `errorResponse`
     // spreads a top-level detail flat, and the web client parses
     // `error.details`. A detail at the wrong depth is a name nobody shows.
-    expect(body.error.details).toEqual({ collectionName: "Protected Wall" });
+    expect(body.error.details).toEqual({ catalogueName: "Protected Wall" });
     // And still never the member's fact, nor the hash.
     expect("isPasswordProtected" in body.error).toBe(false);
     expect("passwordHash" in body.error).toBe(false);
@@ -361,7 +361,7 @@ describe("a protected catalogue's visitor half", () => {
     const token = mintGrantToken();
     const now = new Date();
     await db.insert(grantsTable).values({
-      collectionId: otherId,
+      catalogueId: otherId,
       tokenHash: hashGrantToken(token),
       createdAt: now,
       expiresAt: new Date(now.getTime() + GRANT_TTL_MS),
@@ -379,7 +379,7 @@ describe("a protected catalogue's visitor half", () => {
     const token = mintGrantToken();
     const now = Date.now();
     await db.insert(grantsTable).values({
-      collectionId: cid,
+      catalogueId: cid,
       tokenHash: hashGrantToken(token),
       createdAt: new Date(now - GRANT_TTL_MS),
       expiresAt: new Date(now - 1),
@@ -412,7 +412,7 @@ describe("a protected catalogue's visitor half", () => {
     const rows = await db
       .select({ tokenHash: grantsTable.tokenHash })
       .from(grantsTable)
-      .where(eq(grantsTable.collectionId, cid));
+      .where(eq(grantsTable.catalogueId, cid));
     expect(rows).toEqual([]);
 
     // The new password admits, and the old one no longer does.
@@ -449,8 +449,8 @@ describe("the unlock throttle", () => {
   });
 
   /** One attempt from an address the gateway would have named. */
-  const attempt = (address: string, collectionId: string, password: string) =>
-    req("POST", `/api/v1/catalogues/${collectionId}/unlock`, {
+  const attempt = (address: string, catalogueId: string, password: string) =>
+    req("POST", `/api/v1/catalogues/${catalogueId}/unlock`, {
       body: { password },
       headers: { [CLIENT_ADDRESS_HEADER]: address },
     });

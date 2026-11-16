@@ -72,7 +72,7 @@ const deletedArtwork = (
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "catalogue1",
+  catalogueId: "catalogue1",
   status: "published",
   deletedAt: { seconds: 1767225600, nanoseconds: 0 },
   createdAt: { seconds: 1, nanoseconds: 0 },

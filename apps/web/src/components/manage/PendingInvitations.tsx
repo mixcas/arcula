@@ -101,7 +101,7 @@ const PendingInvitations: React.FC = () => {
         >
           <Group justify="space-between" align="center" wrap="nowrap">
             <div>
-              <Text size="h3">{invitation.collectionName}</Text>
+              <Text size="h3">{invitation.catalogueName}</Text>
               <Text size="sm" c="dim">
                 Invited by {invitation.inviterName}
               </Text>

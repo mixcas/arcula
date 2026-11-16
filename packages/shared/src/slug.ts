@@ -58,9 +58,6 @@ const docSlug = (name: string, id: string, fallback: string): string =>
 export const catalogueSlug = (name: string, id: string): string =>
   docSlug(name, id, "catalogue");
 
-/** The helper's older spelling, alias-kept while the API and web migrate. */
-export const collectionSlug = catalogueSlug;
-
 /** The `:artworkId` route param for an artwork, which is named by its title. */
 export const artworkSlug = (title: string, id: string): string =>
   docSlug(title, id, "artwork");

@@ -221,7 +221,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
               <Text size="sm" c="dim">
                 Invitation
               </Text>
-              <Title order={2}>{preview.collection.name}</Title>
+              <Title order={2}>{preview.catalogue.name}</Title>
             </div>
 
             <Text>
@@ -261,7 +261,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
                   title="Invitation declined"
                   data-testid="invitation-declined"
                 >
-                  You declined the invitation to {preview.collection.name}.
+                  You declined the invitation to {preview.catalogue.name}.
                 </Alert>
                 <Group>
                   <Button component={Link} to="/manage" variant="outline">

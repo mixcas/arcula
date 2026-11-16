@@ -62,7 +62,7 @@ export interface PublicArtworkData {
  * screen. Parsed rather than read loosely, so a reshaped detail leaves the
  * screen with its generic line instead of the string "undefined".
  */
-const lockDetails = z.object({ collectionName: z.string().min(1) });
+const lockDetails = z.object({ catalogueName: z.string().min(1) });
 
 /**
  * A read that was refused, or that failed for any other reason.
@@ -87,7 +87,7 @@ export const publicFailure = (error: unknown): PublicState<never> => {
   }
   const details = lockDetails.safeParse(error.details);
   return details.success
-    ? { status: "locked", catalogueName: details.data.collectionName }
+    ? { status: "locked", catalogueName: details.data.catalogueName }
     : { status: "locked" };
 };
 
@@ -147,7 +147,7 @@ export const publicArtworkState = (
   if (catalogue.isPublic !== true) {
     return { status: "private" };
   }
-  if (artwork.collectionId !== catalogueId) {
+  if (artwork.catalogueId !== catalogueId) {
     return { status: "notFound" };
   }
   return { status: "ready", value: { catalogue, artwork } };

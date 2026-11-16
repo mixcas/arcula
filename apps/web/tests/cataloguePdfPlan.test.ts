@@ -23,7 +23,7 @@ const photo = (id: string, order: number): ArtworkPhoto => ({
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "artwork-1",
   userId: "owner-1",
-  collectionId: "catalogue-1",
+  catalogueId: "catalogue-1",
   title: "Untitled",
   artistName: "Unknown",
   photos: [],

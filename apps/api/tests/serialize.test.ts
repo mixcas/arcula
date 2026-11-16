@@ -25,7 +25,7 @@ const DOC = "doc-1";
 const artworkRow = (userId: string): ArtworkRow => ({
   id: AID,
   userId,
-  collectionId: CID,
+  catalogueId: CID,
   title: "Study in Red",
   artistName: "C. Cas",
   serie: null,

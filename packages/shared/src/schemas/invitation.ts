@@ -18,7 +18,7 @@ export const invitationStatusSchema = z.enum([
 export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 
 /**
- * POST /collections/{cid}/invitations. The address is trimmed and lowercased
+ * POST /catalogues/{cid}/invitations. The address is trimmed and lowercased
  * once here, so every comparison downstream is against the stored form.
  */
 export const invitationCreateSchema = z.object({
@@ -35,7 +35,7 @@ export type InvitationCreatePayload = z.infer<typeof invitationCreateSchema>;
  *  it. The token is absent by construction: only its hash is stored. */
 export const invitationSummarySchema = z.object({
   id: z.string(),
-  collectionId: z.string(),
+  catalogueId: z.string(),
   email: z.string(),
   invitedByUserId: z.string(),
   status: invitationStatusSchema,
@@ -46,7 +46,7 @@ export const invitationSummarySchema = z.object({
 
 export type InvitationSummary = z.infer<typeof invitationSummarySchema>;
 
-/** POST /collections/{cid}/invitations — the row plus whether the mail went
+/** POST /catalogues/{cid}/invitations — the row plus whether the mail went
  *  out. A provider failure is not an invitation failure. */
 export const invitationCreateResponseSchema = z.object({
   invitation: invitationSummarySchema,
@@ -63,7 +63,7 @@ export type InvitationCreateResponse = z.infer<
  * inviter's own email is not part of an anonymous response.
  */
 export const invitationPreviewSchema = z.object({
-  collection: z.object({ id: z.string(), name: z.string() }),
+  catalogue: z.object({ id: z.string(), name: z.string() }),
   inviter: z.object({ name: z.string() }),
   email: z.string(),
   expiresAt: wireTimestamp,
@@ -83,7 +83,7 @@ export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
  * (ADR-0004 — only the invited inbox can accept).
  */
 export const invitationInboxEntrySchema = invitationSummarySchema.extend({
-  collectionName: z.string(),
+  catalogueName: z.string(),
   inviterName: z.string(),
 });
 

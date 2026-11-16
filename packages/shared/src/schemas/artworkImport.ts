@@ -3,7 +3,7 @@ import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
 /**
- * Pure logic for the CSV artwork-import flow (`/manage/collection/:id/import/csv`).
+ * Pure logic for the CSV artwork-import flow (`/manage/catalogue/:id/import/csv`).
  *
  * Nothing in this module touches React or the filesystem: every
  * step of the pipeline — header-to-field guessing, cell normalization, date

@@ -8,8 +8,8 @@
 // Two matrices meet here, and the membership fact decides which one applies:
 //
 //   - **Inside a catalogue** — the owner and every collaborator. The owner
-//     is `collections.userId`; anyone else with access is a
-//     `collection_collaborators` row. Both see the whole catalogue: every
+//     is `catalogues.userId`; anyone else with access is a
+//     `catalogueCollaborators` row. Both see the whole catalogue: every
 //     work, drafts and soft-deleted works included, and its documents.
 //   - **Outside it** — a Visitor (a signed-in somebody else) and Anonymous
 //     (no session). The visitor rule is unchanged (ADR-0003): the catalogue

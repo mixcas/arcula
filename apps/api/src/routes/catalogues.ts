@@ -12,10 +12,6 @@
 //   POST   /catalogues/{cid}/artworks/bulk-restore  the batch restore
 //   POST   /catalogues/{cid}/artworks/{aid}/restore deletedAt → NULL (one work, both UIs)
 //
-// Every path below is also registered under `/collections/…` (`routes`): the
-// legacy Collection spelling keeps answering unchanged until the contract
-// step removes it (ADR-0010, #246).
-//
 // A catalogue is deleted by its owner alone, and the stamp is the whole
 // record: `deletedAt` makes the loader refuse the row, so every address that
 // named it answers not-found. Nothing cascades — the works, their media and
@@ -93,12 +89,8 @@ import {
   UNLOCK_WINDOW_MINUTES,
   unlockWindowStart,
 } from "../unlockThrottle";
-import { withLegacyCollectionAlias } from "./paths";
 
 export const catalogueRoutes = new Hono();
-
-// Every registration below mounts under both names.
-const routes = withLegacyCollectionAlias(catalogueRoutes);
 
 /**
  * The one write behind both batch routes: move a catalogue's deletion stamp
@@ -111,7 +103,7 @@ const routes = withLegacyCollectionAlias(catalogueRoutes);
  * the update is shared.
  */
 async function moveDeletionStamp(
-  collectionId: string,
+  catalogueId: string,
   artworkIds: readonly string[],
   direction: "delete" | "restore",
 ): Promise<number> {
@@ -126,7 +118,7 @@ async function moveDeletionStamp(
         })
         .where(
           and(
-            eq(artworksTable.collectionId, collectionId),
+            eq(artworksTable.catalogueId, catalogueId),
             inArray(artworksTable.id, [...artworkIds]),
             direction === "delete"
               ? isNull(artworksTable.deletedAt)
@@ -153,7 +145,7 @@ async function moveDeletionStamp(
 // The anonymous filter is the SQL form of `canSeeCatalogue(null, row)` in
 // access.ts — public AND not protected — and catalogues.api.test.ts asserts
 // the two agree.
-routes.get("/catalogues", async (c) => {
+catalogueRoutes.get("/catalogues", async (c) => {
   const session = await resolveSession(c);
   if (session === null) {
     const rows = await db
@@ -207,7 +199,7 @@ routes.get("/catalogues", async (c) => {
 
 // POST /catalogues — the cap check comes FIRST: the count is over the
 // caller's own catalogues, the limit is read off the caller's tier.
-routes.post("/catalogues", requireSession, async (c) => {
+catalogueRoutes.post("/catalogues", requireSession, async (c) => {
   const user = c.get("user");
   const payload: CatalogueCreatePayload = await parseBody(
     c,
@@ -260,10 +252,10 @@ routes.post("/catalogues", requireSession, async (c) => {
 
 // GET one — a member always; a visitor when the catalogue is public. The
 // password flag is the member's alone: a visitor's document does not carry it.
-routes.get("/catalogues/:collectionId", async (c) => {
+catalogueRoutes.get("/catalogues/:catalogueId", async (c) => {
   const { catalogue, audience } = await requireReadableCatalogue(
     c,
-    param(c, "collectionId"),
+    param(c, "catalogueId"),
   );
   return c.json(serializeCatalogue(catalogue, { audience }));
 });
@@ -274,8 +266,8 @@ routes.get("/catalogues/:collectionId", async (c) => {
 // only what changed" payload safe. A body that names nothing writes nothing:
 // no column moves, and `updatedAt` is left alone, so "updated" continues to
 // mean something was.
-routes.patch("/catalogues/:collectionId", requireSession, async (c) => {
-  const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+catalogueRoutes.patch("/catalogues/:catalogueId", requireSession, async (c) => {
+  const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
   const payload: CatalogueUpdatePayload = await parseBody(
     c,
     catalogueUpdateSchema,
@@ -328,7 +320,7 @@ routes.patch("/catalogues/:collectionId", requireSession, async (c) => {
         // operation, and removing has nothing left to admit.
         await tx
           .delete(grantsTable)
-          .where(eq(grantsTable.collectionId, catalogue.id));
+          .where(eq(grantsTable.catalogueId, catalogue.id));
       }
     });
   }
@@ -352,42 +344,46 @@ routes.patch("/catalogues/:collectionId", requireSession, async (c) => {
 // refusal: two deletes racing get one stamp, and the loser answers not-found
 // rather than moving the timestamp twice. Nothing else is written — that is
 // what keeps the operator's restore to clearing one column.
-routes.delete("/catalogues/:collectionId", requireSession, async (c) => {
-  const catalogue = await requireOwnerCatalogue(
-    c,
-    param(c, "collectionId"),
-    "Only the catalogue's owner can delete it",
-  );
-  const now = new Date();
-  await safeTx(async (tx) => {
-    const stamped = await tx
-      .update(cataloguesTable)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(cataloguesTable.id, catalogue.id),
-          isNull(cataloguesTable.deletedAt),
-        ),
-      )
-      .returning({ id: cataloguesTable.id });
-    if (stamped.length === 0) {
-      throw new ApiError("not-found", "The catalogue does not exist");
-    }
-    await tx
-      .update(catalogueInvitationsTable)
-      .set({ status: "revoked", resolvedAt: now })
-      .where(
-        and(
-          eq(catalogueInvitationsTable.collectionId, catalogue.id),
-          eq(catalogueInvitationsTable.status, "pending"),
-        ),
-      );
-    await tx
-      .delete(grantsTable)
-      .where(eq(grantsTable.collectionId, catalogue.id));
-  });
-  return c.body(null, 204);
-});
+catalogueRoutes.delete(
+  "/catalogues/:catalogueId",
+  requireSession,
+  async (c) => {
+    const catalogue = await requireOwnerCatalogue(
+      c,
+      param(c, "catalogueId"),
+      "Only the catalogue's owner can delete it",
+    );
+    const now = new Date();
+    await safeTx(async (tx) => {
+      const stamped = await tx
+        .update(cataloguesTable)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(cataloguesTable.id, catalogue.id),
+            isNull(cataloguesTable.deletedAt),
+          ),
+        )
+        .returning({ id: cataloguesTable.id });
+      if (stamped.length === 0) {
+        throw new ApiError("not-found", "The catalogue does not exist");
+      }
+      await tx
+        .update(catalogueInvitationsTable)
+        .set({ status: "revoked", resolvedAt: now })
+        .where(
+          and(
+            eq(catalogueInvitationsTable.catalogueId, catalogue.id),
+            eq(catalogueInvitationsTable.status, "pending"),
+          ),
+        );
+      await tx
+        .delete(grantsTable)
+        .where(eq(grantsTable.catalogueId, catalogue.id));
+    });
+    return c.body(null, 204);
+  },
+);
 
 // POST …/unlock — the lock screen's password attempt, and the one route a
 // non-member reaches a Protected catalogue through.
@@ -409,7 +405,7 @@ routes.delete("/catalogues/:collectionId", requireSession, async (c) => {
 // — the state the request does not suit, rather than a permission question.
 //
 // **The throttle.** This is the one route whose purpose is to be guessed at,
-// so its attempts are counted in `collection_unlock_attempts`, per address and
+// so its attempts are counted in `catalogueUnlockAttempts`, per address and
 // per catalogue, in a **fixed** ten-minute window (unlockThrottle.ts has the
 // arithmetic and the reason it is fixed). The count is spent *before* the
 // secret is read, in one atomic claim: an INSERT that opens the window's row,
@@ -423,8 +419,8 @@ routes.delete("/catalogues/:collectionId", requireSession, async (c) => {
 // The refusal states the window and nothing about the time left in it, and
 // carries no `Retry-After` for the same reason: a countdown would tell a
 // guesser exactly when their next ten attempts open.
-routes.post("/catalogues/:collectionId/unlock", async (c) => {
-  const catalogue = await loadCatalogue(param(c, "collectionId"));
+catalogueRoutes.post("/catalogues/:catalogueId/unlock", async (c) => {
+  const catalogue = await loadCatalogue(param(c, "catalogueId"));
   if (!catalogue) {
     throw new ApiError("not-found", "The catalogue does not exist");
   }
@@ -440,11 +436,11 @@ routes.post("/catalogues/:collectionId/unlock", async (c) => {
   const windowStart = unlockWindowStart(new Date());
   const [claim] = await db
     .insert(unlockAttemptsTable)
-    .values({ ip, collectionId: catalogue.id, windowStart, attempts: 1 })
+    .values({ ip, catalogueId: catalogue.id, windowStart, attempts: 1 })
     .onConflictDoUpdate({
       target: [
         unlockAttemptsTable.ip,
-        unlockAttemptsTable.collectionId,
+        unlockAttemptsTable.catalogueId,
         unlockAttemptsTable.windowStart,
       ],
       set: { attempts: sql`${unlockAttemptsTable.attempts} + 1` },
@@ -474,14 +470,14 @@ routes.post("/catalogues/:collectionId/unlock", async (c) => {
     .where(
       and(
         eq(unlockAttemptsTable.ip, ip),
-        eq(unlockAttemptsTable.collectionId, catalogue.id),
+        eq(unlockAttemptsTable.catalogueId, catalogue.id),
       ),
     );
 
   const now = new Date();
   const token = mintGrantToken();
   await db.insert(grantsTable).values({
-    collectionId: catalogue.id,
+    catalogueId: catalogue.id,
     tokenHash: hashGrantToken(token),
     createdAt: now,
     expiresAt: new Date(now.getTime() + GRANT_TTL_MS),
@@ -503,11 +499,11 @@ routes.post("/catalogues/:collectionId/unlock", async (c) => {
 // rows are written in one transaction. The ids are minted here — the
 // client's review step has no say in them, and the shared schema is the
 // only place a row's validity is decided.
-routes.post(
-  "/catalogues/:collectionId/import/csv",
+catalogueRoutes.post(
+  "/catalogues/:catalogueId/import/csv",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const payload: ArtworkImportPayload = await parseBody(
       c,
       artworkImportSchema,
@@ -542,7 +538,7 @@ routes.post(
         // The mirror of the catalogue's owner: an import adds the
         // catalogue's works, whoever ran it (ADR-0004).
         userId: catalogue.userId,
-        collectionId: catalogue.id,
+        catalogueId: catalogue.id,
         title: values.title,
         artistName: values.artistName,
         status: values.status,
@@ -576,12 +572,12 @@ routes.post(
 // path sits at the catalogue level because a static segment under `artworks`
 // would be shadowed by the single-artwork route (Hono matches in registration
 // order).
-routes.get(
-  "/catalogues/:collectionId/deleted-artworks",
+catalogueRoutes.get(
+  "/catalogues/:catalogueId/deleted-artworks",
   requireSession,
   async (c) => {
     const read = await readDeletedArtworkList(
-      param(c, "collectionId"),
+      param(c, "catalogueId"),
       c.get("user").id,
     );
     if (read.status === "not-found") {
@@ -601,11 +597,11 @@ routes.get(
 // `updatedAt`. Already-deleted or foreign ids are not in the WHERE clause's
 // result and do not count: the response is how many works this call
 // actually moved.
-routes.post(
-  "/catalogues/:collectionId/artworks/bulk-delete",
+catalogueRoutes.post(
+  "/catalogues/:catalogueId/artworks/bulk-delete",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const payload: ArtworkBulkDeletePayload = await parseBody(
       c,
       artworkBulkDeleteSchema,
@@ -626,11 +622,11 @@ routes.post(
 // id, an id from another catalogue and an id a previous call already restored
 // are not in the WHERE clause's result and do not count, so a repeated call is
 // a no-op rather than an error and the response is the number restored.
-routes.post(
-  "/catalogues/:collectionId/artworks/bulk-restore",
+catalogueRoutes.post(
+  "/catalogues/:catalogueId/artworks/bulk-restore",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const payload: ArtworkBulkRestorePayload = await parseBody(
       c,
       artworkBulkRestoreSchema,
@@ -650,15 +646,15 @@ routes.post(
 // live work (restoring it is a no-op the route does not special-case).
 // The path both UIs use for one work: a row in the Deleted view, and the banner
 // on a deleted work's Edit page.
-routes.post(
-  "/catalogues/:collectionId/artworks/:artworkId/restore",
+catalogueRoutes.post(
+  "/catalogues/:catalogueId/artworks/:artworkId/restore",
   requireSession,
   async (c) => {
-    const collectionId = param(c, "collectionId");
+    const catalogueId = param(c, "catalogueId");
     const artworkId = param(c, "artworkId");
     const { catalogue, artwork } = await requireMemberArtwork(
       c,
-      collectionId,
+      catalogueId,
       artworkId,
     );
     await db
@@ -667,7 +663,7 @@ routes.post(
       .where(
         and(
           eq(artworksTable.id, artwork.id),
-          eq(artworksTable.collectionId, catalogue.id),
+          eq(artworksTable.catalogueId, catalogue.id),
         ),
       );
     return c.json({ restored: true });
@@ -678,11 +674,11 @@ routes.post(
 // whose entryId has no row. An entry that DOES have a row keeps its staged
 // objects even under a soft-deleted work: the row is what a restore would
 // point at, and the staged object may be the entry's newest version.
-routes.post(
-  "/catalogues/:collectionId/maintenance/sweep",
+catalogueRoutes.post(
+  "/catalogues/:catalogueId/maintenance/sweep",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
 
     // Every staged object under the caller's prefix. Staging names the
     // uploader, not the catalogue owner, so this is the caller's own

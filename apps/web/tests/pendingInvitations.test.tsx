@@ -70,21 +70,21 @@ const invitation = (
   overrides: Partial<InvitationInboxEntry> = {},
 ): InvitationInboxEntry => ({
   id: "iiiiiiiiiiiiiiiiiiii",
-  collectionId: "cccccccccccccccccccc",
+  catalogueId: "cccccccccccccccccccc",
   email: "invitee@example.test",
   invitedByUserId: "u-owner",
   status: "pending",
   createdAt: { seconds: 1, nanoseconds: 0 },
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
   resolvedAt: null,
-  collectionName: "Flores Solares",
+  catalogueName: "Flores Solares",
   inviterName: "Sofía Lara",
   ...overrides,
 });
 
 const declined = (entry: InvitationInboxEntry): InvitationSummary => ({
   id: entry.id,
-  collectionId: entry.collectionId,
+  catalogueId: entry.catalogueId,
   email: entry.email,
   invitedByUserId: entry.invitedByUserId,
   status: "declined",
@@ -113,8 +113,8 @@ describe("the dashboard's pending invitations", () => {
       invitation(),
       invitation({
         id: "jjjjjjjjjjjjjjjjjjjj",
-        collectionId: "dddddddddddddddddddd",
-        collectionName: "Estudio Compartido",
+        catalogueId: "dddddddddddddddddddd",
+        catalogueName: "Estudio Compartido",
         inviterName: "Mateo Ruiz",
       }),
     ]);
@@ -153,8 +153,8 @@ describe("the dashboard's pending invitations", () => {
     const first = invitation();
     const second = invitation({
       id: "jjjjjjjjjjjjjjjjjjjj",
-      collectionId: "dddddddddddddddddddd",
-      collectionName: "Estudio Compartido",
+      catalogueId: "dddddddddddddddddddd",
+      catalogueName: "Estudio Compartido",
       inviterName: "Mateo Ruiz",
     });
     declinePendingInvitation.mockResolvedValue(declined(first));

@@ -69,7 +69,7 @@ export type ArtworkRow = typeof artworksTable.$inferSelect;
  * carry their own `deletedAt IS NULL` filter.
  */
 export const loadCatalogue = async (
-  collectionId: string,
+  catalogueId: string,
 ): Promise<CatalogueRow | null> =>
   (
     await db
@@ -77,7 +77,7 @@ export const loadCatalogue = async (
       .from(cataloguesTable)
       .where(
         and(
-          eq(cataloguesTable.id, collectionId),
+          eq(cataloguesTable.id, catalogueId),
           isNull(cataloguesTable.deletedAt),
         ),
       )
@@ -86,12 +86,12 @@ export const loadCatalogue = async (
 /**
  * The viewer's own membership row for a catalogue, or `null` for none.
  *
- * The owner has no row here — `collections.userId` is the one owner fact —
+ * The owner has no row here — `catalogues.userId` is the one owner fact —
  * so this is asked only to place everyone else, and the query is keyed by
  * both ids so a row naming somebody else can never come back.
  */
 const loadCollaborator = async (
-  collectionId: string,
+  catalogueId: string,
   userId: string,
 ): Promise<CollaboratorRow | null> =>
   (
@@ -100,17 +100,17 @@ const loadCollaborator = async (
       .from(catalogueCollaboratorsTable)
       .where(
         and(
-          eq(catalogueCollaboratorsTable.collectionId, collectionId),
+          eq(catalogueCollaboratorsTable.catalogueId, catalogueId),
           eq(catalogueCollaboratorsTable.userId, userId),
         ),
       )
   )[0] ?? null;
 
 /** The viewer's membership in a catalogue, rows loaded. An owner costs no
- *  query: `collections.userId` is the fact, and the membership row is only
+ *  query: `catalogues.userId` is the fact, and the membership row is only
  *  asked about anyone else. */
 export const loadMembership = async (
-  collectionId: string,
+  catalogueId: string,
   catalogue: CatalogueFacts,
   viewer: string | null,
 ): Promise<Membership> => {
@@ -119,12 +119,12 @@ export const loadMembership = async (
   return membershipOf(
     viewer,
     catalogue,
-    await loadCollaborator(collectionId, viewer),
+    await loadCollaborator(catalogueId, viewer),
   );
 };
 
 export const loadArtworkInCatalogue = async (
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): Promise<ArtworkRow | null> =>
   (
@@ -133,7 +133,7 @@ export const loadArtworkInCatalogue = async (
       .from(artworksTable)
       .where(
         and(
-          eq(artworksTable.collectionId, collectionId),
+          eq(artworksTable.catalogueId, catalogueId),
           eq(artworksTable.id, artworkId),
         ),
       )
@@ -166,15 +166,15 @@ export const loadArtworkById = async (
  */
 export async function requireReadableCatalogue(
   c: Context,
-  collectionId: string,
+  catalogueId: string,
 ): Promise<{ catalogue: CatalogueRow; audience: CatalogueAudience }> {
-  const catalogue = await loadCatalogue(collectionId);
+  const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) {
     throw new ApiError("not-found", "The catalogue does not exist");
   }
   const session = await resolveSession(c);
   const membership = await loadMembership(
-    collectionId,
+    catalogueId,
     catalogue,
     session?.user.id ?? null,
   );
@@ -182,7 +182,7 @@ export async function requireReadableCatalogue(
   // someone it could admit.
   const hasValidGrant = isMember(membership)
     ? false
-    : await grantHeld(c, collectionId);
+    : await grantHeld(c, catalogueId);
   if (!canSeeCatalogue(membership, catalogue, hasValidGrant)) {
     throw catalogueRefusal(catalogue);
   }
@@ -196,13 +196,13 @@ export async function requireReadableCatalogue(
  *
  * The name rides in `details`, the envelope's one nested slot, because
  * `errorResponse` spreads a detail at the top level: a bare
- * `{ collectionName }` would land on `error.collectionName`, which no client
+ * `{ catalogueName }` would land on `error.catalogueName`, which no client
  * reads and the lock screen would never see.
  */
 function catalogueRefusal(catalogue: CatalogueFacts & { name: string }) {
   if (catalogue.isPublic && catalogue.passwordHash != null) {
     return new ApiError("password-required", "This catalogue is protected", {
-      details: { collectionName: catalogue.name },
+      details: { catalogueName: catalogue.name },
     });
   }
   return new ApiError("forbidden", "This catalogue is private");
@@ -211,7 +211,7 @@ function catalogueRefusal(catalogue: CatalogueFacts & { name: string }) {
 /**
  * Whether this request holds a usable grant for THIS catalogue.
  *
- * The cookie's name is the scope: only `arcula_grant_{collectionId}` is read,
+ * The cookie's name is the scope: only `arcula_grant_{catalogueId}` is read,
  * so a grant minted for another catalogue is never consulted (ADR-0005). The
  * row is looked up by the catalogue id and the token's hash, so a token
  * replayed under the wrong name finds nothing either, and expiry is the same
@@ -222,9 +222,9 @@ function catalogueRefusal(catalogue: CatalogueFacts & { name: string }) {
  */
 export const grantHeld = async (
   c: Context,
-  collectionId: string,
+  catalogueId: string,
 ): Promise<boolean> => {
-  const token = getCookie(c, grantCookieName(collectionId));
+  const token = getCookie(c, grantCookieName(catalogueId));
   if (!token) return false;
   const row = (
     await db
@@ -232,7 +232,7 @@ export const grantHeld = async (
       .from(grantsTable)
       .where(
         and(
-          eq(grantsTable.collectionId, collectionId),
+          eq(grantsTable.catalogueId, catalogueId),
           eq(grantsTable.tokenHash, hashGrantToken(token)),
         ),
       )
@@ -242,7 +242,7 @@ export const grantHeld = async (
 
 /**
  * The write-side check: the catalogue exists and the caller is a member of
- * it — its owner, or an account with a `collection_collaborators` row.
+ * it — its owner, or an account with a `catalogueCollaborators` row.
  *
  * Membership is the whole verdict (ADR-0004): a collaborator may change every
  * setting, public/private included, and every work, exactly as the owner does,
@@ -255,14 +255,14 @@ export const grantHeld = async (
  */
 export async function requireMemberCatalogue(
   c: Context,
-  collectionId: string,
+  catalogueId: string,
 ): Promise<CatalogueRow> {
-  const catalogue = await loadCatalogue(collectionId);
+  const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) {
     throw new ApiError("not-found", "The catalogue does not exist");
   }
   const membership = await loadMembership(
-    collectionId,
+    catalogueId,
     catalogue,
     c.get("user").id,
   );
@@ -284,10 +284,10 @@ export async function requireMemberCatalogue(
  */
 export async function requireOwnerCatalogue(
   c: Context,
-  collectionId: string,
+  catalogueId: string,
   refusal = "Only the catalogue's owner can manage access",
 ): Promise<CatalogueRow> {
-  const catalogue = await requireMemberCatalogue(c, collectionId);
+  const catalogue = await requireMemberCatalogue(c, catalogueId);
   if (catalogue.userId !== c.get("user").id) {
     throw new ApiError("forbidden", refusal);
   }
@@ -297,11 +297,11 @@ export async function requireOwnerCatalogue(
 /** The membership check plus the artwork existing inside that catalogue. */
 export async function requireMemberArtwork(
   c: Context,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): Promise<{ catalogue: CatalogueRow; artwork: ArtworkRow }> {
-  const catalogue = await requireMemberCatalogue(c, collectionId);
-  const artwork = await loadArtworkInCatalogue(collectionId, artworkId);
+  const catalogue = await requireMemberCatalogue(c, catalogueId);
+  const artwork = await loadArtworkInCatalogue(catalogueId, artworkId);
   if (!artwork) {
     throw new ApiError("not-found", "The artwork does not exist");
   }

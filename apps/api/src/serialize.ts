@@ -198,7 +198,7 @@ function serializePhoto(
   row: PhotoRow,
   variants: VariantRow[],
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): PhotoRead {
   // The photo row carries no metadata: the `original` variant row is where
@@ -220,7 +220,7 @@ function serializePhoto(
   const originalUrl = mediaUrl(
     finalPhotoKey(
       namespaceId,
-      collectionId,
+      catalogueId,
       artworkId,
       row.id,
       "original",
@@ -244,7 +244,7 @@ function serializePhoto(
         mediaUrl(
           finalPhotoKey(
             namespaceId,
-            collectionId,
+            catalogueId,
             artworkId,
             row.id,
             key,
@@ -260,7 +260,7 @@ function serializeDocument(
   row: DocumentRow,
   variants: VariantRow[],
   namespaceId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
 ): DocumentRead {
   const kind = kindOf(row.kind);
@@ -273,7 +273,7 @@ function serializeDocument(
       url: mediaUrl(
         finalDocumentKey(
           namespaceId,
-          collectionId,
+          catalogueId,
           artworkId,
           row.id,
           "original",
@@ -298,7 +298,7 @@ function serializeDocument(
             mediaUrl(
               finalDocumentKey(
                 namespaceId,
-                collectionId,
+                catalogueId,
                 artworkId,
                 row.id,
                 key,
@@ -339,7 +339,7 @@ export function serializeArtwork(
         d,
         byParent.get(d.id) ?? [],
         namespaceId,
-        artwork.collectionId,
+        artwork.catalogueId,
         artwork.id,
       ),
     ),
@@ -348,11 +348,11 @@ export function serializeArtwork(
         p,
         byParent.get(p.id) ?? [],
         namespaceId,
-        artwork.collectionId,
+        artwork.catalogueId,
         artwork.id,
       ),
     ),
-    collectionId: artwork.collectionId,
+    catalogueId: artwork.catalogueId,
     status: statusOf(artwork.status),
     deletedAt: wireTimestampOrNull(artwork.deletedAt),
     createdAt: wireTimestamp(artwork.createdAt),
@@ -437,7 +437,7 @@ export function serializeMember(row: {
 export function serializeInvitation(row: InvitationRow): InvitationSummary {
   return {
     id: row.id,
-    collectionId: row.collectionId,
+    catalogueId: row.catalogueId,
     email: row.email,
     invitedByUserId: row.invitedByUserId,
     status: row.status as InvitationSummary["status"],

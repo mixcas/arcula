@@ -52,7 +52,7 @@ const access = {
   invitations: [
     {
       id: "i1",
-      collectionId: "c1",
+      catalogueId: "c1",
       email: "invited@example.test",
       invitedByUserId: "u-owner",
       status: "pending",

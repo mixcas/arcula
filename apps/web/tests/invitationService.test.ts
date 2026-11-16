@@ -42,7 +42,7 @@ afterEach(() => {
 const TOKEN = "tok-not-a-real-token";
 
 const preview = {
-  collection: { id: "c1", name: "Flores Solares" },
+  catalogue: { id: "c1", name: "Flores Solares" },
   inviter: { name: "Sofía Lara" },
   email: "invited@example.test",
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
@@ -59,7 +59,7 @@ const catalogue = {
 
 const declined = {
   id: "i1",
-  collectionId: "c1",
+  catalogueId: "c1",
   email: "invited@example.test",
   invitedByUserId: "u-owner",
   status: "declined",
@@ -73,7 +73,7 @@ const inboxEntry = {
   ...declined,
   status: "pending",
   resolvedAt: null,
-  collectionName: "Flores Solares",
+  catalogueName: "Flores Solares",
   inviterName: "Sofía Lara",
 };
 
@@ -116,7 +116,7 @@ describe("getInvitation", () => {
   });
 
   it("fails on a reshaped preview instead of rendering it", async () => {
-    stubFetch(answer({ ...preview, collection: { id: "c1" } }));
+    stubFetch(answer({ ...preview, catalogue: { id: "c1" } }));
 
     await expect(invitationService.getInvitation(TOKEN)).rejects.toThrow();
   });
@@ -197,7 +197,7 @@ describe("declinePendingInvitation", () => {
 /** One owner-side offer, as the create and resend responses carry it. */
 const offer = {
   id: "i1",
-  collectionId: "c1",
+  catalogueId: "c1",
   email: "invited@example.test",
   invitedByUserId: "u-owner",
   status: "pending",

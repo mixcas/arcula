@@ -5,7 +5,7 @@ import { invitationSummarySchema } from "./invitation";
 /**
  * The access view: who may read and change a catalogue.
  *
- * `GET /collections/{cid}/access` is the one source of the caller's role for
+ * `GET /catalogues/{cid}/access` is the one source of the caller's role for
  * the settings and the access card — the dashboard list carries a `role` too,
  * but a list row is not where an administrative screen may read one from.
  *
@@ -35,7 +35,7 @@ export const catalogueAccessSchema = z.object({
   role: catalogueRoleSchema,
   owner: catalogueMemberSchema,
   /** Everyone else with access, in the order they were added. The owner is
-   *  never one of them — `collections.userId` is the one owner fact. */
+   *  never one of them — `catalogues.userId` is the one owner fact. */
   collaborators: z.array(catalogueMemberSchema),
   /** Owner only: every pending invitation, expired ones included (their
    *  status stays `pending` — expiry is computed from `expiresAt`). Absent
@@ -71,15 +71,3 @@ export const catalogueTransferResponseSchema = z.object({
 export type CatalogueTransferResponse = z.infer<
   typeof catalogueTransferResponseSchema
 >;
-
-// The names this contract carried before ADR-0010 made Catalogue the unit,
-// alias-kept while the API and web migrate. The contract step deletes them.
-export const collectionRoleSchema = catalogueRoleSchema;
-export type CollectionMember = CatalogueMember;
-export const collectionMemberSchema = catalogueMemberSchema;
-export const collectionAccessSchema = catalogueAccessSchema;
-export type CollectionAccess = CatalogueAccess;
-export const collectionTransferSchema = catalogueTransferSchema;
-export type CollectionTransferPayload = CatalogueTransferPayload;
-export const collectionTransferResponseSchema = catalogueTransferResponseSchema;
-export type CollectionTransferResponse = CatalogueTransferResponse;

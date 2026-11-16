@@ -20,10 +20,6 @@
 // after a save all go through artworkRead.ts, which now owns the list's SQL
 // filter too; a test pins that filter and the verdict together.
 //
-// Every path is registered under `/collections/…` too (`routes`): the legacy
-// Collection spelling keeps answering unchanged until the contract step
-// removes it (ADR-0010, #246).
-//
 // Writer access: any member, the owner or a collaborator, for every route
 // here (ADR-0004). A save by a collaborator promotes THEIR staged entries
 // onto the catalogue's final keys, but records `artworks.userId` as the
@@ -70,7 +66,6 @@ import {
   writeDocumentSequence,
   writePhotoSequence,
 } from "./artworkSave";
-import { withLegacyCollectionAlias } from "./paths";
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -79,11 +74,11 @@ import { withLegacyCollectionAlias } from "./paths";
 /** The work a save must read back; absence after a successful save is a
  *  server bug, not a half-shaped response. */
 async function readSavedArtwork(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   viewer: string,
 ): Promise<ArtworkRead> {
-  const read = await readArtwork(collectionId, artworkId, viewer);
+  const read = await readArtwork(catalogueId, artworkId, viewer);
   if (read.status !== "ok") {
     throw new ApiError("internal", "The saved artwork could not be read back");
   }
@@ -96,19 +91,16 @@ async function readSavedArtwork(
 
 export const artworkRoutes = new Hono();
 
-// Every registration below mounts under both names.
-const routes = withLegacyCollectionAlias(artworkRoutes);
-
 // GET one — a member always; a visitor when catalogue and work both admit it.
-routes.get("/catalogues/:collectionId/artworks/:artworkId", async (c) => {
+artworkRoutes.get("/catalogues/:catalogueId/artworks/:artworkId", async (c) => {
   const session = await resolveSession(c);
-  const collectionId = param(c, "collectionId");
+  const catalogueId = param(c, "catalogueId");
   // The grant is a fact the route reads off the cookie and the verdict
   // takes as one; a member's read never needs it (`grantHeld` still costs
   // nothing without the cookie, and the verdict ignores it for a member).
-  const hasValidGrant = await grantHeld(c, collectionId);
+  const hasValidGrant = await grantHeld(c, catalogueId);
   const read = await readArtwork(
-    collectionId,
+    catalogueId,
     param(c, "artworkId"),
     session?.user.id ?? null,
     hasValidGrant,
@@ -130,15 +122,15 @@ routes.get("/catalogues/:collectionId/artworks/:artworkId", async (c) => {
 // grant holder included — is 403, and only then is a query past the shared
 // caps a validation error attributed to `q`. Absent, empty or whitespace-only
 // leaves the list exactly as it was.
-routes.get("/catalogues/:collectionId/artworks", async (c) => {
+artworkRoutes.get("/catalogues/:catalogueId/artworks", async (c) => {
   const session = await resolveSession(c);
-  const collectionId = param(c, "collectionId");
+  const catalogueId = param(c, "catalogueId");
   const rawQuery = c.req.query("q");
   const search =
     rawQuery !== undefined && !isBlankSearchQuery(rawQuery) ? rawQuery : null;
-  const hasValidGrant = await grantHeld(c, collectionId);
+  const hasValidGrant = await grantHeld(c, catalogueId);
   const read = await readArtworkList(
-    collectionId,
+    catalogueId,
     session?.user.id ?? null,
     hasValidGrant,
     search,
@@ -165,106 +157,113 @@ routes.get("/catalogues/:collectionId/artworks", async (c) => {
 });
 
 // POST — create the row and promote the staged entries, one transaction.
-routes.post("/catalogues/:collectionId/artworks", requireSession, async (c) => {
-  const user = c.get("user");
-  const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
-  const payload: ArtworkCreatePayload = await parseBody(c, artworkCreateSchema);
-
-  // An id is a global primary key: reusing one would promote this
-  // save's staged entries under the existing row's id.
-  const clash = await loadArtworkById(payload.artworkId);
-  if (clash) {
-    throw new ApiError("validation", "The artwork id is already in use", {
-      fields: { artworkId: "The artwork id is already in use" },
-    });
-  }
-  checkUniqueEntryIds(payload.photos, "photos");
-  checkUniqueEntryIds(payload.documents, "documents");
-  if (payload.photos.length > MAX_ARTWORK_PHOTOS) {
-    throw tooMany("photos", MAX_ARTWORK_PHOTOS);
-  }
-  if (payload.documents.length > MAX_ARTWORK_DOCUMENTS) {
-    throw tooMany("documents", MAX_ARTWORK_DOCUMENTS);
-  }
-  await assertEntriesFree(
-    "photo",
-    payload.photos.map((e) => e.entryId),
-  );
-  await assertEntriesFree(
-    "document",
-    payload.documents.map((e) => e.entryId),
-  );
-
-  const now = new Date();
-  const stagedKeys = await safeTx(async (tx) => {
-    await tx.insert(artworksTable).values({
-      id: payload.artworkId,
-      // The mirror of the catalogue's owner, not the session user: a
-      // collaborator saves work into someone else's catalogue (ADR-0004).
-      userId: catalogue.userId,
-      collectionId: catalogue.id,
-      title: payload.title,
-      artistName: payload.artistName,
-      serie: payload.serie ?? null,
-      dateOfCreation: payload.dateOfCreation ?? null,
-      medium: payload.medium ?? null,
-      dimensions: payload.dimensions ?? null,
-      editions: payload.editions ?? null,
-      acquisitionDate: payload.acquisitionDate ?? null,
-      acquisitionPrice: payload.acquisitionPrice ?? null,
-      placeOfOrigin: payload.placeOfOrigin ?? null,
-      provenance: payload.provenance ?? null,
-      notes: payload.notes ?? null,
-      condition: payload.condition ?? null,
-      currentValue: payload.currentValue ?? null,
-      status: payload.status,
-      // Always written, as null: the list filters on it, and a missing
-      // field is not a null (the write-path doctrine).
-      deletedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const photos = await writePhotoSequence(
-      tx,
-      catalogue,
-      user.id,
-      payload.artworkId,
-      payload.photos,
-      [],
-    );
-    const documents = await writeDocumentSequence(
-      tx,
-      catalogue,
-      user.id,
-      payload.artworkId,
-      payload.documents,
-      new Set(),
-    );
-    return [...photos.stagedKeys, ...documents.stagedKeys];
-  });
-  for (const key of stagedKeys) {
-    await deleteObject(key);
-  }
-
-  const artworkRead = await readSavedArtwork(
-    catalogue.id,
-    payload.artworkId,
-    user.id,
-  );
-  return c.json(artworkRead, 201);
-});
-
-// PATCH — the edit form: fields plus the full new sequences.
-routes.patch(
-  "/catalogues/:collectionId/artworks/:artworkId",
+artworkRoutes.post(
+  "/catalogues/:catalogueId/artworks",
   requireSession,
   async (c) => {
-    const collectionId = param(c, "collectionId");
+    const user = c.get("user");
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
+    const payload: ArtworkCreatePayload = await parseBody(
+      c,
+      artworkCreateSchema,
+    );
+
+    // An id is a global primary key: reusing one would promote this
+    // save's staged entries under the existing row's id.
+    const clash = await loadArtworkById(payload.artworkId);
+    if (clash) {
+      throw new ApiError("validation", "The artwork id is already in use", {
+        fields: { artworkId: "The artwork id is already in use" },
+      });
+    }
+    checkUniqueEntryIds(payload.photos, "photos");
+    checkUniqueEntryIds(payload.documents, "documents");
+    if (payload.photos.length > MAX_ARTWORK_PHOTOS) {
+      throw tooMany("photos", MAX_ARTWORK_PHOTOS);
+    }
+    if (payload.documents.length > MAX_ARTWORK_DOCUMENTS) {
+      throw tooMany("documents", MAX_ARTWORK_DOCUMENTS);
+    }
+    await assertEntriesFree(
+      "photo",
+      payload.photos.map((e) => e.entryId),
+    );
+    await assertEntriesFree(
+      "document",
+      payload.documents.map((e) => e.entryId),
+    );
+
+    const now = new Date();
+    const stagedKeys = await safeTx(async (tx) => {
+      await tx.insert(artworksTable).values({
+        id: payload.artworkId,
+        // The mirror of the catalogue's owner, not the session user: a
+        // collaborator saves work into someone else's catalogue (ADR-0004).
+        userId: catalogue.userId,
+        catalogueId: catalogue.id,
+        title: payload.title,
+        artistName: payload.artistName,
+        serie: payload.serie ?? null,
+        dateOfCreation: payload.dateOfCreation ?? null,
+        medium: payload.medium ?? null,
+        dimensions: payload.dimensions ?? null,
+        editions: payload.editions ?? null,
+        acquisitionDate: payload.acquisitionDate ?? null,
+        acquisitionPrice: payload.acquisitionPrice ?? null,
+        placeOfOrigin: payload.placeOfOrigin ?? null,
+        provenance: payload.provenance ?? null,
+        notes: payload.notes ?? null,
+        condition: payload.condition ?? null,
+        currentValue: payload.currentValue ?? null,
+        status: payload.status,
+        // Always written, as null: the list filters on it, and a missing
+        // field is not a null (the write-path doctrine).
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const photos = await writePhotoSequence(
+        tx,
+        catalogue,
+        user.id,
+        payload.artworkId,
+        payload.photos,
+        [],
+      );
+      const documents = await writeDocumentSequence(
+        tx,
+        catalogue,
+        user.id,
+        payload.artworkId,
+        payload.documents,
+        new Set(),
+      );
+      return [...photos.stagedKeys, ...documents.stagedKeys];
+    });
+    for (const key of stagedKeys) {
+      await deleteObject(key);
+    }
+
+    const artworkRead = await readSavedArtwork(
+      catalogue.id,
+      payload.artworkId,
+      user.id,
+    );
+    return c.json(artworkRead, 201);
+  },
+);
+
+// PATCH — the edit form: fields plus the full new sequences.
+artworkRoutes.patch(
+  "/catalogues/:catalogueId/artworks/:artworkId",
+  requireSession,
+  async (c) => {
+    const catalogueId = param(c, "catalogueId");
     const artworkId = param(c, "artworkId");
     const user = c.get("user");
     const { catalogue, artwork } = await requireMemberArtwork(
       c,
-      collectionId,
+      catalogueId,
       artworkId,
     );
     const payload: ArtworkUpdatePayload = await parseBody(

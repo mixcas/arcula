@@ -42,7 +42,7 @@ async function insertWork(options: {
     // ticket a collaborator's save still records the catalogue's owner, but
     // the read side may not depend on that to be true.
     userId: options.userId ?? owner.userId,
-    collectionId: cid,
+    catalogueId: cid,
     title: "Shared Work",
     artistName: "C. Cas",
     status: options.status ?? "published",
@@ -69,7 +69,7 @@ beforeAll(async () => {
     updatedAt: new Date(),
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: collaborator.userId,
   });
 

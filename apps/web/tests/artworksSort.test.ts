@@ -19,7 +19,7 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   artistName: "Unknown",
   documents: [],
   photos: [],
-  collectionId: "catalogue1",
+  catalogueId: "catalogue1",
   status: "published",
   deletedAt: null,
   ...overrides,

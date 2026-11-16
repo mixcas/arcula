@@ -71,7 +71,7 @@ async function sharedCatalogue(
   for (const account of members) {
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId: cid, userId: account.userId });
+      .values({ catalogueId: cid, userId: account.userId });
   }
   const [row] = await db
     .select()
@@ -87,7 +87,7 @@ const membership = async (cid: string, userId: string) =>
       .from(collaboratorsTable)
       .where(
         and(
-          eq(collaboratorsTable.collectionId, cid),
+          eq(collaboratorsTable.catalogueId, cid),
           eq(collaboratorsTable.userId, userId),
         ),
       )
@@ -371,7 +371,7 @@ describe("DELETE /catalogues/{cid}/collaborators/{userId}", () => {
     // a membership to remove: it is a state conflict, and the row stays.
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId: cid, userId: owner.userId });
+      .values({ catalogueId: cid, userId: owner.userId });
     const theOwner = await req("DELETE", removePath(cid, owner.userId), {
       cookies: owner.cookies,
     });

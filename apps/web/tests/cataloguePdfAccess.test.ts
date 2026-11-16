@@ -27,7 +27,7 @@ describe("accessRefusalOutcome", () => {
       "Locked",
       undefined,
       {
-        collectionName: "Flores Solares",
+        catalogueName: "Flores Solares",
       },
     );
 

@@ -54,8 +54,8 @@ let cid = "";
 let privCid = "";
 
 /** Share `catalogue` with the mate: one membership row, no API for it yet. */
-async function shareWith(collectionId: string, userId: string) {
-  await db.insert(collaboratorsTable).values({ collectionId, userId });
+async function shareWith(catalogueId: string, userId: string) {
+  await db.insert(collaboratorsTable).values({ catalogueId, userId });
 }
 
 async function stage(
@@ -497,7 +497,7 @@ describe("GET /api/v1/media — staged objects", () => {
       .delete(collaboratorsTable)
       .where(
         and(
-          eq(collaboratorsTable.collectionId, cid),
+          eq(collaboratorsTable.catalogueId, cid),
           eq(collaboratorsTable.userId, stranger.userId),
         ),
       );

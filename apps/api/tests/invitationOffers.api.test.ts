@@ -42,13 +42,13 @@ const unknownId = () => crypto.randomUUID();
 const uniqueEmail = (label: string) =>
   `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
 
-const resend = (cookies: string, id: string, collectionId = cid) =>
-  req("POST", `/api/v1/catalogues/${collectionId}/invitations/${id}/resend`, {
+const resend = (cookies: string, id: string, catalogueId = cid) =>
+  req("POST", `/api/v1/catalogues/${catalogueId}/invitations/${id}/resend`, {
     cookies,
   });
 
-const revoke = (cookies: string, id: string, collectionId = cid) =>
-  req("DELETE", `/api/v1/catalogues/${collectionId}/invitations/${id}`, {
+const revoke = (cookies: string, id: string, catalogueId = cid) =>
+  req("DELETE", `/api/v1/catalogues/${catalogueId}/invitations/${id}`, {
     cookies,
   });
 
@@ -180,7 +180,7 @@ describe("POST /catalogues/{cid}/invitations/{id}/resend", () => {
 
     for (const status of ["accepted", "declined", "revoked"] as const) {
       const resolved = await makeInvitation({
-        collectionId: cid,
+        catalogueId: cid,
         invitedByUserId: owner.userId,
         email: uniqueEmail(`Resend${status}`),
         status,
@@ -194,7 +194,7 @@ describe("POST /catalogues/{cid}/invitations/{id}/resend", () => {
   it("revives an expired pending invitation", async () => {
     const email = uniqueEmail("ResendLapsed");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -269,7 +269,7 @@ describe("DELETE /catalogues/{cid}/invitations/{id}", () => {
 
   it("revokes an expired pending offer too", async () => {
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeLapsed"),
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -282,7 +282,7 @@ describe("DELETE /catalogues/{cid}/invitations/{id}", () => {
 
   it("conflicts on a resolved offer and is owner-only", async () => {
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeDone"),
       status: "accepted",
@@ -294,7 +294,7 @@ describe("DELETE /catalogues/{cid}/invitations/{id}", () => {
     expect((await invitationRow(resolved.id)).status).toBe("accepted");
 
     const pending = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("RevokeByMate"),
     });
@@ -308,7 +308,7 @@ describe("GET /me/invitations", () => {
   it("lists the pending, unexpired offers for the signed-in address and never a token", async () => {
     const invitee = await freshUser("OfferInvitee");
     const live = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email.toUpperCase(),
       // Stored as given: an address is compared case-insensitively, so a row
@@ -318,20 +318,20 @@ describe("GET /me/invitations", () => {
     // A lapsed offer (in another catalogue — one pending row per address
     // per catalogue), a declined one, and one addressed to somebody else.
     await makeInvitation({
-      collectionId: otherCid,
+      catalogueId: otherCid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
       expiresAt: new Date(Date.now() - 86_400_000),
     });
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       status: "declined",
     });
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferInboxOther"),
     });
@@ -348,7 +348,7 @@ describe("GET /me/invitations", () => {
     // Enough to render the card without a second read: the catalogue and
     // the account that sent the offer, never the inviter's own address.
     const [entry] = body;
-    expect(entry.collectionName).toBe("Offer Wall");
+    expect(entry.catalogueName).toBe("Offer Wall");
     expect(entry.inviterName).toBe("OfferOwner Test");
     expect(entry.status).toBe("pending");
     expect(JSON.stringify(body)).not.toContain(owner.email);
@@ -360,7 +360,7 @@ describe("GET /me/invitations", () => {
   it("names a nameless inviter neutrally, never by address", async () => {
     const invitee = await freshUser("OfferNameless");
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
     });
@@ -401,7 +401,7 @@ describe("POST /me/invitations/{id}/decline", () => {
   it("marks the invitee's own pending offer declined", async () => {
     const invitee = await freshUser("OfferDecline");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
     });
@@ -436,18 +436,18 @@ describe("POST /me/invitations/{id}/decline", () => {
     const other = await freshUser("OfferDeclineOther");
 
     const someoneElses = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferDeclineOtherAddress"),
     });
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       status: "accepted",
     });
     const lapsed = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email,
       createdAt: new Date(Date.now() - 8 * 86_400_000),
@@ -475,7 +475,7 @@ describe("POST /me/invitations/{id}/decline", () => {
   it("matches the caller's address case-insensitively", async () => {
     const invitee = await freshUser("OfferDeclineCase");
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: invitee.email.toUpperCase(),
       storeEmailAsGiven: true,
@@ -488,7 +488,7 @@ describe("POST /me/invitations/{id}/decline", () => {
 
   it("requires a session", async () => {
     const made = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: uniqueEmail("OfferDeclineAnon"),
     });

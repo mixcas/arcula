@@ -86,7 +86,7 @@ async function hasCollaborator(userId: string): Promise<boolean> {
     .from(collaboratorsTable)
     .where(
       and(
-        eq(collaboratorsTable.collectionId, cid),
+        eq(collaboratorsTable.catalogueId, cid),
         eq(collaboratorsTable.userId, userId),
       ),
     );
@@ -105,7 +105,7 @@ async function insertInvitation(options: {
   const now = new Date();
   await db.insert(invitationsTable).values({
     id,
-    collectionId: cid,
+    catalogueId: cid,
     email: options.email.trim().toLowerCase(),
     invitedByUserId: owner.userId,
     tokenHash: hashInvitationToken(options.token),
@@ -126,7 +126,7 @@ beforeAll(async () => {
     isPublic: false,
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: collaborator.userId,
   });
 });
@@ -148,7 +148,7 @@ describe("POST /catalogues/{cid}/invitations", () => {
     expect(body.emailSent).toBe(true);
     expect(body.invitation.status).toBe("pending");
     expect(body.invitation.email).toBe(invited.toLowerCase());
-    expect(body.invitation.collectionId).toBe(cid);
+    expect(body.invitation.catalogueId).toBe(cid);
     expect(body.invitation.resolvedAt).toBeNull();
 
     // Seven days, computed from the row's own issue time.
@@ -302,12 +302,12 @@ describe("GET /invitations/{token}", () => {
     const res = await req("GET", `/api/v1/invitations/${token}`);
     expect(res.status).toBe(200);
     const body = await json<PreviewResponse>(res);
-    expect(body.collection).toEqual({ id: cid, name: "Invitation Wall" });
+    expect(body.catalogue).toEqual({ id: cid, name: "Invitation Wall" });
     expect(body.inviter).toEqual({ name: "InviteOwner Test" });
     expect(body.email).toBe(email.toLowerCase());
     expect(body.expiresAt.seconds).toBe(created.invitation.expiresAt.seconds);
     expect(body).not.toHaveProperty("description");
-    expect(body.collection).not.toHaveProperty("artworks");
+    expect(body.catalogue).not.toHaveProperty("artworks");
   });
 
   it("answers one uniform 404 for unknown, expired, revoked and declined tokens", async () => {
@@ -435,7 +435,7 @@ describe("POST /invitations/{token}/accept", () => {
       await req("GET", "/api/v1/me", { cookies: invited.cookies }),
     );
     await db.insert(collaboratorsTable).values({
-      collectionId: cid,
+      catalogueId: cid,
       userId: me.id,
     });
 
