@@ -1,0 +1,2 @@
+ALTER TABLE "artworks" ADD COLUMN "availability" text;--> statement-breakpoint
+ALTER TABLE "artworks" ADD CONSTRAINT "artworks_availability_check" CHECK ("availability" in ('available', 'reserved', 'sold', 'on-consignment'));
