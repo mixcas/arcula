@@ -22,8 +22,8 @@ describe("catalogueSurface", () => {
       }),
     ).toEqual([
       ["Portfolio", "Artist name", "Bio"],
-      ["Collection", "Name", "Description"],
       ["Inventory", "Gallery name", "About"],
+      ["Collection", "Name", "Description"],
     ]);
   });
 

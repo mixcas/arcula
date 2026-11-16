@@ -15,7 +15,6 @@
 import React, { useState } from "react";
 import {
   Alert,
-  Badge,
   Box,
   Button,
   Card,
@@ -29,6 +28,7 @@ import {
 } from "@mantine/core";
 import type { Catalogue } from "@arcula/shared";
 import { catalogueSurface } from "@/catalogueSurface";
+import CatalogueKindBadge from "./CatalogueKindBadge";
 import { passwordControlMode } from "./cataloguePassword";
 import {
   resolveGeneralSave,
@@ -92,17 +92,15 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
     removing: removingPassword,
   });
 
-  // The kind is fixed, so its only job here is to name the two fields and to
-  // stay visible: after creation this is where a member confirms what the
-  // catalogue is.
+  // The kind is fixed, so its job here is to name the two fields and to stay
+  // visible as its colour-coded badge: after creation this is where a member
+  // confirms what the catalogue is.
   const surface = catalogueSurface(catalogue.kind);
 
   return (
     <Card shadow="sm" p="lg">
       <Group mb="md" gap="sm">
-        <Badge variant="light" color="gray">
-          Kind: {surface.kindLabel}
-        </Badge>
+        <CatalogueKindBadge kind={catalogue.kind} />
         <Text size="sm" c="dim">
           The kind is fixed at creation.
         </Text>

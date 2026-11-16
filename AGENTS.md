@@ -261,14 +261,15 @@ not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
 against the three values (`catalogueKindOf`) before emitting it.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
-means for the surface, as data: the labels, the market states a kind offers
-(a Portfolio's three, an Inventory's four, a Collection's none) with their
-words, and the v1 artwork field table — every field visible, only `title` and
-`artistName` required. The field table is the data a later per-kind hiding will
-read; no v1 screen consumes `visible`/`required`, and a screen that reads the
-module uses the labels, the availability values and `availabilityFor`'s
-default. `services/` are the API clients
-(`api.ts` is the transport); `auth/` is the Better Auth React client;
+means for the surface, as data: the kind's colour (`kindColor`, a literal union
+the screens turn into a CSS variable through `kindColorVar`), the labels, the
+market states a kind offers (a Portfolio's three, an Inventory's four, a
+Collection's none) with their words, and the v1 artwork field table — every
+field visible, only `title` and `artistName` required. The field table is the
+data a later per-kind hiding will read; no v1 screen consumes
+`visible`/`required`, and a screen that reads the module uses the labels, the
+availability values and `availabilityFor`'s default. `services/` are the API
+clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
 `components/manage` and `components/catalogue`; `skins/` is the public-view
 system. The artwork Add and Edit pages load the catalogue for its kind; a
 Collection's form renders no availability control and sends no key, while a
