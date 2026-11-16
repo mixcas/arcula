@@ -246,8 +246,15 @@ both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
 card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
 `MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),
-`slug.ts`, `types.ts`. `schemas/catalogue.ts` holds `catalogueKindSchema`
-(`portfolio`/`collection`/`inventory`, pinned to `CatalogueKind`); the create
+`slug.ts`, `types.ts`. `schemas/artwork.ts` holds `artworkStatusSchema` and
+`artworkAvailabilitySchema` (`available`/`reserved`/`sold`/`on-consignment`,
+both pinned to their client types); the save schemas accept availability as
+`.nullable()`, the create treating an absent key as null and the update as
+"leave it alone", and the read schema requires the key because the serializer
+always emits it. The API never validates it against the catalogue's kind — a
+Collection's work may carry one. `schemas/catalogue.ts` holds
+`catalogueKindSchema` (`portfolio`/`collection`/`inventory`, pinned to
+`CatalogueKind`); the create
 schema accepts `kind` defaulting to `collection` and the update schema does
 not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
 `catalogueReadSchema` carries it, and the API's serializer validates a row
@@ -255,10 +262,15 @@ against the three values (`catalogueKindOf`) before emitting it.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
 means for the surface, as data (labels, availability in play, the artwork
-form's visible/required fields); `services/` are the API clients
+form's visible/required fields, and the four availability labels both the form
+and the manage badges read); `services/` are the API clients
 (`api.ts` is the transport); `auth/` is the Better Auth React client;
 `components/manage` and `components/catalogue`; `skins/` is the public-view
-system.
+system. The artwork Add and Edit pages load the catalogue for its kind; a
+Collection's form renders no availability control and sends no key, while a
+Portfolio or an Inventory defaults a surfaced work with no stored state to
+`available`. The manage page passes `showAvailability` down from the kind, and
+no public page renders availability at all.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `catalogues`, `catalogueCollaborators`,
