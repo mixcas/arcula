@@ -1,26 +1,26 @@
 // Access can end, and it ends on the next request.
 //
-//   DELETE /collections/{cid}/collaborators/{userId}   owner: remove somebody
-//   DELETE /collections/{cid}/collaborators/me         collaborator: leave
+//   DELETE /catalogues/{cid}/collaborators/{userId}   owner: remove somebody
+//   DELETE /catalogues/{cid}/collaborators/me         collaborator: leave
 //
 // Both delete the membership row and nothing else that is saved: the works the
-// departing account recorded stay in the collection, with their final objects,
-// and the account is a visitor from its next request on — the collection, its
+// departing account recorded stay in the catalogue, with their final objects,
+// and the account is a visitor from its next request on — the catalogue, its
 // works, its documents and its bytes included.
 //
 // The one thing that is discarded is that account's unsaved uploads for that
-// one collection: its staging prefix, best effort. A storage failure does not
+// one catalogue: its staging prefix, best effort. A storage failure does not
 // fail the action — the seven-day staging lifecycle is the backstop — and
 // another member's prefix, or the departing account's staging in another
-// collection, is never touched.
+// catalogue, is never touched.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
-import type { ArtworkRead, Collection, CollectionAccess } from "@arcula/shared";
+import type { ArtworkRead, Catalogue, CatalogueAccess } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
 import {
   finalPhotoPrefix,
@@ -30,7 +30,7 @@ import {
 import { listObjects, s3 } from "../src/storage";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageDocument,
@@ -51,20 +51,20 @@ const sourceJpeg = (async () => makeJpeg())();
 const makePdf = (): Uint8Array<ArrayBuffer> =>
   Uint8Array.from(new TextEncoder().encode("%PDF-1.4 (test) %%EOF"));
 
-const collectionPath = (cid: string) => `/api/v1/collections/${cid}`;
-const listPath = (cid: string) => `${collectionPath(cid)}/artworks`;
-const accessPath = (cid: string) => `${collectionPath(cid)}/access`;
+const cataloguePath = (cid: string) => `/api/v1/catalogues/${cid}`;
+const listPath = (cid: string) => `${cataloguePath(cid)}/artworks`;
+const accessPath = (cid: string) => `${cataloguePath(cid)}/access`;
 const removePath = (cid: string, userId: string) =>
-  `${collectionPath(cid)}/collaborators/${userId}`;
-const leavePath = (cid: string) => `${collectionPath(cid)}/collaborators/me`;
+  `${cataloguePath(cid)}/collaborators/${userId}`;
+const leavePath = (cid: string) => `${cataloguePath(cid)}/collaborators/me`;
 
-/** A collection (private by default — the strongest read refusal: `403` for a
+/** A catalogue (private by default — the strongest read refusal: `403` for a
  *  non-member) shared with the accounts named. */
-async function sharedCollection(
+async function sharedCatalogue(
   members: Account[],
   { isPublic = false }: { isPublic?: boolean } = {},
 ): Promise<{ cid: string; namespace: string }> {
-  const cid = await makeCollection(owner.userId, {
+  const cid = await makeCatalogue(owner.userId, {
     name: "Shared Removal Wall",
     isPublic,
   });
@@ -75,8 +75,8 @@ async function sharedCollection(
   }
   const [row] = await db
     .select()
-    .from(collectionsTable)
-    .where(eq(collectionsTable.id, cid));
+    .from(cataloguesTable)
+    .where(eq(cataloguesTable.id, cid));
   return { cid, namespace: row.mediaNamespaceId };
 }
 
@@ -146,12 +146,12 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
+describe("DELETE /catalogues/{cid}/collaborators/{userId}", () => {
   it("removes the collaborator, who is a visitor from its next request", async () => {
-    const { cid, namespace } = await sharedCollection([mate]);
+    const { cid, namespace } = await sharedCatalogue([mate]);
 
     // The work a collaborator records, with a photo and a document that belong
-    // to the collection once saved.
+    // to the catalogue once saved.
     const aid = uuid();
     const photo = entry("rm-photo");
     const doc = entry("rm-doc");
@@ -176,10 +176,10 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     const leftover = entry("rm-leftover");
     await stageAndProcess(mate, cid, aid, "photos", leftover);
 
-    // While a collaborator: the collection, the work, its photo and its
+    // While a collaborator: the catalogue, the work, its photo and its
     // document all answer.
     expect(
-      (await req("GET", collectionPath(cid), { cookies: mate.cookies })).status,
+      (await req("GET", cataloguePath(cid), { cookies: mate.cookies })).status,
     ).toBe(200);
     for (const url of [
       work.photos[0].original.url,
@@ -199,24 +199,24 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
 
     // The membership row is the access fact, and it is gone.
     expect(await membership(cid, mate.userId)).toBeUndefined();
-    const access = await json<CollectionAccess>(
+    const access = await json<CatalogueAccess>(
       await req("GET", accessPath(cid), { cookies: owner.cookies }),
     );
     expect(access.collaborators.map((c) => c.userId)).not.toContain(
       mate.userId,
     );
     // …and the dashboard no longer lists it for them.
-    const dashboard = await json<Collection[]>(
-      await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+    const dashboard = await json<Catalogue[]>(
+      await req("GET", "/api/v1/catalogues", { cookies: mate.cookies }),
     );
     expect(dashboard.map((c) => c.id)).not.toContain(cid);
 
-    // Their next requests: a private collection refuses the way it refuses a
-    // stranger — the collection and its list `403`, the work and its photo
+    // Their next requests: a private catalogue refuses the way it refuses a
+    // stranger — the catalogue and its list `403`, the work and its photo
     // `404` (the uniform visitor refusal), the document `403`, the access read
     // `403`.
     for (const [path, status] of [
-      [collectionPath(cid), 403],
+      [cataloguePath(cid), 403],
       [listPath(cid), 403],
       [accessPath(cid), 403],
       [`${listPath(cid)}/${aid}`, 404],
@@ -237,7 +237,7 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     // a staged upload are not a visitor's to make.
     expect(
       (
-        await req("PATCH", collectionPath(cid), {
+        await req("PATCH", cataloguePath(cid), {
           cookies: mate.cookies,
           body: { name: "Hijacked" },
         })
@@ -297,8 +297,8 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     ).toHaveLength(7);
   });
 
-  it("changes only the membership: a public collection's works stay public, its documents do not", async () => {
-    const { cid } = await sharedCollection([mate], { isPublic: true });
+  it("changes only the membership: a public catalogue's works stay public, its documents do not", async () => {
+    const { cid } = await sharedCatalogue([mate], { isPublic: true });
     const aid = uuid();
     const photo = entry("rm-public-photo");
     const doc = entry("rm-public-doc");
@@ -323,11 +323,11 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     });
     expect(res.status).toBe(200);
 
-    // The visitor rule is untouched by the removal: the public collection,
+    // The visitor rule is untouched by the removal: the public catalogue,
     // the published work and its photo read for the departed account, exactly
     // as they read for any visitor.
     for (const path of [
-      collectionPath(cid),
+      cataloguePath(cid),
       `${listPath(cid)}/${aid}`,
       mediaUrl(keyOf(work.photos[0].original.url)),
     ]) {
@@ -353,7 +353,7 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
   });
 
   it("is owner-only, and conflicts on the owner and on a non-collaborator", async () => {
-    const { cid } = await sharedCollection([mate]);
+    const { cid } = await sharedCatalogue([mate]);
 
     // A collaborator is a member but never an access administrator — not even
     // of themselves.
@@ -396,7 +396,7 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     });
     expect(again.status).toBe(409);
 
-    // A missing collection is `404` for the owner too.
+    // A missing catalogue is `404` for the owner too.
     const missing = await req(
       "DELETE",
       removePath(`missing-${RUN}`, mate.userId),
@@ -406,10 +406,10 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     expect((await err(missing)).code).toBe("not-found");
   });
 
-  it("discards the target's unsaved uploads for that collection only", async () => {
-    // Two shared collections: removal from one must not reach the other.
-    const first = await sharedCollection([mate]);
-    const second = await sharedCollection([mate]);
+  it("discards the target's unsaved uploads for that catalogue only", async () => {
+    // Two shared catalogues: removal from one must not reach the other.
+    const first = await sharedCatalogue([mate]);
+    const second = await sharedCatalogue([mate]);
     const aid = uuid();
 
     const theirFirst = entry("rm-scope-a");
@@ -424,22 +424,22 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
     });
     expect(res.status).toBe(200);
 
-    // The target's prefix in THIS collection is empty…
+    // The target's prefix in THIS catalogue is empty…
     expect(
       await listObjects(stagedArtworkPrefix(mate.userId, first.cid, aid)),
     ).toEqual([]);
-    // …their prefix in the other collection survives…
+    // …their prefix in the other catalogue survives…
     expect(
       await listObjects(stagedArtworkPrefix(mate.userId, second.cid, aid)),
     ).toHaveLength(7);
-    // …and so does the owner's in the same collection.
+    // …and so does the owner's in the same catalogue.
     expect(
       await listObjects(stagedArtworkPrefix(owner.userId, first.cid, aid)),
     ).toHaveLength(7);
   });
 
   it("still succeeds when the storage cleanup fails", async () => {
-    const { cid } = await sharedCollection([mate]);
+    const { cid } = await sharedCatalogue([mate]);
     const aid = uuid();
     const unsaved = entry("rm-storage");
     await stageAndProcess(mate, cid, aid, "photos", unsaved);
@@ -457,7 +457,7 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
       // backstop for the objects the cleanup could not reach.
       expect(await membership(cid, mate.userId)).toBeUndefined();
       expect(
-        (await req("GET", collectionPath(cid), { cookies: mate.cookies }))
+        (await req("GET", cataloguePath(cid), { cookies: mate.cookies }))
           .status,
       ).toBe(403);
     } finally {
@@ -466,9 +466,9 @@ describe("DELETE /collections/{cid}/collaborators/{userId}", () => {
   });
 });
 
-describe("DELETE /collections/{cid}/collaborators/me", () => {
+describe("DELETE /catalogues/{cid}/collaborators/me", () => {
   it("lets a collaborator leave, keeping the work they saved", async () => {
-    const { cid } = await sharedCollection([mate]);
+    const { cid } = await sharedCatalogue([mate]);
 
     const aid = uuid();
     const photo = entry("leave-photo");
@@ -497,8 +497,8 @@ describe("DELETE /collections/{cid}/collaborators/me", () => {
 
     // The membership row is the access fact, and it is gone.
     expect(await membership(cid, mate.userId)).toBeUndefined();
-    const dashboard = await json<Collection[]>(
-      await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+    const dashboard = await json<Catalogue[]>(
+      await req("GET", "/api/v1/catalogues", { cookies: mate.cookies }),
     );
     expect(dashboard.map((c) => c.id)).not.toContain(cid);
     expect(
@@ -535,7 +535,7 @@ describe("DELETE /collections/{cid}/collaborators/me", () => {
   });
 
   it("conflicts for the owner, who must transfer first, and 403s a non-member", async () => {
-    const { cid } = await sharedCollection([mate]);
+    const { cid } = await sharedCatalogue([mate]);
 
     const byOwner = await req("DELETE", leavePath(cid), {
       cookies: owner.cookies,
@@ -544,8 +544,7 @@ describe("DELETE /collections/{cid}/collaborators/me", () => {
     expect((await err(byOwner)).code).toBe("conflict");
     // The owner still owns it.
     expect(
-      (await req("GET", collectionPath(cid), { cookies: owner.cookies }))
-        .status,
+      (await req("GET", cataloguePath(cid), { cookies: owner.cookies })).status,
     ).toBe(200);
 
     const byStranger = await req("DELETE", leavePath(cid), {

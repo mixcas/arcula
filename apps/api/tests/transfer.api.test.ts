@@ -1,9 +1,9 @@
-// Ownership transfer: the collection moves, the bytes do not.
+// Ownership transfer: the catalogue moves, the bytes do not.
 //
-//   POST /collections/{cid}/transfer   owner-only: transfer the collection
+//   POST /catalogues/{cid}/transfer   owner-only: transfer the catalogue
 //
 // The target must already be a collaborator. One transaction updates
-// `collections.userId`, writes the collection's fixed media namespace back
+// `catalogues.userId`, writes the catalogue's fixed media namespace back
 // (a gap row's fallback is persisted here), mirrors the new owner onto every
 // artwork and swaps the two membership rows: the recipient's goes, the
 // previous owner's arrives. The media namespace is fixed, so every saved object
@@ -11,21 +11,21 @@
 // attempted after the commit; a provider failure answers `emailSent: false`
 // and does not undo the transfer.
 //
-// The recipient's tier is never checked: receiving a collection may take an
+// The recipient's tier is never checked: receiving a catalogue may take an
 // account over its cap, and creation stays blocked there afterwards.
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
   artworks as artworksTable,
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import type {
   ArtworkRead,
-  Collection,
-  CollectionAccess,
-  CollectionTransferResponse,
+  Catalogue,
+  CatalogueAccess,
+  CatalogueTransferResponse,
 } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
 import { emailProvider } from "../src/email/provider";
@@ -33,7 +33,7 @@ import { finalPhotoPrefix, mediaUrl } from "../src/media/keys";
 import { listObjects } from "../src/storage";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
-  makeCollection,
+  makeCatalogue,
   makeJpeg,
   processEntry,
   stageDocument,
@@ -58,20 +58,20 @@ let stranger: Account;
 
 const sourceJpeg = (async () => makeJpeg())();
 
-const collectionPath = (cid: string) => `/api/v1/collections/${cid}`;
-const listPath = (cid: string) => `${collectionPath(cid)}/artworks`;
-const accessPath = (cid: string) => `${collectionPath(cid)}/access`;
-const transferPath = (cid: string) => `${collectionPath(cid)}/transfer`;
+const cataloguePath = (cid: string) => `/api/v1/catalogues/${cid}`;
+const listPath = (cid: string) => `${cataloguePath(cid)}/artworks`;
+const accessPath = (cid: string) => `${cataloguePath(cid)}/access`;
+const transferPath = (cid: string) => `${cataloguePath(cid)}/transfer`;
 const removePath = (cid: string, userId: string) =>
-  `${collectionPath(cid)}/collaborators/${userId}`;
-const leavePath = (cid: string) => `${collectionPath(cid)}/collaborators/me`;
+  `${cataloguePath(cid)}/collaborators/${userId}`;
+const leavePath = (cid: string) => `${cataloguePath(cid)}/collaborators/me`;
 
-/** A private collection shared with the accounts named. Its namespace is its
+/** A private catalogue shared with the accounts named. Its namespace is its
  *  owner's id — the shape 0004's backfill leaves on a pre-existing row. */
-async function sharedCollection(
+async function sharedCatalogue(
   members: Account[],
 ): Promise<{ cid: string; namespace: string }> {
-  const cid = await makeCollection(owner.userId, {
+  const cid = await makeCatalogue(owner.userId, {
     name: "Transfer Wall",
     isPublic: false,
     // The shape 0004's backfill leaves on a pre-existing row: its namespace
@@ -86,19 +86,19 @@ async function sharedCollection(
   }
   const [row] = await db
     .select()
-    .from(collectionsTable)
-    .where(eq(collectionsTable.id, cid));
+    .from(cataloguesTable)
+    .where(eq(cataloguesTable.id, cid));
   return { cid, namespace: row.mediaNamespaceId };
 }
 
-/** A collection with the minted namespace `POST /collections` gives it — the
+/** A catalogue with the minted namespace `POST /catalogues` gives it — the
  *  production shape, rather than the migration gap's null column. */
-async function mintedCollection(
+async function mintedCatalogue(
   members: Account[],
 ): Promise<{ cid: string; namespace: string }> {
   const cid = uuid();
   const namespace = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id: cid,
     userId: owner.userId,
     mediaNamespaceId: namespace,
@@ -168,14 +168,14 @@ async function stageAndProcess(
 }
 
 /** Save one published work with a photo and a document, recorded by `account`
- *  — the shape a collection carries when it is transferred. */
+ *  — the shape a catalogue carries when it is transferred. */
 async function savedWork(
   account: Account,
   cid: string,
 ): Promise<{ aid: string; work: ArtworkRead }> {
   const aid = uuid();
   // Globally unique across calls: entry ids are primary keys, and this helper
-  // runs once per collection.
+  // runs once per catalogue.
   const photo = `${entry("transfer-photo")}${uuid().slice(0, 8)}`;
   const doc = `${entry("transfer-doc")}${uuid().slice(0, 8)}`;
   await stageAndProcess(account, cid, aid, "photos", photo);
@@ -212,17 +212,17 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("POST /collections/{cid}/transfer", () => {
+describe("POST /catalogues/{cid}/transfer", () => {
   it("moves the owner, the artwork mirror and the memberships in one transaction, and leaves the namespace alone", async () => {
-    const { cid, namespace } = await sharedCollection([mate]);
+    const { cid, namespace } = await sharedCatalogue([mate]);
     const { aid, work } = await savedWork(mate, cid);
 
-    // Before: the collection's owner wrote the mirror, and every saved object
+    // Before: the catalogue's owner wrote the mirror, and every saved object
     // lives under the namespace 0004's backfill gave the row (the owner's id).
     const [before] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(before.userId).toBe(owner.userId);
     expect(before.mediaNamespaceId).toBe(namespace);
     expect(
@@ -231,7 +231,7 @@ describe("POST /collections/{cid}/transfer", () => {
 
     const res = await transferAs(cid, owner.cookies, mate.userId);
     expect(res.status).toBe(200);
-    expect(await json<CollectionTransferResponse>(res)).toEqual({
+    expect(await json<CatalogueTransferResponse>(res)).toEqual({
       transferred: true,
       emailSent: true,
     });
@@ -240,12 +240,12 @@ describe("POST /collections/{cid}/transfer", () => {
     // was built with — the transfer reads it and writes that same value back.
     const [row] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(row.userId).toBe(mate.userId);
     expect(row.mediaNamespaceId).toBe(namespace);
 
-    // The mirror moved, for every work in the collection.
+    // The mirror moved, for every work in the catalogue.
     const works = await db
       .select()
       .from(artworksTable)
@@ -258,12 +258,12 @@ describe("POST /collections/{cid}/transfer", () => {
     expect(await membership(cid, owner.userId)).toBeDefined();
 
     // Both accounts' access reads agree about the new roles.
-    const mateAccess = await json<CollectionAccess>(
+    const mateAccess = await json<CatalogueAccess>(
       await req("GET", accessPath(cid), { cookies: mate.cookies }),
     );
     expect(mateAccess.role).toBe("owner");
     expect(mateAccess.owner.userId).toBe(mate.userId);
-    const ownerAccess = await json<CollectionAccess>(
+    const ownerAccess = await json<CatalogueAccess>(
       await req("GET", accessPath(cid), { cookies: owner.cookies }),
     );
     expect(ownerAccess.role).toBe("collaborator");
@@ -293,7 +293,7 @@ describe("POST /collections/{cid}/transfer", () => {
     // The production shape: `mediaNamespaceId` was minted at creation and is
     // not the owner's id, so an unconditional rewrite here would strand every
     // saved object behind a URL that no longer resolves.
-    const { cid, namespace } = await mintedCollection([mate]);
+    const { cid, namespace } = await mintedCatalogue([mate]);
     const { aid, work } = await savedWork(mate, cid);
     const original = keyOf(work.photos[0].original.url);
     expect(original).toContain(`/${namespace}/`);
@@ -305,8 +305,8 @@ describe("POST /collections/{cid}/transfer", () => {
     // The row the serializer reads still names the minted namespace…
     const [row] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(row.mediaNamespaceId).toBe(namespace);
 
     // …so the work's URL is byte-for-byte the key it was saved under, and it
@@ -328,8 +328,8 @@ describe("POST /collections/{cid}/transfer", () => {
     ).toEqual([]);
   });
 
-  it("notices the new owner and links to the collection's manage page", async () => {
-    const { cid } = await sharedCollection([mate]);
+  it("notices the new owner and links to the catalogue's manage page", async () => {
+    const { cid } = await sharedCatalogue([mate]);
     const seenIds = (await mailsFor(mate.email)).map((mail) => mail.ID);
 
     expect((await transferAs(cid, owner.cookies, mate.userId)).status).toBe(
@@ -342,7 +342,7 @@ describe("POST /collections/{cid}/transfer", () => {
     const text = await mailpitText(mail.ID);
     const url = linkIn(text);
     expect(url.origin).toBe("http://localhost:3000");
-    expect(url.pathname).toBe(`/manage/collection/transfer-wall-${cid}`);
+    expect(url.pathname).toBe(`/manage/catalogue/transfer-wall-${cid}`);
 
     // The wire's fact: the delivered HTML twin points at the same manage page.
     // The layout's wordmark and footer copy are the composer suite's job.
@@ -351,26 +351,26 @@ describe("POST /collections/{cid}/transfer", () => {
   });
 
   it("never checks the recipient's tier, and creation stays blocked over the cap", async () => {
-    // A dedicated recipient: it already owns the free tier's one collection,
+    // A dedicated recipient: it already owns the free tier's one catalogue,
     // so the transfer is what takes it over the cap.
     const capped = await freshUser("TransferCapped");
-    await makeCollection(capped.userId, { name: "Capped's Own" });
+    await makeCatalogue(capped.userId, { name: "Capped's Own" });
 
-    const { cid } = await sharedCollection([capped]);
+    const { cid } = await sharedCatalogue([capped]);
     const res = await transferAs(cid, owner.cookies, capped.userId);
     expect(res.status).toBe(200);
-    expect(await json<CollectionTransferResponse>(res)).toMatchObject({
+    expect(await json<CatalogueTransferResponse>(res)).toMatchObject({
       transferred: true,
     });
 
-    // Two owned collections now, and the cap still gates creation.
-    const dashboard = await json<Collection[]>(
-      await req("GET", "/api/v1/collections", { cookies: capped.cookies }),
+    // Two owned catalogues now, and the cap still gates creation.
+    const dashboard = await json<Catalogue[]>(
+      await req("GET", "/api/v1/catalogues", { cookies: capped.cookies }),
     );
     expect(
       dashboard.filter((row) => row.role === "owner").map((row) => row.id),
     ).toEqual(expect.arrayContaining([cid]));
-    const over = await req("POST", "/api/v1/collections", {
+    const over = await req("POST", "/api/v1/catalogues", {
       cookies: capped.cookies,
       body: { name: "Still Blocked", isPublic: false },
     });
@@ -379,7 +379,7 @@ describe("POST /collections/{cid}/transfer", () => {
   });
 
   it("is owner-only, and conflicts on the owner or a target who is not a collaborator", async () => {
-    const { cid } = await sharedCollection([mate, stranger]);
+    const { cid } = await sharedCatalogue([mate, stranger]);
 
     // A collaborator is a member but never an access administrator.
     for (const cookies of [mate.cookies, stranger.cookies]) {
@@ -400,11 +400,11 @@ describe("POST /collections/{cid}/transfer", () => {
     expect(notAMember.status).toBe(409);
     expect((await err(notAMember)).code).toBe("conflict");
 
-    // Every refusal left the collection exactly as it was.
+    // Every refusal left the catalogue exactly as it was.
     const [row] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(row.userId).toBe(owner.userId);
     expect(await membership(cid, mate.userId)).toBeDefined();
     expect(await membership(cid, stranger.userId)).toBeDefined();
@@ -428,14 +428,14 @@ describe("POST /collections/{cid}/transfer", () => {
   });
 
   it("commits the transfer even when the notice cannot be sent", async () => {
-    const { cid } = await sharedCollection([mate]);
+    const { cid } = await sharedCatalogue([mate]);
     const send = vi
       .spyOn(emailProvider, "send")
       .mockRejectedValueOnce(new Error("the mail provider is down"));
     try {
       const res = await transferAs(cid, owner.cookies, mate.userId);
       expect(res.status).toBe(200);
-      expect(await json<CollectionTransferResponse>(res)).toEqual({
+      expect(await json<CatalogueTransferResponse>(res)).toEqual({
         transferred: true,
         emailSent: false,
       });
@@ -446,15 +446,15 @@ describe("POST /collections/{cid}/transfer", () => {
     // The row is the durable fact: the failure was reported, not fatal.
     const [row] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(row.userId).toBe(mate.userId);
     expect(await membership(cid, owner.userId)).toBeDefined();
   });
 
   it("leaves the previous owner a collaborator who may leave, and whom the new owner may remove", async () => {
-    // First collection: the previous owner leaves deliberately.
-    const first = await sharedCollection([mate]);
+    // First catalogue: the previous owner leaves deliberately.
+    const first = await sharedCatalogue([mate]);
     expect(
       (await transferAs(first.cid, owner.cookies, mate.userId)).status,
     ).toBe(200);
@@ -467,8 +467,8 @@ describe("POST /collections/{cid}/transfer", () => {
         .status,
     ).toBe(403);
 
-    // Second collection: the new owner removes them instead.
-    const second = await sharedCollection([mate]);
+    // Second catalogue: the new owner removes them instead.
+    const second = await sharedCatalogue([mate]);
     expect(
       (await transferAs(second.cid, owner.cookies, mate.userId)).status,
     ).toBe(200);

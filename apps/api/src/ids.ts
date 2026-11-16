@@ -1,5 +1,5 @@
 // The API's row ids are the shared mint's, re-exported so every call site —
-// collections, a collection's media namespace, CSV-imported artworks,
+// catalogues, a catalogue's media namespace, CSV-imported artworks,
 // invitations — keeps importing one `mintId` while the shape has exactly one
 // owner (`@arcula/shared`).
 //

@@ -7,18 +7,18 @@ import { ownershipTransferMail } from "../src/email/compose";
 import { urlsIn } from "./helpers/html";
 
 const ORIGIN = "http://localhost:3000";
-const MANAGE = `${ORIGIN}/manage/collection/summer-in-lisbon-abc123`;
+const MANAGE = `${ORIGIN}/manage/catalogue/summer-in-lisbon-abc123`;
 
 const facts = {
   to: "ada@example.test",
   firstName: "Ada",
-  collectionName: "Summer in Lisbon",
+  catalogueName: "Summer in Lisbon",
   previousOwnerName: "Grace Hopper",
   url: MANAGE,
 };
 
 describe("ownership transfer mail", () => {
-  it("names the collection in the subject and both parts", () => {
+  it("names the catalogue in the subject and both parts", () => {
     const mail = ownershipTransferMail(facts);
 
     expect(mail.subject).toBe("You now own Summer in Lisbon on Arcula");
@@ -30,7 +30,7 @@ describe("ownership transfer mail", () => {
   it("points the button and the visible URL at the manage page", () => {
     const { text, html } = ownershipTransferMail(facts);
 
-    expect(text).toContain(`Open collection: ${MANAGE}`);
+    expect(text).toContain(`Open catalogue: ${MANAGE}`);
     expect(html).toContain(`href="${MANAGE}"`);
     expect(html).toContain(`>${MANAGE}</a>`);
     expect(html).toContain(`src="${ORIGIN}/arcula-name-logo.png"`);
@@ -61,9 +61,9 @@ describe("ownership transfer mail", () => {
     expect(mail.html).toContain("Hi,");
   });
 
-  it("truncates a long collection name in the subject and keeps it whole in the body", () => {
-    const collectionName = `A collection with a deliberately long name ${"x".repeat(30)}`;
-    const mail = ownershipTransferMail({ ...facts, collectionName });
+  it("truncates a long catalogue name in the subject and keeps it whole in the body", () => {
+    const catalogueName = `A catalogue with a deliberately long name ${"x".repeat(30)}`;
+    const mail = ownershipTransferMail({ ...facts, catalogueName });
     const subjectName = mail.subject.slice(
       "You now own ".length,
       mail.subject.length - " on Arcula".length,
@@ -72,14 +72,14 @@ describe("ownership transfer mail", () => {
     expect(subjectName).toHaveLength(40);
     expect(subjectName.endsWith("…")).toBe(true);
     // The body never loses a character the owner typed.
-    expect(mail.text).toContain(collectionName);
-    expect(mail.html).toContain(collectionName);
+    expect(mail.text).toContain(catalogueName);
+    expect(mail.html).toContain(catalogueName);
   });
 
   it("flattens a newline out of the name so no header can be forged", () => {
     const mail = ownershipTransferMail({
       ...facts,
-      collectionName: "Wall\r\nBcc: evil@example.test",
+      catalogueName: "Wall\r\nBcc: evil@example.test",
     });
 
     expect(mail.subject).not.toMatch(/[\r\n]/);

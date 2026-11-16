@@ -1,4 +1,4 @@
-// The collection password's pure facts: turning a chosen password into a
+// The catalogue password's pure facts: turning a chosen password into a
 // stored hash and checking one against it. No database, no session, no Hono —
 // the settings write hashes, the unlock route verifies, and both read the same
 // encoding.

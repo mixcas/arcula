@@ -1,4 +1,4 @@
-// Collection search over HTTP against the real stack: the member-only `q` on
+// Catalogue search over HTTP against the real stack: the member-only `q` on
 // the live artwork list, the gate in front of it, the filter behind it, and the
 // caps around it.
 //
@@ -10,12 +10,12 @@
 
 import {
   artworks as artworksTable,
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ArtworkRead } from "@arcula/shared";
-import { grantCookieName } from "../src/collectionGrants";
+import { grantCookieName } from "../src/catalogueGrants";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 
@@ -26,7 +26,7 @@ let collaborator: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
 
 let cid = "";
-let foreignCollectionId = "";
+let foreignCatalogueId = "";
 let protectedId = "";
 
 /** Published, matches "blue", "picasso", "canvas", "coastal", "circa". */
@@ -41,9 +41,9 @@ let dateId = "";
 let nonMatchingId = "";
 /** Accents in title and artist, and a place of origin. */
 let accentedId = "";
-/** Another collection's work: a search never reaches across. */
+/** Another catalogue's work: a search never reaches across. */
 let foreignWorkId = "";
-/** The only work in the protected collection. */
+/** The only work in the protected catalogue. */
 let protectedWorkId = "";
 
 interface WorkValues {
@@ -93,7 +93,7 @@ async function insertWork(
 }
 
 const listPath = (collectionId = cid) =>
-  `/api/v1/collections/${collectionId}/artworks`;
+  `/api/v1/catalogues/${collectionId}/artworks`;
 
 /** The list address for a committed search, encoded as a browser would. */
 const searchPath = (query: string, collectionId = cid) =>
@@ -112,7 +112,7 @@ beforeAll(async () => {
 
   const now = new Date();
   cid = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id: cid,
     userId: owner.userId,
     mediaNamespaceId: uuid(),
@@ -168,9 +168,9 @@ beforeAll(async () => {
     createdAt: new Date("2026-01-06T00:00:00.000Z"),
   });
 
-  foreignCollectionId = uuid();
-  await db.insert(collectionsTable).values({
-    id: foreignCollectionId,
+  foreignCatalogueId = uuid();
+  await db.insert(cataloguesTable).values({
+    id: foreignCatalogueId,
     userId: stranger.userId,
     mediaNamespaceId: uuid(),
     name: "Someone Else's Wall",
@@ -178,13 +178,13 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  foreignWorkId = await insertWork(foreignCollectionId, stranger.userId, {
+  foreignWorkId = await insertWork(foreignCatalogueId, stranger.userId, {
     title: "Blue Elsewhere",
     createdAt: new Date("2026-01-07T00:00:00.000Z"),
   });
 
   protectedId = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id: protectedId,
     userId: owner.userId,
     mediaNamespaceId: uuid(),
@@ -199,7 +199,7 @@ beforeAll(async () => {
   });
   const protectedWrite = await req(
     "PATCH",
-    `/api/v1/collections/${protectedId}`,
+    `/api/v1/catalogues/${protectedId}`,
     { cookies: owner.cookies, body: { password: PASSWORD } },
   );
   expect(protectedWrite.status).toBe(200);
@@ -214,7 +214,7 @@ describe("a member's search", () => {
     const res = await req("GET", searchPath("blue"), {
       cookies: owner.cookies,
     });
-    // The draft matches; the deleted work and the foreign collection's work do
+    // The draft matches; the deleted work and the foreign catalogue's work do
     // not appear. Order is the list's own creation order.
     const ids = await idsOf(res);
     expect(ids).toEqual([bluePicassoId, blueDraftId]);
@@ -284,7 +284,7 @@ describe("a member's search", () => {
     expect(await json(res)).toEqual([]);
   });
 
-  it("does not reach across collections", async () => {
+  it("does not reach across catalogues", async () => {
     const own = await req("GET", searchPath("elsewhere"), {
       cookies: owner.cookies,
     });
@@ -292,7 +292,7 @@ describe("a member's search", () => {
 
     const foreign = await req(
       "GET",
-      searchPath("elsewhere", foreignCollectionId),
+      searchPath("elsewhere", foreignCatalogueId),
       { cookies: stranger.cookies },
     );
     expect(await idsOf(foreign)).toEqual([foreignWorkId]);
@@ -327,7 +327,7 @@ describe("the member-only gate", () => {
     expect((await err(res)).code).toBe("unauthorized");
   });
 
-  it("answers 403 to a signed-in non-member of a public collection", async () => {
+  it("answers 403 to a signed-in non-member of a public catalogue", async () => {
     const res = await req("GET", searchPath("blue"), {
       cookies: stranger.cookies,
     });
@@ -340,7 +340,7 @@ describe("the member-only gate", () => {
     // and buys nothing for the member facility.
     const unlocked = await req(
       "POST",
-      `/api/v1/collections/${protectedId}/unlock`,
+      `/api/v1/catalogues/${protectedId}/unlock`,
       { body: { password: PASSWORD } },
     );
     expect(unlocked.status).toBe(201);
@@ -370,8 +370,8 @@ describe("the member-only gate", () => {
     expect((await err(searched)).code).toBe("forbidden");
   });
 
-  it("answers 404 for a missing collection, before the session question", async () => {
-    // There is nothing to search, so the missing collection is the answer for
+  it("answers 404 for a missing catalogue, before the session question", async () => {
+    // There is nothing to search, so the missing catalogue is the answer for
     // a member and an anonymous caller alike.
     for (const cookies of [owner.cookies, undefined]) {
       const res = await req("GET", searchPath("blue", uuid()), { cookies });
@@ -383,7 +383,7 @@ describe("the member-only gate", () => {
   it("answers the access question before the query caps", async () => {
     const overCap = Array.from({ length: 11 }, (_, i) => `nope${i}`).join(" ");
 
-    // A missing collection is the answer even when the query is also invalid:
+    // A missing catalogue is the answer even when the query is also invalid:
     // there is nothing to validate against.
     for (const cookies of [owner.cookies, undefined]) {
       const res = await req("GET", searchPath(overCap, uuid()), { cookies });

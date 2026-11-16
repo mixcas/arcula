@@ -1,16 +1,16 @@
 // Artist Name suggestions: the caller-scoped aggregate read, and the pure
 // decision that turns its rows into the dropdown's list.
 //
-// The resource is the caller's artist vocabulary, not a collection's: every
-// name here is one the caller may already read through the ordinary collection
-// reads. The scope is the signed-in `/collections` list — the collections the
+// The resource is the caller's artist vocabulary, not a catalogue's: every
+// name here is one the caller may already read through the ordinary catalogue
+// reads. The scope is the signed-in `/catalogues` list — the catalogues the
 // caller owns or collaborates on — so the aggregate cannot reveal a name from a
-// collection the caller could not open.
+// catalogue the caller could not open.
 //
 // The database aggregates **exact spellings**: one row per stored
 // `artistName`, with its live-work count and its newest update. Collapsing
 // those spellings to one artist is a pure function over those rows, using a
-// trim, then the shared Collection-search normalization (NFD, strip
+// trim, then the shared Catalogue-search normalization (NFD, strip
 // diacritics, lowercase), so "María López" and "Maria Lopez" are one artist
 // here exactly as they are one search term there. The winning spelling is the
 // most-used one; ties fall to the most recently updated work and then to
@@ -23,11 +23,11 @@
 import { count, eq, isNull, max } from "drizzle-orm";
 import {
   artworks as artworksTable,
-  collectionCollaborators as collectionCollaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as catalogueCollaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import { normalizeSearchText } from "@arcula/shared";
-import { collaboratorJoin, readableCollectionsWhere } from "./collectionScope";
+import { collaboratorJoin, readableCataloguesWhere } from "./catalogueScope";
 import { db } from "./db";
 
 /**
@@ -44,7 +44,7 @@ export interface ArtistNameAggregateRow {
 /**
  * The silent cap. A suggestion list is a hint, not the data, so past this many
  * artists the list is cut rather than refused. 2,000 names fit comfortably in
- * one response for any realistic set of collections; approaching it is the
+ * one response for any realistic set of catalogues; approaching it is the
  * trigger to revisit server-side filtering, not to raise the number.
  */
 export const MAX_ARTIST_NAME_SUGGESTIONS = 2000;
@@ -106,10 +106,10 @@ export function collapseArtistNames(
  * The caller's artist names: exact spellings grouped inside the membership
  * scope, collapsed and ordered by `collapseArtistNames`.
  *
- * The scope is the signed-in `/collections` list's own — `collectionScope.ts`'s
- * left join and readable-collection filter — so a name from a collection the
+ * The scope is the signed-in `/catalogues` list's own — `catalogueScope.ts`'s
+ * left join and readable-catalogue filter — so a name from a catalogue the
  * caller cannot open is never read. Inside it, only live works count: a draft
- * contributes, a deleted work does not, exactly as in Collection search. The
+ * contributes, a deleted work does not, exactly as in Catalogue search. The
  * query aggregates exact spellings and leaves the accent/case collapse to the
  * pure function, which is why no Postgres `unaccent` extension and no new index
  * are involved.
@@ -123,11 +123,11 @@ export async function readArtistNames(userId: string): Promise<string[]> {
     })
     .from(artworksTable)
     .innerJoin(
-      collectionsTable,
-      eq(collectionsTable.id, artworksTable.collectionId),
+      cataloguesTable,
+      eq(cataloguesTable.id, artworksTable.collectionId),
     )
-    .leftJoin(collectionCollaboratorsTable, collaboratorJoin(userId))
-    .where(readableCollectionsWhere(userId, isNull(artworksTable.deletedAt)))
+    .leftJoin(catalogueCollaboratorsTable, collaboratorJoin(userId))
+    .where(readableCataloguesWhere(userId, isNull(artworksTable.deletedAt)))
     .groupBy(artworksTable.artistName);
 
   return collapseArtistNames(

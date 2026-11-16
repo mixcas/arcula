@@ -1,12 +1,12 @@
 // A collaborator does the job they were invited to do, end to end: one
-// collection created by its owner and shared with a second account, driven
+// catalogue created by its owner and shared with a second account, driven
 // through the real write routes against the real stack.
 //
 // This is the wire proof that every write path answers to membership rather
-// than to `collections.userId`. The settings — public/private included — the
+// than to `catalogues.userId`. The settings — public/private included — the
 // artwork create, edit, bulk-delete and restore, the CSV import, the save and
 // the staged media all belong to a collaborator exactly as they do to the
-// owner; a stranger gets `403` and a missing collection `404`.
+// owner; a stranger gets `403` and a missing catalogue `404`.
 //
 // Two facts are about the collaborator specifically, not just about the route
 // admitting them:
@@ -14,18 +14,18 @@
 //   - **Staging stays per uploader.** A staged object is named by the account
 //     that uploaded it, so process, discard and the sweep only ever reach the
 //     caller's own unsaved work: one person's sweep cannot destroy another's.
-//   - **A save records the collection's owner.** The final objects land under
-//     the collection's fixed media namespace and `artworks.userId` mirrors the
+//   - **A save records the catalogue's owner.** The final objects land under
+//     the catalogue's fixed media namespace and `artworks.userId` mirrors the
 //     owner, not the session user — the collaborator saves work, they do not
 //     become its owner.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
-import type { ArtworkRead, Collection } from "@arcula/shared";
+import type { ArtworkRead, Catalogue } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
 import {
   finalPhotoPrefix,
@@ -54,12 +54,12 @@ let owner: Account;
 let mate: Account;
 let stranger: Account;
 
-/** The shared collection: created by the owner, shared with `mate`. */
+/** The shared catalogue: created by the owner, shared with `mate`. */
 let cid = "";
 /** Its fixed media namespace — minted at creation, and neither account's id. */
 let namespace = "";
 
-/** Sign up an account and share a collection with it. */
+/** Sign up an account and share a catalogue with it. */
 async function share(
   label: string,
   collectionId: string = cid,
@@ -76,19 +76,19 @@ beforeAll(async () => {
   owner = await freshUser("WriteOwner");
   stranger = await freshUser("WriteOther");
 
-  // Created through the route, so the collection carries the media namespace
+  // Created through the route, so the catalogue carries the media namespace
   // the current code mints — the fact the save's final keys are checked against.
-  const created = await req("POST", "/api/v1/collections", {
+  const created = await req("POST", "/api/v1/catalogues", {
     cookies: owner.cookies,
     body: { name: "Shared Wall", isPublic: false },
   });
   expect(created.status).toBe(201);
-  cid = (await json<Collection>(created)).id;
+  cid = (await json<Catalogue>(created)).id;
 
   const [row] = await db
     .select()
-    .from(collectionsTable)
-    .where(eq(collectionsTable.id, cid));
+    .from(cataloguesTable)
+    .where(eq(cataloguesTable.id, cid));
   namespace = row.mediaNamespaceId;
 
   mate = await share("WriteMate");
@@ -98,8 +98,8 @@ afterAll(async () => {
   await closeDb();
 });
 
-const collectionPath = (id = cid) => `/api/v1/collections/${id}`;
-const listPath = (id = cid) => `${collectionPath(id)}/artworks`;
+const cataloguePath = (id = cid) => `/api/v1/catalogues/${id}`;
+const listPath = (id = cid) => `${cataloguePath(id)}/artworks`;
 
 async function listAs(cookies: string, id = cid): Promise<ArtworkRead[]> {
   const res = await req("GET", listPath(id), { cookies });
@@ -143,9 +143,9 @@ async function stageAndProcessPhoto(
 // The settings
 // ---------------------------------------------------------------------------
 
-describe("PATCH /collections/:collectionId — the settings", () => {
+describe("PATCH /catalogues/:collectionId — the settings", () => {
   it("lets a collaborator change every setting, public/private included", async () => {
-    const res = await req("PATCH", collectionPath(), {
+    const res = await req("PATCH", cataloguePath(), {
       cookies: mate.cookies,
       body: {
         name: "Edited By A Collaborator",
@@ -156,7 +156,7 @@ describe("PATCH /collections/:collectionId — the settings", () => {
       },
     });
     expect(res.status).toBe(200);
-    const body = await json<Collection>(res);
+    const body = await json<Catalogue>(res);
     expect(body).toMatchObject({
       name: "Edited By A Collaborator",
       isPublic: true,
@@ -167,29 +167,29 @@ describe("PATCH /collections/:collectionId — the settings", () => {
 
     // The gate is the whole point of "every setting": a collaborator who could
     // not publish could not do the job they were invited to do.
-    const anon = await req("GET", collectionPath());
+    const anon = await req("GET", cataloguePath());
     expect(anon.status).toBe(200);
 
     // …and back to private, by the same account.
-    const closed = await req("PATCH", collectionPath(), {
+    const closed = await req("PATCH", cataloguePath(), {
       cookies: mate.cookies,
       body: { name: "Shared Wall", isPublic: false },
     });
     expect(closed.status).toBe(200);
-    const reopened = await req("GET", collectionPath());
+    const reopened = await req("GET", cataloguePath());
     expect(reopened.status).toBe(403);
   });
 
   it("does not move the owner column", async () => {
     // Settings are not ownership: the owner still owns, the collaborator is
     // still a collaborator.
-    const ownerList = await json<Collection[]>(
-      await req("GET", "/api/v1/collections", { cookies: owner.cookies }),
+    const ownerList = await json<Catalogue[]>(
+      await req("GET", "/api/v1/catalogues", { cookies: owner.cookies }),
     );
     expect(ownerList.find((c) => c.id === cid)?.role).toBe("owner");
 
-    const mateList = await json<Collection[]>(
-      await req("GET", "/api/v1/collections", { cookies: mate.cookies }),
+    const mateList = await json<Catalogue[]>(
+      await req("GET", "/api/v1/catalogues", { cookies: mate.cookies }),
     );
     expect(mateList.find((c) => c.id === cid)?.role).toBe("collaborator");
   });
@@ -218,17 +218,17 @@ describe("POST …/artworks — a collaborator's save", () => {
     expect(res.status).toBe(201);
     const body = await json<ArtworkRead>(res);
 
-    // The mirror: the collection's owner, never the session user.
+    // The mirror: the catalogue's owner, never the session user.
     expect(body.userId).toBe(owner.userId);
     expect(namespace).not.toBe(mate.userId);
 
-    // The final objects belong to the collection, not to whoever uploaded
+    // The final objects belong to the catalogue, not to whoever uploaded
     // them: the namespace is the key's segment.
     const parsed = parseMediaKey(keyOf(body.photos[0].original.url));
     expect(parsed).toMatchObject({
       kind: "final",
       namespaceId: namespace,
-      collectionId: cid,
+      catalogueId: cid,
       artworkId: aid,
     });
     expect(
@@ -265,7 +265,7 @@ describe("POST …/artworks — a collaborator's save", () => {
     expect(read.status).toBe(200);
     expect(await json<ArtworkRead>(read)).toEqual(document);
 
-    // And it is in the collection's list for every member, the owner too.
+    // And it is in the catalogue's list for every member, the owner too.
     for (const account of [owner, mate]) {
       expect((await listAs(account.cookies)).map((w) => w.id)).toContain(aid);
     }
@@ -388,8 +388,8 @@ describe("bulk-delete and restore", () => {
 });
 
 describe("POST …/import/csv", () => {
-  it("imports rows as the collection's works, recorded as the owner's", async () => {
-    const res = await req("POST", `${collectionPath()}/import/csv`, {
+  it("imports rows as the catalogue's works, recorded as the owner's", async () => {
+    const res = await req("POST", `${cataloguePath()}/import/csv`, {
       cookies: mate.cookies,
       body: {
         rows: [
@@ -410,7 +410,7 @@ describe("POST …/import/csv", () => {
       (w) => w.title === "Imported By A Collaborator",
     );
     if (!imported) throw new Error("The imported work is not in the list");
-    // The same mirror a save writes: the import adds the collection's works,
+    // The same mirror a save writes: the import adds the catalogue's works,
     // whoever ran it.
     expect(imported.userId).toBe(owner.userId);
     expect(imported.status).toBe("published");
@@ -429,7 +429,7 @@ describe("staging as a collaborator", () => {
 
     await stageAndProcessPhoto(mate, cid, aid, photo);
     // The staged key names the uploader: staging is per account, not per
-    // collection, and the collaborator is the uploader here.
+    // catalogue, and the collaborator is the uploader here.
     expect(
       await listObjects(stagedOriginalPrefix(mate.userId, cid, aid, photo)),
     ).toHaveLength(1);
@@ -543,15 +543,15 @@ describe("staging as a collaborator", () => {
 
 describe("POST …/maintenance/sweep", () => {
   it("sweeps only the caller's staged objects, and keeps an entry that has a row", async () => {
-    // A collection of its own and an owner of its own — the free tier allows
-    // one owned collection per account — so the counts below are exact.
+    // A catalogue of its own and an owner of its own — the free tier allows
+    // one owned catalogue per account — so the counts below are exact.
     const sweepOwner = await freshUser("WriteSweepOwner");
-    const created = await req("POST", "/api/v1/collections", {
+    const created = await req("POST", "/api/v1/catalogues", {
       cookies: sweepOwner.cookies,
       body: { name: "Swept Wall" },
     });
     expect(created.status).toBe(201);
-    const sweptCid = (await json<Collection>(created)).id;
+    const sweptCid = (await json<Catalogue>(created)).id;
     const sweptMate = await share("WriteSweepMate", sweptCid);
 
     const unsavedArt = uuid();
@@ -582,7 +582,7 @@ describe("POST …/maintenance/sweep", () => {
     // upload stays, and the saved entry's staged copy stays.
     const res = await req(
       "POST",
-      `${collectionPath(sweptCid)}/maintenance/sweep`,
+      `${cataloguePath(sweptCid)}/maintenance/sweep`,
       { cookies: sweptMate.cookies },
     );
     expect(res.status).toBe(200);
@@ -618,7 +618,7 @@ describe("POST …/maintenance/sweep", () => {
     // collaborator's space.
     const ownerSweep = await req(
       "POST",
-      `${collectionPath(sweptCid)}/maintenance/sweep`,
+      `${cataloguePath(sweptCid)}/maintenance/sweep`,
       { cookies: sweepOwner.cookies },
     );
     expect(await json(ownerSweep)).toEqual({ swept: 7 });
@@ -636,7 +636,7 @@ describe("POST …/maintenance/sweep", () => {
 
 /**
  * The named write routes, as a call taking the caller's cookies and a
- * collection id. The document stage/process routes are not listed: they are
+ * catalogue id. The document stage/process routes are not listed: they are
  * the photo routes' twins through `buildMediaRoutes`, so a separate entry
  * would prove only the shared code again. A route missing from this table is
  * a route nobody has proved answers to membership, so the list grows with the
@@ -649,7 +649,7 @@ const writeRoutes: {
   {
     label: "PATCH the settings",
     call: (cookies, id) =>
-      req("PATCH", collectionPath(id), {
+      req("PATCH", cataloguePath(id), {
         cookies,
         body: { name: "Hijacked", isPublic: true },
       }),
@@ -673,7 +673,7 @@ const writeRoutes: {
   {
     label: "import CSV",
     call: (cookies, id) =>
-      req("POST", `${collectionPath(id)}/import/csv`, {
+      req("POST", `${cataloguePath(id)}/import/csv`, {
         cookies,
         body: { rows: [{ title: "T", artistName: "C. Cas" }] },
       }),
@@ -694,7 +694,7 @@ const writeRoutes: {
   {
     label: "sweep",
     call: (cookies, id) =>
-      req("POST", `${collectionPath(id)}/maintenance/sweep`, { cookies }),
+      req("POST", `${cataloguePath(id)}/maintenance/sweep`, { cookies }),
   },
   {
     label: "stage a photo",
@@ -733,9 +733,9 @@ describe("who may write", () => {
   });
 
   it.each(writeRoutes)(
-    "404s a missing collection on $label",
+    "404s a missing catalogue on $label",
     async ({ call }) => {
-      // The collection is asked for before the membership: a collection that
+      // The catalogue is asked for before the membership: a catalogue that
       // does not exist is `404` for the owner too, not a `403`.
       const res = await call(owner.cookies, `missing-${RUN}`);
       expect(res.status).toBe(404);

@@ -2,26 +2,26 @@
 //
 // The key parses back into its segments (the name is self-describing by
 // construction) and authz is checked per request, then the object
-// streams. The final key's second segment is the collection's media
+// streams. The final key's second segment is the catalogue's media
 // namespace, not an authorization fact: access is answered by the
-// collection, the work and the file's population:
+// catalogue, the work and the file's population:
 //
-//   final photo    — the collection's owner or a collaborator, or a visitor
+//   final photo    — the catalogue's owner or a collaborator, or a visitor
 //                    when access.ts's verdict admits the work (published,
-//                    live, in a public collection, and — if that collection is
+//                    live, in a public catalogue, and — if that catalogue is
 //                    Protected — with a valid Access grant, which is why the
 //                    proxy reads the grant cookie too). A draft, a deleted
-//                    work, a work inside a private collection and a work
+//                    work, a work inside a private catalogue and a work
 //                    behind a password the reader has not entered 404 for a
 //                    non-member, uniformly: saying which was refused would be
 //                    a disclosure (the same call as the single-artwork read).
 //   final document — the owner and collaborators ONLY. Documents are never
 //                    public; the proxy 403s everyone else so a future UI that
 //                    forgot to hide them renders a 403 rather than a leak.
-//                    A deleted collection's document is 404: nothing holds
+//                    A deleted catalogue's document is 404: nothing holds
 //                    it any more.
 //   staged object  — the uploader's in-progress work: a session, the key's
-//                    own uploader segment, and membership of the collection
+//                    own uploader segment, and membership of the catalogue
 //                    the entry was staged under. No row exists yet, so there
 //                    is no artwork-level visibility to consult, and one
 //                    collaborator never reads another's unsaved upload.
@@ -39,8 +39,8 @@ import { Hono } from "hono";
 import { canReadArtworkDocuments, canSeeArtwork } from "../access";
 import {
   grantHeld,
-  loadArtworkInCollection,
-  loadCollection,
+  loadArtworkInCatalogue,
+  loadCatalogue,
   loadMembership,
 } from "../authorize";
 import { db } from "../db";
@@ -58,7 +58,7 @@ export const mediaRoutes = new Hono();
 // Staged objects are per-session previews: no cache at all.
 //
 // `public` is only honest where the same URL answers the same bytes to any
-// reader. Two populations do not: a Protected collection's photo was admitted
+// reader. Two populations do not: a Protected catalogue's photo was admitted
 // by the reader's Access grant, and a document is a member's at every status.
 // Those go to the reader's own cache for the same hour, so a shared cache can
 // never hand the bytes to someone the verdict would refuse.
@@ -84,23 +84,23 @@ mediaRoutes.get("/media", async (c) => {
 
   if (parsed.kind === "staging") {
     // No row yet: access is the uploader's own prefix plus membership of the
-    // collection it was staged under.
+    // catalogue it was staged under.
     if (session === null) {
       throw new ApiError("unauthorized", "A session is required");
     }
-    const collection = await loadCollection(parsed.collectionId);
-    if (!collection) {
-      throw new ApiError("not-found", "The collection does not exist");
+    const catalogue = await loadCatalogue(parsed.catalogueId);
+    if (!catalogue) {
+      throw new ApiError("not-found", "The catalogue does not exist");
     }
     const membership = await loadMembership(
-      parsed.collectionId,
-      collection,
+      parsed.catalogueId,
+      catalogue,
       viewer,
     );
     if (parsed.uploaderId !== viewer || membership === null) {
       throw new ApiError(
         "forbidden",
-        "You do not have access to this collection",
+        "You do not have access to this catalogue",
       );
     }
     const res = await getOr404(rawKey);
@@ -114,8 +114,8 @@ mediaRoutes.get("/media", async (c) => {
 
   // A final object must name a row: the object without one is the orphan
   // residual, and 404 is its shape — owner or visitor.
-  const artwork = await loadArtworkInCollection(
-    parsed.collectionId,
+  const artwork = await loadArtworkInCatalogue(
+    parsed.catalogueId,
     parsed.artworkId,
   );
   if (!artwork) {
@@ -125,49 +125,49 @@ mediaRoutes.get("/media", async (c) => {
     );
   }
 
-  const collection = await loadCollection(parsed.collectionId);
-  if (!collection) {
+  const catalogue = await loadCatalogue(parsed.catalogueId);
+  if (!catalogue) {
     throw new ApiError(
       "not-found",
       "The object key does not name a stored object",
     );
   }
   const membership = await loadMembership(
-    parsed.collectionId,
-    collection,
+    parsed.catalogueId,
+    catalogue,
     viewer,
   );
 
   // Which cache may keep these bytes: a document is a member's at every
-  // status, and a Protected collection's photo was admitted by the reader's
+  // status, and a Protected catalogue's photo was admitted by the reader's
   // grant, so neither is the same answer to every reader.
   let cacheControl = FINAL_CACHE;
 
   if (parsed.population === "documents") {
     // Never public, members only — and the refusal is a 403, not a 404:
     // the key names a row, and the point of the split is that a
-    // forgotten-to-hide UI fails closed. A deleted collection is the one
-    // exception: there is no collection to hold a document, so the key names
+    // forgotten-to-hide UI fails closed. A deleted catalogue is the one
+    // exception: there is no catalogue to hold a document, so the key names
     // nothing that exists (the same not-found the photo branch answers).
     cacheControl = PRIVATE_CACHE;
     if (!canReadArtworkDocuments(membership)) {
       throw new ApiError(
         "forbidden",
-        "Documents are private to the collection's owner and collaborators",
+        "Documents are private to the catalogue's owner and collaborators",
       );
     }
   } else {
     // The same verdict as the row, which is the whole point of the proxy: a
-    // Protected collection's bytes are behind the same challenge as its page,
+    // Protected catalogue's bytes are behind the same challenge as its page,
     // so the grant the reader holds (if any) is a fact this asks for too.
-    const hasValidGrant = await grantHeld(c, parsed.collectionId);
-    if (!canSeeArtwork(membership, collection, artwork, hasValidGrant)) {
+    const hasValidGrant = await grantHeld(c, parsed.catalogueId);
+    if (!canSeeArtwork(membership, catalogue, artwork, hasValidGrant)) {
       throw new ApiError(
         "not-found",
         "The object key does not name a stored object",
       );
     }
-    if (collection.isPublic && collection.passwordHash !== null) {
+    if (catalogue.isPublic && catalogue.passwordHash !== null) {
       cacheControl = PRIVATE_CACHE;
     }
   }

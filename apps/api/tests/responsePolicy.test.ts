@@ -27,8 +27,8 @@ describe("canonicalRedirect", () => {
       name: "redirects the origin's www alias to the origin, path and query kept",
       host: "www.arcula.art",
       origin: "https://arcula.art",
-      url: "https://www.arcula.art/collections/flores-solares?a=1&b=2",
-      expected: "https://arcula.art/collections/flores-solares?a=1&b=2",
+      url: "https://www.arcula.art/catalogues/flores-solares?a=1&b=2",
+      expected: "https://arcula.art/catalogues/flores-solares?a=1&b=2",
     },
     {
       name: "redirects the shell at / with an empty search",

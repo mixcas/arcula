@@ -1,8 +1,8 @@
-// The collection password's pure facts: turning a chosen password into a
+// The catalogue password's pure facts: turning a chosen password into a
 // stored hash and checking one against it. No database, no session, no Hono.
 
 import { describe, expect, it } from "vitest";
-import { hashPassword, verifyPassword } from "../src/collectionPassword";
+import { hashPassword, verifyPassword } from "../src/cataloguePassword";
 
 describe("hashPassword", () => {
   it("stores a scrypt hash with its salt and cost parameters in the string", async () => {
@@ -27,15 +27,15 @@ describe("hashPassword", () => {
 
 describe("verifyPassword", () => {
   it("accepts the password that produced the hash", async () => {
-    const stored = await hashPassword("a collection secret");
-    await expect(verifyPassword("a collection secret", stored)).resolves.toBe(
+    const stored = await hashPassword("a catalogue secret");
+    await expect(verifyPassword("a catalogue secret", stored)).resolves.toBe(
       true,
     );
   });
 
   it("rejects a wrong password", async () => {
-    const stored = await hashPassword("a collection secret");
-    await expect(verifyPassword("a collection secreT", stored)).resolves.toBe(
+    const stored = await hashPassword("a catalogue secret");
+    await expect(verifyPassword("a catalogue secreT", stored)).resolves.toBe(
       false,
     );
   });
@@ -55,7 +55,7 @@ describe("verifyPassword", () => {
   });
 
   it("rejects a malformed or truncated stored hash instead of throwing", async () => {
-    const stored = await hashPassword("a collection secret");
+    const stored = await hashPassword("a catalogue secret");
     const malformed = [
       "",
       "not-a-hash",
@@ -71,7 +71,7 @@ describe("verifyPassword", () => {
     ];
     for (const candidate of malformed) {
       await expect(
-        verifyPassword("a collection secret", candidate),
+        verifyPassword("a catalogue secret", candidate),
       ).resolves.toBe(false);
     }
   });

@@ -1,18 +1,18 @@
-// The collaborator's read side, end to end: one private collection shared with
+// The collaborator's read side, end to end: one private catalogue shared with
 // a second account, read through the real routes against the real stack.
 //
 // The module is the wire proof of access.ts's matrix. The owner and the
-// collaborator read the same collection, the same drafts and the same
+// collaborator read the same catalogue, the same drafts and the same
 // tombstoned work; a visitor and an anonymous reader get the visitor rule —
-// or, for a private collection, its `403`. The list proves the other half:
-// it filters on the collection and the tombstone, never on `artworks.userId`,
+// or, for a private catalogue, its `403`. The list proves the other half:
+// it filters on the catalogue and the tombstone, never on `artworks.userId`,
 // so a work whose mirror names the collaborator is still everyone's to read.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   artworks as artworksTable,
-  collectionCollaborators as collaboratorsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import type { ArtworkRead } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
@@ -37,9 +37,9 @@ async function insertWork(options: {
   const id = uuid();
   await db.insert(artworksTable).values({
     id,
-    // The mirror of the collection owner. A row whose mirror names the
+    // The mirror of the catalogue owner. A row whose mirror names the
     // collaborator is the case the list must not filter on: after the write
-    // ticket a collaborator's save still records the collection's owner, but
+    // ticket a collaborator's save still records the catalogue's owner, but
     // the read side may not depend on that to be true.
     userId: options.userId ?? owner.userId,
     collectionId: cid,
@@ -59,7 +59,7 @@ beforeAll(async () => {
   stranger = await freshUser("SharedOther");
 
   cid = uuid();
-  await db.insert(collectionsTable).values({
+  await db.insert(cataloguesTable).values({
     id: cid,
     userId: owner.userId,
     mediaNamespaceId: uuid(),
@@ -94,13 +94,13 @@ afterAll(async () => {
   await closeDb();
 });
 
-const listPath = () => `/api/v1/collections/${cid}/artworks`;
-const onePath = (aid: string) => `/api/v1/collections/${cid}/artworks/${aid}`;
+const listPath = () => `/api/v1/catalogues/${cid}/artworks`;
+const onePath = (aid: string) => `/api/v1/catalogues/${cid}/artworks/${aid}`;
 
-describe("GET /collections/{cid} for a shared collection", () => {
+describe("GET /catalogues/{cid} for a shared catalogue", () => {
   it("serves the owner and a collaborator; a stranger and an anonymous reader 403", async () => {
     for (const cookies of [owner.cookies, collaborator.cookies]) {
-      const res = await req("GET", `/api/v1/collections/${cid}`, { cookies });
+      const res = await req("GET", `/api/v1/catalogues/${cid}`, { cookies });
       expect(res.status).toBe(200);
       expect((await json<Record<string, unknown>>(res)).name).toBe(
         "Shared Wall",
@@ -108,14 +108,14 @@ describe("GET /collections/{cid} for a shared collection", () => {
     }
 
     for (const cookies of [stranger.cookies, undefined]) {
-      const res = await req("GET", `/api/v1/collections/${cid}`, { cookies });
+      const res = await req("GET", `/api/v1/catalogues/${cid}`, { cookies });
       expect(res.status).toBe(403);
       expect((await err(res)).code).toBe("forbidden");
     }
   });
 });
 
-describe("the artwork list of a shared collection", () => {
+describe("the artwork list of a shared catalogue", () => {
   it("gives the owner and the collaborator every live work, drafts included", async () => {
     // Deleted is not listed for either of them; nor filtered by `userId`,
     // though one row's mirror names the collaborator.
@@ -129,7 +129,7 @@ describe("the artwork list of a shared collection", () => {
     }
   });
 
-  it("403s a stranger and an anonymous reader on the private collection", async () => {
+  it("403s a stranger and an anonymous reader on the private catalogue", async () => {
     for (const cookies of [stranger.cookies, undefined]) {
       const res = await req("GET", listPath(), { cookies });
       expect(res.status).toBe(403);
@@ -138,7 +138,7 @@ describe("the artwork list of a shared collection", () => {
   });
 });
 
-describe("the single read of a shared collection", () => {
+describe("the single read of a shared catalogue", () => {
   it("reads a draft, a deleted work and a collaborator-mirrored work to the owner and the collaborator", async () => {
     for (const cookies of [owner.cookies, collaborator.cookies]) {
       for (const aid of [publishedId, draftId, savedByCollaboratorId]) {
@@ -157,7 +157,7 @@ describe("the single read of a shared collection", () => {
 
   it("404s a visitor and an anonymous reader, uniformly", async () => {
     // A draft, a tombstoned work and a published work behind a private
-    // collection are one answer to a non-member: naming which was refused
+    // catalogue are one answer to a non-member: naming which was refused
     // would be a disclosure.
     for (const cookies of [stranger.cookies, undefined]) {
       for (const aid of [publishedId, draftId, deletedId]) {

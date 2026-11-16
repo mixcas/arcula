@@ -1,19 +1,19 @@
-// Deleting a collection: owner-only, and gone everywhere afterwards.
+// Deleting a catalogue: owner-only, and gone everywhere afterwards.
 //
-//   DELETE /collections/{cid}   owner-only: stamp deletedAt, withdraw the
+//   DELETE /catalogues/{cid}   owner-only: stamp deletedAt, withdraw the
 //                               pending invitations, close the Access grants
 //
 // One transaction does the three writes, so no request can see a deleted
-// collection that still holds live offers or valid grants. Nothing cascades:
+// catalogue that still holds live offers or valid grants. Nothing cascades:
 // the works, their media and the collaborator rows stay, which is what makes
 // the operator's restore a one-column update (spec #212).
 //
 // The not-found posture is one chokepoint, not a per-route change: the shared
 // loader `authorize.ts` refuses a stamped row, so every address that names the
-// collection answers 404 and the four raw queries that bypass it filter their
-// own rows. The PDF export is client-side and reads through the collection
+// catalogue answers 404 and the four raw queries that bypass it filter their
+// own rows. The PDF export is client-side and reads through the catalogue
 // and artwork endpoints, so it is covered by those reads; the API's only PDF
-// route is the public font subset, which names no collection.
+// route is the public font subset, which names no catalogue.
 //
 // This is the real-stack seam: the wire answer, the rows that moved and the
 // bytes that did not. The settings-page component suite owns the card.
@@ -24,10 +24,10 @@ import {
   artworkDocuments as artworkDocumentsTable,
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
-  collectionAccessGrants as grantsTable,
-  collectionCollaborators as collaboratorsTable,
-  collectionInvitations as invitationsTable,
-  collections as collectionsTable,
+  catalogueAccessGrants as grantsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogueInvitations as invitationsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import type {
   InvitationCreateResponse,
@@ -43,7 +43,7 @@ import { listObjects } from "../src/storage";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
 import {
   makeArtwork,
-  makeCollection,
+  makeCatalogue,
   makeInvitation,
   makeJpeg,
   processEntry,
@@ -66,7 +66,7 @@ let mate: Account;
 let stranger: Account;
 let invitee: Account;
 
-const collectionPath = (cid: string) => `/api/v1/collections/${cid}`;
+const cataloguePath = (cid: string) => `/api/v1/catalogues/${cid}`;
 
 /** The object key a proxy URL names. */
 function keyOf(url: string): string {
@@ -86,11 +86,11 @@ interface MediaFixture {
   documentKey: string;
 }
 
-/** A public collection with a published work (one photo, one document) and a
+/** A public catalogue with a published work (one photo, one document) and a
  *  work already carrying its own deletion stamp. Created through the routes,
- *  apart from the collection row itself (the cap is not this file's subject). */
-async function collectionWithMedia(name: string): Promise<MediaFixture> {
-  const cid = await makeCollection(owner.userId, { isPublic: true, name });
+ *  apart from the catalogue row itself (the cap is not this file's subject). */
+async function catalogueWithMedia(name: string): Promise<MediaFixture> {
+  const cid = await makeCatalogue(owner.userId, { isPublic: true, name });
   await db
     .insert(collaboratorsTable)
     .values({ collectionId: cid, userId: mate.userId });
@@ -135,7 +135,7 @@ async function collectionWithMedia(name: string): Promise<MediaFixture> {
       )
     ).status,
   ).toBe(200);
-  const saved = await req("POST", `${collectionPath(cid)}/artworks`, {
+  const saved = await req("POST", `${cataloguePath(cid)}/artworks`, {
     cookies: owner.cookies,
     body: {
       artworkId: aid,
@@ -148,11 +148,11 @@ async function collectionWithMedia(name: string): Promise<MediaFixture> {
   });
   expect(saved.status).toBe(201);
 
-  // A work whose own deletion stamp must survive the collection's.
+  // A work whose own deletion stamp must survive the catalogue's.
   const deletedAid = await makeArtwork(owner.userId, cid);
   expect(
     (
-      await req("POST", `${collectionPath(cid)}/artworks/bulk-delete`, {
+      await req("POST", `${cataloguePath(cid)}/artworks/bulk-delete`, {
         cookies: owner.cookies,
         body: { artworkIds: [deletedAid] },
       })
@@ -163,13 +163,13 @@ async function collectionWithMedia(name: string): Promise<MediaFixture> {
     photos: { id: string; original: { url: string } }[];
     documents: { id: string; original: { url: string } }[];
   }>(
-    await req("GET", `${collectionPath(cid)}/artworks/${aid}`, {
+    await req("GET", `${cataloguePath(cid)}/artworks/${aid}`, {
       cookies: owner.cookies,
     }),
   );
   return {
     cid,
-    // `makeCollection`'s default namespace: the owner's id, the shape
+    // `makeCatalogue`'s default namespace: the owner's id, the shape
     // 0004's backfill leaves on a pre-existing row.
     namespace: owner.userId,
     aid,
@@ -181,11 +181,11 @@ async function collectionWithMedia(name: string): Promise<MediaFixture> {
   };
 }
 
-/** A public collection shared with `mate`. Written straight through drizzle:
- *  the tier cap gives each account one created collection, and the cap is
+/** A public catalogue shared with `mate`. Written straight through drizzle:
+ *  the tier cap gives each account one created catalogue, and the cap is
  *  the subject of its own case, not of every fixture. */
-async function sharedCollection(name: string): Promise<string> {
-  const cid = await makeCollection(owner.userId, { isPublic: true, name });
+async function sharedCatalogue(name: string): Promise<string> {
+  const cid = await makeCatalogue(owner.userId, { isPublic: true, name });
   await db
     .insert(collaboratorsTable)
     .values({ collectionId: cid, userId: mate.userId });
@@ -203,12 +203,12 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("DELETE /collections/{cid}", () => {
+describe("DELETE /catalogues/{cid}", () => {
   it("answers 204 to the owner, 403 to a collaborator, 401 with no session, and 404 to a second delete", async () => {
-    const cid = await sharedCollection("Delete Me");
+    const cid = await sharedCatalogue("Delete Me");
 
     // A collaborator is a member but never the owner.
-    const refused = await req("DELETE", collectionPath(cid), {
+    const refused = await req("DELETE", cataloguePath(cid), {
       cookies: mate.cookies,
     });
     expect(refused.status).toBe(403);
@@ -216,45 +216,45 @@ describe("DELETE /collections/{cid}", () => {
     // The refusal moved nothing.
     const [before] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(before.deletedAt).toBeNull();
 
-    const anonymous = await req("DELETE", collectionPath(cid));
+    const anonymous = await req("DELETE", cataloguePath(cid));
     expect(anonymous.status).toBe(401);
     expect((await err(anonymous)).code).toBe("unauthorized");
 
-    const deleted = await req("DELETE", collectionPath(cid), {
+    const deleted = await req("DELETE", cataloguePath(cid), {
       cookies: owner.cookies,
     });
     expect(deleted.status).toBe(204);
     expect(await deleted.text()).toBe("");
     const [stamped] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
     expect(stamped.deletedAt).toBeInstanceOf(Date);
 
     // A second delete is not an error the user can act on: absent and
     // already deleted are the same answer.
-    const again = await req("DELETE", collectionPath(cid), {
+    const again = await req("DELETE", cataloguePath(cid), {
       cookies: owner.cookies,
     });
     expect(again.status).toBe(404);
     expect((await err(again)).code).toBe("not-found");
 
-    const missing = await req("DELETE", `/api/v1/collections/missing-${RUN}`, {
+    const missing = await req("DELETE", `/api/v1/catalogues/missing-${RUN}`, {
       cookies: owner.cookies,
     });
     expect(missing.status).toBe(404);
   });
 
   it("leaves the anonymous list and both dashboards", async () => {
-    const cid = await sharedCollection("Listed Wall");
+    const cid = await sharedCatalogue("Listed Wall");
     type ListRow = { id: string; role?: string };
     const list = async (cookies?: string): Promise<ListRow[]> =>
       await json<ListRow[]>(
-        await req("GET", "/api/v1/collections", { cookies }),
+        await req("GET", "/api/v1/catalogues", { cookies }),
       );
 
     // Present before, under each caller's own role.
@@ -267,7 +267,7 @@ describe("DELETE /collections/{cid}", () => {
     );
 
     expect(
-      (await req("DELETE", collectionPath(cid), { cookies: owner.cookies }))
+      (await req("DELETE", cataloguePath(cid), { cookies: owner.cookies }))
         .status,
     ).toBe(204);
 
@@ -283,7 +283,7 @@ describe("DELETE /collections/{cid}", () => {
   });
 
   it("withdraws the pending invitation, kills the mailed link, and leaves resolved history alone", async () => {
-    const cid = await sharedCollection("Invitation Wall");
+    const cid = await sharedCatalogue("Invitation Wall");
     const seen = (await mailsFor(invitee.email)).map((mail) => mail.ID);
 
     // A resolved row is history: the delete's withdrawal must not touch it.
@@ -298,7 +298,7 @@ describe("DELETE /collections/{cid}", () => {
       .from(invitationsTable)
       .where(eq(invitationsTable.id, declined.id));
 
-    const invited = await req("POST", `${collectionPath(cid)}/invitations`, {
+    const invited = await req("POST", `${cataloguePath(cid)}/invitations`, {
       cookies: owner.cookies,
       body: { email: invitee.email },
     });
@@ -324,7 +324,7 @@ describe("DELETE /collections/{cid}", () => {
     expect((await req("GET", `/api/v1/invitations/${token}`)).status).toBe(200);
 
     expect(
-      (await req("DELETE", collectionPath(cid), { cookies: owner.cookies }))
+      (await req("DELETE", cataloguePath(cid), { cookies: owner.cookies }))
         .status,
     ).toBe(204);
 
@@ -373,7 +373,7 @@ describe("DELETE /collections/{cid}", () => {
       (await inbox()).some((row) => row.id === created.invitation.id),
     ).toBe(false);
 
-    // The inbox filters the collection itself, not only the status: a
+    // The inbox filters the catalogue itself, not only the status: a
     // pending row written by some path that bypassed the owner check must
     // not surface either.
     const stray = await makeInvitation({
@@ -385,13 +385,13 @@ describe("DELETE /collections/{cid}", () => {
   });
 
   it("answers not-found on every address, for the owner, a collaborator and a visitor", async () => {
-    const fixture = await collectionWithMedia("Gone Wall");
+    const fixture = await catalogueWithMedia("Gone Wall");
     const { cid, aid, deletedAid, photoKey, documentKey } = fixture;
     const paths = {
-      collection: collectionPath(cid),
-      list: `${collectionPath(cid)}/artworks`,
-      work: `${collectionPath(cid)}/artworks/${aid}`,
-      deleted: `${collectionPath(cid)}/deleted-artworks`,
+      catalogue: cataloguePath(cid),
+      list: `${cataloguePath(cid)}/artworks`,
+      work: `${cataloguePath(cid)}/artworks/${aid}`,
+      deleted: `${cataloguePath(cid)}/deleted-artworks`,
     };
 
     // Before the delete: the public work serves, the document is the
@@ -410,11 +410,10 @@ describe("DELETE /collections/{cid}", () => {
     expect(deletedView.map((work) => work.id)).toEqual([deletedAid]);
 
     expect(
-      (await req("DELETE", paths.collection, { cookies: owner.cookies }))
-        .status,
+      (await req("DELETE", paths.catalogue, { cookies: owner.cookies })).status,
     ).toBe(204);
 
-    // Every address that named the collection, for every caller that can
+    // Every address that named the catalogue, for every caller that can
     // hold one. The signed-in visitor is the session-less visitor's case on
     // the session-gated routes.
     const accounts: [string, Account][] = [
@@ -425,12 +424,12 @@ describe("DELETE /collections/{cid}", () => {
     for (const [role, account] of accounts) {
       const calls: [string, Response][] = [
         [
-          "collection read",
-          await req("GET", paths.collection, { cookies: account.cookies }),
+          "catalogue read",
+          await req("GET", paths.catalogue, { cookies: account.cookies }),
         ],
         [
           "settings write",
-          await req("PATCH", paths.collection, {
+          await req("PATCH", paths.catalogue, {
             cookies: account.cookies,
             body: { name: "A Renamed Ghost" },
           }),
@@ -464,10 +463,10 @@ describe("DELETE /collections/{cid}", () => {
     }
 
     // The anonymous half: the reads that take no session answer the same,
-    // which is the PDF's route into the collection as well (the export is
+    // which is the PDF's route into the catalogue as well (the export is
     // client-side and reads through these two endpoints).
     const anonymous: [string, Response][] = [
-      ["collection read", await req("GET", paths.collection)],
+      ["catalogue read", await req("GET", paths.catalogue)],
       ["artwork list", await req("GET", paths.list)],
       ["single work", await req("GET", paths.work)],
       ["photo", await req("GET", mediaUrl(photoKey))],
@@ -480,14 +479,13 @@ describe("DELETE /collections/{cid}", () => {
     // The session gate still answers first on the routes that require one:
     // that is the app-wide contract and deletion does not change it.
     expect(
-      (await req("PATCH", paths.collection, { body: { name: "Ghost" } }))
-        .status,
+      (await req("PATCH", paths.catalogue, { body: { name: "Ghost" } })).status,
     ).toBe(401);
     expect((await req("GET", paths.deleted)).status).toBe(401);
   });
 
   it("keeps the works, their media, the collaborator rows and the works' own stamps", async () => {
-    const fixture = await collectionWithMedia("Preserved Wall");
+    const fixture = await catalogueWithMedia("Preserved Wall");
     const { cid, aid, namespace, photoId, documentId } = fixture;
 
     const snapshot = (
@@ -527,19 +525,19 @@ describe("DELETE /collections/{cid}", () => {
     ).toBeInstanceOf(Date);
 
     expect(
-      (await req("DELETE", collectionPath(cid), { cookies: owner.cookies }))
+      (await req("DELETE", cataloguePath(cid), { cookies: owner.cookies }))
         .status,
     ).toBe(204);
 
-    // The collection row is the one thing that moved: stamped, otherwise as
+    // The catalogue row is the one thing that moved: stamped, otherwise as
     // it was (which is what makes the operator's restore one column).
-    const [collection] = await db
+    const [catalogue] = await db
       .select()
-      .from(collectionsTable)
-      .where(eq(collectionsTable.id, cid));
-    expect(collection.deletedAt).toBeInstanceOf(Date);
-    expect(collection.name).toBe("Preserved Wall");
-    expect(collection.userId).toBe(owner.userId);
+      .from(cataloguesTable)
+      .where(eq(cataloguesTable.id, cid));
+    expect(catalogue.deletedAt).toBeInstanceOf(Date);
+    expect(catalogue.name).toBe("Preserved Wall");
+    expect(catalogue.userId).toBe(owner.userId);
 
     // The works and their children are untouched, the deleted work's own
     // stamp included.
@@ -588,7 +586,7 @@ describe("DELETE /collections/{cid}", () => {
   it("frees the tier slot immediately, so the capped account can create again", async () => {
     const capped = await freshUser("DeleteCapped");
     const create = (name: string) =>
-      req("POST", "/api/v1/collections", {
+      req("POST", "/api/v1/catalogues", {
         cookies: capped.cookies,
         body: { name },
       });
@@ -603,7 +601,7 @@ describe("DELETE /collections/{cid}", () => {
 
     expect(
       (
-        await req("DELETE", collectionPath(firstId), {
+        await req("DELETE", cataloguePath(firstId), {
           cookies: capped.cookies,
         })
       ).status,
@@ -613,23 +611,23 @@ describe("DELETE /collections/{cid}", () => {
     expect(created.status).toBe(201);
     const createdId = (await json<{ id: string }>(created)).id;
 
-    // The dashboard reads the same filtered list: one live owned collection,
+    // The dashboard reads the same filtered list: one live owned catalogue,
     // and the deleted one is not it.
     const dashboard = await json<{ id: string; role: string }[]>(
-      await req("GET", "/api/v1/collections", { cookies: capped.cookies }),
+      await req("GET", "/api/v1/catalogues", { cookies: capped.cookies }),
     );
     expect(dashboard.map((row) => row.id)).toEqual([createdId]);
     expect(dashboard[0].role).toBe("owner");
   });
 
   it("ends the unlock route and closes the Access grants", async () => {
-    const cid = await makeCollection(owner.userId, {
+    const cid = await makeCatalogue(owner.userId, {
       isPublic: true,
       name: "Locked Wall",
     });
     expect(
       (
-        await req("PATCH", collectionPath(cid), {
+        await req("PATCH", cataloguePath(cid), {
           cookies: owner.cookies,
           body: { password: "open-sesame" },
         })
@@ -637,7 +635,7 @@ describe("DELETE /collections/{cid}", () => {
     ).toBe(200);
     expect(
       (
-        await req("POST", `${collectionPath(cid)}/unlock`, {
+        await req("POST", `${cataloguePath(cid)}/unlock`, {
           body: { password: "open-sesame" },
         })
       ).status,
@@ -650,12 +648,12 @@ describe("DELETE /collections/{cid}", () => {
     ).toHaveLength(1);
 
     expect(
-      (await req("DELETE", collectionPath(cid), { cookies: owner.cookies }))
+      (await req("DELETE", cataloguePath(cid), { cookies: owner.cookies }))
         .status,
     ).toBe(204);
 
     // The transaction closed the grants, and the route that mints them no
-    // longer knows the collection — for any caller, the owner included.
+    // longer knows the catalogue — for any caller, the owner included.
     expect(
       await db
         .select()
@@ -668,7 +666,7 @@ describe("DELETE /collections/{cid}", () => {
       ["collaborator", mate],
       ["visitor", stranger],
     ] as [string, Account | null][]) {
-      const after = await req("POST", `${collectionPath(cid)}/unlock`, {
+      const after = await req("POST", `${cataloguePath(cid)}/unlock`, {
         cookies: account?.cookies,
         body: { password: "open-sesame" },
       });

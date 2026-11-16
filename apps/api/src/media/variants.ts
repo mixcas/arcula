@@ -56,7 +56,7 @@ export type ImageVariantSpec = SquareVariantSpec | BoundedVariantSpec;
  * two so a forgotten edit fails CI rather than production.
  *
  * `xxlarge` has two consumers, and its number is theirs rather than a screen's:
- * the Collection PDF's photo box is 504 × 580 pt, so at the 300 dpi the export
+ * the Catalogue PDF's photo box is 504 × 580 pt, so at the 300 dpi the export
  * converts at it needs 2100 × 2417 px — 17 px more than `xlarge` can give,
  * which would have left the largest page a hair under its box. 3000 covers that
  * box with a quarter of its side in hand for a page that grows or is enlarged on
@@ -89,8 +89,8 @@ export const VARIANT_KEYS: readonly ImageVariantKey[] = IMAGE_VARIANTS.map(
  *
  * Two of the six, and the two that documents actually use: `square_sm` renders
  * the list tile, `large` fills the preview modal. `xxlarge`, `xlarge`,
- * `square_lg` and `medium` exist for the public collection views and the
- * Collection PDF, and a document appears in neither — the proxy's document rule
+ * `square_lg` and `medium` exist for the public catalogue views and the
+ * Catalogue PDF, and a document appears in neither — the proxy's document rule
  * refuses it to a visitor, and the PDF prints photos alone. Generating them
  * anyway would write up to four objects per image that nothing can ever read.
  *

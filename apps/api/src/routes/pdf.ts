@@ -1,7 +1,7 @@
-// The Collection PDF's fallback font: GET /pdf/font-fallback?text=…
+// The Catalogue PDF's fallback font: GET /pdf/font-fallback?text=…
 //
 // Public on purpose: a Visitor's export needs it too, so there is no
-// session and no collection to authorize — the answer depends only on the
+// session and no catalogue to authorize — the answer depends only on the
 // characters, which are capped and cached by pdfFontSubset.ts. The body is a
 // TrueType subset of the bundled Noto Sans SC, never a remote font.
 

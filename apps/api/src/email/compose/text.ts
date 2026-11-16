@@ -11,7 +11,7 @@
  *  a recipient is right to distrust. */
 export const SENDER_NAME = "Arcula";
 
-/** The most of a collection or inviter name a subject carries. The body
+/** The most of a catalogue or inviter name a subject carries. The body
  *  always has the whole value. */
 export const SUBJECT_NAME_MAX = 40;
 
@@ -63,10 +63,10 @@ export function truncateSubjectPart(value: string): string {
     .trimEnd()}…`;
 }
 
-/** The tail both relationship mails name the collection with: the shortened
+/** The tail both relationship mails name the catalogue with: the shortened
  *  title and the product, as a subject carries them. */
-export function collectionOnArcula(collectionName: string): string {
-  return `${truncateSubjectPart(collectionName)} on Arcula`;
+export function catalogueOnArcula(catalogueName: string): string {
+  return `${truncateSubjectPart(catalogueName)} on Arcula`;
 }
 
 /**
