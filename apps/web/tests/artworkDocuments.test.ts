@@ -1,24 +1,24 @@
 // Pure-logic tests for the "Other Documents" helpers. No DOM, no canvas, no
 // server — the helpers encode decisions that are easy to make and hard to
-// notice being wrong: which types the form admits, what an image tile reads,
-// and when a save is allowed to skip the field.
+// notice being wrong: what an image tile reads, and when a save is allowed to
+// skip the field.
 //
-// What this file does not test: naming a document's stored object. The server
-// mints the object key from the content type it decoded, so the client has no
-// extension to choose and no allowlist to keep in step with the rules — the
-// accepted-type checks below are the form's only gate, and the stage route
-// enforces the same lists at the boundary.
+// What this file does not test: naming a document's stored object, or which
+// types are admissible. The server mints the object key from the content type
+// it was given, and the allowlist and caps are the shared
+// `checkDeclaredUpload` guard's — the form and the API ask that one function,
+// so there is no client-side list here to keep in step.
 
 import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_DOCUMENT_TYPES,
+  checkDeclaredUpload,
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
 } from "@arcula/shared";
 import {
   documentImageUrl,
   documentsChanged,
-  isAcceptedDocumentType,
   isDocumentImage,
   isDocumentImageType,
   sortDocuments,
@@ -86,11 +86,14 @@ describe("the accepted types", () => {
   });
 
   it("does not accept a type the browser did not report", () => {
-    expect(isAcceptedDocumentType("application/pdf")).toBe(true);
-    expect(isAcceptedDocumentType("image/jpeg")).toBe(true);
     // Browsers hand over an empty type for a dragged file. Rejecting it would
-    // make a perfectly good PDF unusable depending on how it arrived.
-    expect(isAcceptedDocumentType(undefined)).toBe(false);
+    // make a perfectly good PDF unusable depending on how it arrived, so the
+    // shared guard is asked rather than a truthiness check here.
+    expect(checkDeclaredUpload("document", "application/pdf", 1)).toBe(
+      "allowed",
+    );
+    expect(checkDeclaredUpload("document", "image/jpeg", 1)).toBe("allowed");
+    expect(checkDeclaredUpload("document", "", 1)).toBe("unsupported-type");
   });
 
   it("routes a PDF past the image pipeline and an image into it", () => {

@@ -44,7 +44,13 @@ function required(name: string): string {
 // virtual-hosted deployment has to set it to "false" explicitly.
 export const BUCKET = process.env.S3_BUCKET ?? "arcula";
 
-export const s3 = new S3Client({
+/**
+ * The one set of facts every client below is built from. It is a value rather
+ * than a constructor argument because presigning needs a *second* client (see
+ * `presigningS3`), and two configurations drifting apart would be exactly the
+ * bug this module exists to prevent.
+ */
+const clientConfig = {
   endpoint: required("S3_ENDPOINT"),
   region: process.env.S3_REGION ?? "us-east-1",
   forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
@@ -57,12 +63,25 @@ export const s3 = new S3Client({
           secretAccessKey: process.env.S3_SECRET_KEY,
         }
       : undefined,
-  // The SDK computes a CRC32 checksum for every request by default, and a
-  // presigned PUT has no body yet: it signs the checksum of an empty
-  // string, so the real object's bytes fail `BadDigest` at upload time.
-  // "WHEN_REQUIRED" leaves checksums off unless an operation demands one,
-  // which is the price of presigning with this client. Normal put/get
-  // behaviour is unchanged (S3 never required a checksum there).
+};
+
+export const s3 = new S3Client(clientConfig);
+
+/**
+ * The presigner's client: the same configuration, with one difference.
+ *
+ * The SDK computes a CRC32 checksum for every request by default, and a
+ * presigned PUT has no body yet — it would sign the checksum of an empty
+ * string, and the real object's bytes then fail `BadDigest` at upload time.
+ * `WHEN_REQUIRED` leaves checksums off unless an operation demands one.
+ *
+ * It is a second client rather than a setting on the first so the price is
+ * paid only where it must be: ordinary puts, copies and downloads keep the
+ * SDK's checksum, and with it the integrity check on every object this app
+ * writes.
+ */
+const presigningS3 = new S3Client({
+  ...clientConfig,
   requestChecksumCalculation: "WHEN_REQUIRED",
 });
 
@@ -214,7 +233,7 @@ export async function presignPut(
   const signed = ["content-type", ...Object.keys(metaHeaders)];
 
   const url = await getSignedUrl(
-    s3,
+    presigningS3,
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,

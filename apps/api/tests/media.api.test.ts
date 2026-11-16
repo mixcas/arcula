@@ -710,6 +710,38 @@ describe("POST …/documents/process", () => {
     expect(body.contentType).toBe("application/pdf");
   });
 
+  it("refuses a document whose bytes are not a PDF", async () => {
+    // The stored type is the client's declaration — trusted at presign, and
+    // only on real S3 pinned by the signature. So process reads the bytes it
+    // is about to promote: an object stored as application/pdf without the
+    // format's own header is refused rather than promoted and later served
+    // from the app's own origin. A text file is the honest example.
+    const target = await json<PresignedEntry>(
+      await presignEntry("documents", owner.cookies, cid, aid, {
+        entryId: "dpdfjunk",
+        contentType: "application/pdf",
+        size: 20,
+        name: "notes.pdf",
+      }),
+    );
+    await putEntry(
+      target,
+      new TextEncoder().encode("<p>not a pdf at all</p>"),
+      target.headers,
+    );
+    const res = await processEntry(
+      owner.cookies,
+      cid,
+      aid,
+      "documents",
+      JSON.stringify({ entryId: "dpdfjunk" }),
+    );
+    expect(res.status).toBe(400);
+    expect(
+      (await json<{ error: { fields?: object } }>(res)).error.fields,
+    ).toMatchObject({ file: "undecodable" });
+  });
+
   it("refuses a document whose PUT exceeded the document cap", async () => {
     // The declaration said one byte, so presign admitted it; the object that
     // landed is over the cap. The cap is the population's — judged against the

@@ -25,6 +25,7 @@ describe("isSensitivePath", () => {
     "/api/v1/catalogues/abc/artworks/def/documents/stage",
     // Process answers the staged original's proxy path and its variants.
     "/api/v1/catalogues/abc/artworks/def/photos/process",
+    "/api/v1/catalogues/abc/artworks/def/documents/process",
     // The direct PUT to the bucket: a presigned URL is a bearer token, and
     // the request carries the signed `content-type` and `x-amz-meta-name`.
     // Path-style names the bucket first; virtual-hosted names it in the host.

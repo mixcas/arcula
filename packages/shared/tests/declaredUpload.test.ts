@@ -3,17 +3,17 @@
 // A presign call never carries the bytes, so the only thing the API can check
 // when it mints a URL is what the client DECLARES: a content type and a size.
 // This is the one function both the web form and the API ask, and these tests
-// pin the two facts that make it worth having — each population's cap boundary
-// (the cap itself is allowed, one byte over is not) and each population's
-// allowlist (its own types in, everything else out). Flip either comparison or
-// widen either table and a case below goes red.
+// pin the facts that make it worth having — each population's cap boundary
+// (the cap itself is allowed, one byte over is not), each population's
+// allowlist (its own types in, everything else out), and the exact membership
+// of the two lists. Flip either comparison or add a type to either table and a
+// case below goes red.
 
 import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_DOCUMENT_TYPES,
   ACCEPTED_IMAGE_TYPES,
   checkDeclaredUpload,
-  isDeclaredUploadAllowed,
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
 } from "../src/caps";
@@ -75,20 +75,29 @@ describe("the size cap", () => {
 });
 
 describe("the allowlists", () => {
-  it("admits exactly the types the photos' allowlist carries", () => {
-    for (const contentType of Object.keys(ACCEPTED_IMAGE_TYPES)) {
-      expect(checkDeclaredUpload("photo", contentType, WELL_UNDER_CAP)).toBe(
-        "allowed",
-      );
-    }
-  });
-
-  it("admits exactly the types the documents' allowlist carries, PDF included", () => {
-    for (const contentType of Object.keys(ACCEPTED_DOCUMENT_TYPES)) {
-      expect(checkDeclaredUpload("document", contentType, WELL_UNDER_CAP)).toBe(
-        "allowed",
-      );
-    }
+  it("carries exactly the types the product is willing to serve", () => {
+    // A literal pin, deliberately, and not the doctrine's "constant against
+    // its own value": that rule removes an assertion whose expected value is
+    // re-derived from the same expression the code reads (`MAX_IMAGE_BYTES`
+    // asserted to equal `10 * 1024 * 1024` cross-checks nothing). Here the
+    // expected list is the security decision written down independently — the
+    // exact set of types this app will store and then serve from its own
+    // origin. A silently widened allowlist is a regression no negative case
+    // below catches, because those name only the types already known bad; a
+    // newly added type would pass every one of them. So the positive list
+    // itself has to be pinned, and changing it has to be a deliberate edit
+    // here as well as in `caps.ts`.
+    expect(Object.keys(ACCEPTED_IMAGE_TYPES).sort()).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]);
+    expect(Object.keys(ACCEPTED_DOCUMENT_TYPES).sort()).toEqual([
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]);
   });
 
   it("refuses the types that execute when navigated to, for both populations", () => {
@@ -144,22 +153,5 @@ describe("the failed type ahead of the failed size", () => {
     expect(checkDeclaredUpload("photo", "text/html", MAX_IMAGE_BYTES + 1)).toBe(
       "unsupported-type",
     );
-  });
-});
-
-describe("the boolean form", () => {
-  it("is true exactly when the verdict is allowed", () => {
-    // The web form only needs a yes or no; it must not be able to disagree
-    // with the verdict the API would give the same declaration.
-    expect(isDeclaredUploadAllowed("photo", "image/webp", 5_000)).toBe(true);
-    expect(isDeclaredUploadAllowed("photo", "image/webp", 0)).toBe(false);
-    expect(isDeclaredUploadAllowed("document", "text/html", 5_000)).toBe(false);
-    expect(
-      isDeclaredUploadAllowed(
-        "document",
-        "application/pdf",
-        MAX_DOCUMENT_BYTES,
-      ),
-    ).toBe(true);
   });
 });

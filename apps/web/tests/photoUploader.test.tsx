@@ -23,7 +23,7 @@ import {
 import { mediaService } from "@/services/mediaService";
 import { MediaUploadError } from "@/services/uploadError";
 import { ApiRequestError } from "@/services/api";
-import { MAX_ARTWORK_PHOTOS } from "@arcula/shared";
+import { MAX_ARTWORK_PHOTOS, MAX_IMAGE_BYTES } from "@arcula/shared";
 import type { ArtworkPhoto } from "@arcula/shared";
 
 /**
@@ -677,6 +677,29 @@ describe("addFiles", () => {
 
     expect(photos.entries).toHaveLength(MAX_ARTWORK_PHOTOS);
     expect(mediaService.stagePhoto).not.toHaveBeenCalled();
+  });
+
+  it("refuses a supported image over the byte cap without staging it", async () => {
+    // The shared guard asks the same type-and-size question presign does, so a
+    // file the server would refuse at the declaration costs no round trip —
+    // and its reason is the API's own "too large", not a second wording.
+    const oversized = jpegFile("huge.jpg");
+    Object.defineProperty(oversized, "size", {
+      value: MAX_IMAGE_BYTES + 1,
+    });
+    const photos = await withHook([], async (hook) => {
+      await act(async () => {
+        const result = await hook.addFiles([oversized]);
+        expect(result.added).toHaveLength(0);
+        expect(result.rejected.map((entry) => entry.reason)).toEqual([
+          "too large",
+        ]);
+      });
+    });
+
+    expect(photos.entries).toHaveLength(0);
+    expect(mediaService.stagePhoto).not.toHaveBeenCalled();
+    expect(mediaService.processPhoto).not.toHaveBeenCalled();
   });
 
   it("leaves no gap in the numbering when a file fails mid-batch", async () => {

@@ -1,11 +1,11 @@
 /**
  * The caps and accepted-type maps, shared by every side that enforces them.
  *
- * The web client enforces these in the Add/Edit forms — a file that fails a
- * cap is rejected before it is decoded or uploaded — and the API enforces the
- * same ceilings at the boundary, where a hand-rolled client cannot bypass it.
- * Importing them from here is what keeps every enforcer in agreement, by
- * construction.
+ * The web client enforces these in the Add/Edit forms through
+ * `checkDeclaredUpload` — a file that fails a cap or the allowlist is rejected
+ * before it is uploaded — and the API asks the same guard at presign, where a
+ * hand-rolled client cannot bypass it. Importing them from here is what keeps
+ * every enforcer in agreement, by construction.
  */
 
 /**
@@ -117,8 +117,8 @@ export type DeclaredUploadVerdict =
  *
  * A direct-to-storage upload never carries the bytes to the API, so the only
  * thing the presign step can judge is what the client DECLARES — and this is
- * the one function that judges it, asked by the form before it commits to an
- * upload and by the API before it mints a URL. The bytes themselves are
+ * the one function that judges it, asked by both form hooks before they commit
+ * to an upload and by the API before it mints a URL. The bytes themselves are
  * re-checked at process, where the server first sees them.
  *
  * The order is the stage route's existing one, kept: the allowlist first, so a
@@ -143,10 +143,3 @@ export const checkDeclaredUpload = (
   if (size > rule.cap) return "too-large";
   return "allowed";
 };
-
-/** The guard as a yes or no, for the callers that only need that. */
-export const isDeclaredUploadAllowed = (
-  population: MediaPopulationKind,
-  contentType: string,
-  size: number,
-): boolean => checkDeclaredUpload(population, contentType, size) === "allowed";

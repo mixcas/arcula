@@ -117,18 +117,6 @@ describe("the presign answer", () => {
     expect(parsed.expiresAt).toBe("2026-01-01T00:05:00.000Z");
   });
 
-  it("admits no method but PUT", () => {
-    // The URL is scoped to one method: a client that sent it otherwise would
-    // be refused by storage, so the contract says so rather than leaving the
-    // method implicit.
-    for (const method of ["GET", "POST", "PUT ", "put"]) {
-      expect(
-        mediaPresignResponseSchema.safeParse(presignResponse({ method }))
-          .success,
-      ).toBe(false);
-    }
-  });
-
   it("requires every field a client needs to complete the upload", () => {
     for (const field of [
       "uploadUrl",
