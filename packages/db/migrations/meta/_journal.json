@@ -71,6 +71,13 @@
       "when": 1794813104774,
       "tag": "0009_catalogue_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794813313918,
+      "tag": "0010_artwork_availability",
+      "breakpoints": true
     }
   ]
 }
