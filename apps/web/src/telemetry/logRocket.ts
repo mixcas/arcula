@@ -16,10 +16,16 @@
  *   artwork in the response). Timing and errors elsewhere are still recorded.
  *
  * The app ID is a public client-side identifier, like a publishable key: it is
- * not a secret and belongs in the bundle. Recording is a production-build
- * concern only, so `vite dev` and the test suite never reach the service; set
- * `VITE_LOGROCKET_APP_ID=""` to switch it off for an environment that builds
- * for production but should not record.
+ * not a secret and belongs in the bundle. Recording is production-only, and
+ * "production" is a build fact rather than a guess about the current host:
+ * `scripts/build-lambda.sh` exports `VITE_LOGROCKET_ENABLED=true` for the prod
+ * bundle and `false` for dev's, so dev.arcula.art never initialises the
+ * recorder, and neither does `vite dev`, a local build, or the test suite.
+ *
+ * The gate is that flag alone, not `import.meta.env.PROD`: the repo-root
+ * `.env` pins `NODE_ENV=development`, so Vite reports `PROD` as false even in
+ * a `vite build`. The build script is the one thing that knows which
+ * environment it is packaging.
  *
  * `identify` takes the immutable `uid` alone. A name or an email is PII that
  * the session deliberately does not carry, and it would follow the user across
@@ -27,6 +33,7 @@
  */
 
 type LogRocketSdk = typeof import("logrocket");
+type SetupReact = typeof import("logrocket-react").default;
 
 /** The scalar/array values `track` accepts; ids only, never free text. */
 type TrackProperties = Record<
@@ -76,34 +83,50 @@ export function isSensitivePath(url: string): boolean {
 }
 
 /**
- * Start recording, once, if this is a production build with an app ID set.
- * The SDK is imported dynamically so the chunk only loads in a browser that
- * will actually use it — the test runner never pays for it.
+ * Start recording, once, when the bundle was built for production with the
+ * recorder enabled. The SDK and its React plugin are imported dynamically so
+ * the chunk only loads in a browser that will actually use it — the test
+ * runner never pays for it.
  */
 export function initTelemetry(): void {
-  if (sdk || !import.meta.env.PROD || APP_ID === "") return;
+  if (
+    sdk ||
+    import.meta.env.VITE_LOGROCKET_ENABLED !== "true" ||
+    APP_ID === ""
+  ) {
+    return;
+  }
 
-  void import("logrocket").then((mod) => {
-    // The package is `export =` (CommonJS), which Vite's interop hands back
-    // as `default`; the fallback covers a bundler that returns the object
-    // itself instead.
-    const LogRocket =
-      (mod as unknown as { default?: LogRocketSdk }).default ?? mod;
-    LogRocket.init(APP_ID, {
-      dom: {
-        // Redact every input value, not only password fields.
-        inputSanitizer: true,
-      },
-      network: {
-        requestSanitizer: (request) => {
-          if (isSensitivePath(request.url)) return null;
-          return request;
+  void Promise.all([import("logrocket"), import("logrocket-react")]).then(
+    ([lrMod, reactMod]) => {
+      // Both packages are CommonJS (`export =` / `export default`), which
+      // Vite's interop hands back as `default`; the logrocket fallback covers
+      // a bundler that returns the object itself instead.
+      const LogRocket =
+        (lrMod as unknown as { default?: LogRocketSdk }).default ?? lrMod;
+      const setupReact: SetupReact = reactMod.default;
+
+      LogRocket.init(APP_ID, {
+        dom: {
+          // Redact every input value, not only password fields.
+          inputSanitizer: true,
         },
-      },
-    });
-    sdk = LogRocket;
-    if (pendingUid) LogRocket.identify(pendingUid);
-  });
+        network: {
+          requestSanitizer: (request) => {
+            if (isSensitivePath(request.url)) return null;
+            return request;
+          },
+        },
+      });
+      // Names the React components behind each click in replay. It only
+      // annotates the tree the DOM capture already has, so it widens nothing
+      // the redaction above does not already cover.
+      setupReact();
+
+      sdk = LogRocket;
+      if (pendingUid) LogRocket.identify(pendingUid);
+    },
+  );
 }
 
 /** Associate the recording with the signed-in account by its immutable id. */

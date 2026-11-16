@@ -18,11 +18,22 @@ public client-side identifier, like a publishable key, so it is neither a
 secret nor read from the deployment environment. `initTelemetry()` runs in
 `apps/web/src/main.tsx` before the first render.
 
-**Recording is a production-build concern.** `initTelemetry` is a no-op in
-`vite dev` and in the test suite, and `VITE_LOGROCKET_APP_ID=""` switches it
-off for a production build that should not record (dev's deploy, if we want
-the project to hold production sessions only). The SDK is imported
-dynamically, so the chunk never loads where it will not run.
+**Recording is production-only, decided at build time.** The SPA is built once
+per environment, so the switch travels with the bundle: `build-lambda.sh`
+exports `VITE_LOGROCKET_ENABLED=true` for prod and `false` for dev, and
+`initTelemetry` initialises the recorder only when the flag is the literal
+`"true"`. Dev's bundle therefore never loads the SDK — not at `dev.arcula.art`,
+not in `vite dev`, not in a local build, and not in the test suite.
+
+The gate is that flag, not `import.meta.env.PROD`: the repo-root `.env` pins
+`NODE_ENV=development`, which makes Vite report `PROD` as false even in a
+`vite build`. A gate on `PROD` would have silently disabled production
+recording, which is the failure this ADR exists to prevent.
+
+**The React plugin annotates, it does not widen.** `logrocket-react` names the
+components behind a click so replay can show `ArtworkFields` rather than a
+`div`. It attaches names to the tree the DOM capture already holds, so every
+redaction above still applies.
 
 **The redaction is the feature.** Three facts are true at `init`, not left to
 the defaults:
