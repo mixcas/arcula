@@ -544,25 +544,24 @@ the artwork form's field table with `visible` and `required` rules. The colour
 is a name from a literal union, never a Mantine type or a hex, and the record's
 key type makes a fourth kind a build error until it has one; one presentational
 badge renders it as a shade-3 fill with dark text, and that badge is the only
-kind badge in the app. The table is v1's whole rule — every existing
-artwork field visible on every kind, only `title` and `artistName` required —
-and it is the data a later per-kind hiding will read; no v1 screen consumes the
-rules yet. What screens do read is the labels, the availability values and
+kind badge in the app. The table is v1's whole rule — every existing artwork
+field visible on every kind, only `title` and `artistName` required — and it is
+the data a later per-kind hiding will read; no v1 screen consumes the rules yet.
+What screens do read is the labels, the availability values and
 `availabilityFor`, the one default that starts a surfaced work at `available`
-and hands a Collection nothing. The
-create form asks the kind with three cards and no default, and the two fields
-below them stay away until one is chosen: each card carries the kind's icon,
-its persona (Artist, Gallery, Art Collector) and its name, and its kind's
-colour is on it in both states — the 1px border and the shade-7 glyph over a
-body-coloured fill with dark text when unselected, and a shade-3 fill with
-near-black text when selected — so the picker teaches the code the badges wear.
-Once a kind is chosen the two fields appear labelled by its surface (Artist
-name/Bio, Gallery name/About, Name/Description); Create is always rendered and
-stays disabled until a kind is chosen, and nothing on the page says the kind is
-fixed, because the General tab says it.
-The General tab relabels from the catalogue's stored kind and shows it as the same
-fixed, colour-coded badge, so what the catalogue is stays clear after creation;
-the dashboard badges every row with that badge. Nothing writes the kind after
+and hands a Collection nothing. The create form asks the kind with three cards
+and no default, and the two fields below them stay away until one is chosen:
+each card carries the kind's icon, its persona (Artist, Gallery, Art Collector)
+and its name, and its kind's colour is on it in both states — the 1px border
+and the shade-7 glyph over a body-coloured fill with dark text when unselected,
+and a shade-3 fill with near-black text when selected — so the picker teaches
+the code the badges wear. Once a kind is chosen the two fields appear labelled
+by its surface (Artist name/Bio, Gallery name/About, Name/Description); Create
+is always rendered and stays disabled until a kind is chosen, and nothing on the
+page says the kind is fixed, because the General tab says it. The General tab
+relabels from the catalogue's stored kind and shows it as the same fixed,
+colour-coded badge, so what the catalogue is stays clear after creation; the
+dashboard badges every row with that badge. Nothing writes the kind after
 creation.
 
 Availability is the one artwork field the kind gates. On a Portfolio the
