@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Artwork, Collection } from "../types";
+import type { Artwork, Catalogue } from "../types";
 import { artworkStatusSchema } from "./artwork";
 
 /**
@@ -12,7 +12,7 @@ import { artworkStatusSchema } from "./artwork";
  * assertion that a server change cannot silently reshape the document the
  * app renders, and the narrowed `z.infer` type the service layer returns.
  *
- * Two deliberate absences, matching the serializer: a collection row never
+ * Two deliberate absences, matching the serializer: a catalogue row never
  * carries `artworks` (it is not a client field), and blank text fields are
  * ABSENT keys, never `null` — so they are optional here, and the client's
  * looser types (`description?: string`) stay compatible with both shapes.
@@ -135,10 +135,10 @@ export const artworkReadSchema = z.object({
  * public list and the single read emit neither. Hence optional.
  *
  * `isPasswordProtected` is the member read's one-bit answer about the
- * collection's password — never the hash. It is absent from every anonymous
+ * catalogue's password — never the hash. It is absent from every anonymous
  * read, so a visitor never learns more than the lock screen tells them.
  */
-export const collectionReadSchema = z.object({
+export const catalogueReadSchema = z.object({
   id: z.string(),
   name: z.string(),
   userId: z.string(),
@@ -156,19 +156,24 @@ export const collectionReadSchema = z.object({
 });
 
 export type ArtworkRead = z.infer<typeof artworkReadSchema>;
-export type CollectionRead = z.infer<typeof collectionReadSchema>;
+
+export type CatalogueRead = z.infer<typeof catalogueReadSchema>;
+
+// The schema's older spellings, alias-kept while the API and web migrate
+// (ADR-0010). The field keys inside stay `collectionId`/`name`/... until the
+// contract step flips them.
+export const collectionReadSchema = catalogueReadSchema;
+export type CollectionRead = CatalogueRead;
 
 // One direction only, and that is deliberate: the wire shape must be a valid
-// `Artwork`/`Collection` (asserted below), so anything the service layer
+// `Artwork`/`Catalogue` (asserted below), so anything the service layer
 // parses can flow into every existing consumer untyped. The reverse is NOT
 // asserted — the client types stay looser than the wire (absent-optional
 // fields, `Timestamp | null`) so legacy documents still type-check for code
 // that reads them without going through this parse.
 type ArtworkWireIsArtwork = ArtworkRead extends Artwork ? true : never;
-type CollectionWireIsCollection = CollectionRead extends Collection
-  ? true
-  : never;
+type CatalogueWireIsCatalogue = CatalogueRead extends Catalogue ? true : never;
 const artworkWireIsArtwork: ArtworkWireIsArtwork = true;
-const collectionWireIsCollection: CollectionWireIsCollection = true;
+const catalogueWireIsCatalogue: CatalogueWireIsCatalogue = true;
 void artworkWireIsArtwork;
-void collectionWireIsCollection;
+void catalogueWireIsCatalogue;

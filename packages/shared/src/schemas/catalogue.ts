@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MINTED_ID_RE } from "./artwork";
 
 /**
- * The /api/v1 collection payloads. The form side of
+ * The /api/v1 catalogue payloads. The form side of
  * these stays in the web app; what is shared is the JSON the routes
  * validate — the same reason the artwork save payloads live next to
  * `artworkSchema` rather than in the route file.
@@ -12,19 +12,24 @@ import { MINTED_ID_RE } from "./artwork";
  * POST /collections. The id is minted server-side; the client sends only
  * name/description.
  */
-export const collectionCreateSchema = z.object({
+export const catalogueCreateSchema = z.object({
   name: z.string().trim().min(1, "Collection name is required"),
   description: z
     .string()
     .trim()
     .transform((value) => (value === "" ? undefined : value))
     .optional(),
-  // Collections are public by default — the service layer stamped it on
+  // Catalogues are public by default — the service layer stamped it on
   // every create; the schema default keeps every write path agreeing.
   isPublic: z.boolean().default(true),
 });
 
-export type CollectionCreatePayload = z.infer<typeof collectionCreateSchema>;
+export type CatalogueCreatePayload = z.infer<typeof catalogueCreateSchema>;
+
+// The payload's older spelling, alias-kept while the API and web migrate
+// (ADR-0010). The contract step deletes it.
+export const collectionCreateSchema = catalogueCreateSchema;
+export type CollectionCreatePayload = CatalogueCreatePayload;
 
 // In a JSON payload a field is either a value, `null` (clear), or absent
 // (leave alone) — the same contract the artwork PATCH uses. A string must be
@@ -32,7 +37,7 @@ export type CollectionCreatePayload = z.infer<typeof collectionCreateSchema>;
 const clearableText = z.string().trim().min(1).nullable().optional();
 
 /**
- * A collection password, as both sides enforce it: eight characters, no
+ * A catalogue password, as both sides enforce it: eight characters, no
  * complexity rule. Deliberately not trimmed — a space is a character somebody
  * chose, and trimming would silently change the secret they typed.
  *
@@ -56,9 +61,9 @@ export const passwordSchema = z
  * `password` follows the same contract, with the three meanings the settings
  * form needs: a string sets (or overwrites) it, `null` removes it, and an
  * absent key leaves it alone. Setting and overwriting are the same write, and
- * every password write revokes the collection's outstanding grants.
+ * every password write revokes the catalogue's outstanding grants.
  */
-export const collectionUpdateSchema = z.object({
+export const catalogueUpdateSchema = z.object({
   name: z.string().trim().min(1, "Collection name is required").optional(),
   isPublic: z.boolean().optional(),
   description: clearableText,
@@ -70,10 +75,13 @@ export const collectionUpdateSchema = z.object({
   password: passwordSchema.nullable().optional(),
 });
 
-export type CollectionUpdatePayload = z.infer<typeof collectionUpdateSchema>;
+export type CatalogueUpdatePayload = z.infer<typeof catalogueUpdateSchema>;
+
+export const collectionUpdateSchema = catalogueUpdateSchema;
+export type CollectionUpdatePayload = CatalogueUpdatePayload;
 
 /**
- * POST /collections/{cid}/unlock. An attempt at a Protected collection's
+ * POST /collections/{cid}/unlock. An attempt at a Protected catalogue's
  * password, from the lock screen.
  *
  * Deliberately NOT `passwordSchema`: any non-blank string is a fair guess, and
@@ -81,11 +89,14 @@ export type CollectionUpdatePayload = z.infer<typeof collectionUpdateSchema>;
  * answers `invalid-password` for both, so a guess that cannot be right is not
  * singled out from one that merely is not.
  */
-export const collectionUnlockSchema = z.object({
+export const catalogueUnlockSchema = z.object({
   password: z.string().min(1, "Enter the collection's password"),
 });
 
-export type CollectionUnlockPayload = z.infer<typeof collectionUnlockSchema>;
+export type CatalogueUnlockPayload = z.infer<typeof catalogueUnlockSchema>;
+
+export const collectionUnlockSchema = catalogueUnlockSchema;
+export type CollectionUnlockPayload = CatalogueUnlockPayload;
 
 /**
  * POST /collections/{cid}/import/csv. The envelope is deliberately loose

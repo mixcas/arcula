@@ -11,21 +11,21 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  collections: string[]; // Array of collection IDs
+  collections: string[]; // Array of catalogue ids
 }
 
-// Collection type
-export interface Collection {
+// Catalogue type
+export interface Catalogue {
   id: string;
   name: string;
   userId: string; // Reference to the owner
   description?: string;
   isPublic?: boolean;
   artworks?: string[]; // Array of artwork IDs
-  // What the viewer is to this collection, on the dashboard list only:
+  // What the viewer is to this catalogue, on the dashboard list only:
   // `owner` or `collaborator`. Absent on every other read — the anonymous
   // public list has no viewer to name, and the single read is not a list row.
-  role?: CollectionRole;
+  role?: CatalogueRole;
   // The owner's display name (falling back to email), on a shared row of the
   // dashboard list only. An owned row names nobody: you are the owner.
   ownerName?: string;
@@ -33,42 +33,42 @@ export interface Collection {
   // presence at the serializer boundary; the hash itself never leaves the
   // server. Absent on every anonymous read.
   isPasswordProtected?: boolean;
-  // Which skin renders this collection's public view. An unknown or absent id
+  // Which skin renders this catalogue's public view. An unknown or absent id
   // falls back to DEFAULT_SKIN_ID — see apps/web/src/skins/registry.ts.
   //
   // Nothing ever queries on `skin`: it is read off a row already fetched by id
-  // and defaulted at read time, so a collection that never set it simply
+  // and defaulted at read time, so a catalogue that never set it simply
   // renders the default skin. A backfill would buy nothing.
   skin?: string;
   // The chosen skin's own option vocabulary, validated at read time against
   // that skin's `options` — an unknown key is dropped and a wrong type falls
   // back to the default, so a stale or hand-edited value cannot corrupt a
-  // collection. Nothing outside the skin reads it.
+  // catalogue. Nothing outside the skin reads it.
   skinOptions?: Record<string, boolean | number | string>;
-  // Stamped by collectionService, not by callers.
+  // Stamped by the web's catalogue service, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
 
-// The unit's new name, beside the old one while the rename expands (ADR-0010,
-// #244): the two are the same wire type, so a caller may say either without a
-// conversion. The Collection spelling stays until the contract step, then
-// this alias becomes the only name.
-export type Catalogue = Collection;
+// The name this unit carried before ADR-0010 made Catalogue the umbrella:
+// one kind of catalogue now, rather than the name of all of them. Kept as an
+// alias while the API and the web still speak it; the contract step deletes
+// it, and until then either spelling names the same wire type.
+export type Collection = Catalogue;
 
 // The owner's choice for a work: `published` puts it in front of the
-// collection's gate, `draft` keeps it inside. Absent on a document written
+// catalogue's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
 
-// What an account is to a collection: the one whose `userId` it is, or one of
+// What an account is to a catalogue: the one whose `userId` it is, or one of
 // its collaborators. Both read and write everything inside — a collaborator
 // changes every setting, public/private included, and every work. Only access
 // administration (invite, remove, transfer) is the owner's.
-export type CollectionRole = "owner" | "collaborator";
+export type CatalogueRole = "owner" | "collaborator";
 
-// The Catalogue name for the same relationship, during the same expand window.
-export type CatalogueRole = CollectionRole;
+// The role's older spelling, alias-kept like `Collection` itself.
+export type CollectionRole = CatalogueRole;
 
 // Artwork type
 //
@@ -94,7 +94,7 @@ export interface Artwork {
   acquisitionPrice?: string;
   placeOfOrigin?: string;
   provenance?: string;
-  // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public collection
+  // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public catalogue
   // page, not in the public artwork view, and served only to the owner —
   // media reads re-check visibility per request.
   documents: ArtworkDocument[];
@@ -102,7 +102,7 @@ export interface Artwork {
   condition?: string;
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
-  collectionId: string; // Reference to parent collection
+  collectionId: string; // Reference to the parent catalogue
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;

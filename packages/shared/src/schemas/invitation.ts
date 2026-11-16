@@ -3,8 +3,8 @@ import { normalizeEmail } from "../email";
 import { wireTimestamp } from "./document";
 
 /**
- * The /api/v1 invitation contract. The offers carry no collection contents:
- * the preview names the collection, the inviter and the invited address, and
+ * The /api/v1 invitation contract. The offers carry no catalogue contents:
+ * the preview names the catalogue, the inviter and the invited address, and
  * nothing about the works inside.
  */
 
@@ -73,8 +73,8 @@ export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
 
 /**
  * One row of the invitee's in-app list (`GET /me/invitations`): the offer plus
- * the two names the card needs to render it — the collection and the account
- * that sent the offer. The collection's contents are not reachable from a
+ * the two names the card needs to render it — the catalogue and the account
+ * that sent the offer. The catalogue's contents are not reachable from a
  * pending offer (the invitee is not a member yet), so the names travel with the
  * list rather than in a second read that would have to be granted its own
  * visibility rule.
