@@ -1,4 +1,4 @@
-// The collection's media namespace end to end: a collection created by the
+// The catalogue's media namespace end to end: a catalogue created by the
 // current code mints a fresh namespace, final objects are keyed by it while
 // staged objects stay under their uploader, a dropped entry is swept by it,
 // and changing only the owner leaves every URL pointing at the same object.
@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { collections as collectionsTable } from "@arcula/db";
+import { catalogues as cataloguesTable } from "@arcula/db";
 import { MINTED_ID_RE, type ArtworkRead } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
 import {
@@ -71,7 +71,7 @@ beforeAll(async () => {
   owner = await freshUser("NsOwner");
   successor = await freshUser("NsSuccessor");
 
-  const created = await req("POST", "/api/v1/collections", {
+  const created = await req("POST", "/api/v1/catalogues", {
     cookies: owner.cookies,
     body: JSON.stringify({ name: "Namespaced Wall" }),
   });
@@ -79,7 +79,7 @@ beforeAll(async () => {
   cid = (await json<{ id: string }>(created)).id;
 
   const row = (
-    await db.select().from(collectionsTable).where(eq(collectionsTable.id, cid))
+    await db.select().from(cataloguesTable).where(eq(cataloguesTable.id, cid))
   )[0];
   namespace = row.mediaNamespaceId;
 
@@ -87,7 +87,7 @@ beforeAll(async () => {
   stagedKeepUrl = await stageAndProcess(pKeep);
   await stageAndProcess(pDrop);
 
-  const saved = await req("POST", `/api/v1/collections/${cid}/artworks`, {
+  const saved = await req("POST", `/api/v1/catalogues/${cid}/artworks`, {
     cookies: owner.cookies,
     body: {
       artworkId: aid,
@@ -107,10 +107,10 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("a collection's media namespace", () => {
-  it("is minted fresh when the collection is created", () => {
+describe("a catalogue's media namespace", () => {
+  it("is minted fresh when the catalogue is created", () => {
     expect(namespace).toMatch(MINTED_ID_RE);
-    // Not the owner and not the collection id: the namespace outlives the
+    // Not the owner and not the catalogue id: the namespace outlives the
     // owner, so it cannot be derived from either.
     expect(namespace).not.toBe(owner.userId);
     expect(namespace).not.toBe(cid);
@@ -121,7 +121,7 @@ describe("a collection's media namespace", () => {
     expect(staged).toMatchObject({ kind: "staging", uploaderId: owner.userId });
 
     const photo = await json<ArtworkRead>(
-      await req("GET", `/api/v1/collections/${cid}/artworks/${aid}`, {
+      await req("GET", `/api/v1/catalogues/${cid}/artworks/${aid}`, {
         cookies: owner.cookies,
       }),
     );
@@ -131,7 +131,7 @@ describe("a collection's media namespace", () => {
       expect(parsedKeyOf(url)).toMatchObject({
         kind: "final",
         namespaceId: namespace,
-        collectionId: cid,
+        catalogueId: cid,
         artworkId: aid,
       });
     }
@@ -140,7 +140,7 @@ describe("a collection's media namespace", () => {
   it("deletes a dropped entry's final objects by the namespace", async () => {
     const patched = await req(
       "PATCH",
-      `/api/v1/collections/${cid}/artworks/${aid}`,
+      `/api/v1/catalogues/${cid}/artworks/${aid}`,
       {
         cookies: owner.cookies,
         body: {
@@ -165,12 +165,12 @@ describe("a collection's media namespace", () => {
   it("keeps every media URL serving the same object when only the owner changes", async () => {
     const before = keepUrl;
     await db
-      .update(collectionsTable)
+      .update(cataloguesTable)
       .set({ userId: successor.userId })
-      .where(eq(collectionsTable.id, cid));
+      .where(eq(cataloguesTable.id, cid));
 
     const read = await json<ArtworkRead>(
-      await req("GET", `/api/v1/collections/${cid}/artworks/${aid}`, {
+      await req("GET", `/api/v1/catalogues/${cid}/artworks/${aid}`, {
         cookies: successor.cookies,
       }),
     );

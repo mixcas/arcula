@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Artwork, ArtworkStatus } from "../types";
+import type { Artwork, ArtworkAvailability, ArtworkStatus } from "../types";
 
 /**
  * The two words the contract speaks for an artwork's own state: `draft` or
@@ -19,6 +19,29 @@ type StatusEnumIsStatus =
     : never;
 const statusEnumIsStatus: StatusEnumIsStatus = true;
 void statusEnumIsStatus;
+
+/**
+ * A work's market state, declared once so the form, the save payloads and the
+ * wire read cannot drift. `null` is the absence of one — every Collection work
+ * — and is carried by the nullable wrappers at each seam.
+ */
+export const artworkAvailabilitySchema = z.enum([
+  "available",
+  "reserved",
+  "sold",
+  "on-consignment",
+]);
+
+// The same two-way guard the status enum carries: a member added to one side
+// and not the other fails the build.
+type AvailabilityEnumIsAvailability =
+  z.output<typeof artworkAvailabilitySchema> extends ArtworkAvailability
+    ? ArtworkAvailability extends z.output<typeof artworkAvailabilitySchema>
+      ? true
+      : never
+    : never;
+const availabilityEnumIsAvailability: AvailabilityEnumIsAvailability = true;
+void availabilityEnumIsAvailability;
 
 /**
  * Validation and payload shaping for the artwork form, shared by
@@ -82,9 +105,14 @@ export const artworkSchema = z.object({
   condition: optionalText,
   currentValue: optionalText,
   // Published by default, so a save that says nothing about it puts the work
-  // in front of the collection's gate. The collection is the only gate on a
+  // in front of the catalogue's gate. The catalogue is the only gate on a
   // visitor (ADR-0003); this is the owner's own choice within it.
   status: artworkStatusSchema.default("published"),
+  // A member-facing market fact on the kinds that sell work. The API accepts
+  // it on every kind — it never validates it against the catalogue's kind —
+  // and the form only surfaces it where `catalogueSurface` says it is in play.
+  // `null` means the work carries no market state.
+  availability: artworkAvailabilitySchema.nullable().optional(),
 });
 
 /**
@@ -114,6 +142,9 @@ export interface ArtworkFormValues {
   condition: string;
   currentValue: string;
   status: ArtworkStatus;
+  /** `null` means no market state: every Collection work, and a new one until
+   *  the surface puts the control on screen. */
+  availability: ArtworkAvailability | null;
 }
 
 /** The trimmed, validated, API-ready subset of an artwork. */
@@ -147,6 +178,7 @@ export const EMPTY_ARTWORK_FORM: ArtworkFormValues = {
   condition: "",
   currentValue: "",
   status: "published",
+  availability: null,
 };
 
 // `EDITABLE_FIELDS` — the fields the edit form owns, the only ones that may
@@ -191,6 +223,9 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
   // An absent status is a document written before the field, and reads as
   // published.
   status: artwork.status ?? "published",
+  // An absent availability is a work written before the field — or a
+  // Collection's, which has none.
+  availability: artwork.availability ?? null,
 });
 
 // `toArtworkUpdate` — the PATCH-payload seam — lives in
@@ -319,6 +354,10 @@ export const artworkUpdateSchema = z.object({
   // Carried, not obeyed: a PATCH that names it says what the owner chose, and
   // one that omits it leaves the stored value alone.
   status: artworkStatusSchema.optional(),
+  // Set, clear (`null`), or leave alone (absent) — the same three states a
+  // text field has, because a market state can be cleared. The API accepts it
+  // on every kind; the form only offers it where the surface does.
+  availability: artworkAvailabilitySchema.nullable().optional(),
   photos: z.array(stagedEntrySchema).optional(),
   documents: z.array(stagedEntrySchema).optional(),
 });

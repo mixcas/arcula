@@ -1,11 +1,13 @@
 # Arcula
 
-Collection management for people who actually own the work.
+Catalogue management for people who own, make and sell the work.
 
-Arcula is a web app for cataloguing a private art collection: your collections,
-the artworks in them, and the details that make each one worth recording. It is
-free and open source, self-hostable on your own AWS account, and built for
-independent collectors rather than galleries.
+Arcula is a web app for cataloguing art: your catalogues, the artworks in them,
+and the details that make each one worth recording. A catalogue is a Portfolio
+(an artist's body of work), a Collection (what a collector owns) or an Inventory
+(what a gallery represents for sale). It is free and open source, self-hostable
+on your own AWS account, and built for independent collectors, artists and
+galleries rather than institutions.
 
 ## Naming
 
@@ -23,8 +25,8 @@ that the three usual answers each break in a different way.
 **Commercial platforms.** Artlogic and its competitors are genuinely good
 software, built for galleries and institutions. The pricing is calibrated to
 that market — per-seat, per-year, frequently with paid modules. For a collector
-with forty works and no employees, that is a lot of money for software built
-around a workflow you do not have.
+with forty works, a single artist or a small gallery, that is a lot of money for
+software built around a workflow you do not have.
 
 **FileMaker.** Flexible, and it will fit almost anything you ask of it. It also
 becomes yours to maintain. The file lives on one machine, backups are whatever
@@ -33,7 +35,7 @@ when you need a change. A database is not a plan.
 
 **A spreadsheet.** This is where most independent collectors actually land, and
 it is the worst of the three for a reason that has little to do with the
-software. A spreadsheet makes a hard promise about your collection: that it is a
+software. A spreadsheet makes a hard promise about your catalogue: that it is a
 table. One row per work, one column per attribute, every value in a column the
 same shape as every other value in it.
 
@@ -63,24 +65,27 @@ Early, and honest about what is missing:
 | Sign up                                     | ✅                                                            |
 | Sign in / sign out, password reset by email | ✅                                                            |
 | Account profile (name), change password     | ✅                                                            |
-| Create, list, view, rename collections      | ✅                                                            |
-| Share a collection with collaborators       | ✅                                                            |
-| Collections per account                     | Free tier cap: one owned collection; shared ones do not count |
-| Public/private flag per collection          | ✅                                                            |
-| List a collection's artworks                | ✅                                                            |
-| Search a collection                         | ✅                                                            |
+| Create, list, view, rename catalogues       | ✅                                                            |
+| Choose a catalogue's kind at creation       | ✅ Portfolio, Collection or Inventory; fixed afterwards       |
+| Kind-specific field labels                  | ✅ Artist name/Bio, Name/Description, Gallery name/About      |
+| Share a catalogue with collaborators        | ✅                                                            |
+| Catalogues per account                      | Free tier cap: ten owned catalogues; shared ones do not count |
+| Public/private flag per catalogue           | ✅                                                            |
+| List a catalogue's artworks                 | ✅                                                            |
+| Search a catalogue                          | ✅                                                            |
 | Artwork list                                | ✅                                                            |
 | Add and edit an artwork                     | ✅                                                            |
 | Published/draft status per artwork          | ✅                                                            |
-| Public collection and single-artwork pages  | ✅                                                            |
-| Collection PDF                              | ✅                                                            |
+| Record a work's availability                | ✅ Portfolio and Inventory only; never a visitor gate         |
+| Public catalogue and single-artwork pages   | ✅                                                            |
+| Catalogue PDF                               | ✅                                                            |
 | Photo uploads                               | ✅                                                            |
 | "Other Documents" uploads (images and PDFs) | ✅                                                            |
 | Soft delete of artworks (in bulk)           | ✅                                                            |
 | Restore a soft-deleted artwork              | ✅                                                            |
 | CSV import of artworks                      | ✅                                                            |
-| Protected collections (password on Public)  | ✅                                                            |
-| Delete a collection                         | ✅                                                            |
+| Protected catalogues (password on Public)   | ✅                                                            |
+| Delete a catalogue                          | ✅                                                            |
 | Portable data export                        | Not implemented (see the roadmap)                             |
 
 ### How access control works
@@ -91,54 +96,54 @@ session and checks membership or visibility before it touches a row. Media is th
 same — nothing is served straight from object storage. `GET /api/v1/media?key=…`
 proxies each object and re-checks visibility per request, so one authorization
 rule covers both the database row and the bytes. A photo is never more readable
-than the artwork it belongs to, and a document is visible to the collection's
+than the artwork it belongs to, and a document is visible to the catalogue's
 members only.
 
-Collaboration is built: an account with a `collection_collaborators`
-row reads every live work in the collection — drafts included — and a deleted
-work by id, and edits the collection's works and settings as the owner does
+Collaboration is built: an account with a membership row
+reads every live work in the catalogue — drafts included — and a deleted
+work by id, and edits the catalogue's works and settings as the owner does
 ([ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md)). What a
 collaborator does not do is administer access: only the owner invites, resends
-or revokes an offer, removes a collaborator, and transfers the collection.
+or revokes an offer, removes a collaborator, and transfers the catalogue.
 The owner can invite an address by email; the link carries a single-use token,
 and the invited account accepts or declines it. The invitation mail is the only
 place the raw token exists, and accepting needs both that link and a signed-in
 account whose address matches the invitation. The dashboard lists the offers
 addressed to you and can decline them; acceptance is the mail's job. The
-collection settings page's access card lets the owner resend or revoke an offer,
-remove a collaborator, and transfer the collection to a collaborator; the
+catalogue settings page's access card lets the owner resend or revoke an offer,
+remove a collaborator, and transfer the catalogue to a collaborator; the
 previous owner stays as a collaborator and can leave. A transfer mails the new
-owner a link to the collection; a failed mail answers `emailSent: false` and
+owner a link to the catalogue; a failed mail answers `emailSent: false` and
 never undoes the invitation or the transfer.
 
-Today the collection is the only gate: a visitor sees a published, live work
-exactly when its collection is public, and a draft, a deleted work and a private
-collection are one answer to them. A work is published or draft; it carries no
+Today the catalogue is the only gate: a visitor sees a published, live work
+exactly when its catalogue is public, and a draft, a deleted work and a private
+catalogue are one answer to them. A work is published or draft; it carries no
 visibility flag of its own. Soft delete is a `deletedAt` stamp, not a removal: a
 deleted work disappears from every live list without its bytes going anywhere.
-Each collection's **Deleted** view lists its deleted works, most recently
+Each catalogue's **Deleted** view lists its deleted works, most recently
 deleted first, and restores one or several.
 
-**The Collection PDF asks the same question.** The PDF route is public chrome,
-not behind the sign-in guard: the ordinary collection and artwork reads decide
+**The Catalogue PDF asks the same question.** The PDF route is public chrome,
+not behind the sign-in guard: the ordinary catalogue and artwork reads decide
 access, and the document always holds published, live works only — never a
 draft, a deleted work or a document. It is generated in the browser, so the
 API's only role is a font subset; the file is never stored.
 
-**Protected** is a second condition on a **Public** collection, not a third
+**Protected** is a second condition on a **Public** catalogue, not a third
 visibility state. The works and the visitor rule are unchanged; a non-member
 must also get past the **Lock screen**. Membership bypasses the challenge, and a
-**Private** collection stays closed even to an **Access grant**. The grant is
+**Private** catalogue stays closed even to an **Access grant**. The grant is
 what a right password buys: a 32-byte token kept only as its SHA-256 hash,
 delivered in the cookie `arcula_grant_{id}`, scoped to `/api/v1`
 (`HttpOnly`, `SameSite=Lax`) and good for twelve hours. The path is that broad
-because the media proxy is one route for every collection's bytes, so the same
+because the media proxy is one route for every catalogue's bytes, so the same
 grant covers the page and the bytes behind it. A grant admits exactly what a
 visitor sees — published, live works, never a draft and never a document — and
-the anonymous collection list excludes a Protected collection as it excludes a
-Private one, so it is reachable only by its direct link. A refused collection
+the anonymous catalogue list excludes a Protected catalogue as it excludes a
+Private one, so it is reachable only by its direct link. A refused catalogue
 read answers `403 password-required` and folds to the Lock screen; unlock
-attempts are throttled per address and collection in a fixed ten-minute
+attempts are throttled per address and catalogue in a fixed ten-minute
 window, and changing the password revokes every outstanding grant. The
 decision, and the alternatives it rejected, are in
 [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
@@ -173,7 +178,7 @@ Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of the same deploy shape — one Lambda behind one HTTP API:
 
 - **`apps/web`** — the React 19 + Vite single-page app (Mantine v9), including
-  the public collection pages (the "skins").
+  the public catalogue pages (the "skins").
 - **`apps/api`** — the Hono backend. Bun runs it in development; a Node 24
   Lambda runs it in production, and that same function serves the built SPA.
 - **`packages/shared`** — the client⇄server contract: wire types, Zod schemas,
@@ -213,20 +218,20 @@ by the API and the forms alike, so both sides accept and reject the same input.
 
 ## URL scheme
 
-Every collection and artwork route carries a readable segment alongside the id:
+Every catalogue and artwork route carries a readable segment alongside the id:
 
 ```
-/manage/collection/van-gogh-collection-7aV9xKqL2m
-/manage/collection/van-gogh-collection-7aV9xKqL2m/artwork/the-potato-eaters-Yh8kD2mL5v
+/manage/catalogue/van-gogh-collection-7aV9xKqL2m
+/manage/catalogue/van-gogh-collection-7aV9xKqL2m/artwork/the-potato-eaters-Yh8kD2mL5v
 ```
 
 The name is cosmetic, and **only the id is ever a lookup key.** The slug lives in
 the URL and nowhere else, which is what makes a rename safe: changing a
-collection's name cannot orphan the artworks that point at it. Four
+catalogue's name cannot orphan the artworks that point at it. Four
 consequences worth knowing:
 
 - **Bare ids still work.** An older link of the form
-  `/collection/7aV9xKqL2m` loads fine and the page rewrites the address bar to
+  `/catalogue/7aV9xKqL2m` loads fine and the page rewrites the address bar to
   the canonical slug using `replace`.
 - **New ids are ten base62 characters.** A minted id is ten characters of
   `0-9A-Za-z` (`packages/shared/src/ids.ts`); the longer hex ids minted before
@@ -451,8 +456,9 @@ apps/
   web/                       # React 19 + Vite SPA
     src/
       App.tsx                # routes
+      catalogueSurface.ts    # what a kind means for the surface, as data
       auth/                  # the Better Auth React client
-      components/            # ProductPage, auth/, manage/, collection/,
+      components/            # ProductPage, auth/, manage/, catalogue/,
                              # invitation/, pdf/
       hooks/                 # useAuth, useArtworkPhotos, useArtworkDocuments,
                              # useUploadPool
@@ -468,9 +474,9 @@ apps/
       main.ts / lambda.ts    # the two entry points
       spa.ts                 # serves the built SPA in production
       access.ts authorize.ts artworkRead.ts auth.ts invitations.ts
-      collectionPassword.ts collectionGrants.ts unlockThrottle.ts
+      cataloguePassword.ts catalogueGrants.ts unlockThrottle.ts
       session.ts clientAddress.ts
-      routes/                # me, access, invitations, media, collections,
+      routes/                # me, access, invitations, media, catalogues,
                              # artworkMedia, artworkSave, artworks, pdf
       media/                 # keys, pipeline, populations, variants, promote
       email/                 # SMTP locally, Resend in production
@@ -510,24 +516,24 @@ built. The smaller items follow, roughly in order of how much they matter.
 
 ### Quick look
 
-A side panel on a collection's manage page that opens an artwork without leaving
+A side panel on a catalogue's manage page that opens an artwork without leaving
 the list: the full record, with shortcuts to its public page and its Edit form.
 A reading and navigation aid, not a second editor.
 
-### Catalogues
+### Selections
 
-A **Catalogue** is a curated subset of a Collection's artworks, published on its
-own address with its own audience. It would reuse the Collection's model —
+A **Selection** is a curated subset of a Catalogue's artworks, published on its
+own address with its own audience. It would reuse the Catalogue's model —
 Public or Private, an optional password, collaborators — and have its own PDF.
-It selects from the Collection rather than copying or owning the works.
+It selects from the Catalogue rather than copying or owning the works.
 
 - A collector shortlisting works for a gallery considering an exhibition,
   shared as a password-protected link or a PDF.
 - A collector or gallerist taking five works to an art fair, with a public page
   carrying those works' information.
 
-Giving a Catalogue its own public address would make it the first public surface
-besides a Collection, so its access model needs its own decision before
+Giving a Selection its own public address would make it the first public surface
+besides a Catalogue, so its access model needs its own decision before
 implementation.
 
 ### Artwork location
@@ -541,10 +547,10 @@ the moves that keep the inventory accurate as works travel. Distinct from
 
 - Purge and a retention window for soft-deleted artworks (the Deleted view
   restores them)
-- A portable data export (CSV/JSON), so you are never locked in — the Collection
+- A portable data export (CSV/JSON), so you are never locked in — the Catalogue
   PDF is a printed document, not your data
-- Filtering beyond the collection search that exists today
-- Account tiers and billing — this is what turns the per-tier collection cap
+- Filtering beyond the catalogue search that exists today
+- Account tiers and billing — this is what turns the per-tier catalogue cap
   into a sold allowance
 - An always-on container (`infra/Dockerfile`) as the scale-up path from Lambda:
   documented today, not deployed
@@ -554,9 +560,9 @@ and what is still open — are written up in the [design record](DESIGN.md).
 
 ## Contributing
 
-Contributions are welcome, particularly from people who collect. If something in
-the schema does not match how you actually think about your own collection, that
-is a bug worth reporting.
+Contributions are welcome, particularly from people who collect, make or sell
+art. If something in the schema does not match how you actually think about your
+own catalogue, that is a bug worth reporting.
 
 1. Fork the repository
 2. Branch from `dev`, the default branch (`git checkout dev`, then

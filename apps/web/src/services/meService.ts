@@ -4,7 +4,7 @@
  * The session the Better Auth client holds carries the core fields only;
  * the custom columns — tier, first/last name, settings — ride /me. The
  * responses are parsed through `sessionUserSchema` (the wire contract), the
- * same doctrine as `collectionReadSchema`: a server reshape is a parse error
+ * same doctrine as `catalogueReadSchema`: a server reshape is a parse error
  * at the boundary, not a render of a half-shaped user.
  */
 

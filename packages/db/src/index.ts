@@ -1,8 +1,12 @@
 // The Drizzle schema: thirteen tables. Four Better Auth core tables (extended
 // with the typed `user` columns), five domain tables, the two sharing tables
 // (`collection_collaborators`, `collection_invitations`) and the two a
-// protected collection needs (`collection_access_grants`,
+// protected catalogue needs (`collection_access_grants`,
 // `collection_unlock_attempts`).
+//
+// The Catalogue entity is exported as `catalogues`; its physical table stays
+// `collections` (ADR-0010). Physical names — tables, columns, indexes,
+// checks — are storage and never follow a rename.
 //
 // This package is the single source of truth for the schema: the API imports
 // it over a live driver, the migration tooling reads it to generate SQL, and
@@ -23,6 +27,7 @@
 // every query.
 
 import { sql } from "drizzle-orm";
+import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
 import {
   boolean,
   check,
@@ -119,7 +124,11 @@ export const verification = pgTable("verification", {
 
 // There is no `artworks: string[]` column: it would be a denormalized list the
 // join replaces.
-export const collections = pgTable(
+//
+// The physical table is still `collections`: renaming it is a non-additive
+// migration that collides with deploy-before-migrate, and the name is
+// invisible (ADR-0010).
+export const catalogues = pgTable(
   "collections",
   {
     id: text("id").primaryKey(),
@@ -131,6 +140,12 @@ export const collections = pgTable(
     // the Lambda still deploys before that migration runs.
     mediaNamespaceId: text("mediaNamespaceId").notNull(),
     name: text("name").notNull(),
+    // Whose art this catalogue holds and why, fixed at creation (ADR-0010).
+    // Every existing row is a collector's, so the constant default is the
+    // truth and no backfill is owed. The check spells the three values out, as
+    // `artworks.status` does, so the database refuses an unknown kind even when
+    // it arrives from outside the typed reader.
+    kind: text("kind").$type<CatalogueKind>().notNull().default("collection"),
     description: text("description"),
     // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
     // backfill — the deliberate contrast with `deletedAt`.
@@ -138,43 +153,49 @@ export const collections = pgTable(
     skinOptions: jsonb("skinOptions"),
     isPublic: boolean("isPublic").notNull().default(true),
     // A one-way hash with its salt and parameters in the string, or NULL for a
-    // collection anyone may read. Nullable on purpose: a collection without a
+    // catalogue anyone may read. Nullable on purpose: a catalogue without a
     // password is the normal state, not a gap to backfill, so this column needs
     // no tightening step. The plaintext is never stored, and there is no
     // read-back path by design (ADR-0005).
     passwordHash: text("passwordHash"),
-    // NULL = live, as on `artworks`. Nullable with no backfill: a collection
+    // NULL = live, as on `artworks`. Nullable with no backfill: a catalogue
     // without a stamp is the normal state, not a gap to tighten later.
     deletedAt: timestamp("deletedAt", { withTimezone: true }),
     createdAt: timestamptz("createdAt"),
     updatedAt: timestamptz("updatedAt"),
   },
-  (table) => [index("collections_user_id_idx").on(table.userId)],
+  (table) => [
+    index("collections_user_id_idx").on(table.userId),
+    check(
+      "collections_kind_check",
+      sql`"kind" in ('portfolio', 'collection', 'inventory')`,
+    ),
+  ],
 ).enableRLS();
 
-// Everyone with access except the owner. The owner is `collections.userId`
+// Everyone with access except the owner. The owner is `catalogues.userId`
 // and is never duplicated here: one owner fact, one place.
-export const collectionCollaborators = pgTable(
+export const catalogueCollaborators = pgTable(
   "collection_collaborators",
   {
-    collectionId: text("collectionId").notNull(),
+    catalogueId: text("collectionId").notNull(),
     userId: text("userId").notNull(),
     createdAt: timestamptz("createdAt"),
   },
   (table) => [
-    primaryKey({ columns: [table.collectionId, table.userId] }),
-    // The dashboard list: the collections shared with one account.
+    primaryKey({ columns: [table.catalogueId, table.userId] }),
+    // The dashboard list: the catalogues shared with one account.
     index("collection_collaborators_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
 
 // The offer: one row per invitation, kept as history after it resolves.
 // Expiry is computed from `expiresAt`, never stored as a status.
-export const collectionInvitations = pgTable(
+export const catalogueInvitations = pgTable(
   "collection_invitations",
   {
     id: text("id").primaryKey(),
-    collectionId: text("collectionId").notNull(),
+    catalogueId: text("collectionId").notNull(),
     // Stored trimmed and lowercased; the index below compares lower(email).
     email: text("email").notNull(),
     invitedByUserId: text("invitedByUserId").notNull(),
@@ -188,10 +209,10 @@ export const collectionInvitations = pgTable(
     resolvedAt: timestamp("resolvedAt", { withTimezone: true }),
   },
   (table) => [
-    // One pending invitation per collection and address. Resolved rows are
+    // One pending invitation per catalogue and address. Resolved rows are
     // history, so they fall outside the partial index.
     uniqueIndex("collection_invitations_pending_collection_email_idx")
-      .on(table.collectionId, sql`lower(${table.email})`)
+      .on(table.catalogueId, sql`lower(${table.email})`)
       .where(sql`${table.status} = 'pending'`),
     check(
       "collection_invitations_status_check",
@@ -201,15 +222,15 @@ export const collectionInvitations = pgTable(
 ).enableRLS();
 
 // An Access grant: what a reader holds after entering a protected
-// collection's password. The row keeps the token's hash, never the token, so a
+// catalogue's password. The row keeps the token's hash, never the token, so a
 // database leak is a set of unguessable hashes rather than a set of working
 // grants. Expiry is computed from `expiresAt` rather than stored as a status,
-// and the index below exists so that revoking a collection's grants on a
+// and the index below exists so that revoking a catalogue's grants on a
 // password change is one statement (ADR-0005).
-export const collectionAccessGrants = pgTable(
+export const catalogueAccessGrants = pgTable(
   "collection_access_grants",
   {
-    collectionId: text("collectionId").notNull(),
+    catalogueId: text("collectionId").notNull(),
     tokenHash: text("tokenHash").notNull().unique(),
     createdAt: timestamptz("createdAt"),
     // When the grant stops being usable. The TTL is policy, decided by the
@@ -217,28 +238,28 @@ export const collectionAccessGrants = pgTable(
     expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   },
   (table) => [
-    // Revocation: deleting one collection's grants in a single statement.
-    index("collection_access_grants_collection_id_idx").on(table.collectionId),
+    // Revocation: deleting one catalogue's grants in a single statement.
+    index("collection_access_grants_collection_id_idx").on(table.catalogueId),
   ],
 ).enableRLS();
 
-// The unlock throttle's counter: one row per address, collection and window.
+// The unlock throttle's counter: one row per address, catalogue and window.
 // `attempts` counts failures, and a window lapses once its start is older than
 // the window length — which is policy the unlock route owns, not the schema.
-// Keying on both identifiers keeps one collection's throttle from locking
+// Keying on both identifiers keeps one catalogue's throttle from locking
 // visitors out of another's through a shared address (ADR-0005).
-export const collectionUnlockAttempts = pgTable(
+export const catalogueUnlockAttempts = pgTable(
   "collection_unlock_attempts",
   {
     ip: text("ip").notNull(),
-    collectionId: text("collectionId").notNull(),
+    catalogueId: text("collectionId").notNull(),
     // The window's start, floored from the attempt time, so a row names the
     // window it belongs to without a second clock column.
     windowStart: timestamp("windowStart", { withTimezone: true }).notNull(),
     attempts: integer("attempts").notNull().default(0),
   },
   (table) => [
-    primaryKey({ columns: [table.ip, table.collectionId, table.windowStart] }),
+    primaryKey({ columns: [table.ip, table.catalogueId, table.windowStart] }),
   ],
 ).enableRLS();
 
@@ -249,7 +270,7 @@ export const artworks = pgTable(
   {
     id: text("id").primaryKey(),
     userId: text("userId").notNull(),
-    collectionId: text("collectionId").notNull(),
+    catalogueId: text("collectionId").notNull(),
     title: text("title").notNull(),
     artistName: text("artistName").notNull(),
     serie: text("serie"),
@@ -264,8 +285,12 @@ export const artworks = pgTable(
     notes: text("notes"),
     condition: text("condition"),
     currentValue: text("currentValue"),
+    // A work's market state on a Portfolio or an Inventory. Null means no
+    // market state — every Collection work, and every work written before the
+    // column existed. The check keeps the four values the shared enum names.
+    availability: text("availability").$type<ArtworkAvailability>(),
     // The owner's choice, and the only per-work field a visitor is gated on:
-    // `published` or `draft`. The collection is the whole gate; there is no
+    // `published` or `draft`. The catalogue is the whole gate; there is no
     // per-work visibility flag.
     status: text("status").notNull().default("published"),
     // NULL = live. Soft delete: the column is the sole record of deletion.
@@ -274,21 +299,25 @@ export const artworks = pgTable(
     updatedAt: timestamptz("updatedAt"),
   },
   (table) => [
-    // The owner list: a collection's live works, no `userId` filter — the
+    // The owner list: a catalogue's live works, no `userId` filter — the
     // owner and every collaborator see the same list.
     index("artworks_collection_deleted_idx").on(
-      table.collectionId,
+      table.catalogueId,
       table.deletedAt,
     ),
-    // The visitor list: a public collection's published, live works.
+    // The visitor list: a public catalogue's published, live works.
     index("artworks_collection_status_deleted_idx").on(
-      table.collectionId,
+      table.catalogueId,
       table.status,
       table.deletedAt,
     ),
-    // The artwork-by-id-in-collection check (create authorization).
-    index("artworks_collection_id_idx").on(table.collectionId),
+    // The artwork-by-id-in-catalogue check (create authorization).
+    index("artworks_collection_id_idx").on(table.catalogueId),
     check("artworks_status_check", sql`"status" in ('draft', 'published')`),
+    check(
+      "artworks_availability_check",
+      sql`"availability" in ('available', 'reserved', 'sold', 'on-consignment')`,
+    ),
   ],
 ).enableRLS();
 
@@ -364,11 +393,11 @@ export const schema = {
   session,
   account,
   verification,
-  collections,
-  collectionCollaborators,
-  collectionInvitations,
-  collectionAccessGrants,
-  collectionUnlockAttempts,
+  catalogues,
+  catalogueCollaborators,
+  catalogueInvitations,
+  catalogueAccessGrants,
+  catalogueUnlockAttempts,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,

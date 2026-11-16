@@ -5,8 +5,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import SkinHost from "@/components/collection/SkinHost";
-import type { Artwork, Collection } from "@arcula/shared";
+import SkinHost from "@/components/catalogue/SkinHost";
+import type { Artwork, Catalogue } from "@arcula/shared";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -20,9 +20,10 @@ vi.mock("@mantine/carousel", async () => {
   return carouselMock();
 });
 
-const collection: Collection = {
+const catalogue: Catalogue = {
   id: "AAAAAAAAAAAAAAAAAAAA",
   name: "Flores Solares",
+  kind: "collection",
   userId: "owner-1",
   isPublic: true,
 };
@@ -30,7 +31,7 @@ const collection: Collection = {
 const artwork: Artwork = {
   id: "BBBBBBBBBBBBBBBBBBBB",
   userId: "owner-1",
-  collectionId: collection.id,
+  catalogueId: catalogue.id,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -43,10 +44,10 @@ const renderHost = (overrides: Partial<Parameters<typeof SkinHost>[0]> = {}) =>
     <MemoryRouter>
       <SkinHost
         view="home"
-        collection={collection}
+        catalogue={catalogue}
         artworks={[artwork]}
-        collectionPath="/collection/flores-solares-AAAAAAAAAAAAAAAAAAAA"
-        artworkPath={(work) => `/collection/x/${work.id}`}
+        cataloguePath="/catalogue/flores-solares-AAAAAAAAAAAAAAAAAAAA"
+        artworkPath={(work) => `/catalogue/x/${work.id}`}
         {...overrides}
       />
     </MemoryRouter>,
@@ -111,7 +112,7 @@ describe("SkinHost — the isolation boundary", () => {
 });
 
 describe("SkinHost — dispatch", () => {
-  it("renders the collection's skin, not a hardcoded one", () => {
+  it("renders the catalogue's skin, not a hardcoded one", () => {
     renderHost();
     expect(screen.getByRole("region")).toHaveAttribute(
       "aria-label",
@@ -129,8 +130,8 @@ describe("SkinHost — dispatch", () => {
     // region is the artwork section, so the name below is the artwork's title.
     expect(() =>
       renderHost({
-        collection: {
-          ...collection,
+        catalogue: {
+          ...catalogue,
           // Wrong type: the stored value is hostile by design.
           skinOptions: { transitionSeconds: "half a second" },
         },

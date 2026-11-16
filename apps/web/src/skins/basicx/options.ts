@@ -3,22 +3,22 @@
  *
  * One option. There is deliberately no autoplay and no "which fields to show":
  *
- * - Autoplay was cut because a collection homepage is a stack of fullscreen
+ * - Autoplay was cut because a catalogue homepage is a stack of fullscreen
  *   sections the visitor scrolls through at their own pace, and an autoplaying
  *   slideshow inside one of them fights that. Cutting it also removed the only
  *   option whose meaning depended on another one (`autoplaySeconds` matters only
  *   when `autoplay` is on), which is why `resolveSkinOptions` can stay a flat
  *   per-key default with no cross-option logic.
- * - Which fields appear is the *skin's* decision, not per-collection config.
+ * - Which fields appear is the *skin's* decision, not per-catalogue config.
  *   "Artist name, title, photos, or additional fields" varies by skin and by
  *   what the data happens to contain — an option per conceivable field would be
  *   a settings form nobody can reason about.
  *
  * `showPoweredBy` used to gate the footer's "Powered by Arcula" line. It is
  * gone: that text moved into the nav's right-hand slot, where what belongs is
- * decided by *who is looking* — the collection's owner gets a link to the manage
+ * decided by *who is looking* — the catalogue's owner gets a link to the manage
  * side, anyone else gets the attribution. That is a property of the viewer, not
- * a per-collection preference, so an option for it would be a control that does
+ * a per-catalogue preference, so an option for it would be a control that does
  * nothing. The remaining slot's behaviour is a TODO in `BasicxChrome`.
  */
 

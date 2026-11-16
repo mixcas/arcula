@@ -42,15 +42,16 @@ afterEach(() => {
 const TOKEN = "tok-not-a-real-token";
 
 const preview = {
-  collection: { id: "c1", name: "Flores Solares" },
+  catalogue: { id: "c1", name: "Flores Solares" },
   inviter: { name: "Sofía Lara" },
   email: "invited@example.test",
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
 };
 
-const collection = {
+const catalogue = {
   id: "c1",
   name: "Flores Solares",
+  kind: "collection",
   userId: "u-owner",
   isPublic: false,
   createdAt: { seconds: 1, nanoseconds: 0 },
@@ -59,7 +60,7 @@ const collection = {
 
 const declined = {
   id: "i1",
-  collectionId: "c1",
+  catalogueId: "c1",
   email: "invited@example.test",
   invitedByUserId: "u-owner",
   status: "declined",
@@ -73,7 +74,7 @@ const inboxEntry = {
   ...declined,
   status: "pending",
   resolvedAt: null,
-  collectionName: "Flores Solares",
+  catalogueName: "Flores Solares",
   inviterName: "Sofía Lara",
 };
 
@@ -116,19 +117,19 @@ describe("getInvitation", () => {
   });
 
   it("fails on a reshaped preview instead of rendering it", async () => {
-    stubFetch(answer({ ...preview, collection: { id: "c1" } }));
+    stubFetch(answer({ ...preview, catalogue: { id: "c1" } }));
 
     await expect(invitationService.getInvitation(TOKEN)).rejects.toThrow();
   });
 });
 
 describe("acceptInvitation", () => {
-  it("posts to the accept route and parses the collection it answers", async () => {
-    const calls = stubFetch(answer(collection));
+  it("posts to the accept route and parses the catalogue it answers", async () => {
+    const calls = stubFetch(answer(catalogue));
 
     await expect(invitationService.acceptInvitation(TOKEN)).resolves.toEqual({
       status: "accepted",
-      collection,
+      catalogue,
     });
     expect(calls[0]?.url).toBe(`/api/v1/invitations/${TOKEN}/accept`);
     expect(calls[0]?.init.method).toBe("POST");
@@ -197,7 +198,7 @@ describe("declinePendingInvitation", () => {
 /** One owner-side offer, as the create and resend responses carry it. */
 const offer = {
   id: "i1",
-  collectionId: "c1",
+  catalogueId: "c1",
   email: "invited@example.test",
   invitedByUserId: "u-owner",
   status: "pending",
@@ -215,7 +216,7 @@ describe("createInvitation", () => {
     await expect(
       invitationService.createInvitation("c1", "invited@example.test"),
     ).resolves.toEqual({ invitation: offer, emailSent: true });
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/invitations");
     expect(calls[0]?.init.method).toBe("POST");
     expect(JSON.parse(calls[0]?.init.body as string)).toEqual({
       email: "invited@example.test",
@@ -238,7 +239,7 @@ describe("resendInvitation", () => {
     await expect(
       invitationService.resendInvitation("c1", "i1"),
     ).resolves.toEqual({ invitation: offer, emailSent: true });
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations/i1/resend");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/invitations/i1/resend");
     expect(calls[0]?.init.method).toBe("POST");
   });
 });
@@ -255,7 +256,7 @@ describe("revokeInvitation", () => {
     await expect(
       invitationService.revokeInvitation("c1", "i1"),
     ).resolves.toEqual(revoked);
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/invitations/i1");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/invitations/i1");
     expect(calls[0]?.init.method).toBe("DELETE");
   });
 });

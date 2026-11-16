@@ -11,9 +11,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { controlChars } from "./helpers/html";
 import {
-  collectionCollaborators as collaboratorsTable,
-  collectionInvitations as invitationsTable,
-  collections as collectionsTable,
+  catalogueCollaborators as collaboratorsTable,
+  catalogueInvitations as invitationsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import type {
   InvitationCreateResponse,
@@ -26,7 +26,7 @@ import { replyToConfigured } from "../src/env";
 import { emailProvider } from "../src/email/provider";
 import { hashInvitationToken, mintInvitationToken } from "../src/invitations";
 import { err, freshUser, json, req, sessionCookies, uuid } from "./helpers/api";
-import { makeCollection } from "./helpers/fixtures";
+import { makeCatalogue } from "./helpers/fixtures";
 import {
   linkIn,
   mailpitMessage,
@@ -59,7 +59,7 @@ async function signUpAs(
 }
 
 const invite = (cookies: string, email: string) =>
-  req("POST", `/api/v1/collections/${cid}/invitations`, {
+  req("POST", `/api/v1/catalogues/${cid}/invitations`, {
     cookies,
     body: { email },
   });
@@ -86,7 +86,7 @@ async function hasCollaborator(userId: string): Promise<boolean> {
     .from(collaboratorsTable)
     .where(
       and(
-        eq(collaboratorsTable.collectionId, cid),
+        eq(collaboratorsTable.catalogueId, cid),
         eq(collaboratorsTable.userId, userId),
       ),
     );
@@ -105,7 +105,7 @@ async function insertInvitation(options: {
   const now = new Date();
   await db.insert(invitationsTable).values({
     id,
-    collectionId: cid,
+    catalogueId: cid,
     email: options.email.trim().toLowerCase(),
     invitedByUserId: owner.userId,
     tokenHash: hashInvitationToken(options.token),
@@ -121,12 +121,12 @@ beforeAll(async () => {
   owner = await freshUser("InviteOwner");
   collaborator = await freshUser("InviteMate");
   stranger = await freshUser("InviteOther");
-  cid = await makeCollection(owner.userId, {
+  cid = await makeCatalogue(owner.userId, {
     name: "Invitation Wall",
     isPublic: false,
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: collaborator.userId,
   });
 });
@@ -135,7 +135,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe("POST /collections/{cid}/invitations", () => {
+describe("POST /catalogues/{cid}/invitations", () => {
   it("mails the link and stores only the token hash", async () => {
     const invited = uniqueEmail("Invitee").replace(
       "@example.test",
@@ -148,7 +148,7 @@ describe("POST /collections/{cid}/invitations", () => {
     expect(body.emailSent).toBe(true);
     expect(body.invitation.status).toBe("pending");
     expect(body.invitation.email).toBe(invited.toLowerCase());
-    expect(body.invitation.collectionId).toBe(cid);
+    expect(body.invitation.catalogueId).toBe(cid);
     expect(body.invitation.resolvedAt).toBeNull();
 
     // Seven days, computed from the row's own issue time.
@@ -192,16 +192,16 @@ describe("POST /collections/{cid}/invitations", () => {
     );
   });
 
-  it("mails a header-safe, truncated subject and a safely escaped body for a hostile collection name", async () => {
+  it("mails a header-safe, truncated subject and a safely escaped body for a hostile catalogue name", async () => {
     const hostileName = `Hostile\r\nBcc: evil@example.test <script>alert(1)</script> ${"Z".repeat(50)}`;
-    const hostileCid = await makeCollection(owner.userId, {
+    const hostileCid = await makeCatalogue(owner.userId, {
       name: hostileName,
       isPublic: false,
     });
     const email = uniqueEmail("HostileName");
     const res = await req(
       "POST",
-      `/api/v1/collections/${hostileCid}/invitations`,
+      `/api/v1/catalogues/${hostileCid}/invitations`,
       { cookies: owner.cookies, body: { email } },
     );
     expect(res.status).toBe(201);
@@ -292,7 +292,7 @@ describe("POST /collections/{cid}/invitations", () => {
 });
 
 describe("GET /invitations/{token}", () => {
-  it("previews the offer publicly without exposing the collection's contents", async () => {
+  it("previews the offer publicly without exposing the catalogue's contents", async () => {
     const email = uniqueEmail("Preview");
     const created = await json<CreateResponse>(
       await invite(owner.cookies, email),
@@ -302,12 +302,12 @@ describe("GET /invitations/{token}", () => {
     const res = await req("GET", `/api/v1/invitations/${token}`);
     expect(res.status).toBe(200);
     const body = await json<PreviewResponse>(res);
-    expect(body.collection).toEqual({ id: cid, name: "Invitation Wall" });
+    expect(body.catalogue).toEqual({ id: cid, name: "Invitation Wall" });
     expect(body.inviter).toEqual({ name: "InviteOwner Test" });
     expect(body.email).toBe(email.toLowerCase());
     expect(body.expiresAt.seconds).toBe(created.invitation.expiresAt.seconds);
     expect(body).not.toHaveProperty("description");
-    expect(body.collection).not.toHaveProperty("artworks");
+    expect(body.catalogue).not.toHaveProperty("artworks");
   });
 
   it("answers one uniform 404 for unknown, expired, revoked and declined tokens", async () => {
@@ -359,13 +359,13 @@ describe("POST /invitations/{token}/accept", () => {
     const token = await tokenFromMail(email);
     const invited = await signUpAs(email, "Accept Invitee");
 
-    // The accept response is a member read: it may say the collection is
+    // The accept response is a member read: it may say the catalogue is
     // Protected, and the hash never leaves the server.
     const storedHash = "scrypt$16384$8$1$deadbeef$cafebabe";
     await db
-      .update(collectionsTable)
+      .update(cataloguesTable)
       .set({ passwordHash: storedHash })
-      .where(eq(collectionsTable.id, cid));
+      .where(eq(cataloguesTable.id, cid));
 
     const res = await req("POST", `/api/v1/invitations/${token}/accept`, {
       cookies: invited.cookies,
@@ -377,7 +377,7 @@ describe("POST /invitations/{token}/accept", () => {
     expect(body).not.toHaveProperty("passwordHash");
     expect(JSON.stringify(body)).not.toContain(storedHash);
 
-    const read = await req("GET", `/api/v1/collections/${cid}`, {
+    const read = await req("GET", `/api/v1/catalogues/${cid}`, {
       cookies: invited.cookies,
     });
     expect(read.status).toBe(200);
@@ -435,7 +435,7 @@ describe("POST /invitations/{token}/accept", () => {
       await req("GET", "/api/v1/me", { cookies: invited.cookies }),
     );
     await db.insert(collaboratorsTable).values({
-      collectionId: cid,
+      catalogueId: cid,
       userId: me.id,
     });
 

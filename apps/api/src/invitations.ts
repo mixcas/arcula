@@ -7,7 +7,7 @@
 // of working links.
 
 import { createHash, randomBytes } from "node:crypto";
-import type { collectionInvitations as collectionInvitationsTable } from "@arcula/db";
+import type { catalogueInvitations as catalogueInvitationsTable } from "@arcula/db";
 import { INVITATION_RESEND_COOLDOWN_MS } from "@arcula/shared";
 
 // The two durations are product facts shared with the owner's access card —
@@ -26,7 +26,7 @@ export const hashInvitationToken = (token: string): string =>
   createHash("sha256").update(token).digest("hex");
 
 type InvitationFacts = Pick<
-  typeof collectionInvitationsTable.$inferSelect,
+  typeof catalogueInvitationsTable.$inferSelect,
   "status" | "expiresAt"
 >;
 
@@ -43,7 +43,7 @@ export const isInvitationUsable = (
   invitation.expiresAt.getTime() > now.getTime();
 
 type ResendFacts = Pick<
-  typeof collectionInvitationsTable.$inferSelect,
+  typeof catalogueInvitationsTable.$inferSelect,
   "status" | "createdAt"
 >;
 

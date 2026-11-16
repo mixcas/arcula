@@ -4,11 +4,14 @@
 view. It is precise enough to implement without further design decisions; the
 grilling that produced it is recorded in the issue and needs no new ADR.
 
-The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Collection**,
+The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Catalogue**,
 **Artwork**, **Artwork photo**, **Owner**, **Collaborator**, **Draft**,
 **Published**, **Deleted**, **Skin** — and the **Artworks manage view** it now
-defines. "Layout" is not used for this feature: the glossary lists it under
-_Avoid_ for **Skin**, and the app shell already owns the word.
+defines. This spec predates [ADR-0010](../adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md),
+which renamed the unit from Collection to Catalogue, so the rest of the document
+still says "Collection" where the code now says Catalogue. "Layout" is not used
+for this feature: the glossary lists it under _Avoid_ for **Skin**, and the app
+shell already owns the word.
 
 The design record:
 

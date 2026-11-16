@@ -15,7 +15,7 @@
 
 import { Font } from "@react-pdf/renderer";
 
-import { fallbackCharacters, fallbackChunks } from "./collectionPdfPreflight";
+import { fallbackCharacters, fallbackChunks } from "./cataloguePdfPreflight";
 import { throwIfAborted } from "./photoPipeline";
 
 const FALLBACK_ENDPOINT = "/api/v1/pdf/font-fallback";

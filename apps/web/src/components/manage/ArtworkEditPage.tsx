@@ -12,6 +12,8 @@ import { useArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
+import { catalogueService } from "@/services/catalogueService";
+import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
@@ -23,6 +25,7 @@ import {
   artworkSchema,
   fromArtwork,
   toArtworkPayload,
+  type ArtworkAvailability,
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
@@ -38,13 +41,13 @@ import { artworkSlug, artworkSearchSuffix, parseId } from "@arcula/shared";
  * from renumbering fifty rows.
  */
 const ArtworkEditPage: React.FC = () => {
-  const { collectionId: collectionParam, artworkId: artworkParam } = useParams<{
-    collectionId: string;
+  const { catalogueId: catalogueParam, artworkId: artworkParam } = useParams<{
+    catalogueId: string;
     artworkId: string;
   }>();
   // Either segment may be a bare id or a "{slug}-{id}" param; the API needs the
   // bare ids.
-  const collectionId = parseId(collectionParam ?? "");
+  const catalogueId = parseId(catalogueParam ?? "");
   const artworkId = parseId(artworkParam ?? "");
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +87,12 @@ const ArtworkEditPage: React.FC = () => {
   // but a save failure must leave the user's input on screen.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The catalogue's kind decides whether this form surfaces a market state and
+  // which states it offers. Loaded with the work, so the control and the
+  // initial value are settled before the form mounts.
+  const [availabilityValues, setAvailabilityValues] = useState<
+    readonly ArtworkAvailability[]
+  >([]);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
   // so it can be restored from here. Save stays shut while it is deleted, and
@@ -99,10 +108,10 @@ const ArtworkEditPage: React.FC = () => {
   // and it lives inside the banner it failed to dismiss.
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  // The hooks stage under the collection and artwork the route names — no load
+  // The hooks stage under the catalogue and artwork the route names — no load
   // has to complete first, because staging needs neither.
-  const photos = useArtworkPhotos({ collectionId, artworkId });
-  const documents = useArtworkDocuments({ collectionId, artworkId });
+  const photos = useArtworkPhotos({ catalogueId, artworkId });
+  const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
   // Destructured for the same reason as `initialize` above: the load effect must
   // depend on the stable callback, not on a hook result object rebuilt each
@@ -111,7 +120,7 @@ const ArtworkEditPage: React.FC = () => {
   const { hydrate: documentsHydrate } = documents;
 
   useEffect(() => {
-    if (!collectionId || !artworkId) {
+    if (!catalogueId || !artworkId) {
       // The render below shows the invalid-id alert before any of this state,
       // so the guard has nothing to set — only the fetch to skip.
       return;
@@ -119,16 +128,36 @@ const ArtworkEditPage: React.FC = () => {
 
     const fetchArtwork = async () => {
       try {
-        const artwork = await artworkService.getArtwork(
-          collectionId,
-          artworkId,
-        );
+        // The work and its catalogue together: the catalogue's kind decides
+        // whether this form surfaces a market state, and it is what the
+        // control's initial value is defaulted against.
+        const [artwork, catalogue] = await Promise.all([
+          artworkService.getArtwork(catalogueId, artworkId),
+          catalogueService.getCatalogue(catalogueId),
+        ]);
+        if (!catalogue) {
+          setLoadError("Catalogue not found");
+          return;
+        }
         if (!artwork) {
           setLoadError("Artwork not found");
           return;
         }
 
+        const surface = catalogueSurface(catalogue.kind);
+        setAvailabilityValues(surface.availabilityValues);
+
         const values = fromArtwork(artwork);
+        // A surfaced work with no stored state starts Available; a stored
+        // state is never overwritten, and a kind with no market state is
+        // handed nothing (its save omits the key entirely).
+        const availability = availabilityFor(
+          catalogue.kind,
+          values.availability,
+        );
+        if (availability !== null) {
+          values.availability = availability;
+        }
         setLoadedValues(values);
         setLoadedTitle(values.title);
         setIsDeleted(artwork.deletedAt != null);
@@ -151,12 +180,13 @@ const ArtworkEditPage: React.FC = () => {
     };
 
     void fetchArtwork();
-  }, [collectionId, artworkId, initialize, photosHydrate, documentsHydrate]);
+  }, [catalogueId, artworkId, initialize, photosHydrate, documentsHydrate]);
 
   // Put the canonical "{title}-{id}" in the address bar once the title is
-  // known, preserving the collection segment exactly as it arrived — this page
-  // never loads the collection, so it has no name to re-slug it from.
-  // `replace` swaps the current history entry rather than adding one.
+  // known, preserving the catalogue segment exactly as it arrived — this page
+  // loads the catalogue for its kind, but the segment still arrives as it was
+  // and re-slugging it is not this page's job. `replace` swaps the current
+  // history entry rather than adding one.
   useEffect(() => {
     if (!artworkParam || loadedTitle === null) {
       return;
@@ -167,7 +197,7 @@ const ArtworkEditPage: React.FC = () => {
     }
     void navigate(
       {
-        pathname: `/manage/collection/${collectionParam}/artwork/${canonical}`,
+        pathname: `/manage/catalogue/${catalogueParam}/artwork/${canonical}`,
         // The search came in on the address and must survive the rewrite, or
         // Cancel would lose the result set a moment after the page loaded.
         search: location.search,
@@ -176,7 +206,7 @@ const ArtworkEditPage: React.FC = () => {
     );
   }, [
     artworkParam,
-    collectionParam,
+    catalogueParam,
     artworkId,
     loadedTitle,
     navigate,
@@ -195,7 +225,7 @@ const ArtworkEditPage: React.FC = () => {
     setRestoreError(null);
     setRestoring(true);
     try {
-      await artworkService.restoreArtwork(collectionId, artworkId);
+      await artworkService.restoreArtwork(catalogueId, artworkId);
       setIsDeleted(false);
     } catch (err) {
       // The banner stays, so the retry is the same button; the failure is
@@ -208,7 +238,7 @@ const ArtworkEditPage: React.FC = () => {
     }
   };
 
-  if (!artworkId || !collectionId) {
+  if (!artworkId || !catalogueId) {
     return <Alert color="red">Invalid artwork id</Alert>;
   }
 
@@ -228,10 +258,10 @@ const ArtworkEditPage: React.FC = () => {
       {isDeleted ? (
         <Alert color="orange" title="This artwork is deleted" mb="md">
           <Text size="sm">
-            It is not shown in the collection or on its public page, and Save
+            It is not shown in the catalogue or on its public page, and Save
             stays off until it is back. Restore it here to keep editing;
             anything you have typed is kept. The Deleted view lists the
-            collection&rsquo;s deleted works.
+            catalogue&rsquo;s deleted works.
           </Text>
           {restoreError ? (
             <Alert color="red" title="Restore failed" mt="sm">
@@ -267,8 +297,12 @@ const ArtworkEditPage: React.FC = () => {
             // full new sequences whenever they differ from what was loaded.
             const photosCommit = photos.commit();
             const documentsCommit = documents.commit();
-            await artworkService.updateArtwork(collectionId, artworkId, {
-              ...toArtworkUpdate(loadedValues, payload),
+            await artworkService.updateArtwork(catalogueId, artworkId, {
+              ...toArtworkUpdate(
+                loadedValues,
+                payload,
+                availabilityValues.length > 0,
+              ),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
             });
@@ -300,6 +334,7 @@ const ArtworkEditPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
+          availabilityValues={availabilityValues}
           uploadsDisabled={isDeleted}
         />
 
@@ -317,7 +352,7 @@ const ArtworkEditPage: React.FC = () => {
           submitLabel="Save Changes"
           submitting={form.submitting}
           submitDisabled={isDeleted}
-          cancelTo={`/manage/collection/${collectionParam ?? ""}${searchSuffix}`}
+          cancelTo={`/manage/catalogue/${catalogueParam ?? ""}${searchSuffix}`}
         />
       </form>
     </>

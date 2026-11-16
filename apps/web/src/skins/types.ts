@@ -1,7 +1,7 @@
 /**
  * The contract between the public-view shell and a skin.
  *
- * A skin owns the *presentation* of a collection's public views — layout, type,
+ * A skin owns the *presentation* of a catalogue's public views — layout, type,
  * colours, interaction — and nothing else. It never imports a service, never
  * touches `db`, and never decides whether the visitor is allowed to see
  * anything: the shell has already loaded the data, already mapped
@@ -14,7 +14,7 @@
  * overlays, cursor zones and nested scroll behaviour in a vocabulary, and that
  * vocabulary would end up being most of the code while still being less
  * expressive than React. What *is* data-driven is the narrow part that actually
- * varies per collection: a handful of options, declared by the skin itself.
+ * varies per catalogue: a handful of options, declared by the skin itself.
  *
  * ## Style isolation
  *
@@ -35,12 +35,12 @@
 
 import type { ComponentType } from "react";
 import type { MantineThemeOverride } from "@mantine/core";
-import type { Artwork, Collection } from "@arcula/shared";
+import type { Artwork, Catalogue } from "@arcula/shared";
 
 /** Which public view the shell is rendering. */
 export type SkinView = "home" | "artwork";
 
-/** A value a skin option may hold. Mirrors `Collection.skinOptions`. */
+/** A value a skin option may hold. Mirrors `Catalogue.skinOptions`. */
 export type SkinOptionValue = boolean | number | string;
 
 /**
@@ -53,7 +53,7 @@ export type SkinOptionValue = boolean | number | string;
 export type SkinOptions = Record<string, SkinOptionValue>;
 
 interface SkinOptionSpecBase {
-  /** Stable key. It is what gets persisted in `Collection.skinOptions`. */
+  /** Stable key. It is what gets persisted in `Catalogue.skinOptions`. */
   key: string;
   /** Shown in the generated Manage settings form. */
   label: string;
@@ -90,9 +90,9 @@ export type SkinOptionSpec =
 
 /** Everything the shell knows and a skin is allowed to ask about. */
 export interface SkinProps {
-  collection: Collection;
+  catalogue: Catalogue;
   /**
-   * On `home` this is every public, live artwork in the collection. On
+   * On `home` this is every public, live artwork in the catalogue. On
    * `artwork` it is the single work being viewed — still an array, because the
    * two views differ only in how many sections there are, and a skin that
    * renders one component for both needs one shape.
@@ -101,14 +101,14 @@ export interface SkinProps {
   view: SkinView;
   /** Already resolved against this skin's specs: every declared key present. */
   options: SkinOptions;
-  /** The canonical public path of the collection, for links back to it. */
-  collectionPath: string;
+  /** The canonical public path of the catalogue, for links back to it. */
+  cataloguePath: string;
   /** The canonical public path of one artwork. */
   artworkPath: (artwork: Artwork) => string;
 }
 
 export interface SkinDefinition {
-  /** Persisted on `Collection.skin`. Never renamed once shipped. */
+  /** Persisted on `Catalogue.skin`. Never renamed once shipped. */
   id: string;
   /** Shown in the Manage skin picker. */
   label: string;
@@ -127,7 +127,7 @@ export interface SkinDefinition {
    * skin may present entirely through Mantine style props.
    */
   theme?: MantineThemeOverride;
-  /** The collection homepage — normally one section per artwork. */
+  /** The catalogue homepage — normally one section per artwork. */
   Home: ComponentType<SkinProps>;
   /** The single-artwork view. May show more than `Home` does. */
   Artwork: ComponentType<SkinProps>;

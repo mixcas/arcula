@@ -46,7 +46,7 @@ describe("flattenSubject", () => {
 });
 
 describe("truncateSubjectPart", () => {
-  it("shortens a long collection name to 40 characters with an ellipsis", () => {
+  it("shortens a long catalogue name to 40 characters with an ellipsis", () => {
     const long = "A".repeat(60);
     const short = truncateSubjectPart(long);
     expect(short).toHaveLength(40);

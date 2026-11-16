@@ -3,8 +3,8 @@ import { normalizeEmail } from "../email";
 import { wireTimestamp } from "./document";
 
 /**
- * The /api/v1 invitation contract. The offers carry no collection contents:
- * the preview names the collection, the inviter and the invited address, and
+ * The /api/v1 invitation contract. The offers carry no catalogue contents:
+ * the preview names the catalogue, the inviter and the invited address, and
  * nothing about the works inside.
  */
 
@@ -18,7 +18,7 @@ export const invitationStatusSchema = z.enum([
 export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 
 /**
- * POST /collections/{cid}/invitations. The address is trimmed and lowercased
+ * POST /catalogues/{cid}/invitations. The address is trimmed and lowercased
  * once here, so every comparison downstream is against the stored form.
  */
 export const invitationCreateSchema = z.object({
@@ -35,7 +35,7 @@ export type InvitationCreatePayload = z.infer<typeof invitationCreateSchema>;
  *  it. The token is absent by construction: only its hash is stored. */
 export const invitationSummarySchema = z.object({
   id: z.string(),
-  collectionId: z.string(),
+  catalogueId: z.string(),
   email: z.string(),
   invitedByUserId: z.string(),
   status: invitationStatusSchema,
@@ -46,7 +46,7 @@ export const invitationSummarySchema = z.object({
 
 export type InvitationSummary = z.infer<typeof invitationSummarySchema>;
 
-/** POST /collections/{cid}/invitations — the row plus whether the mail went
+/** POST /catalogues/{cid}/invitations — the row plus whether the mail went
  *  out. A provider failure is not an invitation failure. */
 export const invitationCreateResponseSchema = z.object({
   invitation: invitationSummarySchema,
@@ -63,7 +63,7 @@ export type InvitationCreateResponse = z.infer<
  * inviter's own email is not part of an anonymous response.
  */
 export const invitationPreviewSchema = z.object({
-  collection: z.object({ id: z.string(), name: z.string() }),
+  catalogue: z.object({ id: z.string(), name: z.string() }),
   inviter: z.object({ name: z.string() }),
   email: z.string(),
   expiresAt: wireTimestamp,
@@ -73,8 +73,8 @@ export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
 
 /**
  * One row of the invitee's in-app list (`GET /me/invitations`): the offer plus
- * the two names the card needs to render it — the collection and the account
- * that sent the offer. The collection's contents are not reachable from a
+ * the two names the card needs to render it — the catalogue and the account
+ * that sent the offer. The catalogue's contents are not reachable from a
  * pending offer (the invitee is not a member yet), so the names travel with the
  * list rather than in a second read that would have to be granted its own
  * visibility rule.
@@ -83,7 +83,7 @@ export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
  * (ADR-0004 — only the invited inbox can accept).
  */
 export const invitationInboxEntrySchema = invitationSummarySchema.extend({
-  collectionName: z.string(),
+  catalogueName: z.string(),
   inviterName: z.string(),
 });
 

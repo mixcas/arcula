@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { Artwork, Collection } from "../types";
-import { artworkStatusSchema } from "./artwork";
+import type { Artwork, Catalogue } from "../types";
+import { artworkAvailabilitySchema, artworkStatusSchema } from "./artwork";
+import { catalogueKindSchema } from "./catalogue";
 
 /**
  * The wire shape of the API's GET responses, parsed at the service boundary.
@@ -12,7 +13,7 @@ import { artworkStatusSchema } from "./artwork";
  * assertion that a server change cannot silently reshape the document the
  * app renders, and the narrowed `z.infer` type the service layer returns.
  *
- * Two deliberate absences, matching the serializer: a collection row never
+ * Two deliberate absences, matching the serializer: a catalogue row never
  * carries `artworks` (it is not a client field), and blank text fields are
  * ABSENT keys, never `null` — so they are optional here, and the client's
  * looser types (`description?: string`) stay compatible with both shapes.
@@ -91,7 +92,7 @@ export const artworkDocumentReadSchema = z.discriminatedUnion("kind", [
 ]);
 
 /**
- * GET /collections/{cid}/artworks/{aid} and the list's per-work rows.
+ * GET /catalogues/{cid}/artworks/{aid} and the list's per-work rows.
  * `deletedAt` is the one wire field that may honestly be `null`: a soft-
  * deleted work is still readable by its owner, and the serializer writes
  * the marker through.
@@ -115,17 +116,20 @@ export const artworkReadSchema = z.object({
   currentValue: z.string().optional(),
   documents: z.array(artworkDocumentReadSchema),
   photos: z.array(artworkPhotoReadSchema),
-  collectionId: z.string(),
+  catalogueId: z.string(),
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status: artworkStatusSchema.default("published"),
+  // A member read emits it, null included; a visitor's document does not
+  // carry the key at all, so it is optional on the read shape.
+  availability: artworkAvailabilitySchema.nullable().optional(),
   deletedAt: wireTimestamp.nullable(),
   createdAt: wireTimestamp,
   updatedAt: wireTimestamp,
 });
 
 /**
- * GET /collections (list rows) and GET /collections/{cid}. The serializer
+ * GET /catalogues (list rows) and GET /catalogues/{cid}. The serializer
  * omits `description`, `skin` and `skinOptions` when unset — the shape a
  * document written before the fields existed had — so all three are
  * optional, as they are on the client type.
@@ -135,12 +139,14 @@ export const artworkReadSchema = z.object({
  * public list and the single read emit neither. Hence optional.
  *
  * `isPasswordProtected` is the member read's one-bit answer about the
- * collection's password — never the hash. It is absent from every anonymous
+ * catalogue's password — never the hash. It is absent from every anonymous
  * read, so a visitor never learns more than the lock screen tells them.
  */
-export const collectionReadSchema = z.object({
+export const catalogueReadSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** What the catalogue is; chosen at creation and never rewritten. */
+  kind: catalogueKindSchema,
   userId: z.string(),
   description: z.string().optional(),
   isPublic: z.boolean(),
@@ -156,19 +162,18 @@ export const collectionReadSchema = z.object({
 });
 
 export type ArtworkRead = z.infer<typeof artworkReadSchema>;
-export type CollectionRead = z.infer<typeof collectionReadSchema>;
+
+export type CatalogueRead = z.infer<typeof catalogueReadSchema>;
 
 // One direction only, and that is deliberate: the wire shape must be a valid
-// `Artwork`/`Collection` (asserted below), so anything the service layer
+// `Artwork`/`Catalogue` (asserted below), so anything the service layer
 // parses can flow into every existing consumer untyped. The reverse is NOT
 // asserted — the client types stay looser than the wire (absent-optional
 // fields, `Timestamp | null`) so legacy documents still type-check for code
 // that reads them without going through this parse.
 type ArtworkWireIsArtwork = ArtworkRead extends Artwork ? true : never;
-type CollectionWireIsCollection = CollectionRead extends Collection
-  ? true
-  : never;
+type CatalogueWireIsCatalogue = CatalogueRead extends Catalogue ? true : never;
 const artworkWireIsArtwork: ArtworkWireIsArtwork = true;
-const collectionWireIsCollection: CollectionWireIsCollection = true;
+const catalogueWireIsCatalogue: CatalogueWireIsCatalogue = true;
 void artworkWireIsArtwork;
-void collectionWireIsCollection;
+void catalogueWireIsCatalogue;

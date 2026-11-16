@@ -1,6 +1,6 @@
 // The unlock throttle's pure facts: where an attempt's fixed window starts.
 // The counting itself lives in the unlock route, over the real table (its
-// integration cases are in protectedCollection.api.test.ts); what is here is
+// integration cases are in protectedCatalogue.api.test.ts); what is here is
 // the policy, so a later reader can see the fixed-window choice without
 // reading SQL.
 

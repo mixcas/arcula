@@ -4,8 +4,8 @@
 
 A collection used to be permanent. Once created, it stayed in every list and on
 every address, and it counted against its owner's tier cap even after the owner
-had stopped using it. At the free tier — one owned collection — that was a
-permanent lockout: an account whose one collection was unwanted could never
+had stopped using it. At the free tier — ten owned collections — that was a
+permanent lockout: an account whose collections were all unwanted could never
 create another, and the only way out was a hand-written database edit.
 
 The owner can now delete a collection from the bottom of the Collection Settings
@@ -72,7 +72,7 @@ the owner check.
 
 **The cap counts live collections.** The tier cap counts owned collections that
 are not deleted, so a deletion frees its slot immediately; an account at the free
-tier's cap can delete its one collection and create another. The dashboard's
+tier's cap can delete one of its collections and create another. The dashboard's
 counter follows automatically because it reads the same list.
 
 **No mail.** Deletion sends nothing, to collaborators or anyone else. A deletion

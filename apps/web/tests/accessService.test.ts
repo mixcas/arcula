@@ -52,7 +52,7 @@ const access = {
   invitations: [
     {
       id: "i1",
-      collectionId: "c1",
+      catalogueId: "c1",
       email: "invited@example.test",
       invitedByUserId: "u-owner",
       status: "pending",
@@ -68,7 +68,7 @@ describe("getAccess", () => {
     const calls = stubFetch(answer(access));
 
     await expect(accessService.getAccess("c1")).resolves.toEqual(access);
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/access");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/access");
   });
 
   it("accepts a collaborator's document, whose invitations are absent", async () => {
@@ -95,29 +95,29 @@ describe("removeCollaborator", () => {
     await expect(
       accessService.removeCollaborator("c1", "u-mate"),
     ).resolves.toBeUndefined();
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/collaborators/u-mate");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/collaborators/u-mate");
     expect(calls[0]?.init.method).toBe("DELETE");
   });
 });
 
-describe("leaveCollection", () => {
+describe("leaveCatalogue", () => {
   it("deletes the caller's own membership through /me, never a user id", async () => {
     const calls = stubFetch(answer({ left: true }));
 
-    await expect(accessService.leaveCollection("c1")).resolves.toBeUndefined();
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/collaborators/me");
+    await expect(accessService.leaveCatalogue("c1")).resolves.toBeUndefined();
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/collaborators/me");
     expect(calls[0]?.init.method).toBe("DELETE");
   });
 });
 
-describe("transferCollection", () => {
+describe("transferCatalogue", () => {
   it("names the recipient and reports whether the notice was sent", async () => {
     const calls = stubFetch(answer({ transferred: true, emailSent: false }));
 
     await expect(
-      accessService.transferCollection("c1", "u-mate"),
+      accessService.transferCatalogue("c1", "u-mate"),
     ).resolves.toEqual({ transferred: true, emailSent: false });
-    expect(calls[0]?.url).toBe("/api/v1/collections/c1/transfer");
+    expect(calls[0]?.url).toBe("/api/v1/catalogues/c1/transfer");
     expect(calls[0]?.init.method).toBe("POST");
     expect(calls[0]?.init.body).toBe(JSON.stringify({ userId: "u-mate" }));
   });
@@ -126,7 +126,7 @@ describe("transferCollection", () => {
     stubFetch(answer({ emailSent: true }));
 
     await expect(
-      accessService.transferCollection("c1", "u-mate"),
+      accessService.transferCatalogue("c1", "u-mate"),
     ).rejects.toThrow();
   });
 });

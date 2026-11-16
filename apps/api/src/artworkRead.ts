@@ -1,6 +1,6 @@
 // The single read path for Artworks, single and listed.
 //
-// One module owns reading works: the Collection, the works, their photos,
+// One module owns reading works: the Catalogue, the works, their photos,
 // their documents and their Variants — at most five queries for an owner or
 // a non-member (a collaborator's membership row is one more), whatever the
 // number of works. The child loader takes a set of Artwork ids, so a page of
@@ -8,18 +8,23 @@
 // growing a second one.
 //
 // The access verdict is the pure rule in access.ts over the rows loaded here
-// — the Collection, the work and the viewer's membership row, loaded by
+// — the Catalogue, the work and the viewer's membership row, loaded by
 // `authorize.ts`, plus the Access grant's validity, read off the request's
-// cookie by the route and handed in as a fact (a Protected Collection admits a
+// cookie by the route and handed in as a fact (a Protected Catalogue admits a
 // non-member only through it, ADR-0005). This module reports `not-found`,
 // `unauthorized` or `forbidden` and carries no HTTP code or framework type.
 // The route owns the wire codes. Only a list can answer `forbidden` — a
-// Private Collection the viewer is not a member of, a Protected one the
+// Private Catalogue the viewer is not a member of, a Protected one the
 // visitor holds no grant for, or the Deleted list asked for by a non-member —
-// because that is the list's existing wire, and the Collection read answers
+// because that is the list's existing wire, and the Catalogue read answers
 // the same refusal so the two reads agree about who is inside; a single read
-// answers `not-found` for every refusal (a Private Collection included) so the
+// answers `not-found` for every refusal (a Private Catalogue included) so the
 // refusal discloses nothing.
+//
+// Each document is serialized for the viewer's audience: a member read
+// carries a work's `availability`, a visitor's does not. It is a member-facing
+// market fact and never a gate, so a visitor still sees a published work that
+// happens to be sold.
 //
 // No transaction spans the reads: a work or child added or removed between
 // them is a torn read the product tolerates, and no caller may assume a
@@ -28,9 +33,9 @@
 // photos are in `order`, documents by id, and the serializer groups Variants
 // by parent.
 //
-// The live list takes an optional **Collection search**: a present query is a
+// The live list takes an optional **Catalogue search**: a present query is a
 // member-only condition checked ahead of the visitor verdict (a grant holder is
-// refused it even on a Protected collection), and the matching works are
+// refused it even on a Protected catalogue), and the matching works are
 // selected here over the rows the list already read — no SQL pushdown, no
 // second read and no schema change. Deleted works are never candidates and a
 // member's drafts are; only the works that survive both the verdict and the
@@ -54,10 +59,10 @@ import {
   searchQueryOverflow,
   type SearchQueryOverflow,
 } from "@arcula/shared";
-import { canSeeArtwork, canSeeCollection, isMember } from "./access";
+import { audienceOf, canSeeArtwork, canSeeCatalogue, isMember } from "./access";
 import {
-  loadArtworkInCollection,
-  loadCollection,
+  loadArtworkInCatalogue,
+  loadCatalogue,
   loadMembership,
 } from "./authorize";
 import { db } from "./db";
@@ -71,11 +76,11 @@ export type ArtworkReadResult =
 
 /**
  * What a list read answers: every visible work in order, or the one refusal
- * the list can make. A missing Collection is `not-found`; a Private
- * Collection the viewer does not own is `forbidden`. `unauthorized` is the
+ * the list can make. A missing Catalogue is `not-found`; a Private
+ * Catalogue the viewer does not own is `forbidden`. `unauthorized` is the
  * search's own refusal: the member-only live list asked for by a caller with
  * no session. `invalid-search` is a present query past the shared caps —
- * checked after the access questions, so a missing collection, an anonymous
+ * checked after the access questions, so a missing catalogue, an anonymous
  * caller or a non-member is refused for that reason rather than for their
  * query.
  */
@@ -164,28 +169,28 @@ function groupChildren(
 /**
  * One Artwork as its Viewer sees it, or `not-found`.
  *
- * A missing Collection, a missing work, a Draft, a Deleted work, a work
- * behind a Private Collection and a work under the wrong Collection are one
+ * A missing Catalogue, a missing work, a Draft, a Deleted work, a work
+ * behind a Private Catalogue and a work under the wrong Catalogue are one
  * answer for anyone but a member: saying which was refused would be a
  * disclosure. A member — the Owner or any Collaborator — reads every work of
- * the collection, deleted ones included.
+ * the catalogue, deleted ones included.
  *
- * The Collection, the work and the three child reads run without a
+ * The Catalogue, the work and the three child reads run without a
  * transaction: a row added or removed between them is a torn read the
  * product tolerates, and no caller may treat the document as a snapshot.
  */
 export async function readArtwork(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   viewer: string | null,
   hasValidGrant = false,
 ): Promise<ArtworkReadResult> {
-  const collection = await loadCollection(collectionId);
-  if (!collection) return { status: "not-found" };
-  const artwork = await loadArtworkInCollection(collectionId, artworkId);
+  const catalogue = await loadCatalogue(catalogueId);
+  if (!catalogue) return { status: "not-found" };
+  const artwork = await loadArtworkInCatalogue(catalogueId, artworkId);
   if (!artwork) return { status: "not-found" };
-  const membership = await loadMembership(collectionId, collection, viewer);
-  if (!canSeeArtwork(membership, collection, artwork, hasValidGrant)) {
+  const membership = await loadMembership(catalogueId, catalogue, viewer);
+  if (!canSeeArtwork(membership, catalogue, artwork, hasValidGrant)) {
     return { status: "not-found" };
   }
   const children = await loadChildren([artworkId]);
@@ -193,7 +198,8 @@ export async function readArtwork(
     status: "ok",
     artwork: serializeArtwork(
       { artwork, ...children },
-      mediaNamespaceOf(collection),
+      mediaNamespaceOf(catalogue),
+      audienceOf(membership),
     ),
   };
 }
@@ -207,19 +213,19 @@ export async function readArtwork(
 type ArtworkListMode = "live" | "deleted";
 
 /**
- * A Collection's Artwork list as its Viewer sees it, on one side of the
+ * A Catalogue's Artwork list as its Viewer sees it, on one side of the
  * deletion stamp.
  *
  * The live list keeps the two filters it has always used: a member gets every
- * live work of the collection — no `userId` filter, because every member reads
+ * live work of the catalogue — no `userId` filter, because every member reads
  * the same list — and a non-member only Published, live works; a Deleted work
- * is in neither. The Deleted list is member-only, even on a Public Collection,
+ * is in neither. The Deleted list is member-only, even on a Public Catalogue,
  * and holds only works with a deletion stamp: membership is the whole gate, so
  * a non-member is `forbidden` rather than an empty list.
  *
- * A Private Collection the viewer is not a member of, or a Protected one they
+ * A Private Catalogue the viewer is not a member of, or a Protected one they
  * hold no grant for, is `forbidden` (never `not-found` — the client maps it to
- * "private"), and a missing Collection is `not-found`.
+ * "private"), and a missing Catalogue is `not-found`.
  *
  * A present `search` is the live list's member-only condition, checked before
  * the visitor verdict: no session is `unauthorized`, a signed-in non-member
@@ -234,26 +240,26 @@ type ArtworkListMode = "live" | "deleted";
  * ever disagree.
  */
 async function readArtworkListInMode(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
   mode: ArtworkListMode,
   hasValidGrant = false,
   search: string | null = null,
 ): Promise<ArtworkListResult> {
-  const collection = await loadCollection(collectionId);
-  if (!collection) return { status: "not-found" };
-  const member = await loadMembership(collectionId, collection, viewer);
+  const catalogue = await loadCatalogue(catalogueId);
+  if (!catalogue) return { status: "not-found" };
+  const member = await loadMembership(catalogueId, catalogue, viewer);
 
   if (mode === "deleted") {
-    // Membership alone: a public collection's deleted works are still the
+    // Membership alone: a public catalogue's deleted works are still the
     // members' business, and a grant is not an invitation to them.
     if (!isMember(member)) return { status: "forbidden" };
   } else if (search !== null) {
     // The member-only condition first, so a grant holder is refused it even
-    // on a Protected collection rather than being challenged for a password.
+    // on a Protected catalogue rather than being challenged for a password.
     if (viewer === null) return { status: "unauthorized" };
     if (!isMember(member)) return { status: "forbidden" };
-  } else if (!canSeeCollection(member, collection, hasValidGrant)) {
+  } else if (!canSeeCatalogue(member, catalogue, hasValidGrant)) {
     return { status: "forbidden" };
   }
 
@@ -271,16 +277,16 @@ async function readArtworkListInMode(
     .where(
       mode === "deleted"
         ? and(
-            eq(artworksTable.collectionId, collectionId),
+            eq(artworksTable.catalogueId, catalogueId),
             isNotNull(artworksTable.deletedAt),
           )
         : member !== null
           ? and(
-              eq(artworksTable.collectionId, collectionId),
+              eq(artworksTable.catalogueId, catalogueId),
               isNull(artworksTable.deletedAt),
             )
           : and(
-              eq(artworksTable.collectionId, collectionId),
+              eq(artworksTable.catalogueId, catalogueId),
               eq(artworksTable.status, "published"),
               isNull(artworksTable.deletedAt),
             ),
@@ -293,7 +299,7 @@ async function readArtworkListInMode(
     );
 
   const visible = rows.filter((row) =>
-    canSeeArtwork(member, collection, row, hasValidGrant),
+    canSeeArtwork(member, catalogue, row, hasValidGrant),
   );
   // The search runs after the verdict: it narrows what the viewer may see and
   // can never add to it. A committed query with no terms matches nothing.
@@ -311,7 +317,8 @@ async function readArtworkListInMode(
           artwork: work,
           ...(grouped.get(work.id) ?? noChildren()),
         },
-        mediaNamespaceOf(collection),
+        mediaNamespaceOf(catalogue),
+        audienceOf(member),
       ),
     ),
   };
@@ -322,13 +329,13 @@ async function readArtworkListInMode(
  * A present `search` is member-only and filters the result.
  */
 export function readArtworkList(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
   hasValidGrant = false,
   search: string | null = null,
 ): Promise<ArtworkListResult> {
   return readArtworkListInMode(
-    collectionId,
+    catalogueId,
     viewer,
     "live",
     hasValidGrant,
@@ -347,18 +354,18 @@ export type DeletedArtworkListResult = Extract<
 >;
 
 /**
- * The Deleted view's list: every work of the collection that carries a
+ * The Deleted view's list: every work of the catalogue that carries a
  * deletion stamp, most recently deleted first. Member-only (ADR-0004) — the
  * owner and every collaborator see the same list, and nobody else sees one.
  */
 export function readDeletedArtworkList(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
 ): Promise<DeletedArtworkListResult> {
   // The cast states what the call site already guarantees: no search, and a
   // caller the deleted route has resolved a session for.
   return readArtworkListInMode(
-    collectionId,
+    catalogueId,
     viewer,
     "deleted",
   ) as Promise<DeletedArtworkListResult>;

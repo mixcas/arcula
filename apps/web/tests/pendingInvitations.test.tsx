@@ -23,7 +23,7 @@ import { invitationService } from "@/services/invitationService";
  *
  * The service is stubbed; its wire half is pinned by `invitationService.test`,
  * and the routes by the API's invitation-offer suite. These tests keep the
- * card's own decisions true — that each offer is named by collection and
+ * card's own decisions true — that each offer is named by catalogue and
  * inviter, that decline removes the offer the click named, and that there is no
  * accept control at all (acceptance is the mail's token, ADR-0004).
  */
@@ -70,21 +70,21 @@ const invitation = (
   overrides: Partial<InvitationInboxEntry> = {},
 ): InvitationInboxEntry => ({
   id: "iiiiiiiiiiiiiiiiiiii",
-  collectionId: "cccccccccccccccccccc",
+  catalogueId: "cccccccccccccccccccc",
   email: "invitee@example.test",
   invitedByUserId: "u-owner",
   status: "pending",
   createdAt: { seconds: 1, nanoseconds: 0 },
   expiresAt: { seconds: 1790000000, nanoseconds: 0 },
   resolvedAt: null,
-  collectionName: "Flores Solares",
+  catalogueName: "Flores Solares",
   inviterName: "Sofía Lara",
   ...overrides,
 });
 
 const declined = (entry: InvitationInboxEntry): InvitationSummary => ({
   id: entry.id,
-  collectionId: entry.collectionId,
+  catalogueId: entry.catalogueId,
   email: entry.email,
   invitedByUserId: entry.invitedByUserId,
   status: "declined",
@@ -108,13 +108,13 @@ afterEach(() => {
 });
 
 describe("the dashboard's pending invitations", () => {
-  it("names each offer by collection and inviter, and points acceptance at the mail", async () => {
+  it("names each offer by catalogue and inviter, and points acceptance at the mail", async () => {
     renderList([
       invitation(),
       invitation({
         id: "jjjjjjjjjjjjjjjjjjjj",
-        collectionId: "dddddddddddddddddddd",
-        collectionName: "Estudio Compartido",
+        catalogueId: "dddddddddddddddddddd",
+        catalogueName: "Estudio Compartido",
         inviterName: "Mateo Ruiz",
       }),
     ]);
@@ -153,8 +153,8 @@ describe("the dashboard's pending invitations", () => {
     const first = invitation();
     const second = invitation({
       id: "jjjjjjjjjjjjjjjjjjjj",
-      collectionId: "dddddddddddddddddddd",
-      collectionName: "Estudio Compartido",
+      catalogueId: "dddddddddddddddddddd",
+      catalogueName: "Estudio Compartido",
       inviterName: "Mateo Ruiz",
     });
     declinePendingInvitation.mockResolvedValue(declined(first));

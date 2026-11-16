@@ -1,5 +1,5 @@
 /**
- * The skin registry: which skins exist, which one a collection uses, and what
+ * The skin registry: which skins exist, which one a catalogue uses, and what
  * its options resolve to.
  *
  * Adding a skin is a one-line change here plus its own folder. Nothing else in
@@ -16,10 +16,10 @@ import type {
 } from "./types";
 
 /**
- * The skin a collection with no `skin` field — or an unrecognised one — gets.
+ * The skin a catalogue with no `skin` field — or an unrecognised one — gets.
  *
  * Exported as the *definition* and the id derived from it, so the constant the
- * app falls back to and the id written to the collection cannot drift apart.
+ * app falls back to and the id written to the catalogue cannot drift apart.
  */
 export const DEFAULT_SKIN: SkinDefinition = basicxSkin;
 export const DEFAULT_SKIN_ID: string = DEFAULT_SKIN.id;
@@ -28,10 +28,10 @@ export const DEFAULT_SKIN_ID: string = DEFAULT_SKIN.id;
 export const SKINS: readonly SkinDefinition[] = [DEFAULT_SKIN];
 
 /**
- * The skin for a collection.
+ * The skin for a catalogue.
  *
  * A missing or unknown id resolves to the default rather than rendering
- * nothing. A typo in a skin id, or a collection written before skins existed,
+ * nothing. A typo in a skin id, or a catalogue written before skins existed,
  * must not produce a blank page — and the caller already holds a document it
  * successfully fetched, so falling back is always possible.
  */
@@ -42,7 +42,7 @@ export interface ResolvedSkinOptions {
   /** Every declared key, present and correctly typed. */
   options: SkinOptions;
   /**
-   * Keys the collection stores that the selected skin no longer declares.
+   * Keys the catalogue stores that the selected skin no longer declares.
    *
    * Reported rather than silently discarded so Manage can say so out loud. A
    * skin that drops or renames an option is otherwise indistinguishable from a
@@ -82,7 +82,7 @@ const readValue = (
 };
 
 /**
- * Resolve a collection's stored options against a skin's specs.
+ * Resolve a catalogue's stored options against a skin's specs.
  *
  * A flat per-key default with no cross-option logic, deliberately: the one
  * option that used to depend on another (`autoplaySeconds`, meaningful only

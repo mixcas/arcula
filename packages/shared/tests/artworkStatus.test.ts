@@ -2,7 +2,7 @@
 // words and the published default at every seam: the form and its payload, the
 // PATCH body, and the wire read.
 //
-// The collection is the only gate, so there is no per-work visibility field
+// The catalogue is the only gate, so there is no per-work visibility field
 // left to disagree with it (ADR-0003).
 
 import { describe, expect, it } from "vitest";
@@ -30,7 +30,8 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
   artistName: "Whistler",
   documents: [],
   photos: [],
-  collectionId: "c1",
+  catalogueId: "c1",
+  availability: null,
   deletedAt: null,
   createdAt: { seconds: 0, nanoseconds: 0 },
   updatedAt: { seconds: 0, nanoseconds: 0 },
@@ -40,7 +41,7 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
 const storedArtwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "a1",
   userId: "u1",
-  collectionId: "c1",
+  catalogueId: "c1",
   title: "Nocturne",
   artistName: "Whistler",
   documents: [],

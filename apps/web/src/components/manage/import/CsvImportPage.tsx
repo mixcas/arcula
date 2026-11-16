@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Loader, Stepper, Text } from "@mantine/core";
 import { useNavigate, useParams } from "react-router-dom";
-import { collectionService } from "@/services/collectionService";
-import { collectionSlug, parseId } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
+import { catalogueSlug, parseId } from "@arcula/shared";
 import { parseCsvText, type ParsedCsv } from "@/utils/csv";
 import {
   attachIssues,
@@ -18,8 +18,8 @@ import ReviewRowsStep from "./steps/ReviewRowsStep";
 import ImportRunStep from "./steps/ImportRunStep";
 
 /**
- * The CSV bulk-import flow for a collection, at
- * `/manage/collection/:collectionId/import/csv`.
+ * The CSV bulk-import flow for a catalogue, at
+ * `/manage/catalogue/:catalogueId/import/csv`.
  *
  * The four Mantine Stepper stages run on a single URL and hold all their state
  * in this component, so leaving the page discards the whole flow: never
@@ -28,12 +28,12 @@ import ImportRunStep from "./steps/ImportRunStep";
  * header only lets the user click back, never forward.
  */
 const CsvImportPage: React.FC = () => {
-  const { collectionId: param } = useParams<{ collectionId: string }>();
-  const collectionId = parseId(param ?? "");
+  const { catalogueId: param } = useParams<{ catalogueId: string }>();
+  const catalogueId = parseId(param ?? "");
   const navigate = useNavigate();
 
-  // The collection the import writes into; its name feeds the canonical-URL
-  // rewrite below, mirroring CollectionSettingsPage.
+  // The catalogue the import writes into; its name feeds the canonical-URL
+  // rewrite below, mirroring CatalogueSettingsPage.
   const [loadedName, setLoadedName] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -66,41 +66,41 @@ const CsvImportPage: React.FC = () => {
     setHighestStepVisited((h) => Math.max(h, step));
   };
 
-  // --- collection load ------------------------------------------------------
+  // --- catalogue load ------------------------------------------------------
 
   useEffect(() => {
-    if (!collectionId) {
+    if (!catalogueId) {
       return;
     }
-    const fetchCollection = async () => {
+    const fetchCatalogue = async () => {
       try {
-        const collection = await collectionService.getCollection(collectionId);
-        if (!collection) {
-          setLoadError("Collection not found");
+        const catalogue = await catalogueService.getCatalogue(catalogueId);
+        if (!catalogue) {
+          setLoadError("Catalogue not found");
           return;
         }
-        setLoadedName(collection.name ?? "");
+        setLoadedName(catalogue.name ?? "");
       } catch (error) {
         console.error("Error loading import page:", error);
-        setLoadError("Failed to load the collection. Please try again.");
+        setLoadError("Failed to load the catalogue. Please try again.");
       }
     };
-    void fetchCollection();
-  }, [collectionId]);
+    void fetchCatalogue();
+  }, [catalogueId]);
 
   // Keep the canonical "{slug}-{id}" in the address bar once the name is known.
   useEffect(() => {
-    if (!param || loadedName === null || !collectionId) {
+    if (!param || loadedName === null || !catalogueId) {
       return;
     }
-    const canonical = collectionSlug(loadedName, collectionId);
+    const canonical = catalogueSlug(loadedName, catalogueId);
     if (canonical === param) {
       return;
     }
-    void navigate(`/manage/collection/${canonical}/import/csv`, {
+    void navigate(`/manage/catalogue/${canonical}/import/csv`, {
       replace: true,
     });
-  }, [param, loadedName, collectionId, navigate]);
+  }, [param, loadedName, catalogueId, navigate]);
 
   // --- derived parse state --------------------------------------------------
 
@@ -200,8 +200,8 @@ const CsvImportPage: React.FC = () => {
 
   // --- guards ---------------------------------------------------------------
 
-  if (!collectionId) {
-    return <Alert color="red">Invalid collection id</Alert>;
+  if (!catalogueId) {
+    return <Alert color="red">Invalid catalogue id</Alert>;
   }
   if (loadError) {
     return <Alert color="red">{loadError}</Alert>;
@@ -238,7 +238,7 @@ const CsvImportPage: React.FC = () => {
           <Group justify="space-between" mt="xl">
             <Button
               variant="outline"
-              onClick={() => void navigate(`/manage/collection/${param}`)}
+              onClick={() => void navigate(`/manage/catalogue/${param}`)}
             >
               Cancel
             </Button>
@@ -297,12 +297,12 @@ const CsvImportPage: React.FC = () => {
           />
         </Stepper.Step>
 
-        <Stepper.Step label="Import" description="Write to the collection">
+        <Stepper.Step label="Import" description="Write to the catalogue">
           <ImportRunStep
             rows={reviewRows}
             selectedRowIds={selectedRowIds}
-            collectionId={collectionId}
-            collectionSlugParam={collectionSlug(loadedName, collectionId)}
+            catalogueId={catalogueId}
+            catalogueSlugParam={catalogueSlug(loadedName, catalogueId)}
             onReset={resetFlow}
           />
         </Stepper.Step>

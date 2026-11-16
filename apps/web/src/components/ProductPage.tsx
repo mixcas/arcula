@@ -11,9 +11,9 @@ const ProductPage: React.FC = () => {
         size="sm"
         style={{ paddingTop: "2rem", paddingBottom: "2rem" }}
       >
-        <Text size="h3">Art Collection Management</Text>
+        <Text size="h3">Art Catalogue Management</Text>
 
-        <Text mt="xl">Manage and showcase your art collections with ease.</Text>
+        <Text mt="xl">Manage and showcase your art catalogues with ease.</Text>
 
         <Group mt="xl">
           <Button component={Link} to="/login" variant="outline">

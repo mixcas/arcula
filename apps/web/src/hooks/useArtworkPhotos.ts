@@ -96,7 +96,7 @@ const nextKey = keySequence("photo");
  * batch does not leave objects behind that no save will ever promote.
  */
 async function stageAndProcess(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   file: File,
 ): Promise<StageOutcome<StagedPhotoEntry>> {
@@ -106,7 +106,7 @@ async function stageAndProcess(
   const entryId = crypto.randomUUID().replace(/-/g, "");
   try {
     const staged = await mediaService.stagePhoto(
-      collectionId,
+      catalogueId,
       artworkId,
       entryId,
       file,
@@ -114,7 +114,7 @@ async function stageAndProcess(
     let variants: ImageVariant[];
     try {
       ({ variants } = await mediaService.processPhoto(
-        collectionId,
+        catalogueId,
         artworkId,
         entryId,
       ));
@@ -122,7 +122,7 @@ async function stageAndProcess(
       // The original is up and no save will ever name it: discard it now,
       // idempotently, and let the error report the failure.
       void mediaService
-        .discardPhoto(collectionId, artworkId, entryId)
+        .discardPhoto(catalogueId, artworkId, entryId)
         .catch(() => {});
       throw error;
     }
@@ -131,7 +131,7 @@ async function stageAndProcess(
       // is a server bug, not a file condition: discard what is up and say
       // the upload failed rather than render a photo with no geometry.
       void mediaService
-        .discardPhoto(collectionId, artworkId, entryId)
+        .discardPhoto(catalogueId, artworkId, entryId)
         .catch(() => {});
       return { entry: null, rejection: "The image could not be read" };
     }
@@ -169,8 +169,8 @@ async function stageAndProcess(
 }
 
 export interface UseArtworkPhotosOptions {
-  /** Staging happens at add time, under the collection the form belongs to. */
-  collectionId: string;
+  /** Staging happens at add time, under the catalogue the form belongs to. */
+  catalogueId: string;
   /**
    * The artwork id the entries stage under. On the Add page this is the
    * client-minted id the save will create the row with; on the Edit page it
@@ -182,7 +182,7 @@ export interface UseArtworkPhotosOptions {
 }
 
 export const useArtworkPhotos = ({
-  collectionId,
+  catalogueId,
   artworkId,
   initialPhotos = [],
 }: UseArtworkPhotosOptions) => {
@@ -245,7 +245,7 @@ export const useArtworkPhotos = ({
       }
 
       const staged = await run(accepted, (file) =>
-        stageAndProcess(collectionId, artworkId, file),
+        stageAndProcess(catalogueId, artworkId, file),
       );
 
       // Drop order, offset by whatever is already in the list: a remove that
@@ -261,7 +261,7 @@ export const useArtworkPhotos = ({
       }
       return { added, rejected: [...rejected, ...staged.rejected] };
     },
-    [collectionId, artworkId, entries.length, run],
+    [catalogueId, artworkId, entries.length, run],
   );
 
   /**
@@ -283,7 +283,7 @@ export const useArtworkPhotos = ({
             removedId = entry.photo.id;
           } else {
             void mediaService
-              .discardPhoto(collectionId, artworkId, entry.preview.id)
+              .discardPhoto(catalogueId, artworkId, entry.preview.id)
               .catch(() => {});
           }
           return false;
@@ -291,7 +291,7 @@ export const useArtworkPhotos = ({
       );
       return removedId;
     },
-    [collectionId, artworkId],
+    [catalogueId, artworkId],
   );
 
   /**

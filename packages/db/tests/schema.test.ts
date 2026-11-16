@@ -5,7 +5,7 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the two composite PKs, the four CHECKs, the
+// position is the truth", the two composite PKs, the five CHECKs, the
 // composite indexes behind the artwork lists, the partial unique pending-
 // invitation index) missing from either source fails here.
 
@@ -21,11 +21,11 @@ import {
   artworkPhotoVariants,
   artworkPhotos,
   artworks,
-  collectionAccessGrants,
-  collectionCollaborators,
-  collectionInvitations,
-  collectionUnlockAttempts,
-  collections,
+  catalogueAccessGrants,
+  catalogueCollaborators,
+  catalogueInvitations,
+  catalogueUnlockAttempts,
+  catalogues,
   schema,
   session,
   user,
@@ -90,11 +90,11 @@ const TABLE_NAMES = [
   "session",
   "account",
   "verification",
-  "collections",
-  "collectionCollaborators",
-  "collectionInvitations",
-  "collectionAccessGrants",
-  "collectionUnlockAttempts",
+  "catalogues",
+  "catalogueCollaborators",
+  "catalogueInvitations",
+  "catalogueAccessGrants",
+  "catalogueUnlockAttempts",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -133,8 +133,19 @@ const PASSWORD_SQL = readMigration("0005_collection_passwords");
 // The committed lock-down: RLS on every table, the client grants revoked.
 const RLS_SQL = readMigration("0006_enable_rls");
 
-// The committed stamp that retires a whole collection.
+// The committed stamp that retires a whole catalogue.
 const DELETION_SQL = readMigration("0007_collection_deletion_stamp");
+
+// The committed kind: whose art a catalogue holds and why.
+const KIND_SQL = readMigration("0009_catalogue_kind");
+
+// The committed availability: a work's market state, absent on every Collection
+// work and on every work written before the column existed.
+const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
+
+// The four market states, as the spec names them. Shared by the Drizzle check
+// assertion and the committed migration, so the two cannot disagree.
+const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
 
 describe("the thirteen-table schema", () => {
   it("declares exactly the thirteen tables, and `user` is singular", () => {
@@ -181,7 +192,7 @@ describe("the thirteen-table schema", () => {
     expect(Object.keys(c)).toEqual([
       "id",
       "userId",
-      "collectionId",
+      "catalogueId",
       "title",
       "artistName",
       "serie",
@@ -196,6 +207,7 @@ describe("the thirteen-table schema", () => {
       "notes",
       "condition",
       "currentValue",
+      "availability",
       "status",
       "deletedAt",
       "createdAt",
@@ -212,6 +224,15 @@ describe("the thirteen-table schema", () => {
     expect(c.deletedAt.notNull).toBe(false);
   });
 
+  it("artworks carries a nullable availability, with no default to hide a gap", () => {
+    const c = cols(artworks);
+    // Nullable is the whole point: every existing work, and every Collection
+    // work, has no market state. A default would invent one.
+    expect(c.availability.dataType).toBe("string");
+    expect(c.availability.notNull).toBe(false);
+    expect(c.availability.hasDefault).toBe(false);
+  });
+
   it("artworks restricts `status` to draft or published in the Drizzle object", () => {
     expect(checksOf(artworks)).toContainEqual({
       name: "artworks_status_check",
@@ -219,7 +240,14 @@ describe("the thirteen-table schema", () => {
     });
   });
 
-  it("artworks carries the visitor index over the collection, the status and the deletion stamp", () => {
+  it("artworks restricts `availability` to the four market states", () => {
+    expect(checksOf(artworks)).toContainEqual({
+      name: "artworks_availability_check",
+      sql: AVAILABILITY_CHECK,
+    });
+  });
+
+  it("artworks carries the visitor index over the catalogue, the status and the deletion stamp", () => {
     expect(indexesOf(artworks)).toMatchObject({
       artworks_collection_status_deleted_idx: [
         "collectionId",
@@ -264,8 +292,8 @@ describe("the thirteen-table schema", () => {
     expect(c.width.notNull).toBe(false);
   });
 
-  it("collections defaults to public; skin stays nullable (read-time default)", () => {
-    const c = cols(collections);
+  it("catalogues defaults to public; skin stays nullable (read-time default)", () => {
+    const c = cols(catalogues);
     expect(c.isPublic.notNull).toBe(true);
     expect(c.isPublic.default).toBe(true);
     expect(c.skin.notNull).toBe(false);
@@ -276,9 +304,9 @@ describe("the thirteen-table schema", () => {
     expect(c.mediaNamespaceId.notNull).toBe(true);
   });
 
-  it("collections carries a nullable password hash, with no default to hide a gap", () => {
-    const c = cols(collections);
-    // Nullable is the whole point: a collection without a password is the
+  it("catalogues carries a nullable password hash, with no default to hide a gap", () => {
+    const c = cols(catalogues);
+    // Nullable is the whole point: a catalogue without a password is the
     // normal state, so no backfill and no NOT NULL step is owed later. A
     // default would invent a password none was set for.
     expect(c.passwordHash.dataType).toBe("string");
@@ -286,9 +314,9 @@ describe("the thirteen-table schema", () => {
     expect(c.passwordHash.hasDefault).toBe(false);
   });
 
-  it("collections carries a nullable deletion stamp, with no default to hide a gap", () => {
-    const c = cols(collections);
-    // Nullable is the whole point: a collection without a stamp is live, so
+  it("catalogues carries a nullable deletion stamp, with no default to hide a gap", () => {
+    const c = cols(catalogues);
+    // Nullable is the whole point: a catalogue without a stamp is live, so
     // no backfill and no NOT NULL step is owed later. A default would stamp a
     // deletion no owner asked for.
     expect(c.deletedAt.dataType).toBe("date");
@@ -296,15 +324,31 @@ describe("the thirteen-table schema", () => {
     expect(c.deletedAt.hasDefault).toBe(false);
   });
 
-  it("collection_access_grants keeps the token's hash, and indexes the collection for revocation", () => {
-    const c = cols(collectionAccessGrants);
+  it("catalogues carries a kind, required and defaulting to collection", () => {
+    const c = cols(catalogues);
+    // Every row that existed before the column was a collector's, so the
+    // constant default is the truth, not a placeholder awaiting a backfill.
+    expect(c.kind.dataType).toBe("string");
+    expect(c.kind.notNull).toBe(true);
+    expect(c.kind.default).toBe("collection");
+  });
+
+  it("catalogues restricts `kind` to portfolio, collection or inventory", () => {
+    expect(checksOf(catalogues)).toContainEqual({
+      name: "collections_kind_check",
+      sql: "\"kind\" in ('portfolio', 'collection', 'inventory')",
+    });
+  });
+
+  it("catalogue_access_grants keeps the token's hash, and indexes the catalogue for revocation", () => {
+    const c = cols(catalogueAccessGrants);
     expect(Object.keys(c)).toEqual([
-      "collectionId",
+      "catalogueId",
       "tokenHash",
       "createdAt",
       "expiresAt",
     ]);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     // The raw token exists only in the reader's cookie, as with an invitation.
     expect(c.tokenHash.notNull).toBe(true);
     expect(c.tokenHash.isUnique).toBe(true);
@@ -313,29 +357,29 @@ describe("the thirteen-table schema", () => {
     // Expiry is computed from the timestamp, never stored as a status.
     expect(c.expiresAt.dataType).toBe("date");
     expect(c.expiresAt.notNull).toBe(true);
-    // One statement deletes a collection's grants on a password change.
-    expect(indexesOf(collectionAccessGrants)).toMatchObject({
+    // One statement deletes a catalogue's grants on a password change.
+    expect(indexesOf(catalogueAccessGrants)).toMatchObject({
       collection_access_grants_collection_id_idx: ["collectionId"],
     });
   });
 
-  it("collection_unlock_attempts is keyed by address, collection and window", () => {
-    const c = cols(collectionUnlockAttempts);
+  it("catalogue_unlock_attempts is keyed by address, catalogue and window", () => {
+    const c = cols(catalogueUnlockAttempts);
     expect(Object.keys(c)).toEqual([
       "ip",
-      "collectionId",
+      "catalogueId",
       "windowStart",
       "attempts",
     ]);
     expect(c.ip.notNull).toBe(true);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.windowStart.dataType).toBe("date");
     expect(c.windowStart.notNull).toBe(true);
     expect(c.attempts.dataType).toBe("number");
     expect(c.attempts.notNull).toBe(true);
     expect(c.attempts.default).toBe(0);
-    // The triple is the key: one counter per address, collection and window.
-    const pk = getTableConfig(collectionUnlockAttempts).primaryKeys[0];
+    // The triple is the key: one counter per address, catalogue and window.
+    const pk = getTableConfig(catalogueUnlockAttempts).primaryKeys[0];
     expect(pk.columns.map((col) => col.name)).toEqual([
       "ip",
       "collectionId",
@@ -343,16 +387,16 @@ describe("the thirteen-table schema", () => {
     ]);
   });
 
-  it("collection_collaborators is keyed by (collectionId, userId), with the dashboard index on user", () => {
-    const c = cols(collectionCollaborators);
+  it("catalogue_collaborators is keyed by (catalogueId, userId), with the dashboard index on user", () => {
+    const c = cols(catalogueCollaborators);
     // The owner is `collections.userId`; this table holds everyone else.
-    expect(Object.keys(c)).toEqual(["collectionId", "userId", "createdAt"]);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(Object.keys(c)).toEqual(["catalogueId", "userId", "createdAt"]);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.userId.notNull).toBe(true);
     expect(c.createdAt.dataType).toBe("date");
     expect(c.createdAt.notNull).toBe(true);
     expect(c.createdAt.hasDefault).toBe(true);
-    const pk = getTableConfig(collectionCollaborators).primaryKeys[0];
+    const pk = getTableConfig(catalogueCollaborators).primaryKeys[0];
     expect(pk.getName()).toBe(
       "collection_collaborators_collectionId_userId_pk",
     );
@@ -360,16 +404,16 @@ describe("the thirteen-table schema", () => {
       "collectionId",
       "userId",
     ]);
-    expect(indexesOf(collectionCollaborators)).toMatchObject({
+    expect(indexesOf(catalogueCollaborators)).toMatchObject({
       collection_collaborators_user_id_idx: ["userId"],
     });
   });
 
-  it("collection_invitations carries the offer, its status and its unique token hash", () => {
-    const c = cols(collectionInvitations);
+  it("catalogue_invitations carries the offer, its status and its unique token hash", () => {
+    const c = cols(catalogueInvitations);
     expect(Object.keys(c)).toEqual([
       "id",
-      "collectionId",
+      "catalogueId",
       "email",
       "invitedByUserId",
       "tokenHash",
@@ -379,7 +423,7 @@ describe("the thirteen-table schema", () => {
       "resolvedAt",
     ]);
     expect(c.id.primary).toBe(true);
-    expect(c.collectionId.notNull).toBe(true);
+    expect(c.catalogueId.notNull).toBe(true);
     expect(c.email.notNull).toBe(true);
     expect(c.invitedByUserId.notNull).toBe(true);
     // The raw token lives only in the mail.
@@ -396,15 +440,15 @@ describe("the thirteen-table schema", () => {
     expect(c.resolvedAt.notNull).toBe(false);
   });
 
-  it("collection_invitations limits status to the four lifecycle values", () => {
-    expect(checksOf(collectionInvitations)).toContainEqual({
+  it("catalogue_invitations limits status to the four lifecycle values", () => {
+    expect(checksOf(catalogueInvitations)).toContainEqual({
       name: "collection_invitations_status_check",
       sql: "\"status\" in ('pending', 'accepted', 'declined', 'revoked')",
     });
   });
 
-  it("collection_invitations allows one pending invitation per collection and address", () => {
-    const pending = getTableConfig(collectionInvitations).indexes.find(
+  it("catalogue_invitations allows one pending invitation per catalogue and address", () => {
+    const pending = getTableConfig(catalogueInvitations).indexes.find(
       (i) =>
         i.config.name === "collection_invitations_pending_collection_email_idx",
     );
@@ -417,7 +461,7 @@ describe("the thirteen-table schema", () => {
     expect(predicateOf(pending?.config.where)).toContain("'pending'");
   });
 
-  it("artworks' owner list is indexed by collection and deletion, not by user", () => {
+  it("artworks' owner list is indexed by catalogue and deletion, not by user", () => {
     const idx = indexesOf(artworks);
     expect(idx.artworks_collection_deleted_idx).toEqual([
       "collectionId",
@@ -521,7 +565,7 @@ describe("the committed drop migration (as it will actually be applied)", () => 
     );
   });
 
-  it("builds the visitor index over the collection, the status and the deletion stamp", () => {
+  it("builds the visitor index over the catalogue, the status and the deletion stamp", () => {
     expect(DROP_SQL).toMatch(
       /CREATE INDEX "artworks_collection_status_deleted_idx" ON "artworks" USING btree \("collectionId","status","deletedAt"\)/,
     );
@@ -586,7 +630,7 @@ describe("the committed sharing migration (as it will actually be applied)", () 
     );
   });
 
-  it("replaces the owner-list index and leaves the visitor and collection indexes alone", () => {
+  it("replaces the owner-list index and leaves the visitor and catalogue indexes alone", () => {
     expect(SHARED_SQL).toContain(
       'DROP INDEX "artworks_collection_user_deleted_idx"',
     );
@@ -658,7 +702,7 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(PASSWORD_SQL).toContain(
       'ALTER TABLE "collections" ADD COLUMN "passwordHash" text;',
     );
-    // Nullable is load-bearing: a collection without a password is normal.
+    // Nullable is load-bearing: a catalogue without a password is normal.
     expect(PASSWORD_SQL).not.toMatch(/ADD COLUMN "passwordHash" text NOT NULL/);
     expect(PASSWORD_SQL).not.toContain(
       'ALTER COLUMN "passwordHash" SET NOT NULL',
@@ -671,7 +715,7 @@ describe("the committed password migration (as it will actually be applied)", ()
     expect(dataWrites(PASSWORD_SQL)).toEqual([]);
   });
 
-  it("carries the revocation index over the collection", () => {
+  it("carries the revocation index over the catalogue", () => {
     expect(PASSWORD_SQL).toMatch(
       /CREATE INDEX "collection_access_grants_collection_id_idx" ON "collection_access_grants" USING btree \("collectionId"\)/,
     );
@@ -724,6 +768,47 @@ describe("the committed deletion-stamp migration (as it will actually be applied
     expect(dataWrites(DELETION_SQL)).toEqual([]);
     expect(DELETION_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(DELETION_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed kind migration (as it will actually be applied)", () => {
+  it("adds `kind` required, defaulting to collection, checked to the three kinds", () => {
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD COLUMN "kind" text DEFAULT 'collection' NOT NULL;`,
+    );
+    expect(KIND_SQL).toContain(
+      `ALTER TABLE "collections" ADD CONSTRAINT "collections_kind_check" CHECK ("kind" in ('portfolio', 'collection', 'inventory'));`,
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no default to backfill", () => {
+    // The column ships alone, ahead of the code that reads it: every existing
+    // row takes the constant default, so there is nothing to backfill and
+    // nothing to reverse.
+    expect(dataWrites(KIND_SQL)).toEqual([]);
+    expect(KIND_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(KIND_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed availability migration (as it will actually be applied)", () => {
+  it("adds a nullable `availability` with the four-value check and no default", () => {
+    expect(AVAILABILITY_SQL).toContain(
+      `ALTER TABLE "artworks" ADD COLUMN "availability" text;`,
+    );
+    expect(AVAILABILITY_SQL).toContain(
+      `ALTER TABLE "artworks" ADD CONSTRAINT "artworks_availability_check" CHECK (${AVAILABILITY_CHECK});`,
+    );
+    expect(AVAILABILITY_SQL).not.toMatch(/DEFAULT/);
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The column ships alone, ahead of the code that reads it: null is already
+    // the truth for every existing work, so there is nothing to backfill and
+    // nothing to reverse.
+    expect(dataWrites(AVAILABILITY_SQL)).toEqual([]);
+    expect(AVAILABILITY_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(AVAILABILITY_SQL).not.toMatch(/ALTER COLUMN/);
   });
 });
 

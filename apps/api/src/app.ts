@@ -18,7 +18,7 @@ import { accessRoutes } from "./routes/access";
 import { artistNameRoutes } from "./routes/artistNames";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
 import { artworkRoutes } from "./routes/artworks";
-import { collectionRoutes } from "./routes/collections";
+import { catalogueRoutes } from "./routes/catalogues";
 import { invitationRoutes } from "./routes/invitations";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
@@ -71,7 +71,7 @@ app.route(
 // under its own paths.
 app.route("/api/v1", meRoutes);
 app.route("/api/v1", mediaRoutes);
-app.route("/api/v1", collectionRoutes);
+app.route("/api/v1", catalogueRoutes);
 app.route("/api/v1", artistNameRoutes);
 app.route("/api/v1", accessRoutes);
 app.route("/api/v1", invitationRoutes);

@@ -13,21 +13,22 @@ The surface — `src/index.ts`, re-exported whole; importers use the bare packag
 name, never a subpath:
 
 - `types.ts` — the wire types: `Timestamp`, `Artwork`, `ArtworkStatus`,
-  `Collection`, `CollectionRole`, `ArtworkPhoto`, `ArtworkDocument`,
-  `ImageVariant`. `Collection` carries `role`/`ownerName` — the dashboard
+  `Catalogue`, `CatalogueRole`, `CatalogueKind`, `ArtworkAvailability`,
+  `ArtworkPhoto`, `ArtworkDocument`, `ImageVariant`. `Catalogue` carries
+  `role`/`ownerName` — the dashboard
   list's per-row extras, absent on every other read — and
   `isPasswordProtected`, the member read's one-bit answer about a password,
   derived from the hash's presence and never the hash itself, and absent on
   every anonymous read.
 - `schemas/` — the Zod schemas: `access` (the access read, the transfer
-  payload and its answer), `artwork`, `artworkImport`, `collection` —
+  payload and its answer), `artwork`, `artworkImport`, `catalogue` —
   including `passwordSchema` for the settings write and
-  `collectionUnlockSchema` for the unlock route's guess — `invitation`
+  `catalogueUnlockSchema` for the unlock route's guess — `invitation`
   (create, summary, preview), `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.
-- `limits.ts` — `COLLECTION_LIMITS` and `collectionLimitForTier`, the per-tier
-  collection quota the API enforces on create. The quota counts owned
-  collections only; a collaboration does not consume it.
+- `limits.ts` — `CATALOGUE_LIMITS` and `catalogueLimitForTier`, the per-tier
+  catalogue quota the API enforces on create. The quota counts owned
+  catalogues only; a collaboration does not consume it.
 - `email.ts` — `normalizeEmail`, the one trim-and-lowercase an address gets on
   both sides of every comparison.
 - `invitationTime.ts` — the invitation clock: `INVITATION_TTL_MS` (seven
@@ -41,7 +42,8 @@ name, never a subpath:
   coexist ([ADR-0007](../../docs/adr/0007-ids-are-ten-base62-characters.md)).
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
-- `slug.ts` — `{urlizedName}-{id}` route params ⇄ bare ids.
+- `slug.ts` — `catalogueSlug`/`artworkSlug`, the `{urlizedName}-{id}` route
+  params ⇄ bare ids.
 
 Sharing's contract is in the code too: `role`/`ownerName` on the dashboard rows,
 the invitation loop's payloads, the access read, the resend, revoke and

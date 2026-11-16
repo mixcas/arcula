@@ -19,6 +19,18 @@ password tables and `collections.passwordHash` are read and written by the
 password routes — and `collection_unlock_attempts` by the unlock route alone,
 which is the throttle's whole surface.
 
+The Drizzle entity is **`catalogues`** and every sharing table is exported under
+its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
+`catalogueAccessGrants`, `catalogueUnlockAttempts`), while the physical tables
+keep their `collections` / `collection_*` names: renaming a table is a
+non-additive migration that collides with deploy-before-migrate, and the
+physical name is invisible (ADR-0010). The rule is worth stating once: **the
+Drizzle entity is `catalogues`; the physical Postgres table is still
+`collections`**, and the same holds for the four `collection_*` tables and for
+every relation's `catalogueId` property, whose physical column stays
+`"collectionId"`. A TS-only rename of a property or export therefore generates
+no SQL.
+
 Layout:
 
 - `src/index.ts` — the schema. The single source of truth: the API imports it
@@ -43,7 +55,7 @@ Layout:
   feature code followed, and `0004` tightened the column afterwards.
   `0005_collection_passwords` is the contrast: it adds
   `collections.passwordHash` nullable and creates the two password tables, and
-  it needs **no** tightening step, because a collection without a password is
+  it needs **no** tightening step, because a catalogue without a password is
   the normal state rather than a gap to backfill. `0006_enable_rls` is the
   third hand edit: `enableRLS()` on each declaration makes drizzle-kit generate
   the thirteen `ENABLE ROW LEVEL SECURITY` statements, but a **grant** lives in
@@ -52,7 +64,11 @@ Layout:
   `authenticated` is appended by hand. The guard is deliberate: Supabase creates
   those roles, while the local stack and CI have neither, so an unguarded
   `REVOKE … FROM anon` would fail every `db:migrate` with `role "anon" does not
-exist`. Nothing else is edited by hand.
+exist`. `0009_catalogue_kind` and `0010_artwork_availability` are the other
+  contrast: both are pure `generate` output. `kind` is `NOT NULL` with a constant
+  default, so the existing rows are already right and no backfill is owed;
+  `availability` is nullable, so a work without a market state is the normal
+  state rather than a gap to tighten. Nothing else is edited by hand.
 - `tests/` — the structural contract: the in-memory schema and the committed
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
@@ -69,14 +85,17 @@ re-save an idempotent upsert; `collections.userId` is the one owner fact and a
 collaborator is a row in `collection_collaborators`;
 `collections.mediaNamespaceId` is fixed at creation, so a transfer moves no
 object; and `collection_invitations` stores the token's hash, never the token,
-with one pending offer per collection and address as a partial unique index.
-`artworks.userId` is a mirror of the collection owner, not an authorization
+with one pending offer per catalogue and address as a partial unique index.
+`catalogues.kind` is fixed at creation (`portfolio`, `collection`, `inventory`)
+and `artworks.availability` is nullable (`available`, `reserved`, `sold`,
+`on-consignment`), each guarded by a CHECK.
+`artworks.userId` is a mirror of the catalogue owner, not an authorization
 fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and
 `collection_access_grants` keeps a grant's hash, never its token, with the
-collection indexed so a password change revokes in one statement.
+catalogue indexed so a password change revokes in one statement.
 `collections.deletedAt` is nullable, with no default and no backfill: a
-collection without a stamp is live.
+catalogue without a stamp is live.
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
 PostgREST roles' grants on what exists and on the defaults for what comes next.

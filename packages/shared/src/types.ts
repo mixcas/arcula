@@ -11,21 +11,25 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  collections: string[]; // Array of collection IDs
+  catalogues: string[]; // Array of catalogue ids
 }
 
-// Collection type
-export interface Collection {
+// Catalogue type
+export interface Catalogue {
   id: string;
   name: string;
+  // What this catalogue is — chosen at creation and fixed, so a Portfolio
+  // never turns into an Inventory under the works it holds (ADR-0010). The
+  // surface's labels and the availability axis are derived from it.
+  kind: CatalogueKind;
   userId: string; // Reference to the owner
   description?: string;
   isPublic?: boolean;
   artworks?: string[]; // Array of artwork IDs
-  // What the viewer is to this collection, on the dashboard list only:
+  // What the viewer is to this catalogue, on the dashboard list only:
   // `owner` or `collaborator`. Absent on every other read — the anonymous
   // public list has no viewer to name, and the single read is not a list row.
-  role?: CollectionRole;
+  role?: CatalogueRole;
   // The owner's display name (falling back to email), on a shared row of the
   // dashboard list only. An owned row names nobody: you are the owner.
   ownerName?: string;
@@ -33,33 +37,45 @@ export interface Collection {
   // presence at the serializer boundary; the hash itself never leaves the
   // server. Absent on every anonymous read.
   isPasswordProtected?: boolean;
-  // Which skin renders this collection's public view. An unknown or absent id
+  // Which skin renders this catalogue's public view. An unknown or absent id
   // falls back to DEFAULT_SKIN_ID — see apps/web/src/skins/registry.ts.
   //
   // Nothing ever queries on `skin`: it is read off a row already fetched by id
-  // and defaulted at read time, so a collection that never set it simply
+  // and defaulted at read time, so a catalogue that never set it simply
   // renders the default skin. A backfill would buy nothing.
   skin?: string;
   // The chosen skin's own option vocabulary, validated at read time against
   // that skin's `options` — an unknown key is dropped and a wrong type falls
   // back to the default, so a stale or hand-edited value cannot corrupt a
-  // collection. Nothing outside the skin reads it.
+  // catalogue. Nothing outside the skin reads it.
   skinOptions?: Record<string, boolean | number | string>;
-  // Stamped by collectionService, not by callers.
+  // Stamped by the web's catalogue service, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
 
 // The owner's choice for a work: `published` puts it in front of the
-// collection's gate, `draft` keeps it inside. Absent on a document written
+// catalogue's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.
 export type ArtworkStatus = "draft" | "published";
 
-// What an account is to a collection: the one whose `userId` it is, or one of
+// A work's market state on a Portfolio or an Inventory: for sale, held for a
+// buyer, sold, or placed with a gallery. Null means no market state — every
+// Collection work, and every work written before the field existed.
+export type ArtworkAvailability =
+  "available" | "reserved" | "sold" | "on-consignment";
+
+// What a catalogue is, which decides whose art it holds and why: a Portfolio
+// is an artist's own work, a Collection is what a collector owns, an Inventory
+// is what a gallery represents (ADR-0010). Fixed at creation; every artwork
+// field stays valid on every kind, and the kind only shapes the surface.
+export type CatalogueKind = "portfolio" | "collection" | "inventory";
+
+// What an account is to a catalogue: the one whose `userId` it is, or one of
 // its collaborators. Both read and write everything inside — a collaborator
 // changes every setting, public/private included, and every work. Only access
 // administration (invite, remove, transfer) is the owner's.
-export type CollectionRole = "owner" | "collaborator";
+export type CatalogueRole = "owner" | "collaborator";
 
 // Artwork type
 //
@@ -67,7 +83,7 @@ export type CollectionRole = "owner" | "collaborator";
 // optional so an absent key can be distinguished from a set-but-empty value.
 // `documents` and `photos` are always written — as [] when the artwork has
 // none — so a reader never has to distinguish an absent field from an empty
-// list, and collectionId/userId are always supplied by the creating code path.
+// list, and catalogueId/userId are always supplied by the creating code path.
 export interface Artwork {
   id: string;
   userId: string; // Reference to the owner
@@ -85,7 +101,7 @@ export interface Artwork {
   acquisitionPrice?: string;
   placeOfOrigin?: string;
   provenance?: string;
-  // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public collection
+  // Up to MAX_ARTWORK_DOCUMENTS. Never public: not in the public catalogue
   // page, not in the public artwork view, and served only to the owner —
   // media reads re-check visibility per request.
   documents: ArtworkDocument[];
@@ -93,10 +109,16 @@ export interface Artwork {
   condition?: string;
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
-  collectionId: string; // Reference to parent collection
+  catalogueId: string; // Reference to the parent catalogue
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;
+  // A member-facing market state on a Portfolio or an Inventory. Null (or
+  // absent on an old document) means the work carries none — every Collection
+  // work. The key is emitted on a member read only, so a visitor's document
+  // never carries it. Never a second gate: a published work stays visible
+  // whatever this says.
+  availability?: ArtworkAvailability | null;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
   // Add/Edit form has no such field, so editing a deleted work leaves it

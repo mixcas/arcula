@@ -3,7 +3,7 @@ import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
 /**
- * Pure logic for the CSV artwork-import flow (`/manage/collection/:id/import/csv`).
+ * Pure logic for the CSV artwork-import flow (`/manage/catalogue/:id/import/csv`).
  *
  * Nothing in this module touches React or the filesystem: every
  * step of the pipeline — header-to-field guessing, cell normalization, date
@@ -18,14 +18,14 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  *   3. `validateImportRow` — computed live so the review step always reflects
  *      the user's latest edits. The only title rule is that a Title exists:
  *      same-title works are legitimate in art, so titles are never compared
- *      against each other or against the collection's existing artworks.
+ *      against each other or against the catalogue's existing artworks.
  * The run step's remaining job is to POST the selected rows to the API's
  * import route and render its `{ inserted, rejected }` answer — the server
  * validates each row against this same `artworkSchema`, so an imported work
  * lands byte-identical to one created by hand.
  *
  * `status` is not a mappable column either, and is pinned to `published`: an
- * import is the owner adding works to a collection, not a way to declare one a
+ * import is the owner adding works to a catalogue, not a way to declare one a
  * draft. A work can be turned into a draft afterwards, by id.
  */
 
@@ -35,7 +35,7 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
 /**
  * The status every imported work lands with. An import adds works to a
- * collection; it does not declare any of them drafts. One constant, because
+ * catalogue; it does not declare any of them drafts. One constant, because
  * the review's per-row check and the route's write must agree.
  */
 export const IMPORTED_WORK_STATUS: ArtworkStatus = "published";

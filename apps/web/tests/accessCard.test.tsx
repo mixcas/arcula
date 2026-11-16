@@ -14,12 +14,12 @@ import { ModalsProvider } from "@mantine/modals";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  CollectionAccess,
+  CatalogueAccess,
   InvitationSummary,
   Timestamp,
 } from "@arcula/shared";
 
-import AccessCard from "@/components/manage/collection/AccessCard";
+import AccessCard from "@/components/manage/catalogue/AccessCard";
 import { ApiRequestError } from "@/services/api";
 import { accessService } from "@/services/accessService";
 import { invitationService } from "@/services/invitationService";
@@ -44,8 +44,8 @@ vi.mock("@/services/accessService", () => ({
   accessService: {
     getAccess: vi.fn(),
     removeCollaborator: vi.fn(),
-    leaveCollection: vi.fn(),
-    transferCollection: vi.fn(),
+    leaveCatalogue: vi.fn(),
+    transferCatalogue: vi.fn(),
   },
 }));
 
@@ -79,14 +79,14 @@ Object.defineProperty(window, "matchMedia", {
 /* eslint-disable @typescript-eslint/unbound-method */
 const getAccess = vi.mocked(accessService.getAccess);
 const removeCollaborator = vi.mocked(accessService.removeCollaborator);
-const leaveCollection = vi.mocked(accessService.leaveCollection);
-const transferCollection = vi.mocked(accessService.transferCollection);
+const leaveCatalogue = vi.mocked(accessService.leaveCatalogue);
+const transferCatalogue = vi.mocked(accessService.transferCatalogue);
 const createInvitation = vi.mocked(invitationService.createInvitation);
 const resendInvitation = vi.mocked(invitationService.resendInvitation);
 const revokeInvitation = vi.mocked(invitationService.revokeInvitation);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const COLLECTION_ID = "cccccccccccccccccccc";
+const CATALOGUE_ID = "cccccccccccccccccccc";
 
 const ts = (ms: number): Timestamp => ({
   seconds: Math.floor(ms / 1000),
@@ -113,7 +113,7 @@ const invitation = (
   overrides: Partial<InvitationSummary> = {},
 ): InvitationSummary => ({
   id: "iiiiiiiiiiiiiiiiiiii",
-  collectionId: COLLECTION_ID,
+  catalogueId: CATALOGUE_ID,
   email: "invited@example.test",
   invitedByUserId: OWNER.userId,
   status: "pending",
@@ -125,8 +125,8 @@ const invitation = (
 });
 
 const ownerAccess = (
-  overrides: Partial<CollectionAccess> = {},
-): CollectionAccess => ({
+  overrides: Partial<CatalogueAccess> = {},
+): CatalogueAccess => ({
   role: "owner",
   owner: OWNER,
   collaborators: [MATE],
@@ -135,8 +135,8 @@ const ownerAccess = (
 });
 
 const collaboratorAccess = (
-  overrides: Partial<CollectionAccess> = {},
-): CollectionAccess => ({
+  overrides: Partial<CatalogueAccess> = {},
+): CatalogueAccess => ({
   role: "collaborator",
   owner: OWNER,
   collaborators: [MATE],
@@ -149,14 +149,14 @@ const LocationProbe: React.FC = () => {
   return <div data-testid="location">{location.pathname}</div>;
 };
 
-const renderCard = (access: CollectionAccess) => {
+const renderCard = (access: CatalogueAccess) => {
   getAccess.mockResolvedValue(access);
   return render(
     <MantineProvider>
       <ModalsProvider>
-        <MemoryRouter initialEntries={["/manage/collection/flores/settings"]}>
+        <MemoryRouter initialEntries={["/manage/catalogue/flores/settings"]}>
           <LocationProbe />
-          <AccessCard collectionId={COLLECTION_ID} />
+          <AccessCard catalogueId={CATALOGUE_ID} />
         </MemoryRouter>
       </ModalsProvider>
     </MantineProvider>,
@@ -198,7 +198,7 @@ describe("the owner's access card", () => {
       within(mateRow).getByRole("button", { name: /remove/i }),
     ).toBeTruthy();
 
-    // The owner cannot leave: a collection is never left without an owner.
+    // The owner cannot leave: a catalogue is never left without an owner.
     expect(
       screen.queryByRole("button", { name: /leave/i }),
     ).not.toBeInTheDocument();
@@ -257,7 +257,7 @@ describe("the owner's access card", () => {
       .click(within(row).getByRole("button", { name: /resend/i }));
 
     expect(resendInvitation).toHaveBeenCalledWith(
-      COLLECTION_ID,
+      CATALOGUE_ID,
       "iiiiiiiiiiiiiiiiiiii",
     );
     await waitFor(() =>
@@ -285,7 +285,7 @@ describe("the owner's access card", () => {
       .click(within(row).getByRole("button", { name: /revoke/i }));
 
     expect(revokeInvitation).toHaveBeenCalledWith(
-      COLLECTION_ID,
+      CATALOGUE_ID,
       "iiiiiiiiiiiiiiiiiiii",
     );
     await waitFor(() =>
@@ -361,7 +361,7 @@ describe("the owner's access card", () => {
   });
 
   it("warns before a transfer that it is immediate and that the owner becomes a collaborator, then re-reads the card", async () => {
-    transferCollection.mockResolvedValue({
+    transferCatalogue.mockResolvedValue({
       transferred: true,
       emailSent: true,
     });
@@ -375,7 +375,7 @@ describe("the owner's access card", () => {
       );
 
     const scope = within(await dialogEl());
-    expect(transferCollection).not.toHaveBeenCalled();
+    expect(transferCatalogue).not.toHaveBeenCalled();
 
     // The read after the transfer is the caller's new role: they are a
     // collaborator, so the owner controls give way to leave.
@@ -384,9 +384,9 @@ describe("the owner's access card", () => {
       .setup()
       .click(scope.getByRole("button", { name: /transfer ownership/i }));
 
-    expect(transferCollection).toHaveBeenCalledWith(COLLECTION_ID, "u-mate");
+    expect(transferCatalogue).toHaveBeenCalledWith(CATALOGUE_ID, "u-mate");
     expect(
-      await screen.findByRole("button", { name: /leave collection/i }),
+      await screen.findByRole("button", { name: /leave catalogue/i }),
     ).toBeInTheDocument();
     expect(
       within(screen.getByTestId("access-card")).queryByRole("button", {
@@ -399,7 +399,7 @@ describe("the owner's access card", () => {
   });
 
   it("keeps the transfer and says so when the notice could not be sent", async () => {
-    transferCollection.mockResolvedValue({
+    transferCatalogue.mockResolvedValue({
       transferred: true,
       emailSent: false,
     });
@@ -419,12 +419,12 @@ describe("the owner's access card", () => {
     );
 
     // The transfer is the durable fact; only the notice failed.
-    expect(transferCollection).toHaveBeenCalledWith(COLLECTION_ID, "u-mate");
+    expect(transferCatalogue).toHaveBeenCalledWith(CATALOGUE_ID, "u-mate");
     expect(
       await screen.findByTestId("access-transfer-notice"),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: /leave collection/i }),
+      await screen.findByRole("button", { name: /leave catalogue/i }),
     ).toBeInTheDocument();
   });
 
@@ -445,7 +445,7 @@ describe("the owner's access card", () => {
       .setup()
       .click(scope.getByRole("button", { name: /remove/i }));
 
-    expect(removeCollaborator).toHaveBeenCalledWith(COLLECTION_ID, "u-mate");
+    expect(removeCollaborator).toHaveBeenCalledWith(CATALOGUE_ID, "u-mate");
     await waitFor(() =>
       expect(
         screen.queryByTestId("access-collaborator-u-mate"),
@@ -458,7 +458,7 @@ describe("the owner's access card", () => {
       new ApiRequestError(
         409,
         "conflict",
-        "That account does not have access to this collection",
+        "That account does not have access to this catalogue",
       ),
     );
     renderCard(ownerAccess());
@@ -473,7 +473,7 @@ describe("the owner's access card", () => {
 
     const alert = await screen.findByTestId("access-action-error");
     expect(alert).toHaveTextContent(
-      "That account does not have access to this collection",
+      "That account does not have access to this catalogue",
     );
 
     // The read has moved on: the next one no longer names the stale member.
@@ -512,27 +512,27 @@ describe("a collaborator's access card", () => {
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByRole("button", { name: /leave collection/i }),
+      screen.getByRole("button", { name: /leave catalogue/i }),
     ).toBeInTheDocument();
   });
 
   it("leaves only after a confirmation that warns, then returns to the dashboard", async () => {
-    leaveCollection.mockResolvedValue(undefined);
+    leaveCatalogue.mockResolvedValue(undefined);
     renderCard(collaboratorAccess());
 
     await userEvent
       .setup()
-      .click(await screen.findByRole("button", { name: /leave collection/i }));
+      .click(await screen.findByRole("button", { name: /leave catalogue/i }));
 
     const scope = within(await dialogEl());
     expect(scope.getByText(/unsaved uploads/i)).toBeInTheDocument();
-    expect(leaveCollection).not.toHaveBeenCalled();
+    expect(leaveCatalogue).not.toHaveBeenCalled();
 
     await userEvent
       .setup()
       .click(scope.getByRole("button", { name: /leave/i }));
 
-    expect(leaveCollection).toHaveBeenCalledWith(COLLECTION_ID);
+    expect(leaveCatalogue).toHaveBeenCalledWith(CATALOGUE_ID);
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe("/manage"),
     );
