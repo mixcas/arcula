@@ -1,4 +1,4 @@
-// Collection search, tier 1: the pure predicate over our own fields.
+// Catalogue search, tier 1: the pure predicate over our own fields.
 //
 // Every matching permutation lives here, because this is the only place it can
 // be asserted without a wire, a database or a DOM. The API suite proves the

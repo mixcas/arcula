@@ -1,5 +1,5 @@
 /**
- * Readable route params for collections and artworks.
+ * Readable route params for catalogues and artworks.
  *
  * Routes carry a `{urlizedName}-{id}` segment, while the stored id is a bare
  * string on its own. These helpers are the one place that knows how the two
@@ -20,7 +20,7 @@
  * id's last segment instead of the id.
  *
  * Callers pass a single path segment, so this never sees the surrounding path.
- * The collection and artwork segments of a nested route are therefore parsed
+ * The catalogue and artwork segments of a nested route are therefore parsed
  * independently of one another.
  */
 export const parseId = (param: string): string => {
@@ -48,9 +48,18 @@ export const urlizeName = (name: string): string =>
 const docSlug = (name: string, id: string, fallback: string): string =>
   `${urlizeName(name) || fallback}-${id}`;
 
-/** The `:collectionId` route param for a collection. */
-export const collectionSlug = (name: string, id: string): string =>
+/**
+ * The `:collectionId` route param for a catalogue.
+ *
+ * The fallback segment is still `"collection"` — the URL word moves with the
+ * routes (#247), and until then this helper must keep producing the params
+ * the mounted routes parse.
+ */
+export const catalogueSlug = (name: string, id: string): string =>
   docSlug(name, id, "collection");
+
+/** The helper's older spelling, alias-kept while the API and web migrate. */
+export const collectionSlug = catalogueSlug;
 
 /** The `:artworkId` route param for an artwork, which is named by its title. */
 export const artworkSlug = (title: string, id: string): string =>

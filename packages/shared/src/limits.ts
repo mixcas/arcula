@@ -1,38 +1,43 @@
 /**
  * The account tiers the quotas are keyed on.
  *
- * The `user.tier` column (default `'free'`) and `COLLECTION_LIMITS`
+ * The `user.tier` column (default `'free'`) and `CATALOGUE_LIMITS`
  * below share this vocabulary, so the column and the table cannot name the
  * same thing differently.
  */
-export type CollectionTier = "free";
+export type CatalogueTier = "free";
 
 /**
- * Collections per account, by tier.
+ * Catalogues per account, by tier.
  *
- * The beta cap: one collection per free account. The API enforces this on
+ * The beta cap: one catalogue per free account. The API enforces this on
  * create (409 when reached) and the client reads it to reflect the cap in the
  * UI — one map, imported by both sides, so the two cannot disagree.
  */
-export const COLLECTION_LIMITS: Record<CollectionTier, number> = {
+export const CATALOGUE_LIMITS: Record<CatalogueTier, number> = {
   free: 1,
 };
 
 /**
- * The collection cap for a tier, with the unknown-tier fallback in one place.
+ * The catalogue cap for a tier, with the unknown-tier fallback in one place.
  *
- * A `tier` value that is not a key of `COLLECTION_LIMITS` (a tier added
+ * A `tier` value that is not a key of `CATALOGUE_LIMITS` (a tier added
  * server-side before the client knows it, or a corrupt row) is treated as
  * `free` — the same fallback the API's create check makes, so the UI and the
  * enforcement cannot disagree about a number. Passing `undefined`/`null` is
  * the client's "the profile read is not back yet" state, which also falls
  * to `free` rather than to "no cap".
  */
-export function collectionLimitForTier(
-  tier: string | null | undefined,
-): number {
-  if (tier && tier in COLLECTION_LIMITS) {
-    return COLLECTION_LIMITS[tier as CollectionTier];
+export function catalogueLimitForTier(tier: string | null | undefined): number {
+  if (tier && tier in CATALOGUE_LIMITS) {
+    return CATALOGUE_LIMITS[tier as CatalogueTier];
   }
-  return COLLECTION_LIMITS.free;
+  return CATALOGUE_LIMITS.free;
 }
+
+// The names this tier vocabulary carried before ADR-0010 made Catalogue the
+// unit, alias-kept while the API and web migrate. The contract step deletes
+// them.
+export type CollectionTier = CatalogueTier;
+export const COLLECTION_LIMITS = CATALOGUE_LIMITS;
+export const collectionLimitForTier = catalogueLimitForTier;

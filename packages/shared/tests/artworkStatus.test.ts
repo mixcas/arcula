@@ -2,7 +2,7 @@
 // words and the published default at every seam: the form and its payload, the
 // PATCH body, and the wire read.
 //
-// The collection is the only gate, so there is no per-work visibility field
+// The catalogue is the only gate, so there is no per-work visibility field
 // left to disagree with it (ADR-0003).
 
 import { describe, expect, it } from "vitest";

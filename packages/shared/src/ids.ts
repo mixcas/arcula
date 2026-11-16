@@ -1,7 +1,7 @@
 /**
  * The one id mint, shared by the API and the browser.
  *
- * Collection, artwork, invitation and media-namespace ids are all minted here,
+ * Catalogue, artwork, invitation and media-namespace ids are all minted here,
  * so the two halves of the product cannot drift on the shape — which is the
  * drift this module exists to remove. The shape is a route segment and an
  * object-key segment, which fixes two of its properties:

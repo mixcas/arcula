@@ -82,7 +82,7 @@ export const artworkSchema = z.object({
   condition: optionalText,
   currentValue: optionalText,
   // Published by default, so a save that says nothing about it puts the work
-  // in front of the collection's gate. The collection is the only gate on a
+  // in front of the catalogue's gate. The catalogue is the only gate on a
   // visitor (ADR-0003); this is the owner's own choice within it.
   status: artworkStatusSchema.default("published"),
 });

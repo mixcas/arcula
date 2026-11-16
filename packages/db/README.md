@@ -19,6 +19,14 @@ password tables and `collections.passwordHash` are read and written by the
 password routes — and `collection_unlock_attempts` by the unlock route alone,
 which is the throttle's whole surface.
 
+The Drizzle entity is **`catalogues`** and every sharing table is exported under
+its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
+`catalogueAccessGrants`, `catalogueUnlockAttempts`), while the physical tables
+keep their `collections` / `collection_*` names: renaming a table is a
+non-additive migration that collides with deploy-before-migrate, and the
+physical name is invisible (ADR-0010). The old export names stay as aliases of
+the same objects until the API and the web finish migrating.
+
 Layout:
 
 - `src/index.ts` — the schema. The single source of truth: the API imports it
@@ -43,7 +51,7 @@ Layout:
   feature code followed, and `0004` tightened the column afterwards.
   `0005_collection_passwords` is the contrast: it adds
   `collections.passwordHash` nullable and creates the two password tables, and
-  it needs **no** tightening step, because a collection without a password is
+  it needs **no** tightening step, because a catalogue without a password is
   the normal state rather than a gap to backfill. `0006_enable_rls` is the
   third hand edit: `enableRLS()` on each declaration makes drizzle-kit generate
   the thirteen `ENABLE ROW LEVEL SECURITY` statements, but a **grant** lives in
@@ -69,14 +77,14 @@ re-save an idempotent upsert; `collections.userId` is the one owner fact and a
 collaborator is a row in `collection_collaborators`;
 `collections.mediaNamespaceId` is fixed at creation, so a transfer moves no
 object; and `collection_invitations` stores the token's hash, never the token,
-with one pending offer per collection and address as a partial unique index.
-`artworks.userId` is a mirror of the collection owner, not an authorization
+with one pending offer per catalogue and address as a partial unique index.
+`artworks.userId` is a mirror of the catalogue owner, not an authorization
 fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and
 `collection_access_grants` keeps a grant's hash, never its token, with the
-collection indexed so a password change revokes in one statement.
+catalogue indexed so a password change revokes in one statement.
 `collections.deletedAt` is nullable, with no default and no backfill: a
-collection without a stamp is live.
+catalogue without a stamp is live.
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
 PostgREST roles' grants on what exists and on the defaults for what comes next.

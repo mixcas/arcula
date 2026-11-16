@@ -6,11 +6,11 @@ import { z } from "zod";
  * The profile surface is the only place the user's custom columns
  * (firstName, lastName, tier, settings) reach the client: Better Auth's
  * session carries the core fields only, so /me is where the UI learns the
- * tier it reads COLLECTION_LIMITS on, and the names the menu and the profile
+ * tier it reads CATALOGUE_LIMITS on, and the names the menu and the profile
  * page render.
  *
  * createdAt/updatedAt are ISO strings — the /me serializer's own convention
- * (`toISOString()`), distinct from the collections/artworks
+ * (`toISOString()`), distinct from the catalogues/artworks
  * `{ seconds, nanoseconds }` wire shape elsewhere in the API.
  */
 export const sessionUserSchema = z.object({
