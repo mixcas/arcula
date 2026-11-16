@@ -33,7 +33,12 @@ import { wireImageVariant } from "./document";
 export const mediaPresignRequestSchema = z.object({
   entryId: z.string().regex(MINTED_ID_RE, "Invalid entry id"),
   contentType: z.string().min(1),
-  /** The declared length in bytes — checked by the guard, signed into the URL. */
+  /**
+   * The declared length in bytes. Checked against the population's cap by the
+   * guard; the stored object's own length is what process trusts. Not signed
+   * into the URL: `content-length` is a forbidden header for `fetch`, so a
+   * browser cannot honour a signed value.
+   */
   size: z.number(),
   name: z.string().optional(),
 });
