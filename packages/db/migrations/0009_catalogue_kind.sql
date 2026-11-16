@@ -1,0 +1,2 @@
+ALTER TABLE "collections" ADD COLUMN "kind" text DEFAULT 'collection' NOT NULL;--> statement-breakpoint
+ALTER TABLE "collections" ADD CONSTRAINT "collections_kind_check" CHECK ("kind" in ('portfolio', 'collection', 'inventory'));
