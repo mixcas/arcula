@@ -113,6 +113,11 @@ export interface Artwork {
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;
+  // A member-facing market state on a Portfolio or an Inventory. Null (or
+  // absent on an old document) means the work carries none — every Collection
+  // work. Never a second gate: a published work stays visible whatever this
+  // says.
+  availability?: ArtworkAvailability | null;
   // Soft delete. `null` means live; a timestamp means deleted and the row is
   // kept (reversible). Stamped and cleared by artworkService only — the
   // Add/Edit form has no such field, so editing a deleted work leaves it

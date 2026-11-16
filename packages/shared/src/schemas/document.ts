@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Artwork, Catalogue } from "../types";
-import { artworkStatusSchema } from "./artwork";
+import { artworkAvailabilitySchema, artworkStatusSchema } from "./artwork";
 import { catalogueKindSchema } from "./catalogue";
 
 /**
@@ -120,6 +120,9 @@ export const artworkReadSchema = z.object({
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status: artworkStatusSchema.default("published"),
+  // Always on the wire, null included: the serializer emits it on every read,
+  // so an absent key is a reshaped document rather than a legacy one.
+  availability: artworkAvailabilitySchema.nullable(),
   deletedAt: wireTimestamp.nullable(),
   createdAt: wireTimestamp,
   updatedAt: wireTimestamp,
