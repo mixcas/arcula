@@ -74,3 +74,79 @@ export const ACCEPTED_DOCUMENT_TYPES: Record<string, string[]> = {
   ...ACCEPTED_IMAGE_TYPES,
   "application/pdf": [".pdf"],
 };
+
+/**
+ * Which of the two media populations a declaration is judged against.
+ *
+ * The singular — `photo` / `document` — because that is the name everything
+ * that holds a population uses: the API's row tables and variants, the
+ * `parentKind` a stored object records, and the save payloads' two arrays.
+ * The PLURAL (`photos` / `documents`) is the wire's and the object key's name
+ * for the same population, and the API's `kindOf` is the one place that
+ * translates between them.
+ */
+export type MediaPopulationKind = "photo" | "document";
+
+/**
+ * Each population's ceiling and allowlist, mapped to the tables above and
+ * never restated: there is no type name and no byte count written below, so
+ * this record cannot drift from the form's Dropzone or the API's own table.
+ */
+const DECLARED_UPLOAD_RULES: Record<
+  MediaPopulationKind,
+  { accepted: Record<string, string[]>; cap: number }
+> = {
+  photo: { accepted: ACCEPTED_IMAGE_TYPES, cap: MAX_IMAGE_BYTES },
+  document: { accepted: ACCEPTED_DOCUMENT_TYPES, cap: MAX_DOCUMENT_BYTES },
+};
+
+/**
+ * Why a declared upload was refused — and `allowed` when it was not.
+ *
+ * The refusal is named rather than narrowed to `false` because the two
+ * failures reach the person differently ("that type is not accepted" versus
+ * "that file is too large"), and because the type is what decides whether an
+ * extension — hence the object's name — is minted at all. Both sides map a
+ * verdict to their own wording; neither re-derives the decision.
+ */
+export type DeclaredUploadVerdict =
+  "allowed" | "unsupported-type" | "too-large" | "invalid-size";
+
+/**
+ * The declared-upload guard: is this `(population, contentType, size)` legal?
+ *
+ * A direct-to-storage upload never carries the bytes to the API, so the only
+ * thing the presign step can judge is what the client DECLARES — and this is
+ * the one function that judges it, asked by the form before it commits to an
+ * upload and by the API before it mints a URL. The bytes themselves are
+ * re-checked at process, where the server first sees them.
+ *
+ * The order is the stage route's existing one, kept: the allowlist first, so a
+ * forged type is reported as a type failure rather than as an honest file that
+ * is too big. The cap is inclusive on both ends — a file may hit it exactly
+ * rather than be refused a byte under.
+ */
+export const checkDeclaredUpload = (
+  population: MediaPopulationKind,
+  contentType: string,
+  size: number,
+): DeclaredUploadVerdict => {
+  const rule = DECLARED_UPLOAD_RULES[population];
+  // An own-property question, not `in`: the allowlists are object literals, so
+  // `"toString" in ACCEPTED_IMAGE_TYPES` is true and a prototype key would be
+  // admitted as a type.
+  if (!Object.hasOwn(rule.accepted, contentType)) return "unsupported-type";
+  // A byte count has to be a positive whole number before `> cap` means
+  // anything: `NaN` compares false against every cap, and a fractional or
+  // negative one is a malformed declaration rather than a large file.
+  if (!Number.isSafeInteger(size) || size < 1) return "invalid-size";
+  if (size > rule.cap) return "too-large";
+  return "allowed";
+};
+
+/** The guard as a yes or no, for the callers that only need that. */
+export const isDeclaredUploadAllowed = (
+  population: MediaPopulationKind,
+  contentType: string,
+  size: number,
+): boolean => checkDeclaredUpload(population, contentType, size) === "allowed";
