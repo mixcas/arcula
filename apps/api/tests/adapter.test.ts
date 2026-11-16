@@ -1,7 +1,7 @@
 // The opaque-sign-up gotcha, asserted: every column the Better
 // Auth adapter is told about via `user.additionalFields` must exist on the
 // schema's user table — and the other way around, the declared tier default
-// must be the one the quota key (`COLLECTION_LIMITS`) keys on. Drift here
+// must be the one the quota key (`CATALOGUE_LIMITS`) keys on. Drift here
 // fails sign-up in production with no useful error, which is exactly what
 // this test exists to kill in CI.
 //
@@ -11,7 +11,7 @@
 
 import { getTableColumns } from "drizzle-orm";
 import { schema, user } from "@arcula/db";
-import { COLLECTION_LIMITS } from "@arcula/shared";
+import { CATALOGUE_LIMITS } from "@arcula/shared";
 import { describe, expect, it } from "vitest";
 
 // auth.ts builds the betterAuth instance at import, which needs a secret;
@@ -51,13 +51,13 @@ describe("the adapter declaration and the schema agree", () => {
   });
 
   it("defaults a new account to a tier the quota table keys on", () => {
-    // The default must be a key of COLLECTION_LIMITS: a default outside the
+    // The default must be a key of CATALOGUE_LIMITS: a default outside the
     // table falls through `catalogueLimitForTier` to `undefined` (limits.ts),
     // so every new account would be uncapped and nothing would raise.
     expect(userAdditionalFields.tier.defaultValue).toBe(
       userColumns.tier.default,
     );
-    expect(Object.keys(COLLECTION_LIMITS)).toContain(
+    expect(Object.keys(CATALOGUE_LIMITS)).toContain(
       userAdditionalFields.tier.defaultValue,
     );
   });

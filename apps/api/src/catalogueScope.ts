@@ -9,13 +9,13 @@ import {
 } from "@arcula/db";
 
 /**
- * The left join to the caller's own collaborator row. `(collectionId, userId)`
+ * The left join to the caller's own collaborator row. `(catalogueId, userId)`
  * is unique, so the join finds at most one row; an owner is not in this table,
  * so their join finds nothing and the owner column decides the role.
  */
 export const collaboratorJoin = (userId: string): SQL | undefined =>
   and(
-    eq(catalogueCollaboratorsTable.collectionId, cataloguesTable.id),
+    eq(catalogueCollaboratorsTable.catalogueId, cataloguesTable.id),
     eq(catalogueCollaboratorsTable.userId, userId),
   );
 

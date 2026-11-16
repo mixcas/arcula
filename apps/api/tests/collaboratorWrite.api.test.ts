@@ -62,11 +62,11 @@ let namespace = "";
 /** Sign up an account and share a catalogue with it. */
 async function share(
   label: string,
-  collectionId: string = cid,
+  catalogueId: string = cid,
 ): Promise<Account> {
   const account = await freshUser(label);
   await db.insert(collaboratorsTable).values({
-    collectionId,
+    catalogueId,
     userId: account.userId,
   });
   return account;
@@ -143,7 +143,7 @@ async function stageAndProcessPhoto(
 // The settings
 // ---------------------------------------------------------------------------
 
-describe("PATCH /catalogues/:collectionId — the settings", () => {
+describe("PATCH /catalogues/:catalogueId — the settings", () => {
   it("lets a collaborator change every setting, public/private included", async () => {
     const res = await req("PATCH", cataloguePath(), {
       cookies: mate.cookies,

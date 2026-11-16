@@ -461,7 +461,7 @@ say "Command: gh workflow run deploy-dev.yml --ref dev"
 open_url "https://github.com/$REPO/actions/workflows/deploy-dev.yml"
 pause "Press Enter once the run is green."
 say "Expected, the whole pass green: health, the SPA shell and a deep link, sign-up with a Secure session cookie, the duplicate sign-up's 422,"
-say "a collection create, the tier cap's 409, a real 12 MP photo through stage → process → save, a visitor read, and the reset-mail path."
+say "a catalogue create, the tier cap's 409, a real 12 MP photo through stage → process → save, a visitor read, and the reset-mail path."
 
 # ── 10 ────────────────────────────────────────────────────────────────────
 stage "Confirm the dev-only responses, and production's"

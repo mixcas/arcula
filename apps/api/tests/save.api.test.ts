@@ -193,7 +193,7 @@ async function makeTwoPhotoArtwork(): Promise<{
 
 /** A bare artwork row, inserted directly (the route's job is tested elsewhere). */
 async function insertRow(
-  collectionId: string,
+  catalogueId: string,
   opts: {
     id?: string;
     status?: "draft" | "published";
@@ -206,7 +206,7 @@ async function insertRow(
   await db.insert(artworksTable).values({
     id,
     userId: owner.userId,
-    collectionId,
+    catalogueId,
     title: "Direct Row",
     artistName: "C. Cas",
     status: opts.status ?? "published",
@@ -276,7 +276,7 @@ describe("POST …/artworks", () => {
     // is left to prove is that this document carries the right values.
     // Blank text fields are ABSENT keys, not nulls.
     expect(body.userId).toBe(owner.userId);
-    expect(body.collectionId).toBe(cid);
+    expect(body.catalogueId).toBe(cid);
     expect(body.status).toBe("published");
     expect(body.deletedAt).toBe(null);
     expect(body.serie).toBe("Early works");

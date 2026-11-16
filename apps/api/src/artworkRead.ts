@@ -175,16 +175,16 @@ function groupChildren(
  * product tolerates, and no caller may treat the document as a snapshot.
  */
 export async function readArtwork(
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   viewer: string | null,
   hasValidGrant = false,
 ): Promise<ArtworkReadResult> {
-  const catalogue = await loadCatalogue(collectionId);
+  const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) return { status: "not-found" };
-  const artwork = await loadArtworkInCatalogue(collectionId, artworkId);
+  const artwork = await loadArtworkInCatalogue(catalogueId, artworkId);
   if (!artwork) return { status: "not-found" };
-  const membership = await loadMembership(collectionId, catalogue, viewer);
+  const membership = await loadMembership(catalogueId, catalogue, viewer);
   if (!canSeeArtwork(membership, catalogue, artwork, hasValidGrant)) {
     return { status: "not-found" };
   }
@@ -234,15 +234,15 @@ type ArtworkListMode = "live" | "deleted";
  * ever disagree.
  */
 async function readArtworkListInMode(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
   mode: ArtworkListMode,
   hasValidGrant = false,
   search: string | null = null,
 ): Promise<ArtworkListResult> {
-  const catalogue = await loadCatalogue(collectionId);
+  const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) return { status: "not-found" };
-  const member = await loadMembership(collectionId, catalogue, viewer);
+  const member = await loadMembership(catalogueId, catalogue, viewer);
 
   if (mode === "deleted") {
     // Membership alone: a public catalogue's deleted works are still the
@@ -271,16 +271,16 @@ async function readArtworkListInMode(
     .where(
       mode === "deleted"
         ? and(
-            eq(artworksTable.collectionId, collectionId),
+            eq(artworksTable.catalogueId, catalogueId),
             isNotNull(artworksTable.deletedAt),
           )
         : member !== null
           ? and(
-              eq(artworksTable.collectionId, collectionId),
+              eq(artworksTable.catalogueId, catalogueId),
               isNull(artworksTable.deletedAt),
             )
           : and(
-              eq(artworksTable.collectionId, collectionId),
+              eq(artworksTable.catalogueId, catalogueId),
               eq(artworksTable.status, "published"),
               isNull(artworksTable.deletedAt),
             ),
@@ -322,13 +322,13 @@ async function readArtworkListInMode(
  * A present `search` is member-only and filters the result.
  */
 export function readArtworkList(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
   hasValidGrant = false,
   search: string | null = null,
 ): Promise<ArtworkListResult> {
   return readArtworkListInMode(
-    collectionId,
+    catalogueId,
     viewer,
     "live",
     hasValidGrant,
@@ -352,13 +352,13 @@ export type DeletedArtworkListResult = Extract<
  * owner and every collaborator see the same list, and nobody else sees one.
  */
 export function readDeletedArtworkList(
-  collectionId: string,
+  catalogueId: string,
   viewer: string | null,
 ): Promise<DeletedArtworkListResult> {
   // The cast states what the call site already guarantees: no search, and a
   // caller the deleted route has resolved a session for.
   return readArtworkListInMode(
-    collectionId,
+    catalogueId,
     viewer,
     "deleted",
   ) as Promise<DeletedArtworkListResult>;

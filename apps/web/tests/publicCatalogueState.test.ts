@@ -21,7 +21,7 @@ const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
 const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "artwork-1",
   userId: "owner-1",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",
@@ -41,7 +41,7 @@ const passwordRequired = (catalogueName?: string): ApiRequestError =>
     "password-required",
     "This catalogue is protected",
     undefined,
-    catalogueName === undefined ? {} : { collectionName: catalogueName },
+    catalogueName === undefined ? {} : { catalogueName: catalogueName },
   );
 
 describe("publicFailure", () => {
@@ -69,7 +69,7 @@ describe("publicFailure", () => {
     expect(
       publicFailure(
         new ApiRequestError(403, "password-required", "…", undefined, {
-          collectionName: 42,
+          catalogueName: 42,
         }),
       ),
     ).toEqual({ status: "locked" });
@@ -169,7 +169,7 @@ describe("publicArtworkState", () => {
     expect(
       publicArtworkState(
         catalogue(),
-        artwork({ collectionId: "some-other-catalogue" }),
+        artwork({ catalogueId: "some-other-catalogue" }),
         CATALOGUE_ID,
       ),
     ).toEqual({ status: "notFound" });

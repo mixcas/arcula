@@ -24,7 +24,7 @@ let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
 let mate: { cookies: string; userId: string };
 
-let collectionId = "";
+let catalogueId = "";
 let newestId = "";
 let middleId = "";
 let oldestDraftId = "";
@@ -73,7 +73,7 @@ async function stampDeleted(artworkId: string, iso: string): Promise<void> {
 async function expectRefusal(input: {
   method: "GET" | "POST";
   target: string;
-  path: (collectionId: string) => string;
+  path: (catalogueId: string) => string;
   memberCookies: string;
   strangerCookies: string;
   body?: string;
@@ -109,25 +109,25 @@ beforeAll(async () => {
     body: JSON.stringify({ name: "The Deleted View" }),
   });
   expect(created.status).toBe(201);
-  collectionId = String((await json<Record<string, unknown>>(created)).id);
+  catalogueId = String((await json<Record<string, unknown>>(created)).id);
 
-  newestId = await createWork(collectionId, owner.cookies, {
+  newestId = await createWork(catalogueId, owner.cookies, {
     title: "Newest Out",
     artistName: "N. Out",
     status: "published",
     serie: "Red Series",
   });
-  middleId = await createWork(collectionId, owner.cookies, {
+  middleId = await createWork(catalogueId, owner.cookies, {
     title: "Middle Out",
     artistName: "M. Out",
     status: "published",
   });
-  oldestDraftId = await createWork(collectionId, owner.cookies, {
+  oldestDraftId = await createWork(catalogueId, owner.cookies, {
     title: "Oldest Draft",
     artistName: "O. Draft",
     status: "draft",
   });
-  liveId = await createWork(collectionId, owner.cookies, {
+  liveId = await createWork(catalogueId, owner.cookies, {
     title: "Still Live",
     artistName: "L. Live",
     status: "published",
@@ -174,7 +174,7 @@ describe("GET /catalogues/{cid}/deleted-artworks", () => {
   it("lists only deleted works, most recently deleted first, serialized like the live list", async () => {
     const res = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/deleted-artworks`,
+      `/api/v1/catalogues/${catalogueId}/deleted-artworks`,
       { cookies: owner.cookies },
     );
     expect(res.status).toBe(200);
@@ -207,7 +207,7 @@ describe("GET /catalogues/{cid}/deleted-artworks", () => {
   it("refuses a non-member on a public catalogue, an anonymous caller, and 404s a missing catalogue", async () => {
     await expectRefusal({
       method: "GET",
-      target: collectionId,
+      target: catalogueId,
       path: (id) => `/api/v1/catalogues/${id}/deleted-artworks`,
       memberCookies: owner.cookies,
       strangerCookies: stranger.cookies,
@@ -217,11 +217,11 @@ describe("GET /catalogues/{cid}/deleted-artworks", () => {
   it("shows a collaborator the same deleted works", async () => {
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId, userId: mate.userId });
+      .values({ catalogueId, userId: mate.userId });
 
     const res = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/deleted-artworks`,
+      `/api/v1/catalogues/${catalogueId}/deleted-artworks`,
       { cookies: mate.cookies },
     );
     expect(res.status).toBe(200);
@@ -397,7 +397,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
   it("brings back a published work with its status, fields, photos and documents, publicly visible again", async () => {
     const restored = await req(
       "POST",
-      `/api/v1/catalogues/${collectionId}/artworks/${newestId}/restore`,
+      `/api/v1/catalogues/${catalogueId}/artworks/${newestId}/restore`,
       { cookies: owner.cookies },
     );
     expect(restored.status).toBe(200);
@@ -405,7 +405,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
 
     const read = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/artworks/${newestId}`,
+      `/api/v1/catalogues/${catalogueId}/artworks/${newestId}`,
       { cookies: owner.cookies },
     );
     expect(read.status).toBe(200);
@@ -421,7 +421,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
     // Restore is the inverse of delete: a published work is public again.
     const publicList = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/artworks`,
+      `/api/v1/catalogues/${catalogueId}/artworks`,
     );
     expect(publicList.status).toBe(200);
     const publicIds = (await json<{ id: string }[]>(publicList)).map(
@@ -431,7 +431,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
     expect(publicIds).toContain(liveId);
 
     const deleted = await json<{ id: string }[]>(
-      await req("GET", `/api/v1/catalogues/${collectionId}/deleted-artworks`, {
+      await req("GET", `/api/v1/catalogues/${catalogueId}/deleted-artworks`, {
         cookies: owner.cookies,
       }),
     );
@@ -441,14 +441,14 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
   it("keeps a restored draft a draft, still absent from the public list", async () => {
     const restored = await req(
       "POST",
-      `/api/v1/catalogues/${collectionId}/artworks/${oldestDraftId}/restore`,
+      `/api/v1/catalogues/${catalogueId}/artworks/${oldestDraftId}/restore`,
       { cookies: owner.cookies },
     );
     expect(restored.status).toBe(200);
 
     const read = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/artworks/${oldestDraftId}`,
+      `/api/v1/catalogues/${catalogueId}/artworks/${oldestDraftId}`,
       { cookies: owner.cookies },
     );
     expect(read.status).toBe(200);
@@ -458,7 +458,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
 
     const publicList = await req(
       "GET",
-      `/api/v1/catalogues/${collectionId}/artworks`,
+      `/api/v1/catalogues/${catalogueId}/artworks`,
     );
     const publicIds = (await json<{ id: string }[]>(publicList)).map(
       (row) => row.id,

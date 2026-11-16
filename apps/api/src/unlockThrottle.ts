@@ -1,7 +1,7 @@
 // The unlock throttle's policy, in one place: how long a window is and where
 // an attempt's window starts.
 //
-// The route owns the rows (`collection_unlock_attempts`, written and read by
+// The route owns the rows (`catalogueUnlockAttempts`, written and read by
 // the unlock route alone) and the arithmetic that spends them; this module
 // owns the number and the flooring, so the choice between a fixed and a
 // sliding window is visible without reading SQL. No database and no Hono.

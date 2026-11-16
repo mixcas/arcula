@@ -124,7 +124,7 @@ export async function readArtistNames(userId: string): Promise<string[]> {
     .from(artworksTable)
     .innerJoin(
       cataloguesTable,
-      eq(cataloguesTable.id, artworksTable.collectionId),
+      eq(cataloguesTable.id, artworksTable.catalogueId),
     )
     .leftJoin(catalogueCollaboratorsTable, collaboratorJoin(userId))
     .where(readableCataloguesWhere(userId, isNull(artworksTable.deletedAt)))

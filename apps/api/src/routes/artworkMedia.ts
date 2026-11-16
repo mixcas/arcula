@@ -16,9 +16,8 @@
 // discard reach only their own staged objects and one member can neither
 // process nor discard another's unsaved upload.
 //
-// The mount below carries both names: `/catalogues/…` and the legacy
-// `/collections/…` (ADR-0010, #246), from one route app and one set of
-// handlers.
+// The routes mount under the catalogue's own address, carrying their own
+// segments, from one route app and one set of handlers.
 
 import { MINTED_ID_RE } from "@arcula/shared";
 import { Hono } from "hono";
@@ -48,7 +47,6 @@ import {
   WEBP_TYPE,
 } from "../media/pipeline";
 import { deleteObject, listObjects, putObject, readObject } from "../storage";
-import { legacyCollectionPath } from "./paths";
 
 // Ids are client-minted and become key segments: letters and digits only —
 // nothing that could carry a path separator, a dot or a hyphen (the route
@@ -73,12 +71,12 @@ const isImage = (contentType: string | null): boolean =>
  * `abc_xlarge.webp` from `abc_d.jpg`. */
 async function discardEntry(
   userId: string,
-  collectionId: string,
+  catalogueId: string,
   artworkId: string,
   entryId: string,
 ): Promise<number> {
   const keys = await listObjects(
-    stagedArtworkPrefix(userId, collectionId, artworkId),
+    stagedArtworkPrefix(userId, catalogueId, artworkId),
   );
   const doomed = keys.filter((key) => {
     const parsed = parseMediaKey(key);
@@ -115,7 +113,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Stage
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/stage`, requireSession, limit, async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -195,7 +193,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Process
   // ------------------------------------------------------------------
   r.post(`/${pop.population}/process`, requireSession, async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -265,7 +263,7 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
   // Discard
   // ------------------------------------------------------------------
   r.delete(`/${pop.population}/:entryId`, requireSession, async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
     const artworkId = param(c, "artworkId");
     if (!MINTED_ID_RE.test(artworkId)) {
       throw invalid("The artwork id is not valid");
@@ -294,7 +292,6 @@ export const artworkMediaRoutes = new Hono();
 
 for (const kind of POPULATION_KINDS) {
   const routes = buildMediaRoutes(kind);
-  const path = "/catalogues/:collectionId/artworks/:artworkId";
+  const path = "/catalogues/:catalogueId/artworks/:artworkId";
   artworkMediaRoutes.route(path, routes);
-  artworkMediaRoutes.route(legacyCollectionPath(path), routes);
 }

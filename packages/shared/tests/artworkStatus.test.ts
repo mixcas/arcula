@@ -30,7 +30,7 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
   artistName: "Whistler",
   documents: [],
   photos: [],
-  collectionId: "c1",
+  catalogueId: "c1",
   deletedAt: null,
   createdAt: { seconds: 0, nanoseconds: 0 },
   updatedAt: { seconds: 0, nanoseconds: 0 },
@@ -40,7 +40,7 @@ const wireArtwork = (overrides: Record<string, unknown> = {}) => ({
 const storedArtwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: "a1",
   userId: "u1",
-  collectionId: "c1",
+  catalogueId: "c1",
   title: "Nocturne",
   artistName: "Whistler",
   documents: [],

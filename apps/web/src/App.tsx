@@ -19,7 +19,6 @@ import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
-import LegacyCatalogueRedirect from "./components/LegacyCatalogueRedirect";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./auth/AuthProvider";
 
@@ -170,26 +169,6 @@ const App: React.FC = () => {
             >
               <CataloguePdfPage />
             </React.Suspense>
-          }
-        />
-
-        {/* The addresses the unit had before the rename: both families move to
-            the catalogue spelling with the rest of the path, the query and the
-            hash kept. Removed in the contract step (#248), once no old link
-            can still be in the wild. */}
-        <Route
-          path="/collection/*"
-          element={
-            <LegacyCatalogueRedirect from="/collection" to="/catalogue" />
-          }
-        />
-        <Route
-          path="/manage/collection/*"
-          element={
-            <LegacyCatalogueRedirect
-              from="/manage/collection"
-              to="/manage/catalogue"
-            />
           }
         />
 

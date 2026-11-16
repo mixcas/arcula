@@ -91,7 +91,7 @@ export const artworkDocumentReadSchema = z.discriminatedUnion("kind", [
 ]);
 
 /**
- * GET /collections/{cid}/artworks/{aid} and the list's per-work rows.
+ * GET /catalogues/{cid}/artworks/{aid} and the list's per-work rows.
  * `deletedAt` is the one wire field that may honestly be `null`: a soft-
  * deleted work is still readable by its owner, and the serializer writes
  * the marker through.
@@ -115,7 +115,7 @@ export const artworkReadSchema = z.object({
   currentValue: z.string().optional(),
   documents: z.array(artworkDocumentReadSchema),
   photos: z.array(artworkPhotoReadSchema),
-  collectionId: z.string(),
+  catalogueId: z.string(),
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status: artworkStatusSchema.default("published"),
@@ -125,7 +125,7 @@ export const artworkReadSchema = z.object({
 });
 
 /**
- * GET /collections (list rows) and GET /collections/{cid}. The serializer
+ * GET /catalogues (list rows) and GET /catalogues/{cid}. The serializer
  * omits `description`, `skin` and `skinOptions` when unset — the shape a
  * document written before the fields existed had — so all three are
  * optional, as they are on the client type.
@@ -158,12 +158,6 @@ export const catalogueReadSchema = z.object({
 export type ArtworkRead = z.infer<typeof artworkReadSchema>;
 
 export type CatalogueRead = z.infer<typeof catalogueReadSchema>;
-
-// The schema's older spellings, alias-kept while the API and web migrate
-// (ADR-0010). The field keys inside stay `collectionId`/`name`/... until the
-// contract step flips them.
-export const collectionReadSchema = catalogueReadSchema;
-export type CollectionRead = CatalogueRead;
 
 // One direction only, and that is deliberate: the wire shape must be a valid
 // `Artwork`/`Catalogue` (asserted below), so anything the service layer

@@ -31,17 +31,17 @@ media pipeline, and — in production — serving the built SPA.
 | -------------------------- | ------------------------------------------------------------------- |
 | `GET` / `PATCH`            | `/me`                                                               |
 | `GET`                      | `/media?key=` — the object proxy (re-checks visibility per request) |
-| `GET` / `POST`             | `/collections`                                                      |
-| `GET` / `PATCH` / `DELETE` | `/collections/:collectionId`                                        |
-| `POST`                     | `/collections/:collectionId/unlock`                                 |
-| `POST`                     | `/collections/:collectionId/import/csv`                             |
-| `GET`                      | `/collections/:collectionId/deleted-artworks`                       |
-| `POST`                     | `/collections/:collectionId/artworks/bulk-delete`                   |
-| `POST`                     | `/collections/:collectionId/artworks/bulk-restore`                  |
-| `POST`                     | `/collections/:collectionId/artworks/:artworkId/restore`            |
-| `POST`                     | `/collections/:collectionId/maintenance/sweep`                      |
-| `GET` / `POST`             | `/collections/:collectionId/artworks`                               |
-| `GET` / `PATCH`            | `/collections/:collectionId/artworks/:artworkId`                    |
+| `GET` / `POST`             | `/catalogues`                                                       |
+| `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId`                                          |
+| `POST`                     | `/catalogues/:catalogueId/unlock`                                   |
+| `POST`                     | `/catalogues/:catalogueId/import/csv`                               |
+| `GET`                      | `/catalogues/:catalogueId/deleted-artworks`                         |
+| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-delete`                     |
+| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-restore`                    |
+| `POST`                     | `/catalogues/:catalogueId/artworks/:artworkId/restore`              |
+| `POST`                     | `/catalogues/:catalogueId/maintenance/sweep`                        |
+| `GET` / `POST`             | `/catalogues/:catalogueId/artworks`                                 |
+| `GET` / `PATCH`            | `/catalogues/:catalogueId/artworks/:artworkId`                      |
 | `POST`                     | `…/artworks/:artworkId/photos/stage` · `…/process`                  |
 | `DELETE`                   | `…/artworks/:artworkId/photos/:entryId`                             |
 | `POST` / `DELETE`          | the same three under `/documents`                                   |
@@ -64,69 +64,69 @@ transferring.
 accepted design for all of it.
 
 Access is membership. `access.ts` answers the visitor and access questions as
-pure functions over the collection, the viewer's membership and the row:
-the owner (`collections.userId`) and every row of `collection_collaborators`
-read every live work in the collection — drafts included — and a deleted work by
-id, and its documents, at every status, never a visitor. A collection's
+pure functions over the catalogue, the viewer's membership and the row:
+the owner (`catalogues.userId`) and every row of `catalogueCollaborators`
+read every live work in the catalogue — drafts included — and a deleted work by
+id, and its documents, at every status, never a visitor. A catalogue's
 **Deleted** view lists the works carrying a deletion stamp, most recently
 deleted first, and restores one or several; it is member-only, even on a public
-collection. `authorize.ts` loads the collection and the viewer's membership row
+catalogue. `authorize.ts` loads the catalogue and the viewer's membership row
 for every read, and every write path asks the same membership question through
-`requireMemberCollection` / `requireMemberArtwork`: a collaborator changes every
+`requireMemberCatalogue` / `requireMemberArtwork`: a collaborator changes every
 setting (public/private included), creates, edits, imports, bulk-deletes,
 restores and sweeps exactly as the owner does, while a non-member gets `403`
-and a missing collection `404`. Only deleting the collection and the
+and a missing catalogue `404`. Only deleting the catalogue and the
 access-administration routes below stay owner-only. A save records
-`artworks.userId` as the collection's owner, never the session user:
-it is a mirror, not an authorization fact. `GET /collections` returns owned
-and shared collections together, name-ordered, each row with `role` and — on
+`artworks.userId` as the catalogue's owner, never the session user:
+it is a mirror, not an authorization fact. `GET /catalogues` returns owned
+and shared catalogues together, name-ordered, each row with `role` and — on
 a shared row — the owner's display name as `ownerName`; the public list keeps
-its shape, and the dashboard's cap counter counts owned live collections only.
-Final media keys use the collection's fixed `mediaNamespaceId`, staging is per
+its shape, and the dashboard's cap counter counts owned live catalogues only.
+Final media keys use the catalogue's fixed `mediaNamespaceId`, staging is per
 uploader, and the proxy's staging branch admits the uploader whose prefix holds
-the object while they are still a member of the collection.
+the object while they are still a member of the catalogue.
 
-The invitation loop is built: `POST /collections/:id/invitations` writes a
+The invitation loop is built: `POST /catalogues/:id/invitations` writes a
 pending row and mails `CLIENT_ORIGIN/invite/:token`; the public
 `GET /invitations/:token` previews it, and the invited account accepts or
 declines with that token. The raw token is never stored — only its SHA-256
 hash — and acceptance needs both the token and a session whose email matches.
-`GET /collections/:id/access` is the access read: the caller's role, the owner
+`GET /catalogues/:id/access` is the access read: the caller's role, the owner
 and the collaborators to every member, plus the pending invitations (expired
 ones included) to the owner alone. Resend rotates the token, the expiry and the
 issue time on the same pending row, once every 60 seconds; revoke records the
 resolution. The invitee's `GET /me/invitations` lists the pending, unexpired
-offers for their own address, each with the collection's name and the inviter's
+offers for their own address, each with the catalogue's name and the inviter's
 display name — never a token and never the inviter's address — and the in-app
 decline answers `not-found` for anything that is not their own live offer. Access ends in two
-places: the owner's `DELETE /collections/:id/collaborators/:userId` (removal,
+places: the owner's `DELETE /catalogues/:id/collaborators/:userId` (removal,
 `409` when the target is not a collaborator or is the owner) and the
-collaborator's `DELETE /collections/:id/collaborators/me` (leaving, `409` for
+collaborator's `DELETE /catalogues/:id/collaborators/me` (leaving, `409` for
 the owner — transfer first — and `403` for a non-member). Both delete the
 membership row, so the account is a visitor on its next request, and discard
-that account's staging prefix for the collection, best effort: a storage failure
+that account's staging prefix for the catalogue, best effort: a storage failure
 does not fail the action, and the staging lifecycle is the backstop. Saved works
-and their final objects are untouched. The owner hands the collection over with
-`POST /collections/:id/transfer`: the target must already be a collaborator
-(`409` otherwise), and one transaction moves `collections.userId`, mirrors
+and their final objects are untouched. The owner hands the catalogue over with
+`POST /catalogues/:id/transfer`: the target must already be a collaborator
+(`409` otherwise), and one transaction moves `catalogues.userId`, mirrors
 `artworks.userId`, removes the recipient's membership row and inserts the
 previous owner's. The media namespace is fixed, so no object moves and every
 existing URL keeps serving its bytes; the new owner is mailed a manage-page link
 after the commit, and `emailSent: false` does not undo the transfer.
 
-| Method   | Path                                                          |
-| -------- | ------------------------------------------------------------- |
-| `GET`    | `/collections/:collectionId/access`                           |
-| `POST`   | `/collections/:collectionId/invitations`                      |
-| `POST`   | `/collections/:collectionId/invitations/:invitationId/resend` |
-| `DELETE` | `/collections/:collectionId/invitations/:invitationId`        |
-| `DELETE` | `/collections/:collectionId/collaborators/:userId`            |
-| `DELETE` | `/collections/:collectionId/collaborators/me`                 |
-| `POST`   | `/collections/:collectionId/transfer`                         |
-| `GET`    | `/invitations/:token`                                         |
-| `POST`   | `/invitations/:token/accept` · `/invitations/:token/decline`  |
-| `GET`    | `/me/invitations`                                             |
-| `POST`   | `/me/invitations/:invitationId/decline`                       |
+| Method   | Path                                                         |
+| -------- | ------------------------------------------------------------ |
+| `GET`    | `/catalogues/:catalogueId/access`                            |
+| `POST`   | `/catalogues/:catalogueId/invitations`                       |
+| `POST`   | `/catalogues/:catalogueId/invitations/:invitationId/resend`  |
+| `DELETE` | `/catalogues/:catalogueId/invitations/:invitationId`         |
+| `DELETE` | `/catalogues/:catalogueId/collaborators/:userId`             |
+| `DELETE` | `/catalogues/:catalogueId/collaborators/me`                  |
+| `POST`   | `/catalogues/:catalogueId/transfer`                          |
+| `GET`    | `/invitations/:token`                                        |
+| `POST`   | `/invitations/:token/accept` · `/invitations/:token/decline` |
+| `GET`    | `/me/invitations`                                            |
+| `POST`   | `/me/invitations/:invitationId/decline`                      |
 
 A malformed email is `validation` (400); a state conflict is `conflict` (409); a
 collaborator attempting an owner-only access change is `forbidden` (403); a
@@ -136,72 +136,72 @@ invalid, expired, revoked, consumed or unknown invitation token is one
 own live offer. The SPA's landing page is `/invite/:token`; the API preview is
 `GET /invitations/:token`.
 
-## Protected collections
+## Protected catalogues
 
-A **Protected** collection is a **Public** collection with a password: the
-password is a second condition on the collection's gate, never a third
+A **Protected** catalogue is a **Public** catalogue with a password: the
+password is a second condition on the catalogue's gate, never a third
 visibility state
 ([ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
-A **Private** collection stays shut to a grant holder exactly as it is to every
+A **Private** catalogue stays shut to a grant holder exactly as it is to every
 other visitor.
 
-**The password write is the collection update.** `PATCH
-/collections/:collectionId` takes `password` with the three meanings the
+**The password write is the catalogue update.** `PATCH
+/catalogues/:catalogueId` takes `password` with the three meanings the
 settings form needs: a string sets or overwrites it (eight characters minimum,
 deliberately not trimmed), `null` removes it, and an absent key leaves the
-column alone — which is why taking a collection private and public again
+column alone — which is why taking a catalogue private and public again
 returns it to Protected. The plaintext is hashed with `scrypt`, the cost
 parameters encoded in the stored string, before the transaction; the settings
-write and the deletion of **every** Access grant row for the collection then
+write and the deletion of **every** Access grant row for the catalogue then
 commit in one transaction, so a password change can never leave a reader
 holding a grant to the old password. A `null` write revokes too, though there
 is nothing left to admit. The hash itself is never a wire field.
 
-**Reading a Protected collection.** `isPasswordProtected` is on every
-member-audience collection document — each signed-in `GET /collections` row,
-`GET /collections/:collectionId` for the owner or a collaborator, and the
-`POST /collections` and `PATCH /collections/:collectionId` responses — derived
+**Reading a Protected catalogue.** `isPasswordProtected` is on every
+member-audience catalogue document — each signed-in `GET /catalogues` row,
+`GET /catalogues/:catalogueId` for the owner or a collaborator, and the
+`POST /catalogues` and `PATCH /catalogues/:catalogueId` responses — derived
 from the hash's presence. A visitor's document does not carry the field at
-all, not even `false`. The anonymous `GET /collections` omits a Protected
-collection exactly as it omits a Private one, so a Protected collection is
+all, not even `false`. The anonymous `GET /catalogues` omits a Protected
+catalogue exactly as it omits a Private one, so a Protected catalogue is
 reachable only by its direct link.
 Membership bypasses the challenge; a non-member needs a valid Access grant. A
-refused collection read is `403 password-required` with the collection's name
-in `details.collectionName`, which the public pages fold to the lock screen. A
+refused catalogue read is `403 password-required` with the catalogue's name
+in `details.catalogueName`, which the public pages fold to the lock screen. A
 refused work, artwork list or media object is not that challenge: the list
-answers `403 forbidden` (as a Private collection does), and a single work or a
+answers `403 forbidden` (as a Private catalogue does), and a single work or a
 photo object answers `404` (a document is `403` to a non-member, whatever the
-collection).
+catalogue).
 
-**Unlocking.** `POST /collections/:collectionId/unlock` takes
+**Unlocking.** `POST /catalogues/:catalogueId/unlock` takes
 `{ "password": "…" }` — any non-empty guess, not the eight-character rule,
 because a short guess is a wrong password rather than a malformed request. A
 right password answers `201` `{ "unlocked": true }` and sets the Access grant
 cookie. A wrong one is `403 invalid-password`, deliberately distinct from the
 uniform `not-found` an invitation token gets: the lock screen already named the
-collection, so it can say "that is not it". A collection with no password, or a
+catalogue, so it can say "that is not it". A catalogue with no password, or a
 Private one, has nothing to get past and answers `409 conflict`; an unknown
-collection is `404`. A grant admits exactly what a visitor sees — published,
+catalogue is `404`. A grant admits exactly what a visitor sees — published,
 live works, and never a draft or a document.
 
-**The Access grant.** The cookie is `arcula_grant_{collectionId}`:
+**The Access grant.** The cookie is `arcula_grant_{catalogueId}`:
 `HttpOnly`, `SameSite=Lax`, `Path=/api/v1`, `Max-Age=43200` (twelve hours), and
 `Secure` in production. Its value is a 32-byte random token; the row stores
 only its SHA-256 hash, with the same twelve-hour expiry, so the cookie lapses
 when the row does. The cookie's name is its scope: each route reads only the
-name for the collection it serves and looks the row up by collection id and
-token hash, so the broad path does not admit one collection's grant to
+name for the catalogue it serves and looks the row up by catalogue id and
+token hash, so the broad path does not admit one catalogue's grant to
 another's reads. An expired or revoked grant lands the reader back on the lock
 screen.
 
-**The unlock throttle.** Guessing is counted in `collection_unlock_attempts`,
-one row per address, collection and **fixed** ten-minute window, floored from
+**The unlock throttle.** Guessing is counted in `catalogueUnlockAttempts`,
+one row per address, catalogue and **fixed** ten-minute window, floored from
 the attempt's own time. Ten failures spend the window and the eleventh attempt
 is refused unread — before the password is checked — as `429
 too-many-attempts` with `details.windowMinutes`. The refusal states the window
 and not the time left in it, and sends no `Retry-After`. A right password
-deletes every counter row for that address and collection, so a member who
-mistyped carries no debt; the pair is the key, so one collection's throttle
+deletes every counter row for that address and catalogue, so a member who
+mistyped carries no debt; the pair is the key, so one catalogue's throttle
 cannot lock a shared address out of another's. The address is the gateway's
 `sourceIp`, carried by the Lambda entry in `x-arcula-client-ip` and never read
 from a forwarding header (`clientAddress.ts`).
@@ -210,12 +210,12 @@ from a forwarding header (`clientAddress.ts`).
 
 - `auth.ts` · `session.ts` · `access.ts` · `authorize.ts` — the Better Auth
   instance (Drizzle adapter), session resolution, the pure access verdicts, and
-  the collection, membership and row checks the routes share.
-- `collectionPassword.ts` — the stored password's two facts: `hashPassword`
+  the catalogue, membership and row checks the routes share.
+- `cataloguePassword.ts` — the stored password's two facts: `hashPassword`
   (scrypt, with the cost encoded in the string) and `verifyPassword`. No
   plaintext is stored or logged, and a malformed hash is a failed check, not a
   `500`.
-- `collectionGrants.ts` — the Access grant's pure facts: the 32-byte token,
+- `catalogueGrants.ts` — the Access grant's pure facts: the 32-byte token,
   its SHA-256 hash, the cookie name and path, the twelve-hour lifetime, and
   whether a row is still usable. No database and no Hono.
 - `unlockThrottle.ts` — the throttle's policy: the fixed ten-minute window and
@@ -231,7 +231,7 @@ from a forwarding header (`clientAddress.ts`).
 
 - `media/keys.ts` — the object-key algebra (final and staging) and its parser;
   the parser is what makes the proxy's per-request authorization work from the
-  key alone. With sharing, final keys use the collection's fixed
+  key alone. With sharing, final keys use the catalogue's fixed
   `mediaNamespaceId` and staging keys use the uploader's id.
 - `media/pipeline.ts` — Sharp: one decode, EXIF orientation, WebP variants.
 - `media/variants.ts` — the variant geometry; one table drives the encoder, the

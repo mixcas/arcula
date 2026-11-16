@@ -34,16 +34,16 @@ beforeAll(async () => {
   // they were added, and one multi-row insert would tie them.
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: mate.userId });
+    .values({ catalogueId: cid, userId: mate.userId });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: mate2.userId,
   });
   // A stray row naming the owner — a hand-written seed, a former transfer's
   // leftover. The owner is the column, so it must not list them twice.
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: cid, userId: owner.userId });
+    .values({ catalogueId: cid, userId: owner.userId });
 });
 
 afterAll(async () => {
@@ -53,19 +53,19 @@ afterAll(async () => {
 describe("GET /catalogues/{cid}/access", () => {
   it("gives the owner the members and every pending invitation", async () => {
     const live = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Live-Access@Example.Test",
     });
     const expired = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Lapsed-Access@Example.Test",
       createdAt: new Date(Date.now() - 8 * 86_400_000),
       expiresAt: new Date(Date.now() - 86_400_000),
     });
     const resolved = await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "Resolved-Access@Example.Test",
       status: "revoked",
@@ -104,7 +104,7 @@ describe("GET /catalogues/{cid}/access", () => {
 
   it("gives a collaborator the members and no invitation data at all", async () => {
     await makeInvitation({
-      collectionId: cid,
+      catalogueId: cid,
       invitedByUserId: owner.userId,
       email: "NotForCollaborators@Example.Test",
     });

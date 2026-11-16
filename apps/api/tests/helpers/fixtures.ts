@@ -46,13 +46,13 @@ export async function makeCatalogue(
 
 export async function makeArtwork(
   userId: string,
-  collectionId: string,
+  catalogueId: string,
 ): Promise<string> {
   const id = uuid();
   await db.insert(artworksTable).values({
     id,
     userId,
-    collectionId,
+    catalogueId,
     title: "Test Artwork",
     artistName: "Test Artist",
     status: "published",
@@ -168,7 +168,7 @@ export async function discardEntry(
  * an address no account owns yet.
  */
 export async function makeInvitation(opts: {
-  collectionId: string;
+  catalogueId: string;
   invitedByUserId: string;
   email: string;
   status?: "pending" | "accepted" | "declined" | "revoked";
@@ -186,7 +186,7 @@ export async function makeInvitation(opts: {
   const status = opts.status ?? "pending";
   await db.insert(invitationsTable).values({
     id,
-    collectionId: opts.collectionId,
+    catalogueId: opts.catalogueId,
     email: opts.storeEmailAsGiven
       ? opts.email
       : opts.email.trim().toLowerCase(),

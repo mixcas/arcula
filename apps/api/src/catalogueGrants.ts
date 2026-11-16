@@ -31,8 +31,8 @@ export const GRANT_TTL_MS = 12 * 60 * 60 * 1000;
 export const GRANT_COOKIE_PATH = "/api/v1";
 
 /** The one cookie this catalogue's unlock mints and its routes read. */
-export const grantCookieName = (collectionId: string): string =>
-  `arcula_grant_${collectionId}`;
+export const grantCookieName = (catalogueId: string): string =>
+  `arcula_grant_${catalogueId}`;
 
 export const hashGrantToken = (token: string): string =>
   createHash("sha256").update(token).digest("hex");

@@ -11,7 +11,7 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  collections: string[]; // Array of catalogue ids
+  catalogues: string[]; // Array of catalogue ids
 }
 
 // Catalogue type
@@ -50,12 +50,6 @@ export interface Catalogue {
   updatedAt?: Timestamp;
 }
 
-// The name this unit carried before ADR-0010 made Catalogue the umbrella:
-// one kind of catalogue now, rather than the name of all of them. Kept as an
-// alias while the API and the web still speak it; the contract step deletes
-// it, and until then either spelling names the same wire type.
-export type Collection = Catalogue;
-
 // The owner's choice for a work: `published` puts it in front of the
 // catalogue's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.
@@ -79,16 +73,13 @@ export type CatalogueKind = "portfolio" | "collection" | "inventory";
 // administration (invite, remove, transfer) is the owner's.
 export type CatalogueRole = "owner" | "collaborator";
 
-// The role's older spelling, alias-kept like `Collection` itself.
-export type CollectionRole = CatalogueRole;
-
 // Artwork type
 //
 // Only `title` and `artistName` are required; every other descriptive field is
 // optional so an absent key can be distinguished from a set-but-empty value.
 // `documents` and `photos` are always written — as [] when the artwork has
 // none — so a reader never has to distinguish an absent field from an empty
-// list, and collectionId/userId are always supplied by the creating code path.
+// list, and catalogueId/userId are always supplied by the creating code path.
 export interface Artwork {
   id: string;
   userId: string; // Reference to the owner
@@ -114,7 +105,7 @@ export interface Artwork {
   condition?: string;
   currentValue?: string;
   photos: ArtworkPhoto[]; // Ordered, up to MAX_ARTWORK_PHOTOS. Index 0 is the primary thumbnail
-  collectionId: string; // Reference to the parent catalogue
+  catalogueId: string; // Reference to the parent catalogue
   // The owner's choice, and the only per-work field a visitor is gated on.
   // Absent on a document written before it existed, and read as `published`.
   status?: ArtworkStatus;

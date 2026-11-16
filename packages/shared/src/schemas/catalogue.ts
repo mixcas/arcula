@@ -9,11 +9,11 @@ import { MINTED_ID_RE } from "./artwork";
  */
 
 /**
- * POST /collections. The id is minted server-side; the client sends only
+ * POST /catalogues. The id is minted server-side; the client sends only
  * name/description.
  */
 export const catalogueCreateSchema = z.object({
-  name: z.string().trim().min(1, "Collection name is required"),
+  name: z.string().trim().min(1, "Catalogue name is required"),
   description: z
     .string()
     .trim()
@@ -25,11 +25,6 @@ export const catalogueCreateSchema = z.object({
 });
 
 export type CatalogueCreatePayload = z.infer<typeof catalogueCreateSchema>;
-
-// The payload's older spelling, alias-kept while the API and web migrate
-// (ADR-0010). The contract step deletes it.
-export const collectionCreateSchema = catalogueCreateSchema;
-export type CollectionCreatePayload = CatalogueCreatePayload;
 
 // In a JSON payload a field is either a value, `null` (clear), or absent
 // (leave alone) — the same contract the artwork PATCH uses. A string must be
@@ -50,7 +45,7 @@ export const passwordSchema = z
   .min(8, "Password must be at least 8 characters");
 
 /**
- * PATCH /collections/{cid}. Every field is optional, and an absent key leaves
+ * PATCH /catalogues/{cid}. Every field is optional, and an absent key leaves
  * the column alone: the settings tabs send only what that tab changed, so the
  * contract no longer exempts any field from the rule that absent leaves alone.
  * A save that names nothing is a valid, successful no-op — no column changes,
@@ -64,7 +59,7 @@ export const passwordSchema = z
  * every password write revokes the catalogue's outstanding grants.
  */
 export const catalogueUpdateSchema = z.object({
-  name: z.string().trim().min(1, "Collection name is required").optional(),
+  name: z.string().trim().min(1, "Catalogue name is required").optional(),
   isPublic: z.boolean().optional(),
   description: clearableText,
   skin: clearableText,
@@ -77,11 +72,8 @@ export const catalogueUpdateSchema = z.object({
 
 export type CatalogueUpdatePayload = z.infer<typeof catalogueUpdateSchema>;
 
-export const collectionUpdateSchema = catalogueUpdateSchema;
-export type CollectionUpdatePayload = CatalogueUpdatePayload;
-
 /**
- * POST /collections/{cid}/unlock. An attempt at a Protected catalogue's
+ * POST /catalogues/{cid}/unlock. An attempt at a Protected catalogue's
  * password, from the lock screen.
  *
  * Deliberately NOT `passwordSchema`: any non-blank string is a fair guess, and
@@ -90,16 +82,13 @@ export type CollectionUpdatePayload = CatalogueUpdatePayload;
  * singled out from one that merely is not.
  */
 export const catalogueUnlockSchema = z.object({
-  password: z.string().min(1, "Enter the collection's password"),
+  password: z.string().min(1, "Enter the catalogue's password"),
 });
 
 export type CatalogueUnlockPayload = z.infer<typeof catalogueUnlockSchema>;
 
-export const collectionUnlockSchema = catalogueUnlockSchema;
-export type CollectionUnlockPayload = CatalogueUnlockPayload;
-
 /**
- * POST /collections/{cid}/import/csv. The envelope is deliberately loose
+ * POST /catalogues/{cid}/import/csv. The envelope is deliberately loose
  * (`rows` is an array of unknowns): a row that fails the shared
  * `artworkSchema` belongs in the 200 response's `rejected`, not in a 400
  * that fails the whole batch — the review step already told the user which
@@ -131,7 +120,7 @@ export const artworkImportOutcomeSchema = z.object({
 export type ArtworkImportOutcome = z.infer<typeof artworkImportOutcomeSchema>;
 
 /**
- * POST /collections/{cid}/artworks/bulk-delete. The ids are the ones the
+ * POST /catalogues/{cid}/artworks/bulk-delete. The ids are the ones the
  * client minted (the table lists them), so the shared minted-id rule is
  * the right one to check against.
  */
@@ -144,7 +133,7 @@ export const artworkBulkDeleteSchema = z.object({
 export type ArtworkBulkDeletePayload = z.infer<typeof artworkBulkDeleteSchema>;
 
 /**
- * POST /collections/{cid}/artworks/bulk-restore. The same selection the batch
+ * POST /catalogues/{cid}/artworks/bulk-restore. The same selection the batch
  * soft delete takes — the ids the client minted — so the two halves of the
  * Deleted view share one request shape and one validation rule. The answer is
  * `{ restored: n }`: how many rows this call actually moved.

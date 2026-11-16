@@ -64,7 +64,7 @@ interface WorkValues {
 }
 
 async function insertWork(
-  collectionId: string,
+  catalogueId: string,
   userId: string,
   values: WorkValues,
 ): Promise<string> {
@@ -72,7 +72,7 @@ async function insertWork(
   await db.insert(artworksTable).values({
     id,
     userId,
-    collectionId,
+    catalogueId,
     title: values.title,
     artistName: values.artistName ?? values.title,
     serie: values.serie ?? null,
@@ -92,12 +92,12 @@ async function insertWork(
   return id;
 }
 
-const listPath = (collectionId = cid) =>
-  `/api/v1/catalogues/${collectionId}/artworks`;
+const listPath = (catalogueId = cid) =>
+  `/api/v1/catalogues/${catalogueId}/artworks`;
 
 /** The list address for a committed search, encoded as a browser would. */
-const searchPath = (query: string, collectionId = cid) =>
-  `${listPath(collectionId)}?q=${encodeURIComponent(query)}`;
+const searchPath = (query: string, catalogueId = cid) =>
+  `${listPath(catalogueId)}?q=${encodeURIComponent(query)}`;
 
 /** The ids of a successful list answer. */
 async function idsOf(res: Response): Promise<string[]> {
@@ -122,7 +122,7 @@ beforeAll(async () => {
     updatedAt: now,
   });
   await db.insert(collaboratorsTable).values({
-    collectionId: cid,
+    catalogueId: cid,
     userId: collaborator.userId,
   });
 

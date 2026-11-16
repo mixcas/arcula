@@ -34,10 +34,3 @@ export function catalogueLimitForTier(tier: string | null | undefined): number {
   }
   return CATALOGUE_LIMITS.free;
 }
-
-// The names this tier vocabulary carried before ADR-0010 made Catalogue the
-// unit, alias-kept while the API and web migrate. The contract step deletes
-// them.
-export type CollectionTier = CatalogueTier;
-export const COLLECTION_LIMITS = CATALOGUE_LIMITS;
-export const collectionLimitForTier = catalogueLimitForTier;

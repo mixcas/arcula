@@ -117,7 +117,7 @@ const ARTWORK_PARAM = `estudio-en-rojo-${ARTWORK_ID}`;
 const stored = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: ARTWORK_ID,
   userId: "owner-1",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",

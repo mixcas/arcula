@@ -33,10 +33,6 @@
 // failure answers `emailSent: false` and leaves the offer pending, so the
 // owner can resend without re-entering the address.
 //
-// The three catalogue-scoped paths are also registered under `/collections/…`
-// (`routes`): the legacy Collection spelling keeps answering unchanged until
-// the contract step removes it (ADR-0010, #246). The token and inbox paths
-// name no catalogue and keep their single spelling.
 
 import { and, desc, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import {
@@ -81,13 +77,8 @@ import {
   type InvitationRow,
 } from "../serialize";
 import { requireSession } from "../session";
-import { withLegacyCollectionAlias } from "./paths";
 
 export const invitationRoutes = new Hono();
-
-// The three catalogue-scoped registrations below mount under both names; the
-// token and inbox ones keep their single spelling.
-const catalogueRoutes = withLegacyCollectionAlias(invitationRoutes);
 
 /** The one answer for every link that cannot be used, whatever the reason. */
 const gone = (): ApiError =>
@@ -125,7 +116,7 @@ async function requireUsableInvitation(token: string): Promise<InvitationRow> {
 /** One invitation of this catalogue by id. The catalogue is part of the
  *  lookup, so an id from another catalogue is simply not found here. */
 async function loadCatalogueInvitation(
-  collectionId: string,
+  catalogueId: string,
   invitationId: string,
 ): Promise<InvitationRow | null> {
   const [row] = await db
@@ -134,7 +125,7 @@ async function loadCatalogueInvitation(
     .where(
       and(
         eq(catalogueInvitationsTable.id, invitationId),
-        eq(catalogueInvitationsTable.collectionId, collectionId),
+        eq(catalogueInvitationsTable.catalogueId, catalogueId),
       ),
     );
   return row ?? null;
@@ -188,11 +179,11 @@ async function sendInvitationMail(mail: InvitationMail): Promise<void> {
 // resolved row (accepted, declined, revoked) does not block a fresh one; an
 // expired pending row is reissued on the same row, because the partial unique
 // index keeps it in the pending slot and its old link is already dead.
-catalogueRoutes.post(
-  "/catalogues/:collectionId/invitations",
+invitationRoutes.post(
+  "/catalogues/:catalogueId/invitations",
   requireSession,
   async (c) => {
-    const catalogue = await requireOwnerCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireOwnerCatalogue(c, param(c, "catalogueId"));
     const user = c.get("user");
     const payload: InvitationCreatePayload = await parseBody(
       c,
@@ -214,7 +205,7 @@ catalogueRoutes.post(
         .from(catalogueCollaboratorsTable)
         .where(
           and(
-            eq(catalogueCollaboratorsTable.collectionId, catalogue.id),
+            eq(catalogueCollaboratorsTable.catalogueId, catalogue.id),
             eq(catalogueCollaboratorsTable.userId, account.id),
           ),
         );
@@ -228,7 +219,7 @@ catalogueRoutes.post(
       .from(catalogueInvitationsTable)
       .where(
         and(
-          eq(catalogueInvitationsTable.collectionId, catalogue.id),
+          eq(catalogueInvitationsTable.catalogueId, catalogue.id),
           sql`lower(${catalogueInvitationsTable.email}) = ${email}`,
           eq(catalogueInvitationsTable.status, "pending"),
         ),
@@ -241,7 +232,7 @@ catalogueRoutes.post(
     const token = mintInvitationToken();
     const row: InvitationRow = {
       id: pending?.id ?? mintId(),
-      collectionId: catalogue.id,
+      catalogueId: catalogue.id,
       email,
       invitedByUserId: user.id,
       tokenHash: hashInvitationToken(token),
@@ -292,11 +283,11 @@ catalogueRoutes.post(
 // token, a fresh seven-day expiry and a fresh issue time, which is both what
 // the link and the 60-second cooldown read. An expired pending row is exactly
 // the offer a resend exists for, so liveness is not part of the check.
-catalogueRoutes.post(
-  "/catalogues/:collectionId/invitations/:invitationId/resend",
+invitationRoutes.post(
+  "/catalogues/:catalogueId/invitations/:invitationId/resend",
   requireSession,
   async (c) => {
-    const catalogue = await requireOwnerCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireOwnerCatalogue(c, param(c, "catalogueId"));
     const invitation = await loadCatalogueInvitation(
       catalogue.id,
       param(c, "invitationId"),
@@ -358,11 +349,11 @@ catalogueRoutes.post(
 
 // DELETE — owner-only. Revoking keeps the row as history: the status says how
 // the offer ended, and the mailed link is dead the moment it is not pending.
-catalogueRoutes.delete(
-  "/catalogues/:collectionId/invitations/:invitationId",
+invitationRoutes.delete(
+  "/catalogues/:catalogueId/invitations/:invitationId",
   requireSession,
   async (c) => {
-    const catalogue = await requireOwnerCatalogue(c, param(c, "collectionId"));
+    const catalogue = await requireOwnerCatalogue(c, param(c, "catalogueId"));
     const invitation = await loadCatalogueInvitation(
       catalogue.id,
       param(c, "invitationId"),
@@ -389,7 +380,7 @@ catalogueRoutes.delete(
 // the inviter's own email stays out of an anonymous response.
 invitationRoutes.get("/invitations/:token", async (c) => {
   const invitation = await requireUsableInvitation(param(c, "token"));
-  const catalogue = await loadCatalogue(invitation.collectionId);
+  const catalogue = await loadCatalogue(invitation.catalogueId);
   const [inviter] = await db
     .select({ id: userTable.id, name: userTable.name })
     .from(userTable)
@@ -397,9 +388,7 @@ invitationRoutes.get("/invitations/:token", async (c) => {
   if (!catalogue || !inviter) throw gone();
 
   const preview: InvitationPreview = {
-    // The wire key stays `collection`: the contract is unchanged until the
-    // contract step flips it (ADR-0010, #248).
-    collection: { id: catalogue.id, name: catalogue.name },
+    catalogue: { id: catalogue.id, name: catalogue.name },
     inviter: { name: inviterDisplayName(inviter.name) },
     email: invitation.email,
     expiresAt: wireTimestamp(invitation.expiresAt),
@@ -418,7 +407,7 @@ invitationRoutes.post(
     const user = c.get("user");
     requireInvitedEmail(invitation, user.email);
 
-    const catalogue = await loadCatalogue(invitation.collectionId);
+    const catalogue = await loadCatalogue(invitation.catalogueId);
     if (!catalogue) throw gone();
     if (catalogue.userId === user.id) {
       throw conflict("You already have access to this catalogue");
@@ -428,7 +417,7 @@ invitationRoutes.post(
       .from(catalogueCollaboratorsTable)
       .where(
         and(
-          eq(catalogueCollaboratorsTable.collectionId, catalogue.id),
+          eq(catalogueCollaboratorsTable.catalogueId, catalogue.id),
           eq(catalogueCollaboratorsTable.userId, user.id),
         ),
       );
@@ -454,7 +443,7 @@ invitationRoutes.post(
       const added = await tx
         .insert(catalogueCollaboratorsTable)
         .values({
-          collectionId: catalogue.id,
+          catalogueId: catalogue.id,
           userId: user.id,
           createdAt: now,
         })
@@ -512,7 +501,7 @@ invitationRoutes.get("/me/invitations", requireSession, async (c) => {
   const rows = await db
     .select({
       invitation: catalogueInvitationsTable,
-      collectionName: cataloguesTable.name,
+      catalogueName: cataloguesTable.name,
       // The inviter is named, never addressed: the account may have no display
       // name, and the invitee is not entitled to the inviter's email. A left
       // join keeps a live offer visible even if its inviter's row is gone.
@@ -521,7 +510,7 @@ invitationRoutes.get("/me/invitations", requireSession, async (c) => {
     .from(catalogueInvitationsTable)
     .innerJoin(
       cataloguesTable,
-      eq(cataloguesTable.id, catalogueInvitationsTable.collectionId),
+      eq(cataloguesTable.id, catalogueInvitationsTable.catalogueId),
     )
     .leftJoin(
       userTable,
@@ -541,9 +530,9 @@ invitationRoutes.get("/me/invitations", requireSession, async (c) => {
     .orderBy(desc(catalogueInvitationsTable.createdAt));
 
   const inbox: InvitationInboxEntry[] = rows.map(
-    ({ invitation, collectionName, inviterName }) => ({
+    ({ invitation, catalogueName, inviterName }) => ({
       ...serializeInvitation(invitation),
-      collectionName,
+      catalogueName,
       inviterName: inviterDisplayName(inviterName),
     }),
   );

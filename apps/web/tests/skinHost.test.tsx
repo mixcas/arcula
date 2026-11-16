@@ -30,7 +30,7 @@ const catalogue: Catalogue = {
 const artwork: Artwork = {
   id: "BBBBBBBBBBBBBBBBBBBB",
   userId: "owner-1",
-  collectionId: catalogue.id,
+  catalogueId: catalogue.id,
   title: "Estudio en rojo",
   artistName: "María López",
   status: "published",

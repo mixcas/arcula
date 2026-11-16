@@ -80,7 +80,7 @@ beforeAll(async () => {
   ).toBe(true);
   await db
     .insert(collaboratorsTable)
-    .values({ collectionId: protectedId, userId: protMate.userId });
+    .values({ catalogueId: protectedId, userId: protMate.userId });
 });
 
 afterAll(async () => {
@@ -234,7 +234,7 @@ describe("GET /catalogues", () => {
       isPublic: false,
     });
     await db.insert(collaboratorsTable).values({
-      collectionId: sharedBoardId,
+      catalogueId: sharedBoardId,
       userId: mate.userId,
     });
     const own = await req("POST", "/api/v1/catalogues", {
@@ -852,7 +852,7 @@ describe("the catalogue password write", () => {
   it("overwrites the password and revokes the catalogue's grants in one write", async () => {
     const before = await storedHash();
     await db.insert(grantsTable).values({
-      collectionId: protectedId,
+      catalogueId: protectedId,
       tokenHash: `grant-${uuid()}`,
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
@@ -869,7 +869,7 @@ describe("the catalogue password write", () => {
     const grants = await db
       .select({ tokenHash: grantsTable.tokenHash })
       .from(grantsTable)
-      .where(eq(grantsTable.collectionId, protectedId));
+      .where(eq(grantsTable.catalogueId, protectedId));
     expect(grants).toEqual([]);
   });
 
@@ -942,7 +942,7 @@ describe("the catalogue password write", () => {
   it("lets a collaborator set and remove the password, as any other setting", async () => {
     await db
       .insert(collaboratorsTable)
-      .values({ collectionId: protectedId, userId: pwdMate.userId });
+      .values({ catalogueId: protectedId, userId: pwdMate.userId });
 
     const set = await patch(pwdMate.cookies, {
       name: "Renamed Wall",

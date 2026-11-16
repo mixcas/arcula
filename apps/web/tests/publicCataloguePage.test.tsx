@@ -87,7 +87,7 @@ const artwork = (
 ): Artwork => ({
   id,
   userId: "owner-1",
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   title,
   artistName: "María López",
   status,
@@ -244,7 +244,7 @@ describe("PublicCataloguePage — a protected catalogue", () => {
       "password-required",
       "This catalogue is protected",
       undefined,
-      { collectionName: "Flores Solares" },
+      { catalogueName: "Flores Solares" },
     );
 
   it("shows the lock screen naming the catalogue, and reads nothing behind it", async () => {

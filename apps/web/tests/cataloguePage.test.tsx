@@ -98,7 +98,7 @@ const artwork = (
   artistName: "Picasso",
   documents: [],
   photos: [],
-  collectionId: CATALOGUE_ID,
+  catalogueId: CATALOGUE_ID,
   status: "published",
   ...overrides,
 });
