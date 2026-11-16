@@ -50,6 +50,12 @@ export interface Collection {
   updatedAt?: Timestamp;
 }
 
+// The unit's new name, beside the old one while the rename expands (ADR-0010,
+// #244): the two are the same wire type, so a caller may say either without a
+// conversion. The Collection spelling stays until the contract step, then
+// this alias becomes the only name.
+export type Catalogue = Collection;
+
 // The owner's choice for a work: `published` puts it in front of the
 // collection's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.
@@ -60,6 +66,9 @@ export type ArtworkStatus = "draft" | "published";
 // changes every setting, public/private included, and every work. Only access
 // administration (invite, remove, transfer) is the owner's.
 export type CollectionRole = "owner" | "collaborator";
+
+// The Catalogue name for the same relationship, during the same expand window.
+export type CatalogueRole = CollectionRole;
 
 // Artwork type
 //

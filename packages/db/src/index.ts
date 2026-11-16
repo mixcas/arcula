@@ -152,6 +152,12 @@ export const collections = pgTable(
   (table) => [index("collections_user_id_idx").on(table.userId)],
 ).enableRLS();
 
+// The Catalogue name for the same table, while the rename expands (ADR-0010,
+// #244). The physical table stays `collections`, so this is one table object
+// under two export names. Deliberately not in `schema`: drizzle-kit iterates
+// that object and a second reference would render a second table.
+export const catalogues = collections;
+
 // Everyone with access except the owner. The owner is `collections.userId`
 // and is never duplicated here: one owner fact, one place.
 export const collectionCollaborators = pgTable(
