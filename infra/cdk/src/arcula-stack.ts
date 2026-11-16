@@ -83,11 +83,13 @@ export class ArculaStack extends cdk.Stack {
     //
     // CORS exists for one hop: the browser's direct `PUT` onto a presigned
     // staging URL. The origin is the app's own, because the SPA and the API
-    // are same-origin by design; `content-type` is the only header the
-    // presign signs and therefore the only one a preflight must allow
-    // (host is browser-managed and credential headers are not sent). CORS
-    // is not the authorization boundary — the presigned URL is, and it is
-    // scoped to one key, one method and one type.
+    // are same-origin by design. The allowed headers are the signed set the
+    // presigner emits — the content type, which pins what the object is
+    // stored as, and the signed `x-amz-meta-name` header that carries the
+    // original's filename; `host` is browser-managed and is the one signed
+    // header a CORS rule cannot carry ([ADR-0012]). CORS is not the
+    // authorization boundary — the presigned URL is, and it is scoped to one
+    // key, one method and one type.
     const clientOrigin = contextValue("PUBLIC_URL", "http://localhost:8000");
     const media = new s3.Bucket(this, "Media", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,

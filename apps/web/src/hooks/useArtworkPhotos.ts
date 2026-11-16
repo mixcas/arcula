@@ -33,7 +33,7 @@
 
 import { useCallback, useState } from "react";
 import {
-  isAcceptedImageType,
+  checkDeclaredUpload,
   MAX_ARTWORK_PHOTOS,
   sortPhotos,
   type ArtworkPhoto,
@@ -42,6 +42,7 @@ import {
 import { mediaService } from "@/services/mediaService";
 import {
   keySequence,
+  localRejectionReason,
   rejectionReason,
   useUploadPool,
   type Rejection,
@@ -203,12 +204,12 @@ export const useArtworkPhotos = ({
   /**
    * Add files, staging each one as it is accepted.
    *
-   * The pre-checks here are the count cap and the type allowlist — the two
-   * things the form knows before spending a round trip. The size cap is the
-   * presign route's to answer and the decode is process's, and either refusal
-   * arrives on the same `rejected` list with a reason the user can act on,
-   * which is why a too-large file does not need a client-side size check of
-   * its own.
+   * The pre-checks are the count cap and the shared `checkDeclaredUpload`
+   * guard — the same function the presign route asks, so the form and the API
+   * agree on the allowlist and the size cap by construction rather than by a
+   * second copy here. Its verdict maps to the wording the API's own refusal
+   * carries, so a file refused locally reads the way it always did; the decode
+   * is still process's, and that refusal arrives on the same `rejected` list.
    *
    * The pool — three files in flight, appended in drop order once the batch
    * has settled — is `useUploadPool`'s; what stays here is the sequence the
@@ -231,8 +232,12 @@ export const useArtworkPhotos = ({
           });
           continue;
         }
-        if (!isAcceptedImageType(file.type)) {
-          rejected.push({ file, reason: "Not a supported image" });
+        const verdict = checkDeclaredUpload("photo", file.type, file.size);
+        if (verdict !== "allowed") {
+          rejected.push({
+            file,
+            reason: localRejectionReason(verdict, "Not a supported image"),
+          });
           continue;
         }
         accepted.push(file);

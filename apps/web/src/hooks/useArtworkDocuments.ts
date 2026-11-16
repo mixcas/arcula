@@ -38,19 +38,20 @@
 
 import { useCallback, useState } from "react";
 import {
+  checkDeclaredUpload,
   MAX_ARTWORK_DOCUMENTS,
   type ArtworkDocument,
   type StagedEntry,
 } from "@arcula/shared";
 import {
   documentsChanged,
-  isAcceptedDocumentType,
   isDocumentImageType,
   sortDocuments,
 } from "@/utils/artworkDocuments";
 import { mediaService } from "@/services/mediaService";
 import {
   keySequence,
+  localRejectionReason,
   rejectionReason,
   useUploadPool,
   type Rejection,
@@ -228,12 +229,13 @@ export const useArtworkDocuments = ({
   /**
    * Add files, staging each one as it is accepted.
    *
-   * The pre-checks here are the count cap and the type allowlist — the two
-   * things the form knows before spending a round trip. The size cap is the
-   * presign route's to answer and the bytes are process's, and either refusal
-   * arrives on the same `rejected` list with a reason the user can act on. The
-   * extension a saved object gets is the server's decision from the content
-   * type, so the form does not pre-judge filenames.
+   * The pre-checks are the count cap and the shared `checkDeclaredUpload`
+   * guard — the same function the presign route asks, so the form and the API
+   * agree on the document allowlist and the 25 MiB cap by construction. Its
+   * verdict maps to the wording the API's own refusal carries, and the bytes
+   * are still process's to validate. The extension a saved object gets is the
+   * server's decision from the content type, so the form does not pre-judge
+   * filenames.
    *
    * The pool — three files in flight, appended in drop order once the batch
    * has settled — is `useUploadPool`'s.
@@ -255,8 +257,12 @@ export const useArtworkDocuments = ({
           });
           continue;
         }
-        if (!isAcceptedDocumentType(file.type)) {
-          rejected.push({ file, reason: "Not a supported file type" });
+        const verdict = checkDeclaredUpload("document", file.type, file.size);
+        if (verdict !== "allowed") {
+          rejected.push({
+            file,
+            reason: localRejectionReason(verdict, "Not a supported file type"),
+          });
           continue;
         }
         accepted.push(file);

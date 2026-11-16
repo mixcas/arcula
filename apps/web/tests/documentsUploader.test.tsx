@@ -587,6 +587,27 @@ describe("addFiles", () => {
     ]);
   });
 
+  it("refuses a supported document over the byte cap without staging it", async () => {
+    // The local gate is the shared guard, the same question presign asks, so a
+    // PDF over 25 MiB is refused before any round trip and reads with the
+    // API's own "too large" wording.
+    const oversized = pdfFile("huge.pdf");
+    Object.defineProperty(oversized, "size", {
+      value: MAX_DOCUMENT_BYTES + 1,
+    });
+    let result: AddFilesResult = { added: [], rejected: [] };
+    await withHook([], async (hook) => {
+      await act(async () => {
+        result = await hook.addFiles([oversized]);
+      });
+    });
+
+    expect(result.added).toHaveLength(0);
+    expect(result.rejected.map((entry) => entry.reason)).toEqual(["too large"]);
+    expect(mediaService.stageDocument).not.toHaveBeenCalled();
+    expect(mediaService.processDocument).not.toHaveBeenCalled();
+  });
+
   it("refuses over the cap without staging anything", async () => {
     // Counted against the cap as the drop is processed, so a drop of twelve
     // with a limit of ten keeps the first ten rather than rejecting all

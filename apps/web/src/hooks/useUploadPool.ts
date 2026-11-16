@@ -7,15 +7,16 @@
  * sequence the user dropped. The progress bar counts settlements, so it moves
  * on failures too.
  *
- * What is *not* here is the part the two lists genuinely disagree on: what
- * admits a file (`isAcceptedImageType` vs the document allowlist), what it
- * costs against the cap, how a staged entry is shaped, and what the save sends
- * — a reorderable sequence of ids for photos, an id set for documents. Those
- * stay in `useArtworkPhotos` / `useArtworkDocuments`, where a reader can see
- * them side by side; this hook is only the queue and the bar.
+ * What is *not* here is the part the two lists genuinely disagree on: which
+ * population's allowlist and cap the shared `checkDeclaredUpload` guard is
+ * asked about, how a staged entry is shaped, and what the save sends — a
+ * reorderable sequence of ids for photos, an id set for documents. Those stay
+ * in `useArtworkPhotos` / `useArtworkDocuments`, where a reader can see them
+ * side by side; this hook is only the queue and the bar.
  */
 
 import { useCallback, useState } from "react";
+import type { DeclaredUploadVerdict } from "@arcula/shared";
 import { ApiRequestError } from "@/services/api";
 import { MediaUploadError } from "@/services/uploadError";
 
@@ -48,6 +49,27 @@ export const rejectionReason = (error: unknown, fallback: string): string => {
     return error.message;
   }
   return fallback;
+};
+
+/**
+ * The same reason for a declaration the shared guard refuses locally, so a
+ * file the form catches before the round trip reads exactly like one the
+ * presign route refused. The type failure is the list's own phrase (a photo
+ * and a document say "image" and "file type"), while the size failures reuse
+ * the API's `fields.file` wording verbatim.
+ */
+export const localRejectionReason = (
+  verdict: Exclude<DeclaredUploadVerdict, "allowed">,
+  unsupportedTypeReason: string,
+): string => {
+  switch (verdict) {
+    case "unsupported-type":
+      return unsupportedTypeReason;
+    case "too-large":
+      return "too large";
+    case "invalid-size":
+      return "invalid size";
+  }
 };
 
 /** How many files a batch stages at a time. */

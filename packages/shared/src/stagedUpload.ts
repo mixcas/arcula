@@ -25,6 +25,13 @@
 export const STAGED_NAME_HEADER = "x-amz-meta-name";
 
 /**
+ * The metadata KEY the presigner is given, which the SDK turns into that
+ * header (`x-amz-meta-{key}`). The route and the presigner read this rather
+ * than spelling `name` twice.
+ */
+export const STAGED_NAME_METADATA_KEY = "name";
+
+/**
  * Every header a staged presigned PUT signs, `host` aside — the browser sets
  * it and no CORS rule carries it. The order is the order the presigner builds
  * them; both assertions compare as sorted sets.

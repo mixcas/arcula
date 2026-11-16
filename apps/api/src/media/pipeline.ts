@@ -176,3 +176,38 @@ export async function generateVariants(
 }
 
 export { DOCUMENT_VARIANT_SPECS, IMAGE_VARIANTS };
+
+/** The PDF header, ASCII: `%PDF-`. */
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
+
+/** How far into the file the header may sit. ISO 32000 puts it on the first
+ *  line, but files written by careless tools carry a few bytes of junk ahead
+ *  of it, and refusing those would reject a document that opens fine. */
+const PDF_MAGIC_WINDOW = 1024;
+
+/**
+ * Whether the bytes actually begin like a PDF.
+ *
+ * A document that is not an image is admitted on its stored content type,
+ * which is the client's declaration: signed on real S3, but the local
+ * stand-in does not verify signatures and an object can always be written out
+ * of band. So process gives the bytes one structural check — the format's own
+ * header — rather than promoting whatever happened to land under `.pdf`.
+ *
+ * Nothing more is asserted: the document is promoted and served as opaque
+ * bytes, never parsed.
+ */
+export function hasPdfSignature(bytes: Uint8Array): boolean {
+  const window = bytes.subarray(0, PDF_MAGIC_WINDOW);
+  for (let i = 0; i + PDF_MAGIC.length <= window.length; i += 1) {
+    let matched = true;
+    for (let j = 0; j < PDF_MAGIC.length; j += 1) {
+      if (window[i + j] !== PDF_MAGIC[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+  return false;
+}

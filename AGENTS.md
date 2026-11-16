@@ -229,8 +229,9 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
   is the point the server validates them —
   [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
-  `populations.ts` (what distinguishes photos from documents: caps, types,
-  tables, variants and key shape), `variants.ts` (the geometry), `promote.ts`
+  `populations.ts` (what distinguishes photos from documents: tables, variants
+  and key shape; the caps and types are the shared guard's),
+  `variants.ts` (the geometry), `promote.ts`
   (staged → final), `stagedName.ts` (the original's filename, the one thing
   that rides a signed header rather than a key or a query).
 - `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly

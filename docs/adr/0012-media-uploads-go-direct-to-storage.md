@@ -135,8 +135,10 @@ migration rules are not triggered.
   The type and size are re-checked; the name is recorded on the object; the
   entry id is in both bodies. `media/stagedName.ts` owns the name's encoding
   and its tolerant default, and the shared signed-header list
-  (`stagedUpload.ts`) owns the header names, so the route, the presigner and
-  the bucket's rule cannot disagree.
+  (`stagedUpload.ts`) owns the header names and the metadata key. The bucket
+  rule is a literal in the stack, and the two suites pin it and the presigner
+  to that shared list, so the three ends are held together by tests rather
+  than by an import that cannot exist.
 - **CORS is deployment state, and it is tested where it lives.** The
   in-process suite cannot send a real preflight, so `deploy-verify.ts` probes
   the deployed bucket and reports "the check did not run" on a refusal rather

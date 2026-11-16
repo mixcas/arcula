@@ -48,6 +48,7 @@ import {
   checkDeclaredUpload,
   MINTED_ID_RE,
   mediaPresignRequestSchema,
+  STAGED_NAME_METADATA_KEY,
   type DeclaredUploadVerdict,
   type MediaPresignResponse,
   type MediaProcessResponse,
@@ -71,10 +72,17 @@ import {
   POPULATIONS,
   type PopulationKind,
 } from "../media/populations";
-import { generateVariants, orientSource, WEBP_TYPE } from "../media/pipeline";
+import {
+  generateVariants,
+  hasPdfSignature,
+  orientSource,
+  WEBP_TYPE,
+} from "../media/pipeline";
 import { decodeStagedName, encodeStagedName } from "../media/stagedName";
 import {
   deleteObject,
+  headObject,
+  isObjectMissing,
   listObjects,
   PRESIGNED_PUT_TTL_SECONDS,
   presignPut,
@@ -220,7 +228,9 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
     // body carries only the entry id, and its answer still has to name the
     // original. Encoded because a header is not a place for arbitrary UTF-8.
     const upload = await presignPut(key, declaration.contentType, {
-      name: encodeStagedName(declaration.name || "untitled"),
+      [STAGED_NAME_METADATA_KEY]: encodeStagedName(
+        declaration.name || "untitled",
+      ),
     });
 
     const answer: MediaPresignResponse = {
@@ -272,22 +282,45 @@ export function buildMediaRoutes(kind: PopulationKind): Hono {
     }
     const originalKey = originals[0];
 
-    // The first point the server sees the object. Everything presign was told
-    // is re-derived from what is actually stored: the recorded content type
-    // against the allowlist, the object's own length against the cap. This is
-    // what makes a forged declaration harmless.
-    const { bytes, contentType, metadata } = await readObject(originalKey);
-    const storedType = contentType ?? "";
-    const verdict = checkDeclaredUpload(kind, storedType, bytes.length);
+    // The object's record first, then its bytes. A HEAD is cheap and answers
+    // the two facts presign was only told — the stored content type and the
+    // stored length — so an oversized or wrongly typed object is refused
+    // before it is pulled into the function. The URL carries no signed length
+    // (`content-length` is forbidden to `fetch`), so without this a forged
+    // declaration buys a full download of whatever was PUT to the key.
+    let head;
+    try {
+      head = await headObject(originalKey);
+    } catch (err) {
+      // The entry was listed a moment ago; a 404 here is a discard racing
+      // this call, and the honest answer is the same not-found.
+      if (isObjectMissing(err)) {
+        throw new ApiError(
+          "not-found",
+          "The staged entry does not exist or has been discarded",
+        );
+      }
+      throw err;
+    }
+    const storedType = head.ContentType ?? "";
+    const storedLength = head.ContentLength ?? 0;
+    const verdict = checkDeclaredUpload(kind, storedType, storedLength);
     if (verdict !== "allowed") {
       throw refusal(verdict);
     }
+
+    const { bytes, metadata } = await readObject(originalKey);
     const name = decodeStagedName(metadata?.name);
 
     if (!isImage(storedType)) {
       // A PDF document has no variants: the original is the whole entry. Its
-      // type and length were validated above — process is the byte check even
-      // when there is nothing to generate.
+      // type and length were validated above, and its bytes are checked for
+      // the PDF header here — process is the byte check even when there is
+      // nothing to generate, so a text file declared as a PDF is refused
+      // rather than promoted and later served from the app's own origin.
+      if (!hasPdfSignature(bytes)) {
+        throw invalid("The file could not be read", { file: "undecodable" });
+      }
       const answer: MediaProcessResponse = {
         entryId,
         name,
