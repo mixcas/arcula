@@ -168,6 +168,10 @@ EOF
 #    a stray `SKIP_LAMBDA_SMOKE=1` on a laptop cannot disarm the build. (The
 #    same guard, for the same reason, is what keeps db-seed from starting a
 #    stack in CI.)
+#
+#    `SMOKE_ENV` tells the smoke which environment's package it is running:
+#    the staged tree cannot say, and dev's assertion that the bundle's map
+#    resolves to TypeScript must not fire on production's map-free package.
 if [ -n "${CI:-}" ] && [ "${SKIP_LAMBDA_SMOKE:-}" = "1" ]; then
   echo "==> smoke skipped on CI (SKIP_LAMBDA_SMOKE=1): installing the target package only"
   docker run --rm --platform linux/arm64 \
@@ -186,7 +190,7 @@ else
 
   echo "==> smoke (node:24, glibc, arm64, compose network)"
   docker run --rm --platform linux/arm64 \
-    --network arcula_default --env-file "$TMP_ENV" \
+    --network arcula_default --env-file "$TMP_ENV" -e SMOKE_ENV="$ENV" \
     -v "$ROOT/$STAGE":/app -w /app node:24 \
     sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
 fi
