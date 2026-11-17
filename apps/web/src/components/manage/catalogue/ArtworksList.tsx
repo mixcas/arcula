@@ -48,7 +48,7 @@ const SORT_OPTIONS = [
   { value: "artist-desc", label: "Artist Name Z-A" },
 ] as const;
 
-export interface ArtworksListProps {
+interface ArtworksListProps {
   artworks: Artwork[];
   /** The "{slug}-{id}" catalogue param, reused verbatim in the row links. */
   catalogueParam: string;

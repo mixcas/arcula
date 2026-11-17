@@ -42,7 +42,7 @@ export const wireImageVariant = z.object({
   contentType: z.string(),
 });
 
-export const artworkPhotoReadSchema = z.object({
+const artworkPhotoReadSchema = z.object({
   id: z.string(),
   order: z.number(),
   name: z.string(),
@@ -61,7 +61,7 @@ export const artworkPhotoReadSchema = z.object({
 // The union on `kind`, not one shape with optionals — the same shape the
 // client types use, so `z.infer` lines up with `ArtworkDocument` without a
 // single `as`.
-export const artworkDocumentReadSchema = z.discriminatedUnion("kind", [
+const artworkDocumentReadSchema = z.discriminatedUnion("kind", [
   z.object({
     id: z.string(),
     name: z.string(),

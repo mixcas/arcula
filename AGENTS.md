@@ -2,26 +2,14 @@
 
 > The design record lives in **`DESIGN.md`** — the as-built description
 > of the product, its data model and its architecture. This file is the working
-> guide: layout, commands, the sharing rules, and the test doctrine.
-> `README.md` is the user-facing overview.
+> guide: layout, commands, the sharing rules, and the test criterion, whose
+> doctrine is **`docs/testing.md`**. `README.md` is the user-facing overview.
 >
 > The product is **Arcula** (`arcula.art`), and the packages, the repository
 > and the identifiers all say `arcula` too. The product's own vocabulary is in
 > **`GLOSSARY.md`**; decisions with their rejected alternatives are in
 > **`docs/adr/`**, and implementation-ready feature specs are in
 > **`docs/specs/`**.
->
-> **Sharing is built.** Access is membership: the owner and every collaborator
-> read and edit one catalogue, invitations are mailed single-use tokens, and
-> ownership transfers without moving media. The model is accepted in
-> [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md); the
-> as-built detail is in **Sharing** below.
->
-> **Catalogue passwords are built too.** A password is a second condition on a
-> public catalogue, answered by an Access grant in a per-catalogue cookie, and
-> the unlock route is throttled per address and catalogue; the design record is
-> [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)
-> and the as-built detail is under **Protected catalogues**.
 
 Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
@@ -124,14 +112,14 @@ sets `NOT NULL` would break the old code's inserts.
 
 All from the repo root (`bun run <script>`):
 
-| Command                                                     | What it does                                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                   |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**                |
-| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
-| `bun run build`                                             | Build the web app                                                                    |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
+| Command                                                     | What it does                                                                                                |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                                          |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                                       |
+| `bun run check`                                             | Typecheck every package and `scripts`, ESLint, Prettier, `check:docs` and `knip` — **the gate before a PR** |
+| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk`, `test:scripts`        |
+| `bun run build`                                             | Build the web app                                                                                           |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                                                |
 
 Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
 `sh scripts/deploy-dev.sh` are thin wrappers over the one sequence in
@@ -152,294 +140,46 @@ performed, is in `infra/cdk/README.md`.
 
 The **local stack** is Postgres (a docker/colima container), SeaweedFS (the S3
 stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
-`scripts/stack-up.sh` is idempotent.
+`scripts/stack-up.sh` is idempotent, and the stack is one per machine: a git
+worktree borrows the main checkout's `.env` and compose project, so the suites
+run there against the same services (the mechanics are in `docs/testing.md`).
 
 ## Where things live
 
-**`apps/api/src/`**
+Five packages, one product: the SPA (`apps/web`), the API (`apps/api`), the
+contract both sides read (`packages/shared`), the schema and its generated
+migrations (`packages/db`), and the stack (`infra/cdk`), with the local stack,
+the Lambda build and both deploys in `scripts`.
 
-- `app.ts` — the Hono app: the error envelope, the `www`→configured-origin
-  redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
-  the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
-  holds the pure decisions derived from it.
-- `access.ts` — the access verdicts, pure over loaded rows: the membership
-  fact (owner, collaborator, nobody) and the visitor rule (the catalogue is
-  the only gate, with an Access grant as the second condition on a Protected
-  one); `authorize.ts` loads the catalogue, the viewer's membership row and
-  the row each route acts on, reads the grant (`grantHeld`, from the cookie
-  named for that catalogue) where a visitor needs one, and answers the one
-  write question — `requireMemberCatalogue` / `requireMemberArtwork`, owner or
-  collaborator — that every write path asks.
-- `catalogueGrants.ts` — the Access grant's pure facts: `mintGrantToken`,
-  `hashGrantToken`, `grantCookieName` and `isGrantUsable` (not past
-  `expiresAt`); `GRANT_TTL_MS` (twelve hours) is the one number behind both the
-  cookie's `Max-Age` and the row's expiry. No database and no Hono — the unlock
-  route mints and stores, the read paths load the row and ask this.
-- `cataloguePassword.ts` — hashing (`hashPassword`) and the check
-  (`verifyPassword`) for a catalogue's password.
-- `catalogueScope.ts` — the membership scope the reads share: the left join
-  to the caller's collaborator row and the live-catalogues where-clause — the
-  catalogues the caller owns or collaborates on — used by the signed-in
-  `/catalogues` list and the Artist Name aggregate so the two cannot drift.
-- `unlockThrottle.ts` — the throttle's policy and nothing else: `UNLOCK_WINDOW_MS`
-  (ten minutes, **fixed**, and why not sliding) and `unlockWindowStart`, which
-  floors an attempt to the window it belongs to. `clientAddress.ts` — the
-  address the counter is keyed by: the Lambda entry writes the gateway's
-  `sourceIp` into `x-arcula-client-ip` with `set`, so a client cannot choose its
-  own, and no forwarding header is ever trusted; locally the header is absent
-  and every attempt shares one bucket.
-- `artworkRead.ts` — the single read path for Artworks: one work (the
-  Catalogue, the work, its photos, documents and Variants), or a Catalogue's
-  list — live, or the member-only Deleted one, most recently deleted first —
-  loading the Catalogue and each child table once for the whole page (at most
-  five queries, six for a collaborator's membership row) and returning ok,
-  not-found, unauthorized or forbidden for the list. The live list also takes
-  an optional member-only search (`q`), refused ahead of the visitor verdict and
-  filtering the rows the list already read — drafts included, deleted works
-  never. The verdict is
-  `access.ts`'s over rows the module loads through `authorize.ts`, with the
-  request's grant validity handed in as a fact; the module carries no Hono type
-  and the route owns the wire code. The save routes read their work back
-  through it.
-- `artistNames.ts` — the caller's Artist Name suggestions for the artwork form:
-  the aggregate read over live works in the live catalogues the caller owns or
-  collaborates on (the caller scope recorded in
-  [ADR-0009](docs/adr/0009-artist-name-suggestions-are-caller-scoped.md)), and
-  the pure collapse of case and accent variants to one most-used spelling,
-  ordered by use then display name and silently capped at 2,000. No Hono type;
-  the route owns the wire and `401`, and the future curated index can replace
-  the module's source behind the same contract.
-- `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
-- `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
-  the caller.
-- `invitations.ts` — the pure token algebra (`mintInvitationToken`,
-  `hashInvitationToken`) and the two questions the routes ask
-  of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
-  `isInvitationResendable` (pending, and the last issue older than the
-  60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `catalogues` (the reads, the settings write, `…/unlock`, the
-  import, the Deleted list and the batch delete/restore), `access` (the access
-  read, removal, leaving and transfer), `invitations` (create,
-  resend, revoke, public preview, accept, decline, the invitee's inbox and
-  in-app decline), `artworks`, `artworkSave` (the write half of a save: the
-  staged entries promoted, upserted and deleted once the payload validates),
-  `artistNames` (the caller's suggestion read), `me`, `media` (the object
-  proxy), `artworkMedia` (the presign and process routes: the browser PUTs the
-  bytes straight to storage under the caller's own staging prefix, and process
-  is the point the server validates them —
-  [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
-- `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
-  `populations.ts` (what distinguishes photos from documents: tables, variants
-  and key shape; the caps and types are the shared guard's),
-  `variants.ts` (the geometry), `promote.ts`
-  (staged → final), `stagedName.ts` (the original's filename, the one thing
-  that rides a signed header rather than a key or a query).
-- `email/provider.ts` — SMTP locally, Resend in production. Sharing adds exactly
-  two mails, the invitation and the ownership-transfer notice; a provider
-  failure surfaces as `emailSent: false`, never as a failed write.
-- `storage.ts` — the S3 client (`S3_ENDPOINT` is required; it refuses a default)
-  and `presignPut`, the short-lived single-object URL the browser PUTs a staged
-  original to ([ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
+The module-by-module map — what each file in the API, the shared contract, the
+web app and the database owns — is in
+[`docs/architecture.md`](docs/architecture.md). Read it before changing a
+module you have not touched; a named file or symbol is still read directly.
 
-**`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
-artworkImport, artistNames, catalogue, invitation, document, media, user),
-`artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
-`photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
-predicate, its caps, the query suffix helper and `normalizeSearchText`, which
-Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
-types), `stagedUpload.ts` (the headers a staged presigned PUT signs — the list
-the media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
-because that package is not a workspace member), `limits.ts` (the
-per-tier catalogue cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
-both sides use),
-`invitationTime.ts` (the invitation durations and the two questions the access
-card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
-`MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),
-`slug.ts`, `types.ts`. `schemas/artwork.ts` holds `artworkStatusSchema` and
-`artworkAvailabilitySchema` (`available`/`reserved`/`sold`/`on-consignment`,
-both pinned to their client types); the save schemas accept availability as
-`.nullable()`, the create treating an absent key as null and the update as
-"leave it alone", and the read schema requires the key because the serializer
-always emits it. The API never validates it against the catalogue's kind — a
-Collection's work may carry one. `schemas/catalogue.ts` holds
-`catalogueKindSchema` (`portfolio`/`collection`/`inventory`, pinned to
-`CatalogueKind`); the create
-schema accepts `kind` defaulting to `collection` and the update schema does
-not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
-`catalogueReadSchema` carries it, and the API's serializer validates a row
-against the three values (`catalogueKindOf`) before emitting it.
+The request path is `browser → API Gateway → Lambda (Hono) → Postgres / S3`. In
+production the SPA is that same Lambda, and media is proxied through the API so
+one authorization layer covers both the row and the bytes (`DESIGN.md` →
+**Architecture at a glance**, and **Media**).
 
-**`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
-means for the surface, as data: the kind's colour (`kindColor`, a literal union
-the screens turn into a CSS variable through `kindColorVar`), the labels, the
-market states a kind offers (a Portfolio's three, an Inventory's four, a
-Collection's none) with their words, and the v1 artwork field table — every
-field visible, only `title` and `artistName` required. The field table is the
-data a later per-kind hiding will read; no v1 screen consumes
-`visible`/`required`, and a screen that reads the module uses the labels, the
-availability values and `availabilityFor`'s default. `services/` are the API
-clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
-`telemetry/logRocket.ts` is the session-replay hook, redacted at the client
-([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
-`components/manage` and `components/catalogue`; `skins/` is the public-view
-system. The artwork Add and Edit pages load the catalogue for its kind; a
-Collection's form renders no availability control and sends no key, while a
-Portfolio or an Inventory defaults a surfaced work with no stored state to
-`available` through `availabilityFor`, and offers only the states that kind
-carries. The manage page and the Deleted view pass `showAvailability` down from
-the kind; no public page renders availability at all, and the API emits it on a
-member read only.
+## Sharing and protected catalogues
 
-**`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
-`account`, `verification`, `catalogues`, `catalogueCollaborators`,
-`catalogueInvitations`, `catalogueAccessGrants`, `catalogueUnlockAttempts`,
-`artworks`, `artworkPhotos`, `artworkPhotoVariants`, `artworkDocuments`) and the
-`schema` object the adapter consumes. The Drizzle entity is `catalogues` and the
-relation property is `catalogueId`, but the physical Postgres tables keep their
-`collections` / `collection_*` names and the physical column stays
-`"collectionId"` — a storage rename is a non-additive migration (ADR-0010). The
-two sharing tables are in the schema
-and `catalogueCollaborators` is read on every
-access question; the invitation routes write `catalogueInvitations`, while the
-code that writes `catalogueCollaborators` covers acceptance, removal, leaving
-and transfer, which swaps the two membership rows and rewrites the owner.
-`catalogues.passwordHash` is the one password fact; `catalogueAccessGrants`
-holds a grant's token hash and its expiry, and `catalogueUnlockAttempts` is the
-unlock throttle's counter — `(ip, catalogueId, windowStart)` with `attempts`,
-written and read by the unlock route alone.
-`packages/db/migrations/` is generated; hand edits are the documented exception,
-and there are exactly three: a data backfill appended to the generated file, the
-add-nullable → backfill → set-not-null sequence for a column that cannot be
-added `NOT NULL` on an existing table, and a grant revoke drizzle-kit cannot
-model — it renders schema, never grants, so `0006_enable_rls` appends its
-guarded block by hand. The sharing schema is the worked example of the first
-two: those migrations are described under **Sharing** below and in
-`packages/db/README.md`; the third is in that README and `0006_enable_rls.sql`.
+Both are built. Access is membership, and membership is the write verdict:
+every account with a `catalogueCollaborators` row reads and writes everything
+inside the catalogue — drafts and documents included — exactly as the owner;
+only access administration (invite, resend, revoke, remove, transfer) is
+owner-only, and the owner cannot leave without transferring.
 
-**`infra/cdk/src/arcula-stack.ts`** — the stack. `contextValue("DOMAIN")` gates
-the custom domain; the apex and `www` are **separate** `DomainName` pairs that
-each get their own regional endpoint — an HTTP-API custom domain serves only its
-exact host, so pointing `www` at the apex target is the `403` the layout is built
-to avoid.
+A password is a **second condition a public catalogue can require, never a third
+visibility state**: membership skips the challenge, an Access grant admits
+exactly the visitor surface — published, live works, never a draft or a
+document — and a grant does not open a private catalogue.
 
-## How a request flows
-
-```
-browser → API Gateway (custom domain) → Lambda (Hono) → Postgres / S3
-```
-
-In production the SPA is part of that same Lambda: a non-`/api` path returns the
-built `index.html` (deep links included), and `/api/*` runs the routes. Media
-never goes straight from S3 — `GET /api/v1/media?key=…` proxies the object and
-re-checks visibility per request, which is what lets one authorization layer
-cover both the row and the bytes.
-
-## Sharing
-
-Sharing is membership, and it is built. `catalogues.userId` is the one owner
-fact; `catalogueCollaborators` holds everyone else, the owner is not
-duplicated there, and a membership row is the authorization fact for everything
-inside the catalogue. `access.ts` answers the questions over loaded rows and
-`authorize.ts` loads the catalogue and the viewer's row, so the owner and every
-collaborator read every live work in the catalogue — drafts included — and a
-deleted work by id, and read its documents at every status. A deleted work is in
-no live list; the catalogue's **Deleted** view lists the stamped works, most
-recently deleted first, and restores one or many, and a deleted work's Edit page
-disables Save and the media uploaders and restores in place. Every write path
-asks the same membership question through `requireMemberCatalogue` /
-`requireMemberArtwork`.
-
-The boundary is access administration. A collaborator changes every setting
-(public/private included), creates, edits, imports, bulk-deletes, restores and
-sweeps exactly as the owner does, and may leave; the owner alone invites,
-resends, revokes, removes and transfers, and cannot leave without transferring.
-`GET /catalogues/:id/access` is member-readable: the owner and collaborators
-see who has access, while the pending offers are the owner's alone.
-`GET /catalogues` returns owned and shared rows together, each with `role` and
-a shared row with `ownerName`; the tier cap counts owned live catalogues only,
-so deleting a catalogue frees the slot. The visitor rule is unchanged: a
-collaborator is never a visitor, and the catalogue remains the visitor's only
-gate
-([ADR-0003](docs/adr/0003-the-collection-gates.md)).
-
-`catalogueInvitations` carries the offer: one pending row per catalogue and
-lowercased email, the SHA-256 hash of a single-use token, a seven-day expiry
-and a status. The raw token exists only in the mail. Acceptance needs the
-mailed token and a session whose email matches the invited address; the
-invitee's `GET /me/invitations` lists their live offers and can decline one,
-because acceptance is the mail's job.
-
-**Two mails, best effort.** Sharing adds exactly two: the invitation mail, which
-links to `CLIENT_ORIGIN/invite/:token`, and the ownership-transfer notice, which
-links the new owner to the manage page. Both go through `email/provider.ts`
-(SMTP locally, Resend in production). The invitation row is written before the
-mail is attempted, so a provider failure answers `emailSent: false` and the
-owner can resend once the 60-second cooldown has passed; a transfer commits
-before its notice, so a failed notice never undoes the transfer.
-
-**The media namespace and the two migrations.** Final object keys use the
-catalogue's `mediaNamespaceId`, fixed at creation, so a transfer changes the
-owner and the artwork mirror and moves no object: existing URLs keep working.
-Staging keys use the uploader's id, so one collaborator's unsaved upload is
-never under another's prefix. The schema shipped in two releases, one per step:
-`0003_shared_collections` created the two sharing tables and added
-`mediaNamespaceId` nullable, backfilled from `userId`; the feature code read
-`mediaNamespaceId ?? userId` through the gap; and
-`0004_media_namespace_not_null` backfilled only the rows the old code wrote in
-between (`WHERE "mediaNamespaceId" IS NULL`) and set the column `NOT NULL`.
-`0003` shipped alone, the code followed, and `0004` tightened afterwards — the
-worked example of the forward-only rule above. The full schema narrative is in
-`DESIGN.md`; the migration detail is in `packages/db/README.md`.
-
-## Protected catalogues
-
-A password is a **second condition on a public catalogue**, never a third
-visibility state ([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)).
-`catalogues.passwordHash` nullable is the whole of the stored protection — a
-catalogue without one is the normal state — and the member read carries
-`isPasswordProtected`, derived from the hash's presence, while the hash never
-leaves the server. Membership bypasses the challenge; a visitor needs an
-**Access grant**.
-
-The grant is a 32-byte token in the cookie named for its catalogue
-(`arcula_grant_{id}`, `Path=/api/v1`, `HttpOnly`, `SameSite=Lax`, twelve
-hours), and the row stores only its SHA-256 hash with the same expiry. The
-cookie's path is broad because the media proxy is one route for every
-catalogue's bytes; the **name** is the scope, and `grantHeld` reads only the
-name for the catalogue it serves and looks the row up by catalogue id and
-token hash, so a grant minted elsewhere is never consulted. The verdict is still
-`access.ts`'s: `canSeeCatalogue` and `canSeeArtwork` take the grant as a fact
-beside membership, and the catalogue read, the artwork list, the single-artwork
-read and the media proxy all ask it — so a grant admits exactly what a visitor
-sees (published, live works; never a draft, never a document) and a private
-catalogue stays shut to a grant holder.
-
-`POST /catalogues/:id/unlock` takes the password: `201` and the cookie on
-success, `403 invalid-password` on a wrong one, `409` on a catalogue with no
-password (or a private one, where there is nothing to get past), and `429
-too-many-attempts` once the window is spent. A refused catalogue read is `403
-password-required` with `details.catalogueName`, which the public pages fold to
-the lock screen — app chrome, not a skin — and whose success calls the hook's
-`reload` to re-run the ordinary load, catalogue read first. An expired grant
-lands back on the lock screen the same way. A password write (`PATCH
-/catalogues/:id`) revokes the catalogue's grants in the same transaction, so
-changing the password closes every open cookie.
-
-**The unlock throttle.** Guessing is counted in `catalogueUnlockAttempts`,
-one row per `(address, catalogue, window)` — the pair is the key precisely so
-one catalogue's throttle cannot lock visitors out of another's through a
-shared address. The window is **fixed**, ten minutes, floored from the
-attempt's own time (`unlockThrottle.ts`), so a row names the span it counts
-instead of the span depending on the clock. Ten failures spend it and the
-eleventh is refused unread, in one atomic claim (`setWhere` on the upsert), so
-two attempts racing the tenth failure cannot both get through; a right password
-deletes the pair's counter rows, so a member who mistyped carries no debt. The
-refusal states the window and never the time left in it, and sends no
-`Retry-After`, which would be the same countdown. The address is the gateway's
-`sourceIp`, carried by the Lambda entry in `x-arcula-client-ip`
-(`clientAddress.ts`), which a client cannot set; the residual weakness is
-recorded in `DESIGN.md` — an address is shared behind a proxy and cheap
-to multiply, so this raises the cost of guessing without being a proof.
+The as-built detail — the invitation lifecycle and its two mails, ownership
+transfer without moving media, the grant cookie, the throttle's numbers — is in
+**`DESIGN.md` → "Access control"**; the reasoning and its rejected alternatives
+are in
+[ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and
+[ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
 ## What to test
 
@@ -455,94 +195,16 @@ A test that answers _the library_ is asserting the library's behaviour. It costs
 a reader and buys nothing — the library tests itself, and when ours goes red we
 have learned nothing that was not visible in the diff.
 
-Three tiers, and the first is where nearly everything belongs:
-
-1. **Pure logic over our own data.** Test directly, no DOM and no server:
-   `variantSize` / `coverCrop` (`apps/api/src/media/variants.ts`),
-   `parseAcquisitionDate` (`packages/shared/src/schemas/artworkImport.ts`),
-   `sortPhotos` / `reindexPhotos` (`packages/shared/src/artworkPhotos.ts`),
-   `catalogueLimitForTier` (`packages/shared/src/limits.ts`),
-   `publicCatalogueState` / `publicFailure`
-   (`apps/web/src/components/catalogue/usePublicCatalogue.ts`),
-   `catalogueSurface` (`apps/web/src/catalogueSurface.ts`),
-   `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
-   verdict (`apps/api/src/access.ts`). Ours end to end, and where a real
-   regression lives.
-2. **Our value going into the library — only when the failure is invisible in
-   review or in a screenshot.** `apps/web/tests/skinHost.test.tsx` reads the
-   emitted style tags to prove `cssVariablesSelector` is not `:root`, because a
-   skin's type scale leaking onto `/manage` appears in no screenshot anyone
-   takes. The Basicx chrome tests read computed `pointer-events`, because jsdom
-   does no hit testing and the bug was a link that looked live and went nowhere.
-3. **Everything else — don't.** Copy that a `Text` renders, props handed to
-   Mantine, a mock's call count with no behavioural meaning, a constant asserted
-   against its own value.
-
 **Mutation testing is the acceptance bar for anything new.** Change the line the
-test claims to cover; if it stays green, the test was not covering that. A test
-that fails its own mutation earns its place; one that needs three separate
-mutations to kill is usually two tests.
+test claims to cover; if it stays green, the test was not covering that.
 
-**What the bar removes**, so it stays legible rather than theoretical — each of
-these could only fail by editing the thing it read:
-
-- A constant against its own value. `MAX_ARTWORK_PHOTOS` is a product choice
-  (`packages/shared/src/caps.ts`); asserting it equals `10` cross-checks nothing.
-  A **correctness floor** is the other case and it stays: getting it wrong is a
-  _silent_ failure rather than a changed preference.
-- A set against itself — looping `Object.keys(ACCEPTED_IMAGE_TYPES)` through
-  `isAcceptedImageType`, which is `type in ACCEPTED_IMAGE_TYPES`.
-- A duplicate, checked at the stronger one first.
-- Copy. Rendering a component and asserting a string we wrote appeared.
-- A title claiming more than its assertion.
-
-**What has not moved**, because the rule cuts one way and it is easy to overshoot
-it in a tidy-up: the pure-logic half, essentially in full; every tier-2 DOM test;
-the API integration suite (it drives the real app against the real local stack —
-Postgres, SeaweedFS, Mailpit — so it is the one place the wire, the schema and
-the storage path meet); and correct-altitude cases that happen to be near
-neighbours of deleted ones.
-
-Test **mechanics** — `afterEach(cleanup)`, the `matches: query === ""` stub,
-`ModalsProvider`, the carousel mock — are in **Gotchas** below and are not
-restated here.
+The tiers, the catalogue of tests that do not earn their place, what the gate
+catches and what it does not, and the mechanics a test file has to get right are
+in [docs/testing.md](docs/testing.md). Read it before writing a test, and when
+reviewing a diff.
 
 ## Gotchas
 
-- **Component tests need an explicit `afterEach(cleanup)`.** Test files run per
-  file with a `// @vitest-environment jsdom` docblock, and the vitest configs
-  deliberately do **not** set `globals`, so Testing Library's automatic cleanup
-  never registers. Without it, each render stays in the document and the next
-  test's queries match the previous test's rows and dialogs. DOM matchers come
-  from `import "@testing-library/jest-dom/vitest"`.
-- In jsdom, a `matchMedia` stub that answers `matches: false` for everything
-  makes every `mantine-datatable` column vanish, leaving only the selection
-  column. The datatable resolves a column's `visibleMediaQuery` through
-  Mantine's `useMediaQuery`, which for a column without one calls
-  `window.matchMedia("")` in an effect and overwrites its optimistic `true` with
-  the stub's answer; Chrome answers an empty query with `true`. Stub
-  `matches: query === ""`.
-- `useModals()` throws without `ModalsProvider`, so any component under test
-  that (transitively) renders a `modals.openConfirmModal` call needs
-  `MantineProvider` + `ModalsProvider` + `MemoryRouter` wrapped around it.
-- `@mantine/modals` ships **no** stylesheet in v9 — Modal and Overlay styles
-  come from `@mantine/core/styles.css`. `@mantine/notifications` does ship one,
-  and `<Notifications />` must be mounted (it is, in `apps/web/src/main.tsx`) for
-  `notifications.show` to render.
-- **A skin must not use a portaled Mantine component.** `Modal`, `Drawer`,
-  `Menu`, `Popover`, `Select`, `Combobox` and `Tooltip` all render into
-  `document.body`, outside the skin's scope, and would silently pick up the app
-  theme. A skin's test suite also needs a mock for `@mantine/carousel` — embla
-  measures real rects, so a real `Carousel` initialises against nothing in
-  jsdom. `apps/web/tests/helpers/carouselMock.tsx` is that mock, loaded through
-  an `async` `vi.mock` factory because `vi.mock` is hoisted above the imports.
-- **`bun run test:api` needs the local stack** — it sources the root `.env` and
-  runs `stack-up.sh postgres s3 mailpit` first. **`bun run test:web` needs the
-  stack _and_ a running API** (`scripts/ensure-api.sh` starts one).
-- **SeaweedFS binds a LAN IP at start.** If the machine's address changes (a
-  laptop that moved networks) its own internal replication dials a host that no
-  longer exists, and storage tests 500 or time out with nothing pointing at the
-  cause. Restart it: `pkill -f "weed server"` then `sh scripts/stack-up.sh s3`.
 - Mantine guidelines are saved in **`.opencode/docs/mantine-llms.txt`** —
   reference it when building UI components or form controls.
 - `lodash` is a dependency of `apps/web` and `@types/lodash` is installed.
@@ -550,22 +212,25 @@ restated here.
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
   inlined at build time. The repo-root file is the local fallback: a deploy
-  reads `infra/cdk/.env.<env>` instead (`infra/cdk/.env` is production's
-  fallback, and dev deliberately has none — falling back would put
+  reads `infra/cdk/.env.<env>` instead (the untracked `.env` there is
+  production's fallback, and dev deliberately has none — falling back would put
   production's database URL into a dev deploy). Never commit real secrets; see
   **Two rules that are load-bearing** above.
 
 ## Validation
 
-- `bun run check` (tsc over every package + ESLint + Prettier) must pass before
-  and after any change, and before a PR. The `infra/cdk` package is deliberately
+- `bun run check` — `tsc` over every package and `scripts`, ESLint, Prettier,
+  `check:docs` (a pointer into the navigation docs that resolves to nothing
+  fails the gate) and `knip` — must pass before and after any change, and before
+  a PR. The `infra/cdk` package is deliberately
   not a workspace member and installs its own dependencies, so run
   `cd infra/cdk && bun install` once before the check can resolve
-  `aws-cdk-lib`.
-- `bun run test` runs every suite; the API and web suites need the local stack
-  (see Gotchas). `npx vitest run <file>` inside a package runs a single file.
-- Before writing a test, read **What to test** above. A green suite is not the
-  goal; a test that fails only when we change something is.
+  `aws-cdk-lib` — in a fresh worktree, `sh scripts/worktree-new.sh <branch>`
+  creates it and runs both installs for you.
+- `bun run test` runs every suite; the API and web suites need the local stack —
+  the commands they run are under **Test mechanics** in
+  [docs/testing.md](docs/testing.md). `npx vitest run <file>` inside a package
+  runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
   `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end
@@ -622,18 +287,19 @@ only visitor gate, and catalogues shared by membership. See
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+This project keeps a **local** knowledge graph at `graphify-out/`, built by the
+installed plugin: god nodes, community structure, and cross-file relationships.
+It is gitignored and never committed, so no branch or pull request carries it
+and a rebuild is never part of a diff.
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
 Rules:
 
-- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- When graphify-out/graph.json exists, a question that spans a subsystem no prompt or report has named a file for starts with `graphify query "<question>"`; a named file or symbol is read directly. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts — these return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+- After modifying code, run `graphify update .` to keep the local graph current (AST-only, no API cost). The rebuild writes only ignored files; there is nothing to stage.
 
 # External docs — fetch on demand
 

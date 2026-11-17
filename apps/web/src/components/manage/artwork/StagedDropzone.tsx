@@ -11,7 +11,7 @@ import type { Rejection } from "@/hooks/useUploadPool";
  * The lines the two lists share are written once; the ones that name the list
  * ("images" against "files", and the accept line) come from here.
  */
-export interface StagedDropzoneWords {
+interface StagedDropzoneWords {
   /** The Dropzone's own accept line: "Add these images". */
   accept: string;
   /**

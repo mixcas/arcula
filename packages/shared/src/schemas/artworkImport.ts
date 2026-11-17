@@ -154,7 +154,7 @@ export interface ImportRowValues {
   currentValue: string;
 }
 
-export const createEmptyImportRowValues = (): ImportRowValues => ({
+const createEmptyImportRowValues = (): ImportRowValues => ({
   title: "",
   artistName: "",
   serie: "",

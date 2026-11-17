@@ -9,7 +9,7 @@ import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
-import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
+import { catalogueSurface, newArtworkForm } from "@/catalogueSurface";
 import { withoutAvailability } from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
 import { trackEvent } from "@/telemetry/logRocket";
@@ -17,9 +17,11 @@ import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
   BAR_HEIGHT,
 } from "@/components/manage/artwork/FormActionsBar";
+import type { UseArtistNames } from "@/hooks/useArtistNames";
+import type { UseArtworkDocuments } from "@/hooks/useArtworkDocuments";
+import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 
 import {
-  EMPTY_ARTWORK_FORM,
   artworkSchema,
   toArtworkPayload,
   toArtworkCreatePayload,
@@ -40,12 +42,15 @@ import {
  * promotes the staged objects into rows in the same transaction as the
  * fields. There is no partial save: the transaction either lands or it does
  * not.
+ *
+ * The page owns the route, the minted id and the catalogue; the form below it
+ * is mounted only once the catalogue's kind is known, because the form's
+ * starting values are a per-kind answer (`newArtworkForm`).
  */
 const ArtworkAddPage: React.FC = () => {
   const { catalogueId: param } = useParams<{ catalogueId: string }>();
   // The route carries "{slug}-{id}"; the API needs the bare id.
   const catalogueId = parseId(param ?? "");
-  const navigate = useNavigate();
   // Add is reached from a search result set; the query travels with the page
   // so the back control returns to it and the new work's Edit page keeps it.
   // Built from `q` alone — no other parameter belongs on either destination.
@@ -61,41 +66,21 @@ const ArtworkAddPage: React.FC = () => {
   // `{title}-{id}` depends on: the route cuts at the last hyphen.
   const [artworkId] = useState(() => mintId());
 
-  const form = useForm<ArtworkFormValues, ArtworkPayload>({
-    mode: "uncontrolled",
-    initialValues: EMPTY_ARTWORK_FORM,
-    validateInputOnBlur: true,
-    // zod's standard-schema validate is synchronous, so `sync: true` keeps
-    // form.validate() synchronous instead of resolving a promise per check.
-    validate: schemaResolver(artworkSchema, { sync: true }),
-    // The schema's output *is* the payload, so there is no second conversion
-    // step: what reaches onSubmit is already trimmed, coerced and stripped of
-    // blank fields.
-    transformValues: toArtworkPayload,
-  });
-
-  const [error, setError] = useState<string | null>(null);
   // Photos and documents live outside the form entirely — see useArtworkPhotos
   // for why a File cannot survive `useForm` in uncontrolled mode. Staging
-  // happens at add time, under the catalogue the route names.
+  // happens at add time, under the catalogue the route names, and mounts with
+  // the page so an upload never waits on the catalogue read.
   const photos = useArtworkPhotos({ catalogueId, artworkId });
   const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
 
-  // The catalogue's kind is what decides whether this work carries a market
-  // state at all, and which states the form offers. The page loads it before
-  // showing the form, so the control is either present from the first paint or
-  // absent — never a flicker.
+  // The catalogue's kind is what decides the form's starting values: the
+  // artist a new work is credited to, whether it carries a market state at
+  // all, and which states the form offers. The page loads it before showing
+  // the form, so neither the fields nor the control can flicker.
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const availabilityValues = catalogue
-    ? catalogueSurface(catalogue.kind).availabilityValues
-    : [];
-  const availabilityInPlay = availabilityValues.length > 0;
-  // Destructured so the effect depends on the stable callback rather than on
-  // the `form` object, which is rebuilt every render.
-  const { initialize } = form;
 
   useEffect(() => {
     if (!catalogueId) return;
@@ -108,14 +93,6 @@ const ArtworkAddPage: React.FC = () => {
           return;
         }
         setCatalogue(fetched);
-        // A newly surfaced work starts Available: on the kinds that sell
-        // work, a work with no market state is the exception, not the default.
-        // A kind with no market state is handed nothing. Edits never come
-        // through here — this form is the empty one.
-        const availability = availabilityFor(fetched.kind, null);
-        if (availability !== null) {
-          initialize({ ...EMPTY_ARTWORK_FORM, availability });
-        }
       } catch (err) {
         console.error("Error fetching catalogue:", err);
         setLoadError("Failed to load the catalogue. Please try again.");
@@ -125,7 +102,7 @@ const ArtworkAddPage: React.FC = () => {
     };
 
     void fetchCatalogue();
-  }, [catalogueId, initialize]);
+  }, [catalogueId]);
 
   if (!catalogueId) {
     return <Alert color="red">Invalid catalogue id</Alert>;
@@ -138,6 +115,86 @@ const ArtworkAddPage: React.FC = () => {
   if (loadError) {
     return <Alert color="red">{loadError}</Alert>;
   }
+
+  // Unreachable in practice — a null answer is a load error and the alert above
+  // has already returned — but it is what lets the form below take a Catalogue
+  // rather than re-test for one.
+  if (!catalogue) {
+    return null;
+  }
+
+  return (
+    <ArtworkAddForm
+      catalogue={catalogue}
+      catalogueId={catalogueId}
+      catalogueParam={param ?? ""}
+      artworkId={artworkId}
+      searchSuffix={searchSuffix}
+      photos={photos}
+      documents={documents}
+      artistNames={artistNames}
+    />
+  );
+};
+
+interface ArtworkAddFormProps {
+  /** The catalogue the work is being added to — its kind decides the form. */
+  catalogue: Catalogue;
+  catalogueId: string;
+  /** The catalogue segment exactly as it arrived, so the addresses this page
+   *  builds keep the slug the user came in on. */
+  catalogueParam: string;
+  artworkId: string;
+  /** The active search, already shaped for a URL query. */
+  searchSuffix: string;
+  photos: UseArtworkPhotos;
+  documents: UseArtworkDocuments;
+  artistNames: UseArtistNames;
+}
+
+/**
+ * The form itself, mounted once the kind is known.
+ *
+ * Every kind's form is built from the surface's one answer for it: the values
+ * the fields start with. There is no per-kind branch here, so a kind with
+ * nothing prefilled — an Inventory, a Collection — is still initialised exactly
+ * like the others instead of falling through a condition written for the market
+ * state.
+ */
+const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
+  catalogue,
+  catalogueId,
+  catalogueParam,
+  artworkId,
+  searchSuffix,
+  photos,
+  documents,
+  artistNames,
+}) => {
+  const navigate = useNavigate();
+  // The catalogue's kind is read once here, at mount: this component exists
+  // only because the catalogue arrived, and the form's initial values are the
+  // one thing it cannot take later.
+  const initialValues = newArtworkForm(catalogue.kind, catalogue.name);
+  const availabilityValues = catalogueSurface(
+    catalogue.kind,
+  ).availabilityValues;
+  const availabilityInPlay = availabilityValues.length > 0;
+
+  const form = useForm<ArtworkFormValues, ArtworkPayload>({
+    mode: "uncontrolled",
+    initialValues,
+    validateInputOnBlur: true,
+    // zod's standard-schema validate is synchronous, so `sync: true` keeps
+    // form.validate() synchronous instead of resolving a promise per check.
+    validate: schemaResolver(artworkSchema, { sync: true }),
+    // The schema's output *is* the payload, so there is no second conversion
+    // step: what reaches onSubmit is already trimmed, coerced and stripped of
+    // blank fields.
+    transformValues: toArtworkPayload,
+  });
+
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <>
@@ -173,7 +230,7 @@ const ArtworkAddPage: React.FC = () => {
               message: `"${created.title}" was added to this catalogue.`,
             });
             void navigate(
-              `/manage/catalogue/${param ?? ""}/artwork/${artworkSlug(
+              `/manage/catalogue/${catalogueParam}/artwork/${artworkSlug(
                 created.title,
                 created.id,
               )}${searchSuffix}`,
@@ -215,8 +272,8 @@ const ArtworkAddPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Artwork"
           submitting={form.submitting}
-          backTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
-          backLabel={`Back to ${catalogue?.name ?? "catalogue"}`}
+          backTo={`/manage/catalogue/${catalogueParam}${searchSuffix}`}
+          backLabel={`Back to ${catalogue.name}`}
         />
       </form>
     </>

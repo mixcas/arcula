@@ -43,7 +43,7 @@ Font.register({
 // a word the artwork does not have.
 Font.registerHyphenationCallback((word) => [word]);
 
-export const PDF_PAGE_HEIGHT = 792;
+const PDF_PAGE_HEIGHT = 792;
 
 /**
  * The page's side margin: 0.75 in, which buys the photo box 36 pt on each side
@@ -353,7 +353,7 @@ const EmptyPage: React.FC<{
  * is the document's: it is unreachable — and collectable — as soon as
  * `toBlob()` resolves.
  */
-export type PdfPhotoSources = ReadonlyMap<string, ConvertedPhoto>;
+type PdfPhotoSources = ReadonlyMap<string, ConvertedPhoto>;
 
 export interface CataloguePdfProps {
   catalogue: Catalogue;

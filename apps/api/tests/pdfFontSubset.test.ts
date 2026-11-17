@@ -1,12 +1,12 @@
-// The fallback subset's own decisions: what a request normalizes to, the
-// bounds of the warm-Lambda cache, and the one thing the bytes must be able to
-// do — answer a character with a glyph. Harfbuzz's subsetting is not exercised,
+// The fallback subset's own decisions: the bytes a request serves, and the
+// bounds of the warm-Lambda cache. What a request text normalizes to is the
+// shared rule's, tested beside it in `packages/shared/tests`; the route's
+// refusals are `pdfFont.api.test.ts`. Harfbuzz's subsetting is not exercised,
 // but its output is: `fontkit` parses the served bytes the way the renderer
 // does, so a complete font is asserted rather than assumed.
 
 import * as fontkit from "fontkit";
 import { describe, expect, it } from "vitest";
-import { ApiError } from "../src/errors";
 import {
   createSubsetCache,
   fontSubsetFor,
@@ -14,44 +14,6 @@ import {
 } from "../src/pdfFontSubset";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
-
-function validationOf(text: string): string | null {
-  try {
-    subsetCharacters(text);
-    return null;
-  } catch (error) {
-    expect(error).toBeInstanceOf(ApiError);
-    return (error as ApiError).code;
-  }
-}
-
-describe("the request text", () => {
-  it("keeps distinct non-ASCII code points, sorted by code point", () => {
-    // ★ U+2605, ☆ U+2606, the emoji U+1F600 — and the duplicate ☆ drops.
-    expect(subsetCharacters("a☆★b☆😀")).toBe("★☆😀");
-    // A private-use BMP code point sorts before the astral emoji by code
-    // point, though a UTF-16 code-unit sort would put the emoji first.
-    expect(subsetCharacters("😀\uE000")).toBe("\uE000😀");
-  });
-
-  it("drops ASCII entirely, DEL included", () => {
-    expect(validationOf("abc 123\u007f")).toBe("validation");
-  });
-
-  it("is empty when the text is empty", () => {
-    expect(validationOf("")).toBe("validation");
-  });
-
-  it("rejects 513 distinct code points but accepts 512", () => {
-    const run = (count: number) =>
-      Array.from({ length: count }, (_, index) =>
-        String.fromCodePoint(0x4e00 + index),
-      ).join("");
-
-    expect(validationOf(run(512))).toBeNull();
-    expect(validationOf(run(513))).toBe("validation");
-  });
-});
 
 describe("the served subset", () => {
   // The served bytes are parsed exactly as the renderer parses them, so a

@@ -37,7 +37,9 @@ execSync("sh scripts/stack-up.sh postgres s3", {
 });
 
 // 2. Wipe the schema — every table, no survivors. The SQL (and why the
-// `drizzle` schema goes too) is shared with the dev reset's db-drop.ts.
+// `drizzle` schema goes too) is shared with the dev reset's db-drop.ts. No
+// `-p`: COMPOSE_PROJECT_NAME is exported by scripts/services.sh, which the
+// db:reset script sources, so this reaches the one stack the machine runs.
 execSync(
   "docker-compose exec -T postgres psql -U arcula -d arcula " +
     `-c "${DROP_APP_SCHEMAS_SQL}"`,

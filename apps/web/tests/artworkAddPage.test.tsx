@@ -204,6 +204,7 @@ const editPath = () =>
 const save = async (
   user: ReturnType<typeof userEvent.setup>,
   title = "Estudio en rojo",
+  artist = "María López",
 ) => {
   // The page waits for the catalogue's kind before it shows the fields, so a
   // test that saves has to wait for the form too.
@@ -212,10 +213,14 @@ const save = async (
   // the Autocomplete's listbox is labelled by the same text, so a bare label
   // query would match the dropdown too.
   await user.type(await screen.findByLabelText(/^Title/), title);
-  await user.type(
-    screen.getByLabelText(/^Artist Name/, { selector: "input" }),
-    "María López",
-  );
+  const artistField = screen.getByLabelText(/^Artist Name/, {
+    selector: "input",
+  });
+  // A Portfolio arrives holding its own artist, so the field is emptied before
+  // the wanted name is typed into it: `type` would append to the default and
+  // make every saved artist a different string than the one named here.
+  await user.clear(artistField);
+  await user.type(artistField, artist);
   await user.click(screen.getByRole("button", { name: "Save Artwork" }));
 };
 
@@ -450,5 +455,70 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
 
     expect(await screen.findByText("Catalogue not found")).toBeVisible();
     expect(screen.queryByLabelText(/^Title/)).toBeNull();
+  });
+});
+
+/**
+ * A Portfolio's name *is* the artist's name (ADR-0010), so a work added to one
+ * starts credited to that artist. It is a creation-time default, not a derived
+ * fact: the field stays editable and required, and whatever is typed is what
+ * the save records. An Inventory's name is the gallery's and a Collection's is
+ * the collector's, so neither prefills.
+ */
+describe("the Add page — the Artist Name a new work starts with", () => {
+  it("starts a Portfolio work credited to the portfolio", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    renderPage();
+
+    const artistField = await screen.findByLabelText(/^Artist Name/, {
+      selector: "input",
+    });
+    expect(artistField).toHaveValue(CATALOGUE_NAME);
+  });
+
+  it.each([
+    { kind: "inventory" as const, label: "an Inventory" },
+    { kind: "collection" as const, label: "a Collection" },
+  ])("starts $label work with an empty Artist Name", async ({ kind }) => {
+    getCatalogue.mockResolvedValue(catalogue(kind));
+    renderPage();
+
+    const artistField = await screen.findByLabelText(/^Artist Name/, {
+      selector: "input",
+    });
+    expect(artistField).toHaveValue("");
+  });
+
+  it("records the artist the owner types over the default", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+    await save(user, "Estudio en rojo", "Estate of Flores Solares");
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    // The typed name, not the catalogue's: the default is a starting value the
+    // field may be written over, so an attribution saves as it was typed.
+    expect(createArtwork.mock.calls[0][1].artistName).toBe(
+      "Estate of Flores Solares",
+    );
+  });
+
+  it("still requires an artist, even on a Portfolio that prefilled one", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    const user = userEvent.setup();
+    renderPage();
+
+    // The prefill is a default, not a substitute for the field: an owner who
+    // empties it gets the ordinary required-field refusal and nothing is
+    // written.
+    const artistField = await screen.findByLabelText(/^Artist Name/, {
+      selector: "input",
+    });
+    await user.type(await screen.findByLabelText(/^Title/), "Estudio en rojo");
+    await user.clear(artistField);
+    await user.click(screen.getByRole("button", { name: "Save Artwork" }));
+
+    expect(await screen.findByText("Artist name is required")).toBeVisible();
+    expect(createArtwork).not.toHaveBeenCalled();
   });
 });

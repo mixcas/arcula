@@ -259,6 +259,44 @@ describe("the Edit page — the status the owner chose", () => {
 });
 
 /**
+ * A Portfolio's new works start credited to the portfolio's artist, but that is
+ * a creation-time default and never a fact the catalogue imposes: the Edit page
+ * shows the artist the work records, even when it differs from the catalogue's
+ * name.
+ */
+describe("the Edit page — the artist a work records", () => {
+  const artistField = async () =>
+    await screen.findByLabelText(/^Artist Name/, { selector: "input" });
+
+  it("shows the work's recorded artist, not the portfolio's name", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ artistName: "Taller de Flores" }));
+
+    renderPage();
+
+    // The two differ, so a page that prefilled from the catalogue would show
+    // "Flores Solares" here.
+    expect(await artistField()).toHaveValue("Taller de Flores");
+  });
+
+  it("sends the recorded artist with a save that changed something else", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ artistName: "Taller de Flores" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    const title = await screen.findByLabelText(/^Title/);
+    await user.clear(title);
+    await user.type(title, "Estudio en azul");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    // A page that prefilled this field from the catalogue would put "Flores
+    // Solares" here — an artist the work never recorded.
+    expect((await sentPatch()).artistName).toBe("Taller de Flores");
+  });
+});
+
+/**
  * A market state belongs to the kinds that sell work. The Edit page learns the
  * catalogue's kind, defaults a surfaced work with no stored state to Available,
  * and never overwrites a stored one. A Collection's form has neither the field

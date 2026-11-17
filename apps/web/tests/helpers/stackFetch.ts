@@ -109,7 +109,39 @@ function proxy(url: URL): URL {
   return new URL(url.pathname + url.search, API_BASE);
 }
 
-const wrappedFetch: typeof fetch = (input, init) => {
+// The checkout this suite expects to find on the stack. `bun run test:web`
+// exports it (apps/web's test script asks local-env.sh), so the suites know
+// which checkout is running them; a bare `vitest run` leaves it unset and the
+// check below stands down rather than inventing an expectation.
+const EXPECTED_CHECKOUT = process.env.ARCULA_CHECKOUT ?? "";
+
+const CHECKED = Symbol.for("arcula.stackFetch.identity");
+
+/**
+ * The API that answers on the port is not necessarily this checkout's: a dev
+ * server started from the main checkout keeps answering when the same port is
+ * reused from a worktree, and a suite that never noticed would test another
+ * branch's code. `/api/health` names the checkout that serves it, so the first
+ * proxied request asks once per worker and refuses a stranger.
+ */
+function ensureCheckout(): Promise<void> {
+  if (!EXPECTED_CHECKOUT) return Promise.resolve();
+  const g = globalThis as { [CHECKED]?: Promise<void> };
+  g[CHECKED] ??= underlyingFetch()(`${API_BASE}/api/health`)
+    .then((res) => res.json())
+    .then((body: { checkout?: string }) => {
+      if (body.checkout === EXPECTED_CHECKOUT) return;
+      const answered = body.checkout ?? "no checkout (it does not report one)";
+      throw new Error(
+        `stackFetch: ${API_BASE} is served by ${answered}, but this suite runs ` +
+          `in ${EXPECTED_CHECKOUT}. Stop that API, or start this checkout's ` +
+          `(bun run test:web does both) — a suite must not test another branch.`,
+      );
+    });
+  return g[CHECKED];
+}
+
+const forward: typeof fetch = (input, init) => {
   if (input instanceof Request) {
     // Neither client here produces a Request (the react client passes
     // string URLs, the service layer relative paths); the branch exists so
@@ -152,6 +184,15 @@ const wrappedFetch: typeof fetch = (input, init) => {
     applySetCookies(res.headers);
     return res;
   });
+};
+
+const wrappedFetch: typeof fetch = (input, init) => {
+  // Only app traffic reaches the stack; anything else passes through, and
+  // only that traffic needs the checkout check.
+  const target =
+    input instanceof Request ? new URL(input.url) : new URL(input, APP_ORIGIN);
+  if (target.origin !== APP_ORIGIN) return underlyingFetch()(input, init);
+  return ensureCheckout().then(() => forward(input, init));
 };
 
 export function installStackFetch(): void {

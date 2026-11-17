@@ -17,6 +17,12 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT
 . "$ROOT/scripts/services.sh"
 
+if [ "$ENV_FILE" != "$ROOT/.env" ]; then
+  echo "env: borrowing $ENV_FILE (the stack belongs to the main checkout)"
+fi
+
+require_env_file
+
 if [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = all ]; }; then
   WANT="$STACK_SERVICES"
 else
@@ -24,7 +30,7 @@ else
 fi
 
 set -a
-. "$ROOT/.env"
+. "$ENV_FILE"
 set +a
 
 ensure_postgres() {
@@ -49,19 +55,19 @@ ensure_s3() {
     return 1
   }
   echo "s3 (SeaweedFS): starting (native binary)..."
-  mkdir -p "$ROOT/.stack/seaweedfs" "$ROOT/.stack/logs"
+  mkdir -p "$STACK_STATE/seaweedfs" "$STACK_STATE/logs"
   # Everything is pinned to loopback: `-ip` is the address the master
   # advertises for the volume server, so a DHCP change cannot leave the S3
   # gateway dialling the machine's previous LAN address (the old failure:
   # GetObject answers 500 InternalError until the stack is restarted).
   # -volume.port: 8080 is often already taken on a dev machine, so the
   # volume server binds 8090 — only the S3 API on 9000 is used here.
-  nohup "$WEED_BIN" server -dir="$ROOT/.stack/seaweedfs" -s3 \
+  nohup "$WEED_BIN" server -dir="$STACK_STATE/seaweedfs" -s3 \
     -ip 127.0.0.1 -ip.bind 127.0.0.1 \
     -s3.ip.bind 127.0.0.1 -s3.port 9000 \
     -volume.port 8090 \
-    >"$ROOT/.stack/logs/seaweedfs.log" 2>&1 &
-  echo $! >"$ROOT/.stack/seaweedfs.pid"
+    >"$STACK_STATE/logs/seaweedfs.log" 2>&1 &
+  echo $! >"$STACK_STATE/seaweedfs.pid"
   wait_ready 'curl -s --noproxy "*" -o /dev/null --max-time 2 -w "%{http_code}" http://127.0.0.1:9000/ | grep -q 200' 30 "s3 (SeaweedFS)"
 }
 

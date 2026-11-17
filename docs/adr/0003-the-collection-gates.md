@@ -11,7 +11,7 @@ now the only gate on a visitor: an artwork carries `status`, `published` or
 public. A draft is part of the collection, hidden by the gate rather than by a
 second flag.
 
-The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Published**, **Draft**,
+The vocabulary is in [GLOSSARY.md](../../GLOSSARY.md): **Published**, **Draft**,
 **Public**, **Private**.
 
 ## Considered Options
@@ -21,7 +21,7 @@ The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Published**, **Draft**,
   draft now says in the product's own words. The extra expressiveness it bought
   — a work discoverable by id inside a private collection — had no usage, and
   the cost was a policy spread across four implementations with three different
-  answers (`routes/artworks.ts`, `routes/media.ts`, `routes/collections.ts`,
+  answers (`routes/artworks.ts`, `routes/media.ts`, `routes/catalogues.ts`,
   `authorize.ts`).
 - **A draft that is not yet in the collection.** Rejected. It makes publishing
   a membership change rather than a state change, which forks the owner's lists
@@ -40,7 +40,7 @@ The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Published**, **Draft**,
   (`save.api.test.ts`, `mediaProxy.api.test.ts`) are rewritten to pin its
   replacement: the collection is the whole gate on both the row and the bytes.
 - The drop is destructive. Under the forward-only rule in
-  [AGENTS.md](../AGENTS.md), a revert of the dropping release leaves old code
+  [AGENTS.md](../../AGENTS.md), a revert of the dropping release leaves old code
   against a schema without the column, so it needs a compensating migration. It
   shipped as two releases — column plus backfill, then the switch and the drop —
   for that reason.

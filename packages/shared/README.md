@@ -29,6 +29,12 @@ name, never a subpath:
 - `limits.ts` — `CATALOGUE_LIMITS` and `catalogueLimitForTier`, the per-tier
   catalogue quota the API enforces on create. The quota counts owned
   catalogues only; a collaboration does not consume it.
+- `pdfFallback.ts` — the Catalogue PDF fallback face's character rule:
+  `pdfFallbackCharacters`, every distinct code point above U+007F in the drawn
+  texts, ascending, and `pdfFallbackChunks`, that string split by code point at
+  `MAX_PDF_FALLBACK_CODE_POINTS`. The web app sends the chunks and the API
+  subsets the face from one, so the two sides cannot disagree about what the
+  fallback must cover.
 - `email.ts` — `normalizeEmail`, the one trim-and-lowercase an address gets on
   both sides of every comparison.
 - `invitationTime.ts` — the invitation clock: `INVITATION_TTL_MS` (seven
@@ -42,6 +48,12 @@ name, never a subpath:
   coexist ([ADR-0007](../../docs/adr/0007-ids-are-ten-base62-characters.md)).
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
+- `artworkSearch.ts` — the ten-field Catalogue search predicate and its caps,
+  the query suffix helper, and `normalizeSearchText`, the collapse Artist Name
+  suggestions also use.
+- `stagedUpload.ts` — the headers a staged presigned PUT signs: the list the
+  media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
+  because that package is not a workspace member.
 - `slug.ts` — `catalogueSlug`/`artworkSlug`, the `{urlizedName}-{id}` route
   params ⇄ bare ids.
 

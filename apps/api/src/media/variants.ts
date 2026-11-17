@@ -19,7 +19,7 @@ import type { ImageVariantKey } from "@arcula/shared";
 // enforces them; the stage routes import them from there.
 
 /** A square variant: scale to cover the box, then crop the overflow off. */
-export interface SquareVariantSpec {
+interface SquareVariantSpec {
   key: ImageVariantKey;
   fit: "cover";
   width: number;
@@ -27,7 +27,7 @@ export interface SquareVariantSpec {
 }
 
 /** A bounding-box variant: scale to fit inside it, keeping the aspect ratio. */
-export interface BoundedVariantSpec {
+interface BoundedVariantSpec {
   key: ImageVariantKey;
   fit: "inside";
   max: number;
