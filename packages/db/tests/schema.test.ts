@@ -5,11 +5,11 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the two composite PKs, the five CHECKs, the
+// position is the truth", the three composite PKs, the seven CHECKs, the
 // composite indexes behind the artwork lists, the partial unique pending-
 // invitation index) missing from either source fails here.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -17,6 +17,7 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
   account,
+  accountWriteWindows,
   artworkDocuments,
   artworkPhotoVariants,
   artworkPhotos,
@@ -95,6 +96,7 @@ const TABLE_NAMES = [
   "catalogueInvitations",
   "catalogueAccessGrants",
   "catalogueUnlockAttempts",
+  "accountWriteWindows",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -107,6 +109,42 @@ const readMigration = (tag: string): string =>
     fileURLToPath(new URL("..", import.meta.url)) + `migrations/${tag}.sql`,
     "utf8",
   );
+
+// Every committed migration, in order: the lock-down asks a question about the
+// whole history (is each table closed by *some* migration?), because a table
+// that ships after 0006 is locked down by its own migration, not by 0006.
+const allMigrationsSql = (): string =>
+  readdirSync(fileURLToPath(new URL("../migrations", import.meta.url)))
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => readMigration(file.replace(/\.sql$/, "")))
+    .join("\n");
+
+// The hand-appended existence guard in a migration, isolated from the
+// generated DDL above it: the `DO $$ … $$;` body is where every revoke must
+// live.
+const guardBlock = (sql: string): string => {
+  const start = sql.indexOf("DO $$");
+  expect(start).toBeGreaterThan(-1);
+  const end = sql.indexOf("$$;", start);
+  expect(end).toBeGreaterThan(start);
+  return sql.slice(start, end);
+};
+
+// The statements between a role's `IF … THEN` and the `END IF;` that closes
+// it. Bounding a revoke to this slice is the only assertion that proves it
+// belongs to that role: ordered against the guard alone it could drift into
+// the other branch, or past `END IF;` and out of the guard, and still sit
+// after some existence check.
+const roleBranch = (block: string, role: string): string => {
+  const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
+  const start = block.indexOf(guard);
+  expect(start).toBeGreaterThan(-1);
+  const open = start + guard.length;
+  const end = block.indexOf("END IF;", open);
+  expect(end).toBeGreaterThan(open);
+  return block.slice(open, end);
+};
 
 // The data statements a migration runs, in order: DDL is not a row write.
 const dataWrites = (sql: string): string[] =>
@@ -143,12 +181,15 @@ const KIND_SQL = readMigration("0009_catalogue_kind");
 // work and on every work written before the column existed.
 const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
 
+// The committed write limiter's counter: one additive table, alone.
+const WRITE_WINDOWS_SQL = readMigration("0011_account_write_windows");
+
 // The four market states, as the spec names them. Shared by the Drizzle check
 // assertion and the committed migration, so the two cannot disagree.
 const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
 
-describe("the thirteen-table schema", () => {
-  it("declares exactly the thirteen tables, and `user` is singular", () => {
+describe("the fourteen-table schema", () => {
+  it("declares exactly the fourteen tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -385,6 +426,50 @@ describe("the thirteen-table schema", () => {
       "collectionId",
       "windowStart",
     ]);
+  });
+
+  it("account_write_windows counts one account's writes per bucket and window", () => {
+    const c = cols(accountWriteWindows);
+    expect(Object.keys(c)).toEqual([
+      "userId",
+      "bucket",
+      "windowStart",
+      "count",
+    ]);
+    // The unit is the account, never the address: a hosted agent's calls all
+    // arrive from one cloud, so an address bucket would be one for everyone.
+    expect(c.userId.notNull).toBe(true);
+    // A row must name its bucket. A default would quietly spend a write's
+    // count in another bucket's counter.
+    expect(c.bucket.notNull).toBe(true);
+    expect(c.bucket.hasDefault).toBe(false);
+    // The window's start, floored by the route to its own window length. No
+    // default: the schema cannot know whether this row is a second or an hour.
+    expect(c.windowStart.dataType).toBe("date");
+    expect(c.windowStart.notNull).toBe(true);
+    expect(c.windowStart.hasDefault).toBe(false);
+    expect(c.count.dataType).toBe("number");
+    expect(c.count.notNull).toBe(true);
+    expect(c.count.default).toBe(0);
+    // The triple is the upsert's conflict target, in this order: one counter
+    // per account, bucket and window, and a claim is one INSERT … ON CONFLICT.
+    const pk = getTableConfig(accountWriteWindows).primaryKeys[0];
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "userId",
+      "bucket",
+      "windowStart",
+    ]);
+  });
+
+  it("account_write_windows restricts the bucket to the two fixed windows", () => {
+    // Two windows, one table: the per-second write bucket and the hourly
+    // import cap differ only in which bucket they spend and how the route
+    // floors `windowStart`. The database refuses a third value even when it
+    // arrives from outside the route that writes the rows.
+    expect(checksOf(accountWriteWindows)).toContainEqual({
+      name: "account_write_windows_bucket_check",
+      sql: "\"bucket\" in ('write', 'import')",
+    });
   });
 
   it("catalogue_collaborators is keyed by (catalogueId, userId), with the dashboard index on user", () => {
@@ -812,61 +897,97 @@ describe("the committed availability migration (as it will actually be applied)"
   });
 });
 
+describe("the committed write-limiter migration (as it will actually be applied)", () => {
+  it("creates the counter with the triple primary key and the two-bucket check", () => {
+    expect(WRITE_WINDOWS_SQL).toMatch(
+      /CREATE TABLE "account_write_windows" \([\s\S]*CONSTRAINT "account_write_windows_userId_bucket_windowStart_pk" PRIMARY KEY\("userId","bucket","windowStart"\)/,
+    );
+    expect(WRITE_WINDOWS_SQL).toContain(
+      `CONSTRAINT "account_write_windows_bucket_check" CHECK ("bucket" in ('write', 'import'))`,
+    );
+    // Domain tables stay reference-free, like the ones before them.
+    expect(WRITE_WINDOWS_SQL).not.toContain("FOREIGN KEY");
+  });
+
+  it("types the columns as the schema declares them, and writes no rows", () => {
+    // The other half of the two-source contract: a changed column type, a
+    // lost zero default or a stray backfill must not survive.
+    expect(WRITE_WINDOWS_SQL).toContain('"userId" text NOT NULL');
+    expect(WRITE_WINDOWS_SQL).toContain('"bucket" text NOT NULL');
+    expect(WRITE_WINDOWS_SQL).toContain(
+      '"windowStart" timestamp with time zone NOT NULL',
+    );
+    expect(WRITE_WINDOWS_SQL).toContain('"count" integer DEFAULT 0 NOT NULL');
+    expect(
+      WRITE_WINDOWS_SQL.replace(/timestamp with time zone/g, ""),
+    ).not.toContain("timestamp");
+    // The table ships alone, ahead of the code that writes it: nothing to
+    // backfill, so a data write would be a bug.
+    expect(dataWrites(WRITE_WINDOWS_SQL)).toEqual([]);
+  });
+
+  it("enables RLS and revokes both client roles inside the existence guard", () => {
+    // 0006 locked down what existed then; this table ships after it, so its
+    // own migration carries the treatment (the generated enablement above the
+    // hand-appended revoke).
+    expect(WRITE_WINDOWS_SQL).toContain(
+      'ALTER TABLE "account_write_windows" ENABLE ROW LEVEL SECURITY;',
+    );
+    const block = guardBlock(WRITE_WINDOWS_SQL);
+    for (const role of ["anon", "authenticated"]) {
+      // Inside this role's own branch: local Postgres and CI have neither
+      // role, so an unguarded revoke would fail every `db:migrate`.
+      expect(roleBranch(block, role)).toContain(
+        `REVOKE ALL ON "account_write_windows" FROM ${role};`,
+      );
+    }
+    // No revoke escapes the guard.
+    expect(
+      WRITE_WINDOWS_SQL.slice(0, WRITE_WINDOWS_SQL.indexOf("DO $$")),
+    ).not.toMatch(/REVOKE/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    const statements = WRITE_WINDOWS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
+  });
+});
+
 describe("the committed lock-down migration (as it will actually be applied)", () => {
-  // The schema's own table names, which the committed migration must render
+  // The schema's own table names, which the committed migrations must render
   // one enablement per. Derived from the Drizzle object, so a table added there
   // without regenerating shows up as a missing statement below.
   const schemaTableNames = Object.values(schema).map(
     (table) => getTableConfig(table as PgTable).name,
   );
 
+  // Across the whole history, not 0006 alone: a table that ships later is
+  // locked down by its own migration, and folding them together is what keeps
+  // "every table is closed" true as the schema grows.
   const enabledTableNames = [
-    ...RLS_SQL.matchAll(/ALTER TABLE "([^"]+)" ENABLE ROW LEVEL SECURITY;/g),
+    ...allMigrationsSql().matchAll(
+      /ALTER TABLE "([^"]+)" ENABLE ROW LEVEL SECURITY;/g,
+    ),
   ].map((match) => match[1]);
-
-  // The hand-appended guard, isolated from the generated DDL above it: the
-  // `DO $$ … $$;` body is where every revoke must live.
-  const guardBlock = (): string => {
-    const start = RLS_SQL.indexOf("DO $$");
-    expect(start).toBeGreaterThan(-1);
-    const end = RLS_SQL.indexOf("$$;", start);
-    expect(end).toBeGreaterThan(start);
-    return RLS_SQL.slice(start, end);
-  };
-
-  // The statements between a role's `IF … THEN` and the `END IF;` that closes
-  // it. Bounding a revoke to this slice is the only assertion that proves it
-  // belongs to that role: ordered against the guard alone it could drift into
-  // the other branch, or past `END IF;` and out of the guard, and still sit
-  // after some existence check.
-  const roleBranch = (block: string, role: string): string => {
-    const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
-    const start = block.indexOf(guard);
-    expect(start).toBeGreaterThan(-1);
-    const open = start + guard.length;
-    const end = block.indexOf("END IF;", open);
-    expect(end).toBeGreaterThan(open);
-    return block.slice(open, end);
-  };
 
   it("enables RLS on every table in the Drizzle object, with no table opted out", () => {
     const disabled = Object.values(schema)
       .filter((table) => !getTableConfig(table as PgTable).enableRLS)
       .map((table) => getTableConfig(table as PgTable).name);
-    // All thirteen, not a sample: a new table is closed unless its declaration
+    // All fourteen, not a sample: a new table is closed unless its declaration
     // omits `enableRLS()`, which this turns red.
     expect(disabled).toEqual([]);
-    expect(schemaTableNames).toHaveLength(13);
+    expect(schemaTableNames).toHaveLength(14);
   });
 
   it("renders one enablement statement per table, matching the schema", () => {
     expect(enabledTableNames).toEqual(expect.arrayContaining(schemaTableNames));
     expect(enabledTableNames).toHaveLength(schemaTableNames.length);
-    expect(enabledTableNames).toHaveLength(13);
+    expect(enabledTableNames).toHaveLength(14);
   });
 
   it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {
-    const block = guardBlock();
+    const block = guardBlock(RLS_SQL);
     for (const role of ["anon", "authenticated"]) {
       const branch = roleBranch(block, role);
 
