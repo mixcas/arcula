@@ -3,6 +3,7 @@
 // spreading it here — no transport change, no new route.
 
 import type { AnyToolDefinition } from "./tool";
+import { artworkTools } from "./tools/artworks";
 import { catalogueTools } from "./tools/catalogues";
 
-export const tools: AnyToolDefinition[] = [...catalogueTools];
+export const tools: AnyToolDefinition[] = [...catalogueTools, ...artworkTools];

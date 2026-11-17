@@ -1,11 +1,12 @@
-// The catalogue tools: the reads a Connection starts from and the writes that
-// let an agent make and shape a Catalogue.
+// The catalogue tools: the reads a Connection starts from — `list_catalogues`
+// and `get_catalogue` — and the writes that let an agent make and shape a
+// Catalogue.
 //
 // Each answer is a small JSON document, not a prose paragraph: the agent
 // relays facts and needs the ids the other tools take. What the tools say is
-// what the routes say — the same module, the same membership verdict, the same
-// tier cap — so an account that cannot create or edit a Catalogue in the app
-// cannot do it here either.
+// what the routes say — the same modules, the same membership verdict, the
+// same tier cap — so an account that cannot see, create or edit a Catalogue in
+// the app cannot do it here either.
 //
 // The three rules the schemas cannot express ride the descriptions, because
 // they are prompt text an agent reads before it chooses arguments:
@@ -25,11 +26,16 @@ import {
   catalogueUpdateSchema,
   type CatalogueRead,
 } from "@arcula/shared";
+import { readableCatalogueFor } from "../../authorize";
+import { catalogueWorkCounts } from "../../catalogueCounts";
 import { listReadableCatalogues } from "../../catalogueList";
 import { createCatalogue, updateCatalogue } from "../../catalogueWrite";
+import { serializeCatalogue } from "../../serialize";
 import { defineTool } from "../tool";
 
 const listCataloguesInput = z.object({});
+
+const getCatalogueInput = z.object({ catalogueId: z.string().min(1) });
 
 /** One Catalogue as `list_catalogues` names it: the identity the other tools
  *  take, the Kind (fixed at creation), its visibility, and the caller's role.
@@ -88,6 +94,54 @@ export const catalogueTools = [
       const catalogues = await listReadableCatalogues(userId);
       const summaries = catalogues.map(catalogueSummary);
       return { total: summaries.length, catalogues: summaries };
+    },
+  }),
+  defineTool({
+    name: "get_catalogue",
+    description:
+      "Read one Catalogue: its name, its Kind (fixed at creation), its " +
+      "visibility, the caller's role when a member, and how many works it " +
+      "holds by status. A member is told every status, a draft count " +
+      "included; anyone else is told published works only. Deleted works " +
+      "are never counted. A private Catalogue answers `forbidden` to an " +
+      "account that is not a member; a missing or deleted one answers " +
+      "`not-found`. Use `search_artworks` to read the works themselves.",
+    inputSchema: getCatalogueInput,
+    call: async ({ catalogueId }, userId) => {
+      // The same read verdict the route uses: a member bypasses a Protected
+      // catalogue's password challenge, a public one admits a visitor, and a
+      // private one refuses a non-member in the app's own words.
+      const { catalogue, audience } = await readableCatalogueFor(
+        userId,
+        catalogueId,
+      );
+      const role =
+        audience === "member"
+          ? catalogue.userId === userId
+            ? "owner"
+            : "collaborator"
+          : undefined;
+      // The wire document decides the fields the app has always exposed — the
+      // Kind's validity, the absent description, and the password state as a
+      // member-only fact.
+      const document = serializeCatalogue(catalogue, {
+        audience,
+        ...(role === undefined ? {} : { role }),
+      });
+      return {
+        id: document.id,
+        name: document.name,
+        kind: document.kind,
+        visibility: document.isPublic ? "public" : "private",
+        ...(document.isPasswordProtected === undefined
+          ? {}
+          : { passwordProtected: document.isPasswordProtected }),
+        ...(document.description === undefined
+          ? {}
+          : { description: document.description }),
+        ...(document.role === undefined ? {} : { role: document.role }),
+        counts: await catalogueWorkCounts(catalogue.id, audience),
+      };
     },
   }),
   defineTool({
