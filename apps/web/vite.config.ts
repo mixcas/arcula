@@ -15,6 +15,16 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, envDir);
   const apiTarget = env.VITE_API_TARGET ?? "http://localhost:8000";
 
+  // Source maps are the local and dev default; production is the one
+  // exception, and `scripts/build-lambda.sh` sets this to `off` for a
+  // production package and to `on` for dev. It is deliberately NOT
+  // VITE_-prefixed: Vite inlines a VITE_ value into the client bundle, and
+  // this is a build instruction, not client configuration. `true` is Vite's
+  // linked form — a separate .map beside the bundle with a sourceMappingURL
+  // comment naming it — never `hidden` (no reference, so no DevTools step)
+  // and never `inline` (one unreadable bundle).
+  const emitSourceMaps = process.env.ARCULA_SOURCE_MAPS !== "off";
+
   return {
     plugins: [react()],
 
@@ -36,6 +46,7 @@ export default defineConfig(({ mode }) => {
 
     build: {
       outDir: "dist",
+      sourcemap: emitSourceMaps,
     },
   };
 });
