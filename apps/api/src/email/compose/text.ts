@@ -9,11 +9,11 @@
 /** The display name every Arcula mail is sent under. A configured sender
  *  without one would look like an anonymous relay, which is exactly the shape
  *  a recipient is right to distrust. */
-export const SENDER_NAME = "Arcula";
+const SENDER_NAME = "Arcula";
 
 /** The most of a catalogue or inviter name a subject carries. The body
  *  always has the whole value. */
-export const SUBJECT_NAME_MAX = 40;
+const SUBJECT_NAME_MAX = 40;
 
 /**
  * The five characters that turn user text into markup. `'` is escaped too:

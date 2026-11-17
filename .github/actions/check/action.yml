@@ -1,9 +1,10 @@
 # The repository's own gate, in one place: the pull-request check and the two
 # deploy workflows all run this, so a gate added locally cannot be forgotten
 # in one of them. It runs the local commands verbatim — `check` (tsc over
-# every package, ESLint, Prettier) and every suite that needs no services:
-# shared, db and cdk. The API and web suites need Postgres, object storage
-# and a mail sink, which the runner does not host; they stay a laptop's job.
+# every package, ESLint, Prettier and the dead-pointer check) and every suite
+# that needs no services: shared, db, cdk and the repository scripts. The API
+# and web suites need Postgres, object storage and a mail sink, which the
+# runner does not host; they stay a laptop's job.
 name: Check
 description: Typecheck, lint, format and the service-free test suites.
 
@@ -34,6 +35,9 @@ runs:
     - name: Typecheck, lint and format
       shell: bash
       run: bun run check
+    - name: Scripts suite
+      shell: bash
+      run: bun run test:scripts
     - name: Shared suite
       shell: bash
       run: bun run test:shared

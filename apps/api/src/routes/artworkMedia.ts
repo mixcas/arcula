@@ -158,7 +158,7 @@ async function discardEntry(
   return doomed.length;
 }
 
-export function buildMediaRoutes(kind: PopulationKind): Hono {
+function buildMediaRoutes(kind: PopulationKind): Hono {
   const pop = POPULATIONS[kind];
   const r = new Hono();
 

@@ -10,10 +10,10 @@
 import { sortPhotos, type Artwork, type ArtworkPhoto } from "@arcula/shared";
 
 /** At most three photos per Artwork, in stored order. */
-export const PHOTOS_PER_ARTWORK = 3;
+const PHOTOS_PER_ARTWORK = 3;
 
 /** Six no-photo works per grid page (2 columns × 3 rows). */
-export const GRID_BLOCK_COUNT = 6;
+const GRID_BLOCK_COUNT = 6;
 
 export type CataloguePdfPage =
   | { kind: "photo"; artwork: Artwork; photo: ArtworkPhoto }
@@ -37,7 +37,7 @@ export const isExportableArtwork = (artwork: Artwork): boolean =>
 const idOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Artist name, then title, with the id making an exact tie stable. */
-export const compareArtworks = (a: Artwork, b: Artwork): number =>
+const compareArtworks = (a: Artwork, b: Artwork): number =>
   collator.compare(a.artistName, b.artistName) ||
   collator.compare(a.title, b.title) ||
   idOrder(a.id, b.id);

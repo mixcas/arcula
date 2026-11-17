@@ -39,8 +39,7 @@ import {
 } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
-  artworkBulkDeleteSchema,
-  artworkBulkRestoreSchema,
+  artworkBulkSelectionSchema,
   artworkImportSchema,
   catalogueCreateSchema,
   catalogueUnlockSchema,
@@ -48,8 +47,7 @@ import {
   catalogueLimitForTier,
   artworkSchema,
   IMPORTED_WORK_STATUS,
-  type ArtworkBulkDeletePayload,
-  type ArtworkBulkRestorePayload,
+  type ArtworkBulkSelectionPayload,
   type ArtworkImportPayload,
   type CatalogueCreatePayload,
   type CatalogueUnlockPayload,
@@ -604,9 +602,9 @@ catalogueRoutes.post(
   requireSession,
   async (c) => {
     const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
-    const payload: ArtworkBulkDeletePayload = await parseBody(
+    const payload: ArtworkBulkSelectionPayload = await parseBody(
       c,
-      artworkBulkDeleteSchema,
+      artworkBulkSelectionSchema,
     );
 
     return c.json({
@@ -629,9 +627,9 @@ catalogueRoutes.post(
   requireSession,
   async (c) => {
     const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
-    const payload: ArtworkBulkRestorePayload = await parseBody(
+    const payload: ArtworkBulkSelectionPayload = await parseBody(
       c,
-      artworkBulkRestoreSchema,
+      artworkBulkSelectionSchema,
     );
 
     return c.json({

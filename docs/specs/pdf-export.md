@@ -21,9 +21,9 @@ The design record, in order:
   and [#127 fonts and the oblique Title](https://github.com/mixcas/arcula/issues/127).
 - Grilling: [#128 access and edge cases](https://github.com/mixcas/arcula/issues/128).
 - Prototype: [#129 one real collection end to end](https://github.com/mixcas/arcula/issues/129),
-  on the branch `prototype/pdf-export` (never merged). Its measured tables are in
-  `docs/prototypes/pdf-export/README.md` on that branch; the sample PDFs and
-  rendered pages are beside it. The template this document was measured from is
+  on the branch `prototype/pdf-export` (never merged). Its measured tables,
+  sample PDFs and rendered pages live on that branch and nowhere in this tree.
+  The template this document was measured from is
   `docs/templates/pdf/arcula-pdf-template.pdf`, with
   `artwork-page.png` and `artworks-grid.png` beside it.
 
@@ -109,7 +109,7 @@ rule.
    Collaborator, published only for a Visitor).
 
 The page reuses `publicFailure` from
-`apps/web/src/components/collection/usePublicCollection.ts` for the
+`apps/web/src/components/catalogue/usePublicCatalogue.ts` for the
 `locked`/`private`/`error` decision rather than re-deriving it. On unlock, the
 lock screen's `onUnlocked` runs the same load again; the grant cookie is now
 set, and the export restarts from the beginning.

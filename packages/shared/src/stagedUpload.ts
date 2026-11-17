@@ -22,7 +22,7 @@
 // carries it.
 
 /** The signed metadata header the original's filename rides. */
-export const STAGED_NAME_HEADER = "x-amz-meta-name";
+const STAGED_NAME_HEADER = "x-amz-meta-name";
 
 /**
  * The metadata KEY the presigner is given, which the SDK turns into that

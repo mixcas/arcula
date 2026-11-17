@@ -22,7 +22,7 @@ what the work had to reconcile — none of it describes the code today.
 - `CollectionSettingsPage.tsx` already renders a `Require Password` switch and a
   `PasswordInput` (`:66-67`, `:267-286`) — orphaned from an earlier design, never
   sent in the update payload and never loaded from the collection.
-- `usePublicCollection.ts`'s doc comment still refers to a "password prompt"
+- `usePublicCatalogue.ts`'s doc comment still refers to a "password prompt"
   that does not exist.
 - There is no rate limiter anywhere in the product.
 
@@ -58,10 +58,10 @@ and the schema suite pass, and no route mentions the new columns.
 
 Ordered so each step is independently testable.
 
-1. **`apps/api/src/collectionPassword.ts`** — pure module:
+1. **`apps/api/src/cataloguePassword.ts`** — pure module:
    `hashPassword` / `verifyPassword` over `node:crypto` `scrypt`, salt and
    parameters encoded as `scrypt$N$r$p$salt$hash`. Tier-1 tested directly.
-2. **`collectionGrants.ts`** — pure facts beside `invitations.ts`: mint a
+2. **`catalogueGrants.ts`** — pure facts beside `invitations.ts`: mint a
    32-byte token, hash it, and decide whether a row is usable (`expiresAt` in the
    future). Tier-1 tested.
 3. **`access.ts`** — extend the verdicts to take the grant as a fact beside
@@ -83,7 +83,7 @@ invalid-password` on a miss; `429` past the throttle window. The route shipped
    `passwordHash IS NOT NULL` and emit it on the **member read only**. The hash
    never leaves the server, and the anonymous read and the anonymous list do not
    carry the boolean at all.
-7. **`collections.ts`** — the anonymous list filter becomes public **and not
+7. **`catalogues.ts`** — the anonymous list filter becomes public **and not
    protected**; `requireReadableCollection` consults the extended verdict.
 8. **`media.ts`** and **`artworkRead.ts`** — the photo path consults the
    extended verdict so the bytes are covered. Documents stay member-only.
@@ -91,7 +91,7 @@ invalid-password` on a miss; `429` past the throttle window. The route shipped
    `collectionReadSchema` / `Collection` gain optional `isPasswordProtected`;
    `passwordSchema` (the length rule) lives next to the other shared schemas.
 10. **Web:**
-    - `usePublicCollection.ts` gains the `locked` status in the union, and
+    - `usePublicCatalogue.ts` gains the `locked` status in the union, and
       `publicCollectionState` gains its pure branch.
     - `PublicCollectionPage` renders the lock screen (app chrome, **not** a
       skin) and re-runs the load on success — the collection read stays
@@ -115,7 +115,7 @@ invalid-password` on a miss; `429` past the throttle window. The route shipped
   succeeds with the grant and is refused without it → a password change revokes
   the outstanding grant.
 - **Deleted/rewritten:** the orphaned settings UI has no test to delete; the
-  `usePublicCollection` doc comment's stale "password prompt" reference goes.
+  `usePublicCatalogue` doc comment's stale "password prompt" reference goes.
 - **Not written:** anything asserting a Mantine control exists. If a mutation to
   the lock screen would be invisible in review, it earns a tier-2 case; otherwise
   it is screenshots' job.

@@ -19,7 +19,7 @@ becomes a suggestion input without becoming one: the suggestions come from the
 collections the caller can already read, so the field gets faster and the access
 model stays exactly as it is.
 
-The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Collection**, **Owner**,
+The vocabulary is in [GLOSSARY.md](../../GLOSSARY.md): **Collection**, **Owner**,
 **Collaborator**, **Artwork**, **Draft**, **Deleted**. There is no **Artist**
 there and this decision adds none: **Artist Name** remains a free-text field on
 an Artwork, and the suggestions are derived from the artworks themselves.

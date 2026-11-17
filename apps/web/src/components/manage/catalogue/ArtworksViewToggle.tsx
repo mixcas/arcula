@@ -3,7 +3,7 @@ import { SegmentedControl, Tooltip } from "@mantine/core";
 import { IconBorderAll, IconLayoutGrid } from "@tabler/icons-react";
 import type { ArtworksView } from "@/userSettings";
 
-export interface ArtworksViewToggleProps {
+interface ArtworksViewToggleProps {
   value: ArtworksView;
   onChange: (value: ArtworksView) => void;
 }

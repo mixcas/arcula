@@ -60,12 +60,12 @@ interface SkinOptionSpecBase {
   description?: string;
 }
 
-export interface BooleanOptionSpec extends SkinOptionSpecBase {
+interface BooleanOptionSpec extends SkinOptionSpecBase {
   kind: "boolean";
   default: boolean;
 }
 
-export interface NumberOptionSpec extends SkinOptionSpecBase {
+interface NumberOptionSpec extends SkinOptionSpecBase {
   kind: "number";
   default: number;
   /** Bounds for the generated control. A stored value outside them is clamped. */
@@ -74,7 +74,7 @@ export interface NumberOptionSpec extends SkinOptionSpecBase {
   step?: number;
 }
 
-export interface TextOptionSpec extends SkinOptionSpecBase {
+interface TextOptionSpec extends SkinOptionSpecBase {
   kind: "text";
   default: string;
 }

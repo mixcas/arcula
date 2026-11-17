@@ -29,7 +29,7 @@ import subsetFont from "subset-font";
 import { ApiError } from "./errors";
 
 /** The client sends the document's set in chunks of this size. */
-export const MAX_FALLBACK_CODE_POINTS = MAX_PDF_FALLBACK_CODE_POINTS;
+const MAX_FALLBACK_CODE_POINTS = MAX_PDF_FALLBACK_CODE_POINTS;
 
 const CACHE_LIMIT = 32;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;

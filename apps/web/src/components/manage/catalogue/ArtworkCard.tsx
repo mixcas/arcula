@@ -10,7 +10,7 @@ import {
 } from "@/services/artworkLinks";
 import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
 
-export interface ArtworkCardProps {
+interface ArtworkCardProps {
   artwork: Artwork;
   /** The "{slug}-{id}" catalogue param, reused verbatim in the card links. */
   catalogueParam: string;

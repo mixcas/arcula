@@ -1,14 +1,14 @@
 import type { Artwork } from "@arcula/shared";
 
 /** The two columns the manage view sorts by — the Table's headers and the Grid's select agree on them. */
-export type ArtworksSortField = "title" | "artistName";
+type ArtworksSortField = "title" | "artistName";
 
 /**
  * The direction. Spelled as mantine-datatable spells it so the shared state
  * feeds the Table's controlled `sortStatus` unchanged, and a header click
  * writes straight back into it.
  */
-export type SortDirection = "asc" | "desc";
+type SortDirection = "asc" | "desc";
 
 export interface SortState {
   field: ArtworksSortField;

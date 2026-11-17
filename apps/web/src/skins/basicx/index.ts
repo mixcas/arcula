@@ -19,7 +19,3 @@ export const basicxSkin: SkinDefinition = {
   Artwork: BasicxSkin,
   // Present only so a test can prove the registry falls back; not a real skin.
 };
-
-export { basicxTheme } from "./theme";
-export { BASICX_OPTION_SPECS } from "./options";
-export type { BasicxOptions } from "./options";

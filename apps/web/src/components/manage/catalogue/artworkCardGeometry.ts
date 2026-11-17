@@ -8,10 +8,10 @@
 // the wrong edge.
 
 /** The widest reserved box: a 2:1 panorama. */
-export const ASPECT_MIN = 0.5;
+const ASPECT_MIN = 0.5;
 
 /** The tallest reserved box: a 1.4 portrait. */
-export const ASPECT_MAX = 1.4;
+const ASPECT_MAX = 1.4;
 
 /** A photo with no usable dimensions reserves a square box. */
 const ASPECT_FALLBACK = 1;
