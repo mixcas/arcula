@@ -2,16 +2,17 @@
 // Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
-// link + cache headers), sign-up (and that its cookie is `Secure`), /me,
+// link + cache headers), sign-up (and that its cookie is `Secure`), the
+// session token refused as an API bearer, /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
 // real 12 MP photo through presign → direct PUT → process → save (the
 // presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
 // target), a visitor read, and a reset request (the Resend call path). The
 // catalogue cap is covered by the API integration suite, not here: reaching it
 // would mean ten creates per run. One account is created per run under
-// verify-<ts>@example.test; nothing is printed that is a credential — and the
-// presigned upload URL is a bearer token, so it is never printed either. Exit
-// code 0 = every step passed.
+// verify-<ts>@example.test; nothing is printed that is a credential — the
+// session token, and the presigned upload URL (a bearer token), are never
+// printed either. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { STAGED_PUT_SIGNED_HEADERS } from "@arcula/shared";
@@ -92,6 +93,7 @@ const post = (path: string, body: unknown, authed = false) =>
   sessionCookie =
     cookies.find((c) => c.startsWith("__Secure-better-auth.session_token=")) ??
     null;
+  const body = (await res.json().catch(() => ({}))) as { token?: string };
   step(
     "sign-up",
     res.status === 200 && sessionCookie !== null,
@@ -102,6 +104,27 @@ const post = (path: string, body: unknown, authed = false) =>
     "session cookie is Secure",
     sessionCookie !== null && /;\s*Secure\b/i.test(sessionCookie),
   );
+
+  // 3b. The session token is not a second credential in a deployment. A deploy
+  //     mounts no bearer plugin (env.ts → bearerAuthAllowed, ADR-0013), so the
+  //     token the sign-up just minted is a cookie session and nothing else:
+  //     presenting it as `Authorization: Bearer` must not resolve a session.
+  //     This is the deployed side of the rule the pure predicate carries, and
+  //     the only place it can be asked. A local stack still admits the bearer
+  //     form — that is the development affordance this replaced the deploy
+  //     verifier's reliance on, not a defect — but this script is aimed at a
+  //     deployment, as its `__Secure-` cookie assertion above already requires.
+  //     The token is never printed and never sent anywhere but this request.
+  if (typeof body.token === "string") {
+    const bearer = await fetch(`${base}/api/v1/me`, {
+      headers: { authorization: `Bearer ${body.token}` },
+    });
+    step(
+      "the session token is refused as an API bearer",
+      bearer.status === 401,
+      `status ${bearer.status}`,
+    );
+  }
 }
 
 // 4. The duplicate sign-up answers the native 422, over the gateway.
