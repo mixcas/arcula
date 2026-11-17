@@ -72,8 +72,9 @@ alternatives are in
 
 ## The data model
 
-Fourteen tables in Postgres with sharing, password protection and the write
-limiter's counter, defined in
+Twenty-two tables in Postgres: the domain model with sharing, password
+protection and the write limiter's counter, plus the eight tables the agent
+access surface's OAuth provider and JWT plugin write. All are defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 **The entity is a Catalogue; the physical table is `collections`.** The Drizzle
@@ -112,6 +113,31 @@ belong to Better Auth; nothing in the domain tables mirrors them.
 
 `verification` exists even though email verification is off, so turning it on is
 a config flip rather than a schema change.
+
+### Agent access (`jwks` and the `oauth*` tables)
+
+Eight tables the JWT and OAuth provider plugins write, hand-authored because
+`@better-auth/cli` is deprecated with no 1.7.x release: `jwks` (the signing key
+pair the session JWT plugin mints) and the provider's `oauthClient`,
+`oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
+`oauthConsent` and `oauthClientAssertion`. The adapter addresses each table by
+its exported key and each column by its property name, so the names are the
+plugin's, exactly — including `oauthClient.requirePKCE`.
+`apps/api/tests/adapter.test.ts` asserts every model and field
+`getAuthTables()` returns exists here, which is the generator a missing release
+would otherwise provide.
+
+A **Connection** is one authorization's refresh-token family: the code mints a
+row, each rotation revokes it and inserts the next with the same
+`authorizationCodeId`, and that id is what the account surface lists and
+revokes. `oauthConsent` is one row per (account, client) — the plugin upserts it
+and declares no unique index — and the MCP guard reads it on every call, so
+deleting it closes an already-issued access token's path immediately even
+though the JWT itself lives for an hour. With `jwt()` in play,
+`oauthAccessToken` stays empty: access tokens are JWTs, not rows.
+
+`0012_agent_access` is additive and ships alone, ahead of the MCP code, per
+[A schema change ships alone](AGENTS.md#migrations-are-forward-only).
 
 ### `collections`
 

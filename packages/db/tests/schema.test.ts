@@ -27,6 +27,14 @@ import {
   catalogueInvitations,
   catalogueUnlockAttempts,
   catalogues,
+  jwks,
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
   schema,
   session,
   user,
@@ -91,6 +99,14 @@ const TABLE_NAMES = [
   "session",
   "account",
   "verification",
+  "jwks",
+  "oauthClient",
+  "oauthResource",
+  "oauthClientResource",
+  "oauthRefreshToken",
+  "oauthAccessToken",
+  "oauthConsent",
+  "oauthClientAssertion",
   "catalogues",
   "catalogueCollaborators",
   "catalogueInvitations",
@@ -150,6 +166,11 @@ const roleBranch = (block: string, role: string): string => {
 const dataWrites = (sql: string): string[] =>
   [...sql.matchAll(/\b(UPDATE|INSERT|DELETE|TRUNCATE)\b/g)].map((m) => m[1]);
 
+// The row writes alone: a foreign key's `ON DELETE … ON UPDATE …` clause names
+// two of the same verbs and is not a data write, so it is stripped first.
+const rowWrites = (sql: string): string[] =>
+  dataWrites(sql.replace(/ON (DELETE|UPDATE) [a-z ]+/g, ""));
+
 // The committed init migration.
 const INIT_SQL = readMigration("0000_init");
 
@@ -184,12 +205,16 @@ const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
 // The committed write limiter's counter: one additive table, alone.
 const WRITE_WINDOWS_SQL = readMigration("0011_account_write_windows");
 
+// The OAuth provider and JWT plugin's eight tables: additive, alone, ahead of
+// the MCP code that reads them.
+const AGENT_ACCESS_SQL = readMigration("0012_agent_access");
+
 // The four market states, as the spec names them. Shared by the Drizzle check
 // assertion and the committed migration, so the two cannot disagree.
 const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
 
-describe("the fourteen-table schema", () => {
-  it("declares exactly the fourteen tables, and `user` is singular", () => {
+describe("the twenty-two-table schema", () => {
+  it("declares exactly the twenty-two tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -560,6 +585,128 @@ describe("the fourteen-table schema", () => {
       "deletedAt",
     ]);
     expect(idx.artworks_collection_id_idx).toEqual(["collectionId"]);
+  });
+
+  it("jwks keeps the signing key pair the jwt plugin mints", () => {
+    const c = cols(jwks);
+    expect(Object.keys(c)).toEqual([
+      "id",
+      "publicKey",
+      "privateKey",
+      "createdAt",
+      "expiresAt",
+      "alg",
+      "crv",
+    ]);
+    expect(c.id.primary).toBe(true);
+    expect(c.publicKey.notNull).toBe(true);
+    expect(c.privateKey.notNull).toBe(true);
+    expect(c.expiresAt.notNull).toBe(false);
+  });
+
+  it("oauth_client is keyed by the client's own id and keeps its discovery origin", () => {
+    const c = cols(oauthClient);
+    expect(c.id.primary).toBe(true);
+    // The CIMD client id is the URL the client hosts: unique by definition.
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.clientId.isUnique).toBe(true);
+    expect(c.redirectUris.notNull).toBe(true);
+    expect(c.redirectUris.dataType).toBe("array");
+    // `"cimd"` marks a client the metadata document owns; a hand-registered
+    // one leaves it null. The tool guard reads neither, but the plugin does.
+    expect(c.clientDiscoveryId.notNull).toBe(false);
+    // Capitalised exactly as the plugin's field name: the adapter addresses
+    // columns by property name, so `requirePkce` would be a missing column.
+    expect(c.requirePKCE).toBeDefined();
+    expect(c.metadata.dataType).toBe("json");
+    expect(indexesOf(oauthClient)).toMatchObject({
+      oauth_client_user_id_idx: ["userId"],
+    });
+  });
+
+  it("oauth_resource is keyed by its identifier, with a policy version", () => {
+    const c = cols(oauthResource);
+    expect(c.identifier.notNull).toBe(true);
+    expect(c.identifier.isUnique).toBe(true);
+    expect(c.name.notNull).toBe(true);
+    expect(c.allowedScopes.dataType).toBe("array");
+    expect(c.customClaims.dataType).toBe("json");
+    expect(c.policyVersion.notNull).toBe(true);
+    expect(c.policyVersion.default).toBe(1);
+  });
+
+  it("oauth_client_resource pairs a client and a resource once", () => {
+    const c = cols(oauthClientResource);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.resourceId.notNull).toBe(true);
+    expect(c.metadata.dataType).toBe("json");
+    expect(indexesOf(oauthClientResource)).toMatchObject({
+      oauth_client_resource_client_id_resource_id_key: [
+        "clientId",
+        "resourceId",
+      ],
+    });
+    const unique = getTableConfig(oauthClientResource).indexes.find(
+      (i) =>
+        i.config.name === "oauth_client_resource_client_id_resource_id_key",
+    );
+    expect(unique?.config.unique).toBe(true);
+  });
+
+  it("oauth_refresh_token is the live connection's family, indexed for rotation", () => {
+    const c = cols(oauthRefreshToken);
+    expect(c.token.notNull).toBe(true);
+    expect(c.token.isUnique).toBe(true);
+    expect(c.userId.notNull).toBe(true);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.scopes.dataType).toBe("array");
+    // The rotation's identity: every refresh in one connect inherits the
+    // authorization code's id (the Connection key the account surface lists).
+    expect(c.authorizationCodeId.notNull).toBe(false);
+    expect(indexesOf(oauthRefreshToken)).toMatchObject({
+      oauth_refresh_token_user_id_idx: ["userId"],
+      oauth_refresh_token_client_id_idx: ["clientId"],
+      oauth_refresh_token_session_id_idx: ["sessionId"],
+      oauth_refresh_token_authorization_code_id_idx: ["authorizationCodeId"],
+    });
+  });
+
+  it("oauth_access_token is the opaque-token table the JWT plugin leaves empty", () => {
+    const c = cols(oauthAccessToken);
+    expect(c.token.isUnique).toBe(true);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.refreshId.notNull).toBe(false);
+    expect(indexesOf(oauthAccessToken)).toMatchObject({
+      oauth_access_token_client_id_idx: ["clientId"],
+      oauth_access_token_refresh_id_idx: ["refreshId"],
+    });
+  });
+
+  it("oauth_consent is one row per account and client, with no unique index", () => {
+    const c = cols(oauthConsent);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.userId.notNull).toBe(false);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.resources.dataType).toBe("array");
+    expect(c.updatedAt.notNull).toBe(true);
+    // The plugin upserts on (clientId, userId, referenceId?) and declares no
+    // unique index; adding one would refuse the row a second connect needs.
+    const unique = getTableConfig(oauthConsent).indexes.filter(
+      (i) => i.config.unique,
+    );
+    expect(unique).toEqual([]);
+    expect(indexesOf(oauthConsent)).toMatchObject({
+      oauth_consent_client_id_idx: ["clientId"],
+      oauth_consent_user_id_idx: ["userId"],
+    });
+  });
+
+  it("oauth_client_assertion carries the assertion's expiry, and nothing else", () => {
+    const c = cols(oauthClientAssertion);
+    expect(Object.keys(c)).toEqual(["id", "expiresAt"]);
+    expect(c.expiresAt.notNull).toBe(true);
   });
 });
 
@@ -953,6 +1100,116 @@ describe("the committed write-limiter migration (as it will actually be applied)
   });
 });
 
+describe("the committed agent-access migration (as it will actually be applied)", () => {
+  it("creates the eight plugin tables, with the plugin's own names", () => {
+    const created = [
+      ...AGENT_ACCESS_SQL.matchAll(/CREATE TABLE "([^"]+)"/g),
+    ].map((m) => m[1]);
+    expect(created.sort()).toEqual(
+      [
+        "jwks",
+        "oauthClient",
+        "oauthResource",
+        "oauthClientResource",
+        "oauthRefreshToken",
+        "oauthAccessToken",
+        "oauthConsent",
+        "oauthClientAssertion",
+      ].sort(),
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The release ships alone, ahead of the code that reads the tables:
+    // every statement must leave the old code's rows and queries intact.
+    expect(rowWrites(AGENT_ACCESS_SQL)).toEqual([]);
+    expect(AGENT_ACCESS_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(AGENT_ACCESS_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+
+  it("keys the client, the refresh token and the resource by their unique facts", () => {
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthClient_clientId_unique" UNIQUE("clientId")`,
+    );
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthRefreshToken_token_unique" UNIQUE("token")`,
+    );
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthResource_identifier_unique" UNIQUE("identifier")`,
+    );
+    // One (client, resource) pair: the provider's per-client resource policy
+    // reads this row, and a duplicate would split the policy in two.
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "oauth_client_resource_client_id_resource_id_key" ON "oauthClientResource" USING btree \("clientId","resourceId"\)/,
+    );
+  });
+
+  it("carries the indexes the rotation and the consent lookup read", () => {
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_refresh_token_authorization_code_id_idx" ON "oauthRefreshToken" USING btree \("authorizationCodeId"\)/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_consent_client_id_idx" ON "oauthConsent" USING btree \("clientId"\)/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_consent_user_id_idx" ON "oauthConsent" USING btree \("userId"\)/,
+    );
+  });
+
+  it("cascades a deleted client or resource, and nulls a deleted session", () => {
+    // The plugin's declared references: the schema test asserts the Drizzle
+    // object, this asserts the SQL that is actually applied.
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CONSTRAINT "oauthClientResource_clientId_oauthClient_clientId_fk" FOREIGN KEY \("clientId"\) REFERENCES "public"\."oauthClient"\("clientId"\) ON DELETE cascade/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CONSTRAINT "oauthRefreshToken_sessionId_session_id_fk" FOREIGN KEY \("sessionId"\) REFERENCES "public"\."session"\("id"\) ON DELETE set null/,
+    );
+  });
+
+  it("uses timestamptz for every timestamp", () => {
+    expect(
+      AGENT_ACCESS_SQL.replace(/timestamp with time zone/g, ""),
+    ).not.toContain("timestamp");
+  });
+
+  it("enables RLS and revokes both client roles inside the existence guard", () => {
+    const tables = [
+      "jwks",
+      "oauthClient",
+      "oauthResource",
+      "oauthClientResource",
+      "oauthRefreshToken",
+      "oauthAccessToken",
+      "oauthConsent",
+      "oauthClientAssertion",
+    ];
+    for (const table of tables) {
+      expect(AGENT_ACCESS_SQL).toContain(
+        `ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;`,
+      );
+    }
+    const block = guardBlock(AGENT_ACCESS_SQL);
+    for (const role of ["anon", "authenticated"]) {
+      const branch = roleBranch(block, role);
+      for (const table of tables) {
+        expect(branch).toContain(`REVOKE ALL ON "${table}" FROM ${role};`);
+      }
+      // One revoke per table, and no fifth statement smuggled in beside them.
+      expect(branch.match(/REVOKE ALL/g)).toHaveLength(tables.length);
+    }
+    // No revoke escapes the guard.
+    expect(
+      AGENT_ACCESS_SQL.slice(0, AGENT_ACCESS_SQL.indexOf("DO $$")),
+    ).not.toMatch(/REVOKE/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    const statements = AGENT_ACCESS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
+  });
+});
+
 describe("the committed lock-down migration (as it will actually be applied)", () => {
   // The schema's own table names, which the committed migrations must render
   // one enablement per. Derived from the Drizzle object, so a table added there
@@ -974,16 +1231,16 @@ describe("the committed lock-down migration (as it will actually be applied)", (
     const disabled = Object.values(schema)
       .filter((table) => !getTableConfig(table as PgTable).enableRLS)
       .map((table) => getTableConfig(table as PgTable).name);
-    // All fourteen, not a sample: a new table is closed unless its declaration
-    // omits `enableRLS()`, which this turns red.
+    // All twenty-two, not a sample: a new table is closed unless its
+    // declaration omits `enableRLS()`, which this turns red.
     expect(disabled).toEqual([]);
-    expect(schemaTableNames).toHaveLength(14);
+    expect(schemaTableNames).toHaveLength(22);
   });
 
   it("renders one enablement statement per table, matching the schema", () => {
     expect(enabledTableNames).toEqual(expect.arrayContaining(schemaTableNames));
     expect(enabledTableNames).toHaveLength(schemaTableNames.length);
-    expect(enabledTableNames).toHaveLength(14);
+    expect(enabledTableNames).toHaveLength(22);
   });
 
   it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {

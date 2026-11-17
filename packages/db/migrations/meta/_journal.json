@@ -85,6 +85,13 @@
       "when": 1794942392485,
       "tag": "0011_account_write_windows",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794943693789,
+      "tag": "0012_agent_access",
+      "breakpoints": true
     }
   ]
 }

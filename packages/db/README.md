@@ -1,16 +1,22 @@
 # @arcula/db
 
-The Drizzle schema for the Arcula backend: fourteen tables, including the two
+The Drizzle schema for the Arcula backend: twenty-two tables, including the two
 sharing tables from
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md), the
 two password tables from
-[ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md)
-and the write limiter's counter from
-[ADR-0013](../../docs/adr/0013-agents-reach-arcula-through-a-hosted-mcp-server.md).
+[ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
+the write limiter's counter from
+[ADR-0013](../../docs/adr/0013-agents-reach-arcula-through-a-hosted-mcp-server.md)
+and the eight tables that ADR's OAuth provider and JWT plugin write.
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
 — with `user` extended by the four typed custom columns (`firstName`,
-`lastName`, `tier`, `settings`) the API declares to the adapter. Ten **domain
+`lastName`, `tier`, `settings`) the API declares to the adapter. Eight
+**agent-access tables** — `jwks`, `oauthClient`, `oauthResource`,
+`oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`,
+`oauthClientAssertion` — hand-authored against `getAuthTables()` because
+`@better-auth/cli` is deprecated with no 1.7.x release; a test in `apps/api`
+asserts every model and field the plugin declares exists here. Ten **domain
 tables**: `collections`, `collection_collaborators`,
 `collection_invitations`, `collection_access_grants`,
 `collection_unlock_attempts`, `account_write_windows`, `artworks`,
@@ -73,7 +79,10 @@ Layout:
 exist`. `0011_account_write_windows` repeats that append for the one table that
   ships after `0006`: the generated half is the `CREATE TABLE`, the primary key
   and the check, and the revoke is added by hand, because a migration can only
-  lock down the tables it can see. `0009_catalogue_kind` and
+  lock down the tables it can see. `0012_agent_access` repeats it for the eight
+  agent-access tables, which also ship after `0006`; its generated half is the
+  eight `CREATE TABLE`s, the foreign keys, the unique constraints and the
+  indexes. `0009_catalogue_kind` and
   `0010_artwork_availability` are the other
   contrast: both are pure `generate` output. `kind` is `NOT NULL` with a constant
   default, so the existing rows are already right and no backfill is owed;
@@ -85,8 +94,8 @@ exist`. `0011_account_write_windows` repeats that append for the one table that
   index and the partial unique pending-invitation index, the
   nullable → backfill → `NOT NULL` order, timestamptz, the defaults, the write
   limiter's `(userId, bucket, windowStart)` key, and the
-  lock-down: RLS on all fourteen tables plus the guarded revoke and the absence
-  of `FORCE ROW LEVEL SECURITY`).
+  lock-down: RLS on all twenty-two tables plus the guarded revoke and the
+  absence of `FORCE ROW LEVEL SECURITY`).
 
 Decisions the schema encodes: timestamptz everywhere a timestamp is stored;
 money as `text` (the string that was typed — no float drift); `deletedAt` NULL
