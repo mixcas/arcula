@@ -79,11 +79,11 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
           idle: (
             <>
               Drag files here, or click to choose up to{" "}
-              {MAX_ARTWORK_DOCUMENTS - documents.count} more
+              {MAX_ARTWORK_DOCUMENTS - documents.count}
             </>
           ),
           noun: "file",
-          glyph: <IconFilePlus size={36} stroke={1.5} />,
+          glyph: <IconFilePlus size={36} stroke={1} />,
         }}
       />
 

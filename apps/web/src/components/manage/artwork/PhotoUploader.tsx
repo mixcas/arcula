@@ -108,11 +108,11 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           idle: (
             <>
               Drag images here, or click to choose up to{" "}
-              {MAX_ARTWORK_PHOTOS - photos.count} more
+              {MAX_ARTWORK_PHOTOS - photos.count}
             </>
           ),
           noun: "image",
-          glyph: <IconPhotoPlus size={36} stroke={1.5} />,
+          glyph: <IconPhotoPlus size={36} stroke={1} />,
         }}
       />
 

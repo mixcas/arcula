@@ -82,29 +82,14 @@ const ManagePage: React.FC = () => {
             {owned.length} of {limit} catalogue
             {limit === 1 ? "" : "s"}
           </Text>
-          {atCap ? (
-            // A disabled button, not a disabled link: an anchor's
-            // `disabled` is not an attribute, so a `component={Link}`
-            // button at the cap would still navigate to a form the server
-            // refuses. A real disabled control cannot, and it is the one
-            // that reads as "not offered".
-            <Button
-              variant="outline"
-              disabled
-              leftSection={<IconStackPlus size={18} />}
-            >
-              New catalogue
-            </Button>
-          ) : (
-            <Button
-              component={Link}
-              to="/manage/catalogue/new"
-              variant="outline"
-              leftSection={<IconStackPlus size={18} />}
-            >
-              New catalogue
-            </Button>
-          )}
+          <Button
+            disabled={atCap}
+            component={atCap ? undefined : Link}
+            to="/manage/catalogue/new"
+            leftSection={<IconStackPlus size={18} />}
+          >
+            New catalogue
+          </Button>
         </Group>
       </Group>
 
