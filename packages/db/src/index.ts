@@ -122,6 +122,14 @@ export const verification = pgTable("verification", {
 // Domain tables
 // ---------------------------------------------------------------------------
 
+// A catalogue's artwork-field deviations: an entry records a choice the member
+// made, and an absent key follows the Kind default, so the map stays sparse.
+// `null` and `{}` both mean pure defaults. The thirteen keys and the per-Kind
+// defaults live in `@arcula/shared`'s registry, which ships with the feature
+// that reads this column; this release declares only the shape, because `$type`
+// is compile-time only (no SQL, no migration).
+type ArtworkFieldDeviations = Partial<Record<string, boolean>>;
+
 // There is no `artworks: string[]` column: it would be a denormalized list the
 // join replaces.
 //
@@ -146,6 +154,13 @@ export const catalogues = pgTable(
     // `artworks.status` does, so the database refuses an unknown kind even when
     // it arrives from outside the typed reader.
     kind: text("kind").$type<CatalogueKind>().notNull().default("collection"),
+    // The catalogue's artwork-field deviations from that Kind's defaults.
+    // Nullable on purpose: a catalogue that never deviated is the normal state,
+    // so there is no backfill and no tightening step. Nothing reads or writes
+    // it yet; the feature that resolves it ships in a later release.
+    artworkFields: jsonb(
+      "artworkFields",
+    ).$type<ArtworkFieldDeviations | null>(),
     description: text("description"),
     // Read-time default `DEFAULT_SKIN_ID`; never queried on, so it needs no
     // backfill — the deliberate contrast with `deletedAt`.
