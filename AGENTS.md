@@ -273,11 +273,14 @@ against the three values (`catalogueKindOf`) before emitting it.
 means for the surface, as data: the kind's colour (`kindColor`, a literal union
 the screens turn into a CSS variable through `kindColorVar`), the labels, the
 market states a kind offers (a Portfolio's three, an Inventory's four, a
-Collection's none) with their words, and the v1 artwork field table — every
+Collection's none) with their words, whether the catalogue's name is the
+artist's name, and the v1 artwork field table — every
 field visible, only `title` and `artistName` required. The field table is the
 data a later per-kind hiding will read; no v1 screen consumes
 `visible`/`required`, and a screen that reads the module uses the labels, the
-availability values and `availabilityFor`'s default. `services/` are the API
+availability values, `availabilityFor`'s default and `newArtworkForm` — what a
+create form starts as on one kind, values and Artist Name line together.
+`services/` are the API
 clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
 `telemetry/logRocket.ts` is the session-replay hook, redacted at the client
 ([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
@@ -286,7 +289,11 @@ system. The artwork Add and Edit pages load the catalogue for its kind; a
 Collection's form renders no availability control and sends no key, while a
 Portfolio or an Inventory defaults a surfaced work with no stored state to
 `available` through `availabilityFor`, and offers only the states that kind
-carries. The manage page and the Deleted view pass `showAvailability` down from
+carries. The Add page also opens a Portfolio's new work credited to the
+portfolio's artist, and it builds every kind's form from that one surface answer
+rather than branching on the market state; a typed name wins, and the Edit page
+shows the artist the work records.
+The manage page and the Deleted view pass `showAvailability` down from
 the kind; no public page renders availability at all, and the API emits it on a
 member read only.
 
