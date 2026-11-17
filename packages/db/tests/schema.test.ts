@@ -5,11 +5,11 @@
 // committed generated migration — what is actually applied to Postgres. A
 // schema edit that is not regenerated shows up here as a mismatch; a
 // load-bearing column (the (artworkId, order) uniqueness that enforces "array
-// position is the truth", the two composite PKs, the five CHECKs, the
+// position is the truth", the three composite PKs, the seven CHECKs, the
 // composite indexes behind the artwork lists, the partial unique pending-
 // invitation index) missing from either source fails here.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -17,6 +17,7 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import {
   account,
+  accountWriteWindows,
   artworkDocuments,
   artworkPhotoVariants,
   artworkPhotos,
@@ -26,6 +27,14 @@ import {
   catalogueInvitations,
   catalogueUnlockAttempts,
   catalogues,
+  jwks,
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
   schema,
   session,
   user,
@@ -90,11 +99,20 @@ const TABLE_NAMES = [
   "session",
   "account",
   "verification",
+  "jwks",
+  "oauthClient",
+  "oauthResource",
+  "oauthClientResource",
+  "oauthRefreshToken",
+  "oauthAccessToken",
+  "oauthConsent",
+  "oauthClientAssertion",
   "catalogues",
   "catalogueCollaborators",
   "catalogueInvitations",
   "catalogueAccessGrants",
   "catalogueUnlockAttempts",
+  "accountWriteWindows",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -108,9 +126,50 @@ const readMigration = (tag: string): string =>
     "utf8",
   );
 
+// Every committed migration, in order: the lock-down asks a question about the
+// whole history (is each table closed by *some* migration?), because a table
+// that ships after 0006 is locked down by its own migration, not by 0006.
+const allMigrationsSql = (): string =>
+  readdirSync(fileURLToPath(new URL("../migrations", import.meta.url)))
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => readMigration(file.replace(/\.sql$/, "")))
+    .join("\n");
+
+// The hand-appended existence guard in a migration, isolated from the
+// generated DDL above it: the `DO $$ … $$;` body is where every revoke must
+// live.
+const guardBlock = (sql: string): string => {
+  const start = sql.indexOf("DO $$");
+  expect(start).toBeGreaterThan(-1);
+  const end = sql.indexOf("$$;", start);
+  expect(end).toBeGreaterThan(start);
+  return sql.slice(start, end);
+};
+
+// The statements between a role's `IF … THEN` and the `END IF;` that closes
+// it. Bounding a revoke to this slice is the only assertion that proves it
+// belongs to that role: ordered against the guard alone it could drift into
+// the other branch, or past `END IF;` and out of the guard, and still sit
+// after some existence check.
+const roleBranch = (block: string, role: string): string => {
+  const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
+  const start = block.indexOf(guard);
+  expect(start).toBeGreaterThan(-1);
+  const open = start + guard.length;
+  const end = block.indexOf("END IF;", open);
+  expect(end).toBeGreaterThan(open);
+  return block.slice(open, end);
+};
+
 // The data statements a migration runs, in order: DDL is not a row write.
 const dataWrites = (sql: string): string[] =>
   [...sql.matchAll(/\b(UPDATE|INSERT|DELETE|TRUNCATE)\b/g)].map((m) => m[1]);
+
+// The row writes alone: a foreign key's `ON DELETE … ON UPDATE …` clause names
+// two of the same verbs and is not a data write, so it is stripped first.
+const rowWrites = (sql: string): string[] =>
+  dataWrites(sql.replace(/ON (DELETE|UPDATE) [a-z ]+/g, ""));
 
 // The committed init migration.
 const INIT_SQL = readMigration("0000_init");
@@ -147,12 +206,19 @@ const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
 // Kind's defaults, absent on every catalogue that never deviated.
 const ARTWORK_FIELDS_SQL = readMigration("0011_catalogue_artwork_fields");
 
+// The committed write limiter's counter: one additive table, alone.
+const WRITE_WINDOWS_SQL = readMigration("0012_account_write_windows");
+
+// The OAuth provider and JWT plugin's eight tables: additive, alone, ahead of
+// the MCP code that reads them.
+const AGENT_ACCESS_SQL = readMigration("0013_agent_access");
+
 // The four market states, as the spec names them. Shared by the Drizzle check
 // assertion and the committed migration, so the two cannot disagree.
 const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
 
-describe("the thirteen-table schema", () => {
-  it("declares exactly the thirteen tables, and `user` is singular", () => {
+describe("the twenty-two-table schema", () => {
+  it("declares exactly the twenty-two tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -401,6 +467,50 @@ describe("the thirteen-table schema", () => {
     ]);
   });
 
+  it("account_write_windows counts one account's writes per bucket and window", () => {
+    const c = cols(accountWriteWindows);
+    expect(Object.keys(c)).toEqual([
+      "userId",
+      "bucket",
+      "windowStart",
+      "count",
+    ]);
+    // The unit is the account, never the address: a hosted agent's calls all
+    // arrive from one cloud, so an address bucket would be one for everyone.
+    expect(c.userId.notNull).toBe(true);
+    // A row must name its bucket. A default would quietly spend a write's
+    // count in another bucket's counter.
+    expect(c.bucket.notNull).toBe(true);
+    expect(c.bucket.hasDefault).toBe(false);
+    // The window's start, floored by the route to its own window length. No
+    // default: the schema cannot know whether this row is a second or an hour.
+    expect(c.windowStart.dataType).toBe("date");
+    expect(c.windowStart.notNull).toBe(true);
+    expect(c.windowStart.hasDefault).toBe(false);
+    expect(c.count.dataType).toBe("number");
+    expect(c.count.notNull).toBe(true);
+    expect(c.count.default).toBe(0);
+    // The triple is the upsert's conflict target, in this order: one counter
+    // per account, bucket and window, and a claim is one INSERT … ON CONFLICT.
+    const pk = getTableConfig(accountWriteWindows).primaryKeys[0];
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "userId",
+      "bucket",
+      "windowStart",
+    ]);
+  });
+
+  it("account_write_windows restricts the bucket to the two fixed windows", () => {
+    // Two windows, one table: the per-second write bucket and the hourly
+    // import cap differ only in which bucket they spend and how the route
+    // floors `windowStart`. The database refuses a third value even when it
+    // arrives from outside the route that writes the rows.
+    expect(checksOf(accountWriteWindows)).toContainEqual({
+      name: "account_write_windows_bucket_check",
+      sql: "\"bucket\" in ('write', 'import')",
+    });
+  });
+
   it("catalogue_collaborators is keyed by (catalogueId, userId), with the dashboard index on user", () => {
     const c = cols(catalogueCollaborators);
     // The owner is `collections.userId`; this table holds everyone else.
@@ -489,6 +599,128 @@ describe("the thirteen-table schema", () => {
       "deletedAt",
     ]);
     expect(idx.artworks_collection_id_idx).toEqual(["collectionId"]);
+  });
+
+  it("jwks keeps the signing key pair the jwt plugin mints", () => {
+    const c = cols(jwks);
+    expect(Object.keys(c)).toEqual([
+      "id",
+      "publicKey",
+      "privateKey",
+      "createdAt",
+      "expiresAt",
+      "alg",
+      "crv",
+    ]);
+    expect(c.id.primary).toBe(true);
+    expect(c.publicKey.notNull).toBe(true);
+    expect(c.privateKey.notNull).toBe(true);
+    expect(c.expiresAt.notNull).toBe(false);
+  });
+
+  it("oauth_client is keyed by the client's own id and keeps its discovery origin", () => {
+    const c = cols(oauthClient);
+    expect(c.id.primary).toBe(true);
+    // The CIMD client id is the URL the client hosts: unique by definition.
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.clientId.isUnique).toBe(true);
+    expect(c.redirectUris.notNull).toBe(true);
+    expect(c.redirectUris.dataType).toBe("array");
+    // `"cimd"` marks a client the metadata document owns; a hand-registered
+    // one leaves it null. The tool guard reads neither, but the plugin does.
+    expect(c.clientDiscoveryId.notNull).toBe(false);
+    // Capitalised exactly as the plugin's field name: the adapter addresses
+    // columns by property name, so `requirePkce` would be a missing column.
+    expect(c.requirePKCE).toBeDefined();
+    expect(c.metadata.dataType).toBe("json");
+    expect(indexesOf(oauthClient)).toMatchObject({
+      oauth_client_user_id_idx: ["userId"],
+    });
+  });
+
+  it("oauth_resource is keyed by its identifier, with a policy version", () => {
+    const c = cols(oauthResource);
+    expect(c.identifier.notNull).toBe(true);
+    expect(c.identifier.isUnique).toBe(true);
+    expect(c.name.notNull).toBe(true);
+    expect(c.allowedScopes.dataType).toBe("array");
+    expect(c.customClaims.dataType).toBe("json");
+    expect(c.policyVersion.notNull).toBe(true);
+    expect(c.policyVersion.default).toBe(1);
+  });
+
+  it("oauth_client_resource pairs a client and a resource once", () => {
+    const c = cols(oauthClientResource);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.resourceId.notNull).toBe(true);
+    expect(c.metadata.dataType).toBe("json");
+    expect(indexesOf(oauthClientResource)).toMatchObject({
+      oauth_client_resource_client_id_resource_id_key: [
+        "clientId",
+        "resourceId",
+      ],
+    });
+    const unique = getTableConfig(oauthClientResource).indexes.find(
+      (i) =>
+        i.config.name === "oauth_client_resource_client_id_resource_id_key",
+    );
+    expect(unique?.config.unique).toBe(true);
+  });
+
+  it("oauth_refresh_token is the live connection's family, indexed for rotation", () => {
+    const c = cols(oauthRefreshToken);
+    expect(c.token.notNull).toBe(true);
+    expect(c.token.isUnique).toBe(true);
+    expect(c.userId.notNull).toBe(true);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.scopes.dataType).toBe("array");
+    // The rotation's identity: every refresh in one connect inherits the
+    // authorization code's id (the Connection key the account surface lists).
+    expect(c.authorizationCodeId.notNull).toBe(false);
+    expect(indexesOf(oauthRefreshToken)).toMatchObject({
+      oauth_refresh_token_user_id_idx: ["userId"],
+      oauth_refresh_token_client_id_idx: ["clientId"],
+      oauth_refresh_token_session_id_idx: ["sessionId"],
+      oauth_refresh_token_authorization_code_id_idx: ["authorizationCodeId"],
+    });
+  });
+
+  it("oauth_access_token is the opaque-token table the JWT plugin leaves empty", () => {
+    const c = cols(oauthAccessToken);
+    expect(c.token.isUnique).toBe(true);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.refreshId.notNull).toBe(false);
+    expect(indexesOf(oauthAccessToken)).toMatchObject({
+      oauth_access_token_client_id_idx: ["clientId"],
+      oauth_access_token_refresh_id_idx: ["refreshId"],
+    });
+  });
+
+  it("oauth_consent is one row per account and client, with no unique index", () => {
+    const c = cols(oauthConsent);
+    expect(c.clientId.notNull).toBe(true);
+    expect(c.userId.notNull).toBe(false);
+    expect(c.scopes.notNull).toBe(true);
+    expect(c.resources.dataType).toBe("array");
+    expect(c.updatedAt.notNull).toBe(true);
+    // The plugin upserts on (clientId, userId, referenceId?) and declares no
+    // unique index; adding one would refuse the row a second connect needs.
+    const unique = getTableConfig(oauthConsent).indexes.filter(
+      (i) => i.config.unique,
+    );
+    expect(unique).toEqual([]);
+    expect(indexesOf(oauthConsent)).toMatchObject({
+      oauth_consent_client_id_idx: ["clientId"],
+      oauth_consent_user_id_idx: ["userId"],
+    });
+  });
+
+  it("oauth_client_assertion carries the assertion's expiry, and nothing else", () => {
+    const c = cols(oauthClientAssertion);
+    expect(Object.keys(c)).toEqual(["id", "expiresAt"]);
+    expect(c.expiresAt.notNull).toBe(true);
   });
 });
 
@@ -852,61 +1084,207 @@ describe("the committed artwork-fields migration (as it will actually be applied
   });
 });
 
+describe("the committed write-limiter migration (as it will actually be applied)", () => {
+  it("creates the counter with the triple primary key and the two-bucket check", () => {
+    expect(WRITE_WINDOWS_SQL).toMatch(
+      /CREATE TABLE "account_write_windows" \([\s\S]*CONSTRAINT "account_write_windows_userId_bucket_windowStart_pk" PRIMARY KEY\("userId","bucket","windowStart"\)/,
+    );
+    expect(WRITE_WINDOWS_SQL).toContain(
+      `CONSTRAINT "account_write_windows_bucket_check" CHECK ("bucket" in ('write', 'import'))`,
+    );
+    // Domain tables stay reference-free, like the ones before them.
+    expect(WRITE_WINDOWS_SQL).not.toContain("FOREIGN KEY");
+  });
+
+  it("types the columns as the schema declares them, and writes no rows", () => {
+    // The other half of the two-source contract: a changed column type, a
+    // lost zero default or a stray backfill must not survive.
+    expect(WRITE_WINDOWS_SQL).toContain('"userId" text NOT NULL');
+    expect(WRITE_WINDOWS_SQL).toContain('"bucket" text NOT NULL');
+    expect(WRITE_WINDOWS_SQL).toContain(
+      '"windowStart" timestamp with time zone NOT NULL',
+    );
+    expect(WRITE_WINDOWS_SQL).toContain('"count" integer DEFAULT 0 NOT NULL');
+    expect(
+      WRITE_WINDOWS_SQL.replace(/timestamp with time zone/g, ""),
+    ).not.toContain("timestamp");
+    // The table ships alone, ahead of the code that writes it: nothing to
+    // backfill, so a data write would be a bug.
+    expect(dataWrites(WRITE_WINDOWS_SQL)).toEqual([]);
+  });
+
+  it("enables RLS and revokes both client roles inside the existence guard", () => {
+    // 0006 locked down what existed then; this table ships after it, so its
+    // own migration carries the treatment (the generated enablement above the
+    // hand-appended revoke).
+    expect(WRITE_WINDOWS_SQL).toContain(
+      'ALTER TABLE "account_write_windows" ENABLE ROW LEVEL SECURITY;',
+    );
+    const block = guardBlock(WRITE_WINDOWS_SQL);
+    for (const role of ["anon", "authenticated"]) {
+      // Inside this role's own branch: local Postgres and CI have neither
+      // role, so an unguarded revoke would fail every `db:migrate`.
+      expect(roleBranch(block, role)).toContain(
+        `REVOKE ALL ON "account_write_windows" FROM ${role};`,
+      );
+    }
+    // No revoke escapes the guard.
+    expect(
+      WRITE_WINDOWS_SQL.slice(0, WRITE_WINDOWS_SQL.indexOf("DO $$")),
+    ).not.toMatch(/REVOKE/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    const statements = WRITE_WINDOWS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
+  });
+});
+
+describe("the committed agent-access migration (as it will actually be applied)", () => {
+  it("creates the eight plugin tables, with the plugin's own names", () => {
+    const created = [
+      ...AGENT_ACCESS_SQL.matchAll(/CREATE TABLE "([^"]+)"/g),
+    ].map((m) => m[1]);
+    expect(created.sort()).toEqual(
+      [
+        "jwks",
+        "oauthClient",
+        "oauthResource",
+        "oauthClientResource",
+        "oauthRefreshToken",
+        "oauthAccessToken",
+        "oauthConsent",
+        "oauthClientAssertion",
+      ].sort(),
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The release ships alone, ahead of the code that reads the tables:
+    // every statement must leave the old code's rows and queries intact.
+    expect(rowWrites(AGENT_ACCESS_SQL)).toEqual([]);
+    expect(AGENT_ACCESS_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(AGENT_ACCESS_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+
+  it("keys the client, the refresh token and the resource by their unique facts", () => {
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthClient_clientId_unique" UNIQUE("clientId")`,
+    );
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthRefreshToken_token_unique" UNIQUE("token")`,
+    );
+    expect(AGENT_ACCESS_SQL).toContain(
+      `CONSTRAINT "oauthResource_identifier_unique" UNIQUE("identifier")`,
+    );
+    // One (client, resource) pair: the provider's per-client resource policy
+    // reads this row, and a duplicate would split the policy in two.
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "oauth_client_resource_client_id_resource_id_key" ON "oauthClientResource" USING btree \("clientId","resourceId"\)/,
+    );
+  });
+
+  it("carries the indexes the rotation and the consent lookup read", () => {
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_refresh_token_authorization_code_id_idx" ON "oauthRefreshToken" USING btree \("authorizationCodeId"\)/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_consent_client_id_idx" ON "oauthConsent" USING btree \("clientId"\)/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CREATE INDEX "oauth_consent_user_id_idx" ON "oauthConsent" USING btree \("userId"\)/,
+    );
+  });
+
+  it("cascades a deleted client or resource, and nulls a deleted session", () => {
+    // The plugin's declared references: the schema test asserts the Drizzle
+    // object, this asserts the SQL that is actually applied.
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CONSTRAINT "oauthClientResource_clientId_oauthClient_clientId_fk" FOREIGN KEY \("clientId"\) REFERENCES "public"\."oauthClient"\("clientId"\) ON DELETE cascade/,
+    );
+    expect(AGENT_ACCESS_SQL).toMatch(
+      /CONSTRAINT "oauthRefreshToken_sessionId_session_id_fk" FOREIGN KEY \("sessionId"\) REFERENCES "public"\."session"\("id"\) ON DELETE set null/,
+    );
+  });
+
+  it("uses timestamptz for every timestamp", () => {
+    expect(
+      AGENT_ACCESS_SQL.replace(/timestamp with time zone/g, ""),
+    ).not.toContain("timestamp");
+  });
+
+  it("enables RLS and revokes both client roles inside the existence guard", () => {
+    const tables = [
+      "jwks",
+      "oauthClient",
+      "oauthResource",
+      "oauthClientResource",
+      "oauthRefreshToken",
+      "oauthAccessToken",
+      "oauthConsent",
+      "oauthClientAssertion",
+    ];
+    for (const table of tables) {
+      expect(AGENT_ACCESS_SQL).toContain(
+        `ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;`,
+      );
+    }
+    const block = guardBlock(AGENT_ACCESS_SQL);
+    for (const role of ["anon", "authenticated"]) {
+      const branch = roleBranch(block, role);
+      for (const table of tables) {
+        expect(branch).toContain(`REVOKE ALL ON "${table}" FROM ${role};`);
+      }
+      // One revoke per table, and no fifth statement smuggled in beside them.
+      expect(branch.match(/REVOKE ALL/g)).toHaveLength(tables.length);
+    }
+    // No revoke escapes the guard.
+    expect(
+      AGENT_ACCESS_SQL.slice(0, AGENT_ACCESS_SQL.indexOf("DO $$")),
+    ).not.toMatch(/REVOKE/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    const statements = AGENT_ACCESS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
+  });
+});
+
 describe("the committed lock-down migration (as it will actually be applied)", () => {
-  // The schema's own table names, which the committed migration must render
+  // The schema's own table names, which the committed migrations must render
   // one enablement per. Derived from the Drizzle object, so a table added there
   // without regenerating shows up as a missing statement below.
   const schemaTableNames = Object.values(schema).map(
     (table) => getTableConfig(table as PgTable).name,
   );
 
+  // Across the whole history, not 0006 alone: a table that ships later is
+  // locked down by its own migration, and folding them together is what keeps
+  // "every table is closed" true as the schema grows.
   const enabledTableNames = [
-    ...RLS_SQL.matchAll(/ALTER TABLE "([^"]+)" ENABLE ROW LEVEL SECURITY;/g),
+    ...allMigrationsSql().matchAll(
+      /ALTER TABLE "([^"]+)" ENABLE ROW LEVEL SECURITY;/g,
+    ),
   ].map((match) => match[1]);
-
-  // The hand-appended guard, isolated from the generated DDL above it: the
-  // `DO $$ … $$;` body is where every revoke must live.
-  const guardBlock = (): string => {
-    const start = RLS_SQL.indexOf("DO $$");
-    expect(start).toBeGreaterThan(-1);
-    const end = RLS_SQL.indexOf("$$;", start);
-    expect(end).toBeGreaterThan(start);
-    return RLS_SQL.slice(start, end);
-  };
-
-  // The statements between a role's `IF … THEN` and the `END IF;` that closes
-  // it. Bounding a revoke to this slice is the only assertion that proves it
-  // belongs to that role: ordered against the guard alone it could drift into
-  // the other branch, or past `END IF;` and out of the guard, and still sit
-  // after some existence check.
-  const roleBranch = (block: string, role: string): string => {
-    const guard = `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN`;
-    const start = block.indexOf(guard);
-    expect(start).toBeGreaterThan(-1);
-    const open = start + guard.length;
-    const end = block.indexOf("END IF;", open);
-    expect(end).toBeGreaterThan(open);
-    return block.slice(open, end);
-  };
 
   it("enables RLS on every table in the Drizzle object, with no table opted out", () => {
     const disabled = Object.values(schema)
       .filter((table) => !getTableConfig(table as PgTable).enableRLS)
       .map((table) => getTableConfig(table as PgTable).name);
-    // All thirteen, not a sample: a new table is closed unless its declaration
-    // omits `enableRLS()`, which this turns red.
+    // All twenty-two, not a sample: a new table is closed unless its
+    // declaration omits `enableRLS()`, which this turns red.
     expect(disabled).toEqual([]);
-    expect(schemaTableNames).toHaveLength(13);
+    expect(schemaTableNames).toHaveLength(22);
   });
 
   it("renders one enablement statement per table, matching the schema", () => {
     expect(enabledTableNames).toEqual(expect.arrayContaining(schemaTableNames));
     expect(enabledTableNames).toHaveLength(schemaTableNames.length);
-    expect(enabledTableNames).toHaveLength(13);
+    expect(enabledTableNames).toHaveLength(22);
   });
 
   it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {
-    const block = guardBlock();
+    const block = guardBlock(RLS_SQL);
     for (const role of ["anon", "authenticated"]) {
       const branch = roleBranch(block, role);
 

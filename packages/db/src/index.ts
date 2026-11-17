@@ -1,8 +1,10 @@
-// The Drizzle schema: thirteen tables. Four Better Auth core tables (extended
-// with the typed `user` columns), five domain tables, the two sharing tables
-// (`collection_collaborators`, `collection_invitations`) and the two a
-// protected catalogue needs (`collection_access_grants`,
-// `collection_unlock_attempts`).
+// The Drizzle schema: twenty-two tables. Four Better Auth core tables
+// (extended with the typed `user` columns), the eight the JWT and OAuth
+// provider plugins write (the agent-access tables), six domain tables, the two
+// sharing tables (`collection_collaborators`, `collection_invitations`) and the
+// two a protected catalogue needs (`collection_access_grants`,
+// `collection_unlock_attempts`), plus the write limiter's counter
+// (`account_write_windows`).
 //
 // The Catalogue entity is exported as `catalogues`; its physical table stays
 // `collections` (ADR-0010). Physical names — tables, columns, indexes,
@@ -120,6 +122,255 @@ export const verification = pgTable("verification", {
   expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
   createdAt: timestamptz("createdAt"),
   updatedAt: timestamptz("updatedAt"),
+}).enableRLS();
+
+// ---------------------------------------------------------------------------
+// Agent-access tables (Better Auth's jwt + mcp/cimd plugins)
+// ---------------------------------------------------------------------------
+//
+// `@better-auth/cli` is deprecated with no 1.7.x release, so these eight
+// models are authored by hand against `getAuthTables()` — the adapter
+// addresses each table by this object's key and each column by its property
+// name, so a renamed property is a missing column at runtime. The physical
+// names match the plugin's model names exactly; `apps/api/tests/adapter.test.ts`
+// asserts every model and field the plugin declares exists here, which is the
+// generator this repository does not have.
+//
+// Only `jwks` is `jwt()`'s. The other seven are the OAuth provider's (the MCP
+// plugin *is* the provider): a client's metadata, the resource the tokens are
+// bound to, the client↔resource grant, the refresh-token family (one row per
+// authorization; each rotation revokes the old row and inserts a new one), the
+// opaque-token table the JWT plugin
+// leaves empty, the consent row a Connection is approved by, and the
+// private-key-jwt assertion a confidential client may present.
+
+export const jwks = pgTable("jwks", {
+  id: text("id").primaryKey(),
+  publicKey: text("publicKey").notNull(),
+  privateKey: text("privateKey").notNull(),
+  createdAt: timestamptz("createdAt"),
+  expiresAt: timestamp("expiresAt", { withTimezone: true }),
+  alg: text("alg"),
+  crv: text("crv"),
+}).enableRLS();
+
+// The client's own identity: a CIMD client's `clientId` is the HTTPS URL it
+// hosts, so the id is the primary fact and is unique. `clientDiscoveryId` is
+// `"cimd"` on a client the metadata document owns, null on one an
+// administrator created.
+export const oauthClient = pgTable(
+  "oauthClient",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("clientId").notNull().unique(),
+    clientSecret: text("clientSecret"),
+    clientDiscoveryId: text("clientDiscoveryId"),
+    disabled: boolean("disabled").notNull().default(false),
+    skipConsent: boolean("skipConsent"),
+    enableEndSession: boolean("enableEndSession"),
+    subjectType: text("subjectType"),
+    scopes: text("scopes").array(),
+    clientCredentialsScopes: text("clientCredentialsScopes").array(),
+    userId: text("userId").references(() => user.id),
+    createdAt: timestamptz("createdAt"),
+    updatedAt: timestamptz("updatedAt"),
+    name: text("name"),
+    uri: text("uri"),
+    icon: text("icon"),
+    contacts: text("contacts").array(),
+    tos: text("tos"),
+    policy: text("policy"),
+    softwareId: text("softwareId"),
+    softwareVersion: text("softwareVersion"),
+    softwareStatement: text("softwareStatement"),
+    redirectUris: text("redirectUris").array().notNull(),
+    postLogoutRedirectUris: text("postLogoutRedirectUris").array(),
+    backchannelLogoutUri: text("backchannelLogoutUri"),
+    backchannelLogoutSessionRequired: boolean(
+      "backchannelLogoutSessionRequired",
+    ),
+    tokenEndpointAuthMethod: text("tokenEndpointAuthMethod"),
+    applicationType: text("applicationType"),
+    jwks: text("jwks"),
+    jwksUri: text("jwksUri"),
+    grantTypes: text("grantTypes").array(),
+    responseTypes: text("responseTypes").array(),
+    // Capitalised exactly as the plugin's field name: the adapter addresses
+    // columns by property name, so `requirePkce` would be a missing column.
+    requirePKCE: boolean("requirePKCE"),
+    dpopBoundAccessTokens: boolean("dpopBoundAccessTokens")
+      .notNull()
+      .default(false),
+    referenceId: text("referenceId"),
+    metadata: jsonb("metadata"),
+  },
+  (table) => [index("oauth_client_user_id_idx").on(table.userId)],
+).enableRLS();
+
+// The protected resource: the MCP endpoint's URL is the identifier, and it is
+// what every token is audience-bound to. One row per deployment, by config.
+export const oauthResource = pgTable("oauthResource", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull().unique(),
+  name: text("name").notNull(),
+  accessTokenTtl: integer("accessTokenTtl"),
+  refreshTokenTtl: integer("refreshTokenTtl"),
+  signingAlgorithm: text("signingAlgorithm"),
+  signingKeyId: text("signingKeyId"),
+  allowedScopes: text("allowedScopes").array(),
+  customClaims: jsonb("customClaims"),
+  dpopBoundAccessTokensRequired: boolean("dpopBoundAccessTokensRequired")
+    .notNull()
+    .default(false),
+  disabled: boolean("disabled").notNull().default(false),
+  createdAt: timestamptz("createdAt"),
+  updatedAt: timestamptz("updatedAt"),
+  policyVersion: integer("policyVersion").notNull().default(1),
+  metadata: jsonb("metadata"),
+}).enableRLS();
+
+// One (client, resource) pair: the provider's per-client resource policy
+// reads this row, and the unique index is what keeps it one row.
+export const oauthClientResource = pgTable(
+  "oauthClientResource",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    resourceId: text("resourceId")
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: "cascade" }),
+    metadata: jsonb("metadata"),
+    createdAt: timestamptz("createdAt"),
+  },
+  (table) => [
+    uniqueIndex("oauth_client_resource_client_id_resource_id_key").on(
+      table.clientId,
+      table.resourceId,
+    ),
+    index("oauth_client_resource_client_id_idx").on(table.clientId),
+    index("oauth_client_resource_resource_id_idx").on(table.resourceId),
+  ],
+).enableRLS();
+
+// One authorization's refresh-token family: the code mints the first row, and
+// each rotation marks the old one revoked and inserts a new one with the same
+// `authorizationCodeId`. That id identifies one authorization family, not a
+// Connection: the Connection the product lists is the `oauthConsent` row, one
+// per (account, client). Several live families per (user, client) are normal —
+// one per client install that connected — and they all collapse into the one
+// consent row.
+export const oauthRefreshToken = pgTable(
+  "oauthRefreshToken",
+  {
+    id: text("id").primaryKey(),
+    // Stored hashed by default (`storeTokens: "hashed"`): the raw token exists
+    // only in the client's hands.
+    token: text("token").notNull().unique(),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    sessionId: text("sessionId").references(() => session.id, {
+      onDelete: "set null",
+    }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    referenceId: text("referenceId"),
+    authorizationCodeId: text("authorizationCodeId"),
+    resources: text("resources").array(),
+    requestedUserInfoClaims: text("requestedUserInfoClaims").array(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }),
+    createdAt: timestamptz("createdAt"),
+    revoked: timestamp("revoked", { withTimezone: true }),
+    rotatedAt: timestamp("rotatedAt", { withTimezone: true }),
+    rotationReplayResponse: text("rotationReplayResponse"),
+    rotationReplayExpiresAt: timestamp("rotationReplayExpiresAt", {
+      withTimezone: true,
+    }),
+    authTime: timestamp("authTime", { withTimezone: true }),
+    confirmation: jsonb("confirmation"),
+    scopes: text("scopes").array().notNull(),
+  },
+  (table) => [
+    index("oauth_refresh_token_client_id_idx").on(table.clientId),
+    index("oauth_refresh_token_session_id_idx").on(table.sessionId),
+    index("oauth_refresh_token_user_id_idx").on(table.userId),
+    index("oauth_refresh_token_authorization_code_id_idx").on(
+      table.authorizationCodeId,
+    ),
+  ],
+).enableRLS();
+
+// Opaque access tokens only: with `jwt()` in play access tokens are JWTs and
+// this table stays empty. It exists because the provider's model set declares
+// it, and an opaque deployment would write it.
+export const oauthAccessToken = pgTable(
+  "oauthAccessToken",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").unique(),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    sessionId: text("sessionId").references(() => session.id, {
+      onDelete: "set null",
+    }),
+    userId: text("userId").references(() => user.id),
+    referenceId: text("referenceId"),
+    authorizationCodeId: text("authorizationCodeId"),
+    resources: text("resources").array(),
+    requestedUserInfoClaims: text("requestedUserInfoClaims").array(),
+    refreshId: text("refreshId").references(() => oauthRefreshToken.id),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }),
+    createdAt: timestamptz("createdAt"),
+    revoked: timestamp("revoked", { withTimezone: true }),
+    confirmation: jsonb("confirmation"),
+    scopes: text("scopes").array().notNull(),
+  },
+  (table) => [
+    index("oauth_access_token_client_id_idx").on(table.clientId),
+    index("oauth_access_token_session_id_idx").on(table.sessionId),
+    index("oauth_access_token_user_id_idx").on(table.userId),
+    index("oauth_access_token_authorization_code_id_idx").on(
+      table.authorizationCodeId,
+    ),
+    index("oauth_access_token_refresh_id_idx").on(table.refreshId),
+  ],
+).enableRLS();
+
+// The Connection's approval: one row per (account, client). The plugin
+// upserts it and declares no unique index, so the guard reads it as "this
+// account still admits this client". `updatedAt` is touched by the MCP guard
+// at most once a minute — the only "last acted" the plugin's model offers.
+export const oauthConsent = pgTable(
+  "oauthConsent",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    userId: text("userId").references(() => user.id),
+    referenceId: text("referenceId"),
+    resources: text("resources").array(),
+    requestedUserInfoClaims: text("requestedUserInfoClaims").array(),
+    scopes: text("scopes").array().notNull(),
+    createdAt: timestamptz("createdAt"),
+    updatedAt: timestamptz("updatedAt"),
+  },
+  (table) => [
+    index("oauth_consent_client_id_idx").on(table.clientId),
+    index("oauth_consent_user_id_idx").on(table.userId),
+  ],
+).enableRLS();
+
+// A private_key_jwt client's presented assertion, kept until it expires so a
+// replay is refused. Public MCP clients (CIMD, PKCE) never write it, and rows
+// are never pruned — harmless while nothing writes them.
+export const oauthClientAssertion = pgTable("oauthClientAssertion", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
 }).enableRLS();
 
 // ---------------------------------------------------------------------------
@@ -281,6 +532,41 @@ export const catalogueUnlockAttempts = pgTable(
   ],
 ).enableRLS();
 
+// The write limiter's counter: one row per account, bucket and window.
+// `count` is how many writes the window has spent, and a window lapses once
+// its start is older than the window length — policy the MCP surface owns, not
+// the schema, exactly as `collection_unlock_attempts` leaves its own window
+// length to the unlock route.
+//
+// The `bucket` discriminator is what lets one table serve both of the
+// limiter's fixed windows: `write`, the per-second bucket every write spends,
+// and `import`, the hourly cap an import spends in addition. The two differ
+// only in that value and in how the route floors `windowStart`; a claim is one
+// `INSERT … ON CONFLICT` on the primary key (`setWhere` past the ceiling
+// returns no row, which is the refusal), so the key is exactly the triple and
+// nothing else is indexed. Keyed by the account, never by the address: a
+// hosted agent's calls all arrive from one cloud, so an address bucket would
+// be one bucket for every account in the product.
+export const accountWriteWindows = pgTable(
+  "account_write_windows",
+  {
+    userId: text("userId").notNull(),
+    bucket: text("bucket").notNull(),
+    // The window's start, floored from the write's own time by the route that
+    // spends it, so a row names the window it belongs to without a second
+    // clock column.
+    windowStart: timestamp("windowStart", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.bucket, table.windowStart] }),
+    check(
+      "account_write_windows_bucket_check",
+      sql`"bucket" in ('write', 'import')`,
+    ),
+  ],
+).enableRLS();
+
 // `photos`/`documents` are tables, not array columns. Money stays text —
 // the string that was typed, no float drift.
 export const artworks = pgTable(
@@ -411,11 +697,20 @@ export const schema = {
   session,
   account,
   verification,
+  jwks,
+  oauthClient,
+  oauthResource,
+  oauthClientResource,
+  oauthRefreshToken,
+  oauthAccessToken,
+  oauthConsent,
+  oauthClientAssertion,
   catalogues,
   catalogueCollaborators,
   catalogueInvitations,
   catalogueAccessGrants,
   catalogueUnlockAttempts,
+  accountWriteWindows,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,

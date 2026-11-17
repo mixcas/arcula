@@ -1,23 +1,33 @@
 # @arcula/db
 
-The Drizzle schema for the Arcula backend: thirteen tables, including the two
+The Drizzle schema for the Arcula backend: twenty-two tables, including the two
 sharing tables from
-[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md) and the
+[ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md), the
 two password tables from
-[ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
+[ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
+the write limiter's counter and the eight tables the agent surface's OAuth
+provider and JWT plugin write.
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
 — with `user` extended by the four typed custom columns (`firstName`,
-`lastName`, `tier`, `settings`) the API declares to the adapter. Nine **domain
+`lastName`, `tier`, `settings`) the API declares to the adapter. Eight
+**agent-access tables** — `jwks`, `oauthClient`, `oauthResource`,
+`oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`,
+`oauthClientAssertion` — hand-authored against `getAuthTables()` because
+`@better-auth/cli` is deprecated with no 1.7.x release. Ten **domain
 tables**: `collections`, `collection_collaborators`,
 `collection_invitations`, `collection_access_grants`,
-`collection_unlock_attempts`, `artworks`, `artwork_photos`,
-`artwork_photo_variants`, `artwork_documents`. The sharing tables are in the
-schema, and the feature code reads them on every access question and writes
-them through the invitation, removal, leaving and transfer routes. The two
-password tables and `collections.passwordHash` are read and written by the
-password routes — and `collection_unlock_attempts` by the unlock route alone,
-which is the throttle's whole surface.
+`collection_unlock_attempts`, `account_write_windows`, `artworks`,
+`artwork_photos`, `artwork_photo_variants`, `artwork_documents`. The sharing
+tables are in the schema, and the feature code reads them on every access
+question and writes them through the invitation, removal, leaving and transfer
+routes. The two password tables and `collections.passwordHash` are read and
+written by the password routes — and `collection_unlock_attempts` by the unlock
+route alone, which is the throttle's whole surface. `account_write_windows` is
+the agent surface's write-limiter counter, to be claimed by the limiter that
+ships next: a rolling 20-write / 20-second window and a fixed hourly import
+window. The table lands alone, ahead of the limiter that reads it, per the rule
+that a schema change is deployed before the code that reads it.
 
 The Drizzle entity is **`catalogues`** and every sharing table is exported under
 its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
@@ -58,13 +68,21 @@ Layout:
   it needs **no** tightening step, because a catalogue without a password is
   the normal state rather than a gap to backfill. `0006_enable_rls` is the
   third hand edit: `enableRLS()` on each declaration makes drizzle-kit generate
-  the thirteen `ENABLE ROW LEVEL SECURITY` statements, but a **grant** lives in
+  the `ENABLE ROW LEVEL SECURITY` statements for the tables that exist when it
+  is generated, but a **grant** lives in
   Postgres's ACL, not in the schema declaration, so there is no schema-level
   fact for it to render — the guarded `DO` block that revokes `anon` and
   `authenticated` is appended by hand. The guard is deliberate: Supabase creates
   those roles, while the local stack and CI have neither, so an unguarded
   `REVOKE … FROM anon` would fail every `db:migrate` with `role "anon" does not
-exist`. `0009_catalogue_kind` and `0010_artwork_availability` are the other
+exist`. `0012_account_write_windows` repeats that append for the one table that
+  ships after `0006`: the generated half is the `CREATE TABLE`, the primary key
+  and the check, and the revoke is added by hand, because a migration can only
+  lock down the tables it can see. `0013_agent_access` repeats it for the eight
+  agent-access tables, which also ship after `0006`; its generated half is the
+  eight `CREATE TABLE`s, the foreign keys, the unique constraints and the
+  indexes. `0009_catalogue_kind` and
+  `0010_artwork_availability` are the other
   contrast: both are pure `generate` output. `kind` is `NOT NULL` with a constant
   default, so the existing rows are already right and no backfill is owed;
   `availability` is nullable, so a work without a market state is the normal
@@ -73,9 +91,10 @@ exist`. `0009_catalogue_kind` and `0010_artwork_availability` are the other
   migration are asserted against each other's ground truth (the table shapes,
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
   index and the partial unique pending-invitation index, the
-  nullable → backfill → `NOT NULL` order, timestamptz, the defaults, and the
-  lock-down: RLS on all thirteen tables plus the guarded revoke and the absence
-  of `FORCE ROW LEVEL SECURITY`).
+  nullable → backfill → `NOT NULL` order, timestamptz, the defaults, the write
+  limiter's `(userId, bucket, windowStart)` key, and the
+  lock-down: RLS on all twenty-two tables plus the guarded revoke and the
+  absence of `FORCE ROW LEVEL SECURITY`).
 
 Decisions the schema encodes: timestamptz everywhere a timestamp is stored;
 money as `text` (the string that was typed — no float drift); `deletedAt` NULL
@@ -88,17 +107,28 @@ object; and `collection_invitations` stores the token's hash, never the token,
 with one pending offer per catalogue and address as a partial unique index.
 `catalogues.kind` is fixed at creation (`portfolio`, `collection`, `inventory`)
 and `artworks.availability` is nullable (`available`, `reserved`, `sold`,
-`on-consignment`), each guarded by a CHECK.
+`on-consignment`), each guarded by a CHECK. `collections.artworkFields` is a
+nullable jsonb map of a catalogue's deviations from its Kind's defaults, with
+`null` and `{}` both meaning pure defaults; the registry that names the keys
+ships with the feature that reads it.
 `artworks.userId` is a mirror of the catalogue owner, not an authorization
 fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and
 `collection_access_grants` keeps a grant's hash, never its token, with the
 catalogue indexed so a password change revokes in one statement.
 `collections.deletedAt` is nullable, with no default and no backfill: a
-catalogue without a stamp is live.
+catalogue without a stamp is live. `account_write_windows` keys on
+`(userId, bucket, windowStart)`, with `count` defaulting to zero: one counter
+row per account, bucket and window, so one atomic `INSERT … ON CONFLICT` is a
+claim and no second table is needed for the import cap. Two buckets —
+`write` (the per-second bucket every write spends) and `import` (the hourly
+cap an import spends as well) — differ only in the value and in how the route
+floors `windowStart`; the window lengths are policy, not schema, exactly as the
+unlock throttle's are.
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
-PostgREST roles' grants on what exists and on the defaults for what comes next.
+PostgREST roles' grants on what exists and on the defaults for what comes next;
+a table that ships later carries the same guarded revoke in its own migration.
 The API connects as the table **owner**, which bypasses RLS, so the lock-down is
 invisible to the product; `FORCE ROW LEVEL SECURITY` must never be added,
 because it would subject the owner to the empty policy set and blank every
@@ -133,4 +163,5 @@ sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
 `src/index.ts` and regenerate; the hand-added statements are the data backfill,
 appended with a comment saying what it reads, the
 add-nullable → backfill → set-not-null sequence above, and the guarded grant
-revoke in `0006_enable_rls`.
+revoke in `0006_enable_rls`, repeated by `0012_account_write_windows` and
+`0013_agent_access` for the tables that followed.
