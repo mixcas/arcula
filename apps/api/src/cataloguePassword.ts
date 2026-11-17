@@ -21,7 +21,7 @@ export interface ScryptParams {
  * Today's cost. Raising it changes only new hashes: old strings name the cost
  * they were made with, so they keep verifying.
  */
-export const DEFAULT_SCRYPT_PARAMS: ScryptParams = { N: 16384, r: 8, p: 1 };
+const DEFAULT_SCRYPT_PARAMS: ScryptParams = { N: 16384, r: 8, p: 1 };
 
 const PREFIX = "scrypt";
 const SALT_BYTES = 16;

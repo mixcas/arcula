@@ -34,7 +34,7 @@ export interface UserSettings {
 
 export const STORAGE_KEY = "arcula.userSettings";
 
-export const DEFAULT_USER_SETTINGS: UserSettings = {
+const DEFAULT_USER_SETTINGS: UserSettings = {
   version: 1,
   artworksView: "grid",
   artworksSort: "title-asc",

@@ -255,7 +255,7 @@ export const fromArtwork = (artwork: Artwork): ArtworkFormValues => ({
 export const MINTED_ID_RE = /^[A-Za-z0-9]{1,64}$/;
 
 /** One staged entry in a save payload. `name` is metadata only — never in a path. */
-export const stagedEntrySchema = z.object({
+const stagedEntrySchema = z.object({
   entryId: z.string().regex(MINTED_ID_RE, "Invalid entry id"),
   name: z.string().trim().min(1, "Name is required"),
 });

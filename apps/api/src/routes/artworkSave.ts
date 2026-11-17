@@ -81,7 +81,7 @@ export async function assertEntriesFree(
 
 /** Upsert one variant row: (parentId, key) is the primary key, which is
  *  exactly what makes a re-save of the same entry a no-op on the rows. */
-export async function upsertVariantRows(
+async function upsertVariantRows(
   tx: Tx,
   parentKind: "photo" | "document",
   parentId: string,

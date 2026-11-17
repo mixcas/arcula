@@ -20,7 +20,7 @@ import { RECORDS_PER_PAGE_OPTIONS } from "@/components/manage/catalogue/artworks
  */
 const ROW_UNIT_PX = 8;
 
-export interface ArtworksGridProps {
+interface ArtworksGridProps {
   /** The page slice, already sorted and cut by the list. */
   records: Artwork[];
   /** The ids the selection covers, across pages. */

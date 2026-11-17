@@ -179,7 +179,7 @@ export const stagedVariantPrefix = (
 
 /** The unmodified source: no key suffix, so a staged entry is at most
  *  one original plus its generated variants. */
-export type ParsedStagingKey = {
+type ParsedStagingKey = {
   kind: "staging";
   uploaderId: string;
   catalogueId: string;

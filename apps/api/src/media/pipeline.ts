@@ -12,7 +12,6 @@
 import sharp from "sharp";
 import type { ImageVariantKey } from "@arcula/shared";
 import {
-  DOCUMENT_VARIANT_SPECS,
   IMAGE_VARIANTS,
   coverCrop,
   variantSize,
@@ -25,7 +24,7 @@ import {
  * WebP at 95 is visually near-lossless while still being far smaller
  * than a PNG.
  */
-export const WEBP_QUALITY = 95;
+const WEBP_QUALITY = 95;
 
 /** Output format, the only one: variants never come out as anything else. */
 export const WEBP_TYPE = "image/webp";
@@ -174,8 +173,6 @@ export async function generateVariants(
   }
   return rendered;
 }
-
-export { DOCUMENT_VARIANT_SPECS, IMAGE_VARIANTS };
 
 /** The PDF header, ASCII: `%PDF-`. */
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];

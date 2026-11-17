@@ -150,26 +150,18 @@ export const artworkImportOutcomeSchema = z.object({
 export type ArtworkImportOutcome = z.infer<typeof artworkImportOutcomeSchema>;
 
 /**
- * POST /catalogues/{cid}/artworks/bulk-delete. The ids are the ones the
- * client minted (the table lists them), so the shared minted-id rule is
- * the right one to check against.
+ * POST /catalogues/{cid}/artworks/bulk-delete and …/bulk-restore. Both halves
+ * of the Deleted view take the same selection — the artwork ids the client
+ * minted (the table lists them) — so they share one request shape and one
+ * validation rule, and a reader has one name to learn. The answers differ:
+ * `{ deleted: n }` and `{ restored: n }`.
  */
-export const artworkBulkDeleteSchema = z.object({
+export const artworkBulkSelectionSchema = z.object({
   artworkIds: z
     .array(z.string().regex(MINTED_ID_RE, "Invalid artwork id"))
     .min(1, "Select at least one artwork"),
 });
 
-export type ArtworkBulkDeletePayload = z.infer<typeof artworkBulkDeleteSchema>;
-
-/**
- * POST /catalogues/{cid}/artworks/bulk-restore. The same selection the batch
- * soft delete takes — the ids the client minted — so the two halves of the
- * Deleted view share one request shape and one validation rule. The answer is
- * `{ restored: n }`: how many rows this call actually moved.
- */
-export const artworkBulkRestoreSchema = artworkBulkDeleteSchema;
-
-export type ArtworkBulkRestorePayload = z.infer<
-  typeof artworkBulkRestoreSchema
+export type ArtworkBulkSelectionPayload = z.infer<
+  typeof artworkBulkSelectionSchema
 >;

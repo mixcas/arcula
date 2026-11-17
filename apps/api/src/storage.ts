@@ -42,7 +42,7 @@ function required(name: string): string {
 // address (its S3_ENDPOINT is the regional endpoint), so the presigned
 // URL names the bucket as the first path segment in both. A
 // virtual-hosted deployment has to set it to "false" explicitly.
-export const BUCKET = process.env.S3_BUCKET ?? "arcula";
+const BUCKET = process.env.S3_BUCKET ?? "arcula";
 
 /**
  * The one set of facts every client below is built from. It is a value rather
