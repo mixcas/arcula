@@ -59,6 +59,7 @@ const FIELD_LABELS: Record<ArtworkFieldKey, string> = {
   notes: "Notes",
   condition: "Condition",
   currentValue: "Current price",
+  availability: "Availability",
 };
 
 /** The two switch groups. Provenance belongs to the work: it describes the
@@ -76,6 +77,7 @@ const WORK_FIELDS = [
 ] as const satisfies readonly ArtworkFieldKey[];
 
 const MARKET_FIELDS = [
+  "availability",
   "acquisitionDate",
   "acquisitionPrice",
   "currentValue",
@@ -84,6 +86,8 @@ const MARKET_FIELDS = [
 /** The market fields' one-line explanations — the only ones that need words:
  *  the rest are the form's own labels. */
 const MARKET_DESCRIPTIONS: Record<(typeof MARKET_FIELDS)[number], string> = {
+  availability:
+    "Whether a work is available, reserved, sold, or on consignment.",
   acquisitionDate: "When the work entered this catalogue's hands.",
   acquisitionPrice: "What was paid for it, in the catalogue's own currency.",
   currentValue: "What it is worth now, labelled as the current price.",
@@ -374,8 +378,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
         {/*
           One switch per record field, grouped into the work and the market.
           The market fields carry a sentence each: they are the ones whose
-          meaning is not obvious from the label. Availability is not here yet;
-          it joins the registry with its own ticket.
+          meaning is not obvious from the label.
         */}
         <Text size="h4" mb="xs">
           About the work

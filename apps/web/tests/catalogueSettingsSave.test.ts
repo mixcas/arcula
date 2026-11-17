@@ -22,7 +22,8 @@ import {
   type PublicLoadedValues,
 } from "@/components/manage/catalogueSettingsSave";
 
-/** Every switch on — a Collection's defaults, and the plainest buffer there is. */
+/** Every switch on — the plainest buffer there is, and a Portfolio's
+ *  Availability default. */
 const switches = (
   overrides: Partial<ArtworkFieldStates> = {},
 ): ArtworkFieldStates => ({
@@ -38,8 +39,14 @@ const switches = (
   notes: true,
   condition: true,
   currentValue: true,
+  availability: true,
   ...overrides,
 });
+
+/** A Collection's exact defaults: everything on, Availability off. */
+const collectionSwitches = (
+  overrides: Partial<ArtworkFieldStates> = {},
+): ArtworkFieldStates => switches({ availability: false, ...overrides });
 
 /** A Portfolio's defaults: the acquisition pair is off. */
 const portfolioSwitches = (
@@ -79,7 +86,7 @@ const generalEdited = (
   confirm: "",
   editingPassword: false,
   removingPassword: false,
-  artworkFields: switches(),
+  artworkFields: collectionSwitches(),
   ...overrides,
 });
 
@@ -224,11 +231,29 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
   it("carries a field switched off, as the one deviation", () => {
     const decision = resolveGeneralSave(
       generalLoaded({ kind: "collection" }),
-      generalEdited({ artworkFields: switches({ provenance: false }) }),
+      generalEdited({
+        artworkFields: collectionSwitches({ provenance: false }),
+      }),
     );
 
     expect(decision).toEqual(
       decided({ artworkFields: { provenance: false } }, true),
+    );
+  });
+
+  it("carries Availability switched on for a Collection", () => {
+    // The switch the flattening adds: a Kind whose default is off can record a
+    // market state because the member said so, and the fold sends that one
+    // choice rather than the whole arrangement.
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "collection" }),
+      generalEdited({
+        artworkFields: collectionSwitches({ availability: true }),
+      }),
+    );
+
+    expect(decision).toEqual(
+      decided({ artworkFields: { availability: true } }, true),
     );
   });
 
@@ -284,11 +309,12 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
   });
 
   it("resolves the same buffer against the Kind it loaded", () => {
-    // All-on is customised for a Portfolio (the acquisition pair is off by
-    // default there) and is exactly the defaults for a Collection.
+    // The same all-on buffer is customised on both Kinds, differently: a
+    // Portfolio's acquisition pair starts off, a Collection's Availability
+    // starts off.
     const portfolio = resolveGeneralSave(
       generalLoaded({ kind: "portfolio" }),
-      generalEdited(),
+      generalEdited({ artworkFields: switches() }),
     );
     expect(portfolio).toEqual(
       decided(
@@ -301,9 +327,11 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
 
     const collection = resolveGeneralSave(
       generalLoaded({ kind: "collection" }),
-      generalEdited(),
+      generalEdited({ artworkFields: switches() }),
     );
-    expect(collection).toEqual(decided({}));
+    expect(collection).toEqual(
+      decided({ artworkFields: { availability: true } }, true),
+    );
   });
 });
 

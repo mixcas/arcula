@@ -1,12 +1,14 @@
 // A work's market state: the save routes record it, a member read carries it,
-// a visitor read does not, and it is never a gate. The kind decides only
-// whether the form surfaces the field (ADR-0010); the API accepts availability
-// on every kind and validates it against nothing but the four-word enum.
+// a visitor read does not, and it is never a gate. Whether a form or a save may
+// name the field is the Catalogue's choice (the Artwork fields registry), so a
+// Collection whose Availability is on accepts all four states like any other
+// Catalogue; the API validates the value against the four-word enum alone, and
+// never against the Kind.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ArtworkRead } from "@arcula/shared";
 import { closeDb } from "../src/db";
-import { freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, req, uuid } from "./helpers/api";
 import { makeCatalogue } from "./helpers/fixtures";
 
 let owner: Awaited<ReturnType<typeof freshUser>>;
@@ -127,13 +129,46 @@ describe("a Collection's work", () => {
     expect((await json<ArtworkRead>(read)).availability).toBeNull();
   });
 
-  it("is accepted and round-tripped anyway — the API is a superset", async () => {
-    // The kind shapes the form, not the contract: a client that names a state
-    // on a Collection's work is not refused, and the value is stored.
-    const created = await save(collection, "reserved");
+  it("refuses a state the Catalogue does not record, like any other disabled field", async () => {
+    // A Collection's Availability starts off, so the refusal #303 added covers
+    // this key now that it is in the registry. It is a configuration rule, not
+    // a Kind one: a Collection that switches the field on accepts the same
+    // states a Portfolio does.
+    const refused = await save(collection, "reserved");
+    expect(refused.status).toBe(400);
+    const body = await err(refused);
+    expect(body.code).toBe("field-disabled");
+    expect(body.fields).toHaveProperty("availability");
+  });
+
+  it("accepts a state when the Collection switched Availability on", async () => {
+    const cid = await makeCatalogue(owner.userId, {
+      kind: "collection",
+      isPublic: true,
+      artworkFields: { availability: true },
+    });
+    const created = await save(cid, "reserved");
     expect(created.status).toBe(201);
     const body = await json<ArtworkRead>(created);
     expect(body.availability).toBe("reserved");
+
+    const read = await getArtwork(cid, body.id, owner.cookies);
+    expect((await json<ArtworkRead>(read)).availability).toBe("reserved");
+  });
+});
+
+describe("the four states are the same on every kind", () => {
+  it("accepts a Portfolio's on-consignment", async () => {
+    // Flattening Availability removed the per-Kind list: a Portfolio can now
+    // record work it holds on consignment, and the server validates the state
+    // against the enum alone.
+    const created = await save(portfolio, "on-consignment");
+    expect(created.status).toBe(201);
+    const body = await json<ArtworkRead>(created);
+    expect(body.availability).toBe("on-consignment");
+
+    const read = await getArtwork(portfolio, body.id, owner.cookies);
+    expect((await json<ArtworkRead>(read)).availability).toBe("on-consignment");
   });
 });
 

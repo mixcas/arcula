@@ -40,7 +40,7 @@ export const artworkFieldDeviationsSchema = z.partialRecord(
   z.boolean(),
 );
 
-// The schema's key space and the registry's are the same twelve. The first
+// The schema's key space and the registry's are the same thirteen. The first
 // direction catches a field the registry knows and the schema refuses; the
 // second catches a key the schema admits that is not a record field.
 type SchemaIsDeviations =

@@ -607,13 +607,13 @@ describe("Catalogue search", () => {
 });
 
 /**
- * The page is the one place that knows the catalogue's kind, so it is where
- * the manage list learns whether a work's market state belongs on screen. The
- * API is a superset, so the flag — not the row — is what hides it on a
- * Collection (ADR-0010).
+ * The page is the one place that knows the catalogue's configuration, so it is
+ * where the manage list learns whether a work's market state belongs on screen.
+ * The API is a superset, so Availability's resolved state — not the row, and no
+ * longer the Kind — is what hides it (ADR-0010's per-Kind rule is gone).
  */
 describe("the manage view — a work's market state", () => {
-  it("shows it for a Portfolio", async () => {
+  it("shows it for a Catalogue that records Availability", async () => {
     getCatalogue.mockResolvedValue({ ...catalogue, kind: "portfolio" });
     getCatalogueArtworks.mockResolvedValue([
       artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
@@ -624,13 +624,41 @@ describe("the manage view — a work's market state", () => {
     expect(screen.getByText("Sold")).toBeInTheDocument();
   });
 
-  it("hides it for a Collection, whatever the work carries", async () => {
+  it("shows it for a Collection that switched Availability on, in both views", async () => {
+    // The flattening, end to end: the badge follows the Catalogue's choice, so
+    // a Kind whose default is off still badges the state it records.
+    getCatalogue.mockResolvedValue({
+      ...catalogue,
+      artworkFields: { availability: true },
+    });
     getCatalogueArtworks.mockResolvedValue([
       artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
     ]);
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("Blue Nude")).toBeInTheDocument();
+    // The Grid is the default view, so the card carries the badge.
+    expect(screen.getByText("Sold")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Table" }));
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Sold")).toBeInTheDocument();
+  });
+
+  it("hides it for a Collection that does not record it, whatever the work carries", async () => {
+    getCatalogueArtworks.mockResolvedValue([
+      artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
+    ]);
+    const user = userEvent.setup();
     renderPage();
 
     expect(await screen.findByText("Blue Nude")).toBeInTheDocument();
     expect(screen.queryByText("Sold")).toBeNull();
+
+    // The Table honours the same flag: the badge is absent there too.
+    await user.click(screen.getByRole("radio", { name: "Table" }));
+    const table = await screen.findByRole("table");
+    expect(within(table).queryByText("Sold")).toBeNull();
   });
 });

@@ -8,10 +8,9 @@
  * disagree about what a Catalogue records. Pure by construction: no React, no
  * database, no API.
  *
- * Availability is deliberately not a key yet: it joins the registry in its own
- * ticket, alongside the flattening of its per-Kind states. Until then the two
- * fixed fields are title and Artist Name, and availability keeps its existing
- * Kind-shaped controls.
+ * Availability is the thirteenth key, and the last one: its four states are the
+ * same on every Kind, so whether a Catalogue records a market state is a choice
+ * like any other field's.
  */
 
 import type { ArtworkFormValues } from "./schemas/artwork";
@@ -27,17 +26,17 @@ export type ArtworkFixedField = (typeof ARTWORK_FIXED_FIELDS)[number];
 
 /**
  * The togglable field keys, derived from the Artwork form's values with the
- * fixed fields, `status` (the Draft/Published stamp, not a record field) and —
- * for now — `availability` excluded. A field added to the form therefore joins
- * this type automatically, and the exhaustiveness guard below fails the build
- * until it is placed in `ARTWORK_FIELD_KEYS`.
+ * fixed fields and `status` (the Draft/Published stamp, not a record field)
+ * excluded. A field added to the form therefore joins this type automatically,
+ * and the exhaustiveness guard below fails the build until it is placed in
+ * `ARTWORK_FIELD_KEYS`.
  */
 export type ArtworkFieldKey = Exclude<
   keyof ArtworkFormValues,
-  ArtworkFixedField | "status" | "availability"
+  ArtworkFixedField | "status"
 >;
 
-/** The twelve keys, in the order the registry and the settings card read them. */
+/** The thirteen keys, in the order the registry and the settings card read them. */
 export const ARTWORK_FIELD_KEYS = [
   "serie",
   "dateOfCreation",
@@ -51,6 +50,7 @@ export const ARTWORK_FIELD_KEYS = [
   "notes",
   "condition",
   "currentValue",
+  "availability",
 ] as const satisfies readonly ArtworkFieldKey[];
 
 // Every togglable field is listed exactly once. The first direction catches a
@@ -81,9 +81,10 @@ export type ArtworkFieldStates = Record<ArtworkFieldKey, boolean>;
 /**
  * The per-Kind defaults. Portfolio and Inventory drop the acquisition pair — an
  * artist did not acquire their own work, and a gallery records what it
- * represents, which on consignment it never held title to. Everything else is
- * on everywhere: provenance and condition are as useful to an artist as to a
- * collector.
+ * represents, which on consignment it never held title to. Availability starts
+ * off on a Collection, which records what the collector owns, and on everywhere
+ * else. Everything else is on on every Kind: provenance and condition are as
+ * useful to an artist as to a collector.
  *
  * `Record<ArtworkFieldKey, boolean>` makes a field the registry forget a build
  * error, and `Record<CatalogueKind, …>` makes a fourth Kind one too.
@@ -104,6 +105,7 @@ export const ARTWORK_FIELD_DEFAULTS: Readonly<
     notes: true,
     condition: true,
     currentValue: true,
+    availability: true,
   },
   collection: {
     serie: true,
@@ -118,6 +120,7 @@ export const ARTWORK_FIELD_DEFAULTS: Readonly<
     notes: true,
     condition: true,
     currentValue: true,
+    availability: false,
   },
   inventory: {
     serie: true,
@@ -132,6 +135,7 @@ export const ARTWORK_FIELD_DEFAULTS: Readonly<
     notes: true,
     condition: true,
     currentValue: true,
+    availability: true,
   },
 };
 

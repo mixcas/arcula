@@ -24,11 +24,10 @@ import type {
  * leaves the stored value, a string sets. `status` has no third state: the
  * form always has one selected, and the patch carries it as it stands.
  *
- * `availability` is the same for the kinds that surface it, with one addition:
- * the form's `null` is a real value (a work with no market state), so it is
- * carried as the wire's own `null` rather than omitted. A kind that does not
- * surface it omits the key entirely, which is what keeps a Collection's stored
- * value untouched.
+ * `availability` is decided by the Catalogue's Artwork fields rather than by
+ * its Kind: when the field is enabled the form's value is carried, with `null`
+ * as a real value on the wire; when it is disabled the key is omitted entirely,
+ * which keeps a stored state untouched.
  *
  * The three-way decision per field is against the loaded values, not against
  * the schema: the schema says whether the *current* input is blank, and only
@@ -37,7 +36,6 @@ import type {
 export const toArtworkUpdate = (
   loaded: ArtworkFormValues,
   payload: ArtworkPayload,
-  availabilityInPlay = false,
   enabled: ArtworkFieldStates,
 ): ArtworkUpdatePayload => {
   const update: ArtworkUpdatePayload = {
@@ -70,7 +68,7 @@ export const toArtworkUpdate = (
     // Blank on both sides: omit. The stored value is already empty, and
     // sending `null` for it would be a write with no effect.
   }
-  if (availabilityInPlay) {
+  if (enabled.availability) {
     // The control always holds one of the four when it is on screen; `null` is
     // the wire's "no market state", not "leave it alone".
     update.availability = payload.availability ?? null;
@@ -79,29 +77,14 @@ export const toArtworkUpdate = (
 };
 
 /**
- * Drop `availability` from a payload for a kind that does not carry it.
- *
- * A Collection's form has no control, and the field is optional on every save
- * schema, so the honest payload is one without the key: the API's PATCH leaves
- * the column alone and its create writes null. Sending `null` would be a write
- * the user never made.
- */
-export const withoutAvailability = (
-  payload: ArtworkPayload,
-): ArtworkPayload => {
-  const copy = { ...payload };
-  delete copy.availability;
-  return copy;
-};
-
-/**
  * Drop every field the catalogue does not record from a create payload.
  *
  * The form validates and submits every field's value whether or not its input
  * is on screen, so a hidden field that still holds a value would otherwise be
- * written again on the next save. A disabled key is left out entirely — never
- * sent as `null` — which keeps the stored value and makes the server's later
- * refusal of a disabled field unreachable from this form.
+ * written again on the next save. A disabled key — Availability included — is
+ * left out entirely, never sent as `null`, which keeps the stored value and
+ * makes the server's later refusal of a disabled field unreachable from this
+ * form.
  */
 export const withoutDisabledArtworkFields = (
   payload: ArtworkPayload,

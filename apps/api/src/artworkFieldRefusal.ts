@@ -23,8 +23,7 @@ import type { CatalogueRow } from "./serialize";
 /**
  * Keys whose prose differs from the key read as words. Sentence case: the
  * refusal is a sentence ("Provenance is not recorded…"). A field the registry
- * gains later — availability joins it in its own ticket — reads off its key
- * and needs no edit here.
+ * gains later reads off its key and needs no edit here.
  */
 const IRREGULAR_LABELS: Readonly<Partial<Record<ArtworkFieldKey, string>>> = {
   dateOfCreation: "Date of creation",

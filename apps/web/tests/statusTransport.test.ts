@@ -16,17 +16,20 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_ARTWORK_FORM,
+  resolveArtworkFields,
   toArtworkCreatePayload,
   toArtworkPayload,
   type ArtworkFormValues,
+  type Catalogue,
 } from "@arcula/shared";
+import { withoutDisabledArtworkFields } from "@/schemas/artwork";
 import { authClient } from "@/auth/client";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
 
 /** A form the way the Add page submits it, with the status the owner chose. */
 const save = async (
-  catalogueId: string,
+  catalogue: Catalogue,
   title: string,
   status: ArtworkFormValues["status"],
 ) => {
@@ -36,10 +39,21 @@ const save = async (
     artistName: "María López",
     status,
   };
-  // The page's own two steps: the schema first, then the create envelope.
+  // The page's own three steps: the schema, the catalogue's field filter, and
+  // the create envelope. The filter is what keeps a field the catalogue does
+  // not record — a Collection's Availability, here — out of the save.
+  const enabled = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled;
   return artworkService.createArtwork(
-    catalogueId,
-    toArtworkCreatePayload(toArtworkPayload(values), `w${Date.now()}`, [], []),
+    catalogue.id,
+    toArtworkCreatePayload(
+      withoutDisabledArtworkFields(toArtworkPayload(values), enabled),
+      `w${Date.now()}`,
+      [],
+      [],
+    ),
   );
 };
 
@@ -55,12 +69,8 @@ describe("the status against the real stack", () => {
     const catalogue = await catalogueService.createCatalogue({
       name: `Status wall ${stamp}`,
     });
-    const draft = await save(catalogue.id, `Draft ${stamp}`, "draft");
-    const published = await save(
-      catalogue.id,
-      `Published ${stamp}`,
-      "published",
-    );
+    const draft = await save(catalogue, `Draft ${stamp}`, "draft");
+    const published = await save(catalogue, `Published ${stamp}`, "published");
 
     // What the owner's page reads — the list, and one work by id.
     const listed = await artworkService.getCatalogueArtworks(catalogue.id);
