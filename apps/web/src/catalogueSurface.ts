@@ -6,18 +6,12 @@
  * existing fields mean
  * (`name` names whose art it is, `description` says what it is), whether a
  * work carries an availability at all (and which states that kind's form
- * offers), what Artist Name a new work starts with, and the v1 artwork field
- * table.
+ * offers), and what Artist Name a new work starts with.
  *
- * It carries the v1 field table whole — every artwork field visible, only
- * `title` and `artistName` required — as the data a later per-kind hiding
- * would read. No v1 screen reads `visible`/`required` yet: the artwork form
- * renders every field it always has, so a per-kind hiding is a change to
- * `ARTWORK_FIELDS` here plus the one screen that consumes it, not a branch in
- * every screen. What v1 screens do read is the labels and the availability
- * axis: the create form, the settings General tab and the dashboard use the
- * words, the artwork form offers the availability values, and the manage views
- * read whether availability is in play at all.
+ * Screens read the labels and the availability axis: the create form, the
+ * settings General tab and the dashboard use the words, the artwork form
+ * offers the availability values, and the manage views read whether
+ * availability is in play at all.
  */
 
 import type {
@@ -58,26 +52,6 @@ type EveryKindIsOffered = CatalogueKind extends (typeof CATALOGUE_KINDS)[number]
 const everyKindIsOffered: EveryKindIsOffered = true;
 void everyKindIsOffered;
 
-/**
- * One artwork field the form may show. Derived from the form's own values, so
- * a field added to the form cannot be silently absent from the surface.
- */
-type ArtworkField = keyof ArtworkFormValues;
-
-/**
- * The fields this table covers. `availability` is deliberately not among them:
- * it is not a per-kind field rule but the `availabilityInPlay` axis above,
- * because the form hides the whole control and the API accepts the value on
- * every kind.
- */
-type SurfaceArtworkField = Exclude<ArtworkField, "availability">;
-
-interface ArtworkFieldSurface {
-  readonly field: SurfaceArtworkField;
-  readonly visible: boolean;
-  readonly required: boolean;
-}
-
 export interface CatalogueSurface {
   readonly kind: CatalogueKind;
   /** "Portfolio" | "Collection" | "Inventory" — the kind, named. */
@@ -97,8 +71,6 @@ export interface CatalogueSurface {
    *  with no market state. The API accepts all four on every kind — this is a
    *  presentation rule, not a validation one. */
   readonly availabilityValues: readonly ArtworkAvailability[];
-  /** The artwork form's fields, in form order, with their v1 rules. */
-  readonly artworkFields: readonly ArtworkFieldSurface[];
   /**
    * Whether the catalogue's own name is the artist's name on this kind — a
    * Portfolio's is (ADR-0010), so a work added to one starts credited to it.
@@ -108,39 +80,6 @@ export interface CatalogueSurface {
    */
   readonly artistNameIsCatalogueName: boolean;
 }
-
-/**
- * v1: every existing artwork field is visible on every kind, and only the two
- * identity fields are required. The list is exhaustive over the form's values
- * — the guard below fails the build if a field is added and not placed here.
- */
-const ARTWORK_FIELDS: readonly ArtworkFieldSurface[] = [
-  { field: "title", visible: true, required: true },
-  { field: "artistName", visible: true, required: true },
-  { field: "serie", visible: true, required: false },
-  { field: "dateOfCreation", visible: true, required: false },
-  { field: "medium", visible: true, required: false },
-  { field: "dimensions", visible: true, required: false },
-  { field: "editions", visible: true, required: false },
-  { field: "acquisitionDate", visible: true, required: false },
-  { field: "acquisitionPrice", visible: true, required: false },
-  { field: "placeOfOrigin", visible: true, required: false },
-  { field: "provenance", visible: true, required: false },
-  { field: "notes", visible: true, required: false },
-  { field: "condition", visible: true, required: false },
-  { field: "currentValue", visible: true, required: false },
-  { field: "status", visible: true, required: false },
-];
-
-type EveryArtworkFieldIsListed =
-  Exclude<
-    SurfaceArtworkField,
-    (typeof ARTWORK_FIELDS)[number]["field"]
-  > extends never
-    ? true
-    : never;
-const everyArtworkFieldIsListed: EveryArtworkFieldIsListed = true;
-void everyArtworkFieldIsListed;
 
 /** The market state's four words, and only those: the record's key type makes
  *  a value the contract names but the surface forgot a build error. */
@@ -159,7 +98,7 @@ export const ARTWORK_AVAILABILITY_LABELS: Record<ArtworkAvailability, string> =
  *  artist's name, which is why its new works start credited to it. */
 const SURFACES: Record<
   CatalogueKind,
-  Omit<CatalogueSurface, "kind" | "availabilityInPlay" | "artworkFields">
+  Omit<CatalogueSurface, "kind" | "availabilityInPlay">
 > = {
   portfolio: {
     kindLabel: "Portfolio",
@@ -194,7 +133,6 @@ export function catalogueSurface(kind: CatalogueKind): CatalogueSurface {
     kind,
     ...surface,
     availabilityInPlay: surface.availabilityValues.length > 0,
-    artworkFields: ARTWORK_FIELDS,
   };
 }
 
