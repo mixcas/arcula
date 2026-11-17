@@ -98,9 +98,21 @@ fi
 mkdir -p "$STAGE/assets/fonts"
 cp -R apps/api/src/assets/fonts/. "$STAGE/assets/fonts/"
 
-# The smoke's pipeline access (never part of the package).
-bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
+# The smoke's pipeline access (never part of the package). Built with the
+# same flags as the deploy bundle, source map included: dev's smoke output is
+# as readable as dev's bundle, so a failure inside the container can be read
+# in TypeScript. Both smoke files are tooling, not package contents, and step
+# 5 removes them before the gate and the zip.
+if [ "$ENV" = prod ]; then
+  bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
+else
+  bun build apps/api/scripts/lambda-smoke-entry.ts --target node --format esm --external sharp --define "$DEFINE_NODE_ENV" --sourcemap=external --outdir "$STAGE"
+fi
 mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
+if [ "$ENV" = dev ]; then
+  mv "$STAGE/lambda-smoke-entry.js.map" "$STAGE/smoke.js.map"
+  printf '\n//# sourceMappingURL=smoke.js.map\n' >>"$STAGE/smoke.js"
+fi
 
 # 2. The SPA the Lambda serves (spa.ts reads WEB_DIST, which the deploy
 #    sets to /var/task/web/dist). A fresh build: a stale dist would
@@ -206,28 +218,35 @@ fi
 #    maps, or "dev is debuggable" is a hope rather than a fact. Reading the
 #    staged tree (not the inputs) means an upstream change that drops either
 #    half fails here, before anything can be zipped or deployed by hand.
+#
+#    The map search covers the whole package, not just its root: a map under
+#    assets/ or any other subdirectory publishes the source just as surely.
+#    node_modules is pruned because it is installed, not built — a
+#    dependency's own map is not our source.
 echo "==> checking the staged artifact"
 gate_fail() {
   echo "artifact gate ($ENV): $1" >&2
   echo "refusing to zip $OUT — see the source-map rules in this script" >&2
   exit 1
 }
-rm -f "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
+rm -f "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js" "$STAGE/smoke.js.map"
+map_files=$(find "$STAGE" -path "$STAGE/node_modules" -prune -o -name '*.map' -print)
 if [ "$ENV" = prod ]; then
-  [ -z "$(find "$STAGE" -maxdepth 1 -name '*.map' -print)" ] ||
-    gate_fail "a map file reached the bundle root: $(find "$STAGE" -maxdepth 1 -name '*.map' -print)"
-  [ -z "$(find "$STAGE/web/dist" -name '*.map' -print)" ] ||
-    gate_fail "a map file reached the served SPA: $(find "$STAGE/web/dist" -name '*.map' -print | head -3)"
+  [ -z "$map_files" ] ||
+    gate_fail "a map file reached the artifact: $(printf '%s\n' "$map_files" | head -3)"
   if grep -rlF 'sourceMappingURL' "$STAGE/index.js" "$STAGE/web/dist" >/dev/null; then
     gate_fail "a sourceMappingURL reference reached the artifact: $(grep -rlF 'sourceMappingURL' "$STAGE/index.js" "$STAGE/web/dist" | head -3)"
   fi
 else
+  [ -n "$map_files" ] ||
+    gate_fail "the staged package carries no map file at all"
   [ -f "$STAGE/index.js.map" ] ||
     gate_fail "the bundle's external map is missing (index.js.map)"
   grep -qF 'sourceMappingURL=index.js.map' "$STAGE/index.js" ||
     gate_fail "the bundle carries no sourceMappingURL reference to index.js.map"
-  [ -n "$(find "$STAGE/web/dist/assets" -name '*.js.map' -print)" ] ||
-    gate_fail "the served SPA carries no .js.map (the build did not emit source maps)"
+  spa_maps=$(find "$STAGE/web/dist" -name '*.map' -print)
+  [ -n "$spa_maps" ] ||
+    gate_fail "the served SPA carries no .map (the build did not emit source maps)"
   for js in "$STAGE"/web/dist/assets/*.js; do
     grep -qF 'sourceMappingURL=' "$js" ||
       gate_fail "the served SPA script $js names no source map"
