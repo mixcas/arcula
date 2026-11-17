@@ -34,6 +34,30 @@ Create a GitHub issue.
 
 Read it as in **Read an issue** above.
 
+## When a spec is taken up for implementation
+
+A spec and its tickets are read by every agent in the run — the lead, each
+implementer, each reviewer — and again when the pull request quotes an
+acceptance criterion. Fetching them per agent is the same text over the network
+a dozen times, and leaves each reader re-deriving what the spec asked.
+
+Fetch once, as files, and pass the **paths**:
+
+```sh
+scratch=$(mktemp -d)/arcula-<spec>
+mkdir -p "$scratch"
+gh issue view <spec> > "$scratch/spec.md"
+for n in <ticket> <ticket>; do gh issue view "$n" > "$scratch/$n.md"; done
+```
+
+Each ticket keeps its number in the filename, so a prompt names
+`$scratch/<ticket>.md` instead of restating the ticket, and the ticket's
+`Blocked by` line stays with it — that is the task graph the run needs.
+
+Keep the directory outside the repository. It is working material, not a
+record: a worktree must not carry it, and it is not the place a decision ends
+up (that is an ADR, `DESIGN.md` or `docs/`).
+
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
