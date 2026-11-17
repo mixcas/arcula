@@ -135,7 +135,8 @@ export const verification = pgTable("verification", {
 // Only `jwks` is `jwt()`'s. The other seven are the OAuth provider's (the MCP
 // plugin *is* the provider): a client's metadata, the resource the tokens are
 // bound to, the client↔resource grant, the refresh-token family (one row per
-// authorization, rotated in place), the opaque-token table the JWT plugin
+// authorization; each rotation revokes the old row and inserts a new one), the
+// opaque-token table the JWT plugin
 // leaves empty, the consent row a Connection is approved by, and the
 // private-key-jwt assertion a confidential client may present.
 
