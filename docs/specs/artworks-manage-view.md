@@ -25,17 +25,17 @@ The design record:
 Where it lands:
 
 - `apps/web/src/userSettings.ts` — the stored settings and their total parser.
-- `apps/web/src/components/manage/collection/artworksSort.ts` — the shared sort
+- `apps/web/src/components/manage/catalogue/artworksSort.ts` — the shared sort
   model and the sorter both views use.
-- `apps/web/src/components/manage/collection/ArtworksList.tsx` — the parent that
+- `apps/web/src/components/manage/catalogue/ArtworksList.tsx` — the parent that
   owns view, sort, page, page size and selection, and renders the toolbar.
-- `apps/web/src/components/manage/collection/ArtworksViewToggle.tsx` — the
+- `apps/web/src/components/manage/catalogue/ArtworksViewToggle.tsx` — the
   icon-only segmented control.
-- `apps/web/src/components/manage/collection/ArtworksGrid.tsx` and
+- `apps/web/src/components/manage/catalogue/ArtworksGrid.tsx` and
   `ArtworkCard.tsx` — the grid and one masonry card.
-- `apps/web/src/components/manage/collection/ArtworksTable.tsx` — kept, reduced
+- `apps/web/src/components/manage/catalogue/ArtworksTable.tsx` — kept, reduced
   to a renderer.
-- `apps/web/src/components/manage/CollectionPage.tsx` — passes the list down;
+- `apps/web/src/components/manage/CataloguePage.tsx` — passes the list down;
   holds no view logic.
 
 ## Problem Statement
