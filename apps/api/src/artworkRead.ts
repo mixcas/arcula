@@ -255,8 +255,9 @@ type ArtworkListMode = "live" | "deleted";
  * that survived the verdict, so a search can never widen what the viewer may
  * see; only the surviving works load their children.
  *
- * The rows are ordered by creation time (live) or deletion time, newest first
- * (deleted), and then id, so repeated reads agree. Children arrive from the
+ * The live rows take the structured query's order — `updated` by default,
+ * newest first, always ending on id — and its page; the Deleted list keeps
+ * deletion time, newest first, and answers every row. Children arrive from the
  * same three batched queries as the single read, and the verdict still runs
  * over each loaded row, so each list fails closed if its filter and the rule
  * ever disagree.
@@ -340,13 +341,16 @@ async function readArtworkListInMode(
       (search === null || matchesArtworkSearch(row, search)) &&
       matchesArtworkFilters(row, query.filters),
   );
-  const ordered = [...works].sort((a, b) =>
-    compareArtworksForList(a, b, query.sort),
-  );
+  // The structured order and page are the live list's: the Deleted view keeps
+  // its own deletion-time order and answers every row, so it takes neither.
+  const ordered =
+    mode === "live"
+      ? [...works].sort((a, b) => compareArtworksForList(a, b, query.sort))
+      : works;
   const page =
-    query.limit === null
-      ? ordered.slice(query.offset)
-      : ordered.slice(query.offset, query.offset + query.limit);
+    mode === "live" && query.limit !== null
+      ? ordered.slice(query.offset, query.offset + query.limit)
+      : ordered.slice(mode === "live" ? query.offset : 0);
   const artworkIds = page.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {
