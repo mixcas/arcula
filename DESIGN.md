@@ -575,17 +575,26 @@ says so.
 
 One pure module answers what a kind means for the surface.
 `src/catalogueSurface.ts` returns, for a kind, the kind's own label and colour,
-the labels of `name` and `description`, the market states that kind offers, and
-the artwork form's field table with `visible` and `required` rules. The colour
+the labels of `name` and `description`, the market states that kind offers,
+whether that name is the artist's name, and the artwork form's field table with
+`visible` and `required` rules. The colour
 is a name from a literal union, never a Mantine type or a hex, and the record's
 key type makes a fourth kind a build error until it has one; one presentational
 badge renders it as a shade-3 fill with dark text, and that badge is the only
 kind badge in the app. The table is v1's whole rule — every existing artwork
 field visible on every kind, only `title` and `artistName` required — and it is
 the data a later per-kind hiding will read; no v1 screen consumes the rules yet.
-What screens do read is the labels, the availability values and
-`availabilityFor`, the one default that starts a surfaced work at `available`
-and hands a Collection nothing. The create form asks the kind with three cards
+What screens do read is the labels, the availability values and the two
+creation defaults: `availabilityFor`, the one default that starts a surfaced
+work at `available` and hands a Collection nothing, and `newArtworkForm`, which
+answers what a create form starts as on one kind — in one call, so a screen has
+no per-kind branch that could skip a kind. On a Portfolio its new work starts
+credited to the portfolio's artist — the catalogue's own name, because on that
+kind the two are the same fact; on an Inventory and a Collection the field
+starts empty. The artist default is a starting value, never a derived fact: the
+field stays editable and required, so a work credited to a guest, an estate or
+an attribution saves exactly as typed, and only the create form reads it.
+The create form asks the kind with three cards
 and no default, and the two fields below them stay away until one is chosen:
 each card carries the kind's icon, its persona (Artist, Gallery, Art Collector)
 and its name, and its kind's colour is on it in both states — the 1px border
@@ -639,7 +648,11 @@ The artwork form's Artist Name field is an `Autocomplete` over the caller's
 artist names, fetched once per form mount and filtered in the browser. It stays
 uncontrolled like every field in the form, so choosing an option fills only the
 Artist Name and an unrecorded name still saves exactly as typed; `limit={20}`
-bounds the dropdown and there is no minimum length. The hook makes no
+bounds the dropdown and there is no minimum length. On the Add page a Portfolio
+opens with the field holding the portfolio's own name; the other two kinds open
+empty. A typed name wins: what is saved is the artist the work records, nothing
+is backfilled, and the Edit page shows the recorded artist rather than the
+catalogue's name. The hook makes no
 per-keystroke request and keeps no cross-mount cache — reopening the form is what
 refreshes the list — and a failed fetch is silent: the list is empty, the field
 remains a working text input and no notification appears, with the `loading`

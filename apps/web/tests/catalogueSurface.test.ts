@@ -7,10 +7,12 @@
 // kind, and only title and artist name are required.
 
 import { describe, expect, it } from "vitest";
+import { EMPTY_ARTWORK_FORM } from "@arcula/shared";
 import {
   CATALOGUE_KINDS,
   availabilityFor,
   catalogueSurface,
+  newArtworkForm,
 } from "@/catalogueSurface";
 
 describe("catalogueSurface", () => {
@@ -73,6 +75,40 @@ describe("catalogueSurface", () => {
         .map(({ field }) => field);
       expect(required).toEqual(["title", "artistName"]);
     }
+  });
+});
+
+/**
+ * What a create form starts as is a per-kind answer, not a derived fact: a
+ * Portfolio's name *is* the artist's name (ADR-0010), so its works start
+ * credited to it; an Inventory's name is the gallery's and a Collection's is
+ * the collector's, so neither can be guessed. One call answers every kind, so
+ * a screen has no branch to skip one with.
+ */
+describe("newArtworkForm", () => {
+  it("starts a Portfolio work credited to the portfolio", () => {
+    expect(newArtworkForm("portfolio", "Flores Solares")).toEqual({
+      ...EMPTY_ARTWORK_FORM,
+      artistName: "Flores Solares",
+      availability: "available",
+    });
+  });
+
+  it("leaves an Inventory's Artist Name empty, with its market state", () => {
+    // An Inventory sells work it represents, so the state is still there;
+    // only the artist is unknown.
+    expect(newArtworkForm("inventory", "Galería Sur")).toEqual({
+      ...EMPTY_ARTWORK_FORM,
+      availability: "available",
+    });
+  });
+
+  it("gives a Collection exactly the empty form", () => {
+    // Nothing prefilled and no market state: a kind that gains no default must
+    // not lose the ones the form already had.
+    expect(newArtworkForm("collection", "Colección Privada")).toEqual(
+      EMPTY_ARTWORK_FORM,
+    );
   });
 });
 

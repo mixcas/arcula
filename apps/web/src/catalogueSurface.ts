@@ -6,7 +6,8 @@
  * existing fields mean
  * (`name` names whose art it is, `description` says what it is), whether a
  * work carries an availability at all (and which states that kind's form
- * offers), and the v1 artwork field table.
+ * offers), what Artist Name a new work starts with, and the v1 artwork field
+ * table.
  *
  * It carries the v1 field table whole — every artwork field visible, only
  * `title` and `artistName` required — as the data a later per-kind hiding
@@ -24,6 +25,7 @@ import type {
   ArtworkFormValues,
   CatalogueKind,
 } from "@arcula/shared";
+import { EMPTY_ARTWORK_FORM } from "@arcula/shared";
 
 /**
  * The colour a kind wears, as a name rather than a Mantine type: this module
@@ -97,6 +99,14 @@ export interface CatalogueSurface {
   readonly availabilityValues: readonly ArtworkAvailability[];
   /** The artwork form's fields, in form order, with their v1 rules. */
   readonly artworkFields: readonly ArtworkFieldSurface[];
+  /**
+   * Whether the catalogue's own name is the artist's name on this kind — a
+   * Portfolio's is (ADR-0010), so a work added to one starts credited to it.
+   * The same fact `nameLabel` states in words: a kind whose `name` is labelled
+   * "Artist name" is exactly the kind whose new works arrive prefilled, and
+   * `newArtworkForm` is the one place the two are read together.
+   */
+  readonly artistNameIsCatalogueName: boolean;
 }
 
 /**
@@ -145,7 +155,8 @@ export const ARTWORK_AVAILABILITY_LABELS: Record<ArtworkAvailability, string> =
 /** The words and the market states, per kind. ADR-0010: a Portfolio sells the
  *  artist's own work, an Inventory sells what a gallery represents — including
  *  work it holds on consignment — and a Collection records what the collector
- *  owns, so it has no market state at all. */
+ *  owns, so it has no market state at all. A Portfolio's name is also its
+ *  artist's name, which is why its new works start credited to it. */
 const SURFACES: Record<
   CatalogueKind,
   Omit<CatalogueSurface, "kind" | "availabilityInPlay" | "artworkFields">
@@ -156,6 +167,7 @@ const SURFACES: Record<
     nameLabel: "Artist name",
     descriptionLabel: "Bio",
     availabilityValues: ["available", "reserved", "sold"],
+    artistNameIsCatalogueName: true,
   },
   collection: {
     kindLabel: "Collection",
@@ -163,6 +175,7 @@ const SURFACES: Record<
     nameLabel: "Name",
     descriptionLabel: "Description",
     availabilityValues: [],
+    artistNameIsCatalogueName: false,
   },
   inventory: {
     kindLabel: "Inventory",
@@ -170,6 +183,7 @@ const SURFACES: Record<
     nameLabel: "Gallery name",
     descriptionLabel: "About",
     availabilityValues: ["available", "reserved", "sold", "on-consignment"],
+    artistNameIsCatalogueName: false,
   },
 };
 
@@ -197,4 +211,32 @@ export function availabilityFor(
   const surface = catalogueSurface(kind);
   if (surface.availabilityValues.length === 0) return null;
   return stored ?? "available";
+}
+
+/**
+ * What a create form starts as on one kind: every field at its empty default,
+ * the Artist Name credited to the catalogue's own name where that name *is* the
+ * artist's — a Portfolio — and a market state where the kind carries one.
+ *
+ * This is a creation-time default, never a derived fact: the field stays
+ * editable and required, so a Portfolio work credited to a guest, an estate or
+ * an attribution saves exactly as typed, and a stored work keeps the artist it
+ * records. Only a create surface reads it; prefilling the Edit page would
+ * rewrite a work's recorded artist on a save that never touched the field.
+ *
+ * One answer for every kind, so a screen has no per-kind branch that could skip
+ * one. A Collection comes out as exactly `EMPTY_ARTWORK_FORM`: it prefills
+ * nothing and has no market state.
+ */
+export function newArtworkForm(
+  kind: CatalogueKind,
+  catalogueName: string,
+): ArtworkFormValues {
+  return {
+    ...EMPTY_ARTWORK_FORM,
+    artistName: catalogueSurface(kind).artistNameIsCatalogueName
+      ? catalogueName
+      : "",
+    availability: availabilityFor(kind, null),
+  };
 }
