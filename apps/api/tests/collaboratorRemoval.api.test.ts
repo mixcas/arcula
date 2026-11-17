@@ -28,7 +28,7 @@ import {
   stagedArtworkPrefix,
 } from "../src/media/keys";
 import { listObjects, s3 } from "../src/storage";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 import {
   makeCatalogue,
   makeJpeg,
@@ -274,7 +274,7 @@ describe("DELETE /catalogues/{cid}/collaborators/{userId}", () => {
     ).toBe(403);
 
     // What stays: the saved work, its document, and every final object.
-    const ownerList = await json<ArtworkRead[]>(
+    const ownerList = await listedArtworks(
       await req("GET", listPath(cid), { cookies: owner.cookies }),
     );
     expect(ownerList.map((w) => w.id)).toContain(aid);
@@ -510,7 +510,7 @@ describe("DELETE /catalogues/{cid}/collaborators/me", () => {
       await listObjects(stagedArtworkPrefix(mate.userId, cid, aid)),
     ).toEqual([]);
     // …and the works stay for the owner, with their bytes.
-    const ownerList = await json<ArtworkRead[]>(
+    const ownerList = await listedArtworks(
       await req("GET", listPath(cid), { cookies: owner.cookies }),
     );
     expect(ownerList.map((w) => w.id)).toContain(aid);

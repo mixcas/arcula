@@ -54,9 +54,18 @@ import {
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import {
+  MAX_SEARCH_QUERY_LENGTH,
+  MAX_SEARCH_TERMS,
+  artworkFacets,
+  compareArtworksForList,
+  matchesArtworkFilters,
   matchesArtworkSearch,
-  type ArtworkRead,
+  parseArtworkSearchQuery,
   searchQueryOverflow,
+  type ArtworkFacets,
+  type ArtworkRead,
+  type ArtworkSearchProblem,
+  type ArtworkSearchQueryParse,
   type SearchQueryOverflow,
 } from "@arcula/shared";
 import { audienceOf, canSeeArtwork, canSeeCatalogue, isMember } from "./access";
@@ -75,23 +84,36 @@ export type ArtworkReadResult =
   | { readonly status: "not-found" };
 
 /**
- * What a list read answers: every visible work in order, or the one refusal
- * the list can make. A missing Catalogue is `not-found`; a Private
- * Catalogue the viewer does not own is `forbidden`. `unauthorized` is the
- * search's own refusal: the member-only live list asked for by a caller with
- * no session. `invalid-search` is a present query past the shared caps —
- * checked after the access questions, so a missing catalogue, an anonymous
- * caller or a non-member is refused for that reason rather than for their
- * query.
+ * What a list read answers: a page of visible works plus the facts that
+ * describe it, or the one refusal the list can make. A missing Catalogue is
+ * `not-found`; a Private Catalogue the viewer does not own is `forbidden`.
+ * `unauthorized` is the search's own refusal: the member-only live list asked
+ * for by a caller with no session. `invalid-search` is a query that cannot be
+ * answered — the free text past its caps, or a structured query naming an
+ * unknown field, a bad enumerated value, an offset without a limit, or too
+ * many values — checked after the access questions, so a missing catalogue,
+ * an anonymous caller or a non-member is refused for that reason rather than
+ * for their query.
+ *
+ * `total` is the number of matches before paging; `limit` is null when the
+ * request asked for none, which is every match; `facets` is present only when
+ * the request named fields. Both are counted over the filtered set.
  */
 export type ArtworkListResult =
-  | { readonly status: "ok"; readonly artworks: ArtworkRead[] }
+  | {
+      readonly status: "ok";
+      readonly artworks: ArtworkRead[];
+      readonly total: number;
+      readonly limit: number | null;
+      readonly offset: number;
+      readonly facets?: ArtworkFacets;
+    }
   | { readonly status: "forbidden" }
   | { readonly status: "unauthorized" }
   | { readonly status: "not-found" }
   | {
       readonly status: "invalid-search";
-      readonly overflow: SearchQueryOverflow;
+      readonly problem: ArtworkSearchProblem;
     };
 
 type ArtworkChildren = Pick<ArtworkJoined, "photos" | "documents" | "variants">;
@@ -245,6 +267,7 @@ async function readArtworkListInMode(
   mode: ArtworkListMode,
   hasValidGrant = false,
   search: string | null = null,
+  structured: ArtworkSearchQueryParse = parseArtworkSearchQuery({}),
 ): Promise<ArtworkListResult> {
   const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) return { status: "not-found" };
@@ -265,11 +288,18 @@ async function readArtworkListInMode(
 
   // The caps are the query's own validity, so they are answered after the
   // access questions: who may ask comes before what they asked. No rows load
-  // for a query that cannot be searched.
+  // for a query that cannot be searched. The free text answers first, then
+  // the structured query — both are the caller's own arguments.
   if (search !== null) {
     const overflow = searchQueryOverflow(search);
-    if (overflow !== null) return { status: "invalid-search", overflow };
+    if (overflow !== null) {
+      return { status: "invalid-search", problem: overflowProblem(overflow) };
+    }
   }
+  if (structured.status === "invalid") {
+    return { status: "invalid-search", problem: structured.problem };
+  }
+  const query = structured.query;
 
   const rows = await db
     .select()
@@ -302,16 +332,26 @@ async function readArtworkListInMode(
     canSeeArtwork(member, catalogue, row, hasValidGrant),
   );
   // The search runs after the verdict: it narrows what the viewer may see and
-  // can never add to it. A committed query with no terms matches nothing.
-  const works =
-    search === null
-      ? visible
-      : visible.filter((row) => matchesArtworkSearch(row, search));
-  const artworkIds = works.map((work) => work.id);
+  // can never add to it. A committed query with no terms matches nothing, and
+  // the structured filters AND with it. `total` and the facets are counted
+  // here, over the filtered set, before a page is cut.
+  const works = visible.filter(
+    (row) =>
+      (search === null || matchesArtworkSearch(row, search)) &&
+      matchesArtworkFilters(row, query.filters),
+  );
+  const ordered = [...works].sort((a, b) =>
+    compareArtworksForList(a, b, query.sort),
+  );
+  const page =
+    query.limit === null
+      ? ordered.slice(query.offset)
+      : ordered.slice(query.offset, query.offset + query.limit);
+  const artworkIds = page.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {
     status: "ok",
-    artworks: works.map((work) =>
+    artworks: page.map((work) =>
       serializeArtwork(
         {
           artwork: work,
@@ -321,18 +361,38 @@ async function readArtworkListInMode(
         audienceOf(member),
       ),
     ),
+    total: works.length,
+    limit: query.limit,
+    offset: query.offset,
+    ...(query.facets.length === 0
+      ? {}
+      : { facets: artworkFacets(works, query.facets) }),
+  };
+}
+
+/** The free-text search's cap, as the problem the route answers with. */
+function overflowProblem(overflow: SearchQueryOverflow): ArtworkSearchProblem {
+  return {
+    field: "q",
+    message:
+      overflow === "too-long"
+        ? `Search is limited to ${MAX_SEARCH_QUERY_LENGTH} characters`
+        : `Search is limited to ${MAX_SEARCH_TERMS} words`,
   };
 }
 
 /**
  * The live list: a member's every live work, a visitor's published ones.
- * A present `search` is member-only and filters the result.
+ * A present `search` is member-only and ANDs with the structured query; the
+ * structured filters, order, page and facets are the caller's own request and
+ * are answered within the same verdict.
  */
 export function readArtworkList(
   catalogueId: string,
   viewer: string | null,
   hasValidGrant = false,
   search: string | null = null,
+  structured: ArtworkSearchQueryParse = parseArtworkSearchQuery({}),
 ): Promise<ArtworkListResult> {
   return readArtworkListInMode(
     catalogueId,
@@ -340,6 +400,7 @@ export function readArtworkList(
     "live",
     hasValidGrant,
     search,
+    structured,
   );
 }
 

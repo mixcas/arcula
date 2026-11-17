@@ -18,7 +18,7 @@ import {
 } from "@arcula/db";
 import { artworkReadSchema } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 
 let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
@@ -424,9 +424,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
       `/api/v1/catalogues/${catalogueId}/artworks`,
     );
     expect(publicList.status).toBe(200);
-    const publicIds = (await json<{ id: string }[]>(publicList)).map(
-      (row) => row.id,
-    );
+    const publicIds = (await listedArtworks(publicList)).map((row) => row.id);
     expect(publicIds).toContain(newestId);
     expect(publicIds).toContain(liveId);
 
@@ -460,9 +458,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
       "GET",
       `/api/v1/catalogues/${catalogueId}/artworks`,
     );
-    const publicIds = (await json<{ id: string }[]>(publicList)).map(
-      (row) => row.id,
-    );
+    const publicIds = (await listedArtworks(publicList)).map((row) => row.id);
     expect(publicIds).not.toContain(oldestDraftId);
   });
 });
