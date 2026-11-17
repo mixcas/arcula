@@ -133,8 +133,19 @@ carries a written reason in the config and is not added silently.
   sources the resolved local environment and runs
   `stack-up.sh postgres s3 mailpit` before vitest. `test:web` needs those
   services and a running API: the root script runs `stack-up.sh`, then
-  `scripts/ensure-api.sh`, which leaves an API already listening on `PORT`
-  alone and otherwise starts one and polls `/api/health`.
+  `scripts/ensure-api.sh`, which leaves an API of this checkout already
+  listening on `PORT` alone, refuses one from another checkout, and otherwise
+  starts this checkout's and polls `/api/health`.
+- **The API on a port names its checkout.** A dev server started from the main
+  checkout keeps answering after a worktree begins, so the API carries
+  `ARCULA_CHECKOUT` (put there by `ensure-api.sh` and by `apps/api`'s `dev`) and
+  `/api/health` answers with it; production's body carries no such key.
+  `ensure-api.sh` refuses a stranger with both paths, and the web transport
+  (`apps/web/tests/helpers/stackFetch.ts`) asks once per worker before its first
+  proxied request, so a bare `vitest run` cannot test another branch either. The
+  way out is to stop that API or to give this checkout its own port — `PORT`,
+  `AUTH_BASE_URL` and `CORS_ORIGINS` move together, so it is a recipe rather
+  than a flag.
 - **A worktree borrows the main checkout's stack.** `.env` is gitignored and
   the compose project is named after the main checkout, so
   `scripts/local-env.sh` hands every caller the main checkout's `.env`, and

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "set -a && . \"$(sh ../../scripts/local-env.sh)\" && set +a && bun --watch src/main.ts",
-    "start": "bun src/main.ts",
+    "dev": "set -a && . \"$(sh ../../scripts/local-env.sh)\" && set +a && ARCULA_CHECKOUT=\"$(sh ../../scripts/local-env.sh --checkout)\" bun --watch src/main.ts",
+    "start": "ARCULA_CHECKOUT=\"$(sh ../../scripts/local-env.sh --checkout)\" bun src/main.ts",
     "db:migrate": "set -a && . \"$(sh ../../scripts/local-env.sh)\" && set +a && bun scripts/db-migrate.ts",
     "db:reset": "set -a && . \"$(sh ../../scripts/local-env.sh)\" && set +a && bun scripts/db-reset.ts",
     "db:seed": "set -a && . \"$(sh ../../scripts/local-env.sh)\" && set +a && bun scripts/db-seed.ts",
