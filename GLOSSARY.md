@@ -198,9 +198,11 @@ The part of an artwork's record that holds its artwork documents.
 _Avoid_: Attachments, files, documents
 
 **Import**:
-A file a member brings into a Catalogue and the works drawn from it. A member's
-CSV import lands them Published; an agent's lands them as Drafts, because a
-conversation is not a review.
+Works brought into a Catalogue in a batch — a member's CSV file, or the rows an
+agent extracted from a document — and the act of bringing them. A member's CSV
+import lands them Published; an agent's lands them as Drafts, because a
+conversation is not a review. The status is the payload's, defaulting to
+Published, so the member's workflow is unchanged.
 _Avoid_: Upload, ingestion, batch, bulk add
 
 ### What is seen
@@ -305,9 +307,12 @@ _Avoid_: Thumbnail, rendition, size
 ### Agents
 
 **Connection**:
-An agent's standing access to one account, approved by the person, named for the
-client that made it, listed and revocable on its own. Never the browser session,
-and never a way into it.
+An agent's standing access to one account: the person's approval of one MCP
+client, named for that client, listed in the account profile with when it
+connected and last acted, and revocable on its own. One per account and client,
+so two installations of the same client share one Connection and one Revoke; a
+duplicate approval collapses to the newest. Never the browser session, and
+never a way into it.
 _Avoid_: Token, API key, integration, app, plugin
 
 ### Tiers

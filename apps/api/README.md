@@ -14,8 +14,9 @@ media pipeline, and — in production — serving the built SPA.
   and binary bodies are base64-encoded.
 - `src/app.ts` — the Hono app: the `onError` error envelope, the canonical-host
   (`www` → configured origin) 308 redirect, CORS for the dev origin,
-  `GET /api/health`, and the mounts (`/api/auth` → Better Auth; `/api/v1` →
-  the resource routes; then the SPA).
+  `GET /api/health`, and the mounts (`/api/auth` → Better Auth; `/.well-known/*`
+  → OAuth discovery; `/api/mcp` → the agent guard; `/api/v1` → the resource
+  routes; then the SPA).
 - `src/spa.ts` — serves the built SPA for every non-`/api`, non-`/.well-known`
   path (deep links included): `index.html` is never cached, hashed assets are
   immutable, and a missing dist tree leaves the middleware inert (Vite is the
@@ -45,6 +46,8 @@ too, before the transport reads the body.
 | -------------------------- | ------------------------------------------------------------------- |
 | `GET` / `PATCH`            | `/me`                                                               |
 | `GET`                      | `/connections/request` — the verified OAuth consent query           |
+| `GET`                      | `/connections` — the account's Connections and the MCP endpoint     |
+| `DELETE`                   | `/connections/:connectionId` — Revoke one Connection                |
 | `GET`                      | `/media?key=` — the object proxy (re-checks visibility per request) |
 | `GET` / `POST`             | `/catalogues`                                                       |
 | `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId`                                          |
@@ -86,9 +89,16 @@ tool takes a Hono `Context` — the user-id-taking cores in `authorize.ts`
 write asks the app's own authorization question.
 
 The consent screen is app-owned; `GET /api/v1/connections/request` verifies the
-signed authorize query the provider redirected with (`verifyOAuthQueryParams`
-against the auth instance's secret) and answers the client's public metadata,
-the signed redirect host and the exact `oauth_query` to post back.
+signed authorize query the provider redirected with (`verifyConsentQuery`
+wrapping `verifyOAuthQueryParams` against the auth instance's secret) and
+answers the client's public metadata, the signed redirect host and the exact
+`oauth_query` to post back.
+
+A Connection is the consent row the guard reads. `GET /api/v1/connections`
+lists one row per client — duplicates collapse to the newest — with the MCP
+endpoint from `mcpResource`; `DELETE /api/v1/connections/:connectionId` deletes
+every consent row for the pair and revokes every live refresh token for it,
+leaving the browser session and every other Connection untouched.
 
 ## Sharing
 

@@ -10,9 +10,11 @@ design record the map points into, including the request path.
 **`apps/api/src/`**
 
 - `app.ts` — the Hono app: the error envelope, the `www`→configured-origin
-  redirect, CORS, route mounting. `main.ts` runs it under Bun; `lambda.ts` is
-  the Lambda handler. `env.ts` reads the configuration once; `responsePolicy.ts`
-  holds the pure decisions derived from it.
+  redirect, CORS, route mounting, `/.well-known/*` routed to the auth handler
+  and `/api/mcp` to the agent guard. `main.ts` runs it under Bun; `lambda.ts` is
+  the Lambda handler. `env.ts` reads the configuration once and derives the MCP
+  resource (`mcpResource`); `responsePolicy.ts` holds the pure decisions
+  derived from it.
 - `access.ts` — the access verdicts, pure over loaded rows: the membership
   fact (owner, collaborator, nobody) and the visitor rule (the catalogue is
   the only gate, with an Access grant as the second condition on a Protected
@@ -63,9 +65,34 @@ design record the map points into, including the request path.
   ordered by use then display name and silently capped at 2,000. No Hono type;
   the route owns the wire and `401`, and the future curated index can replace
   the module's source behind the same contract.
-- `spa.ts` — splits `/api/*` from the SPA and serves `WEB_DIST`.
-- `auth.ts` — the Better Auth instance (Drizzle adapter). `session.ts` resolves
-  the caller.
+- `spa.ts` — refuses `/api/*` and `/.well-known/*` (never the app shell) and
+  serves `WEB_DIST` for everything else.
+- `auth.ts` — the Better Auth instance (Drizzle adapter), with `jwt()`, `mcp()`
+  and `cimd()` for the agent surface and `bearer()` only outside a deployment.
+  `session.ts` resolves the caller.
+- `mcp/` — the agent surface, with no Hono type in a tool: `guard.ts` verifies
+  the access token and reads the `(sub, clientId)` consent row (touching "last
+  acted" at most once a minute), `server.ts` is the per-request Streamable HTTP
+  transport (`legacy: "reject"`, `responseMode: "json"`), `dispatcher.ts`
+  parses a tool's arguments and claims the account's write before `call`,
+  `tool.ts` declares one, `registry.ts` lists the groups and `tools/` holds
+  `catalogues`, `artworks` and `import`.
+- `agentLimiter.ts` — the write allowance's policy and claims: a rolling
+  20-write / 20-second window summed from whole-second rows, and five imports
+  per UTC hour, both in `account_write_windows`, keyed by the verified subject.
+  Reads never call it.
+- `catalogueWrite.ts` · `artworkWrite.ts` · `artworkImport.ts` — the write cores
+  an agent and a route share: create/update a Catalogue with the tier cap,
+  create/update an Artwork's fields, and import a batch with its per-row
+  verdict and one transaction. They take a user id, not a Context;
+  `artworkSave.ts` keeps the route's media sequence.
+- `catalogueList.ts` · `catalogueCounts.ts` — the reads the Catalogue tools
+  share: the signed-in owned-or-shared list (`catalogueScope.ts` is the filter,
+  each row's role and a shared row's owner name) and a Catalogue's live works
+  by status (a member gets every status, a visitor published only).
+- `connectionList.ts` · `consentQuery.ts` — the account surface's pure halves:
+  one row per client collapsed to the newest "last acted", and the signed
+  consent query's rebuild and verification plus the `https:`-only client link.
 - `invitations.ts` — the pure token algebra (`mintInvitationToken`,
   `hashInvitationToken`) and the two questions the routes ask
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
@@ -77,10 +104,11 @@ design record the map points into, including the request path.
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
-  `artistNames` (the caller's suggestion read), `me`, `media` (the object
-  proxy), `artworkMedia` (the presign and process routes: the browser PUTs the
-  bytes straight to storage under the caller's own staging prefix, and process
-  is the point the server validates them —
+  `artistNames` (the caller's suggestion read), `connections` (the verified
+  consent request, the account's Connections and Revoke), `me`, `media` (the
+  object proxy), `artworkMedia` (the presign and process routes: the browser
+  PUTs the bytes straight to storage under the caller's own staging prefix, and
+  process is the point the server validates them —
   [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `populations.ts` (what distinguishes photos from documents: tables, variants
@@ -96,7 +124,8 @@ design record the map points into, including the request path.
   original to ([ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
-artworkImport, artistNames, catalogue, invitation, document, media, user),
+artworkImport, artistNames, catalogue, connection, invitation, document, media,
+user),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
 `photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
 predicate and the structured query's whole pure contract — the parse of the
@@ -141,8 +170,12 @@ data a later per-kind hiding will read; no v1 screen consumes
 availability values, `availabilityFor`'s default and `newArtworkForm` — what a
 create form starts as on one kind, values and Artist Name line together.
 `services/` are the API
-clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
-`telemetry/logRocket.ts` is the session-replay hook, redacted at the client
+clients (`api.ts` is the transport); `auth/` is the Better Auth React client,
+and `auth/oauthResume.ts` decides that a signed authorize query survives
+sign-in; `components/auth/ConsentPage.tsx` is the Connection approval screen,
+and `components/manage/AgentAccessCard.tsx` is the profile's endpoint and
+Connected apps list; `telemetry/logRocket.ts` is the session-replay hook,
+redacted at the client
 ([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
 `components/manage` and `components/catalogue`; `skins/` is the public-view
 system. The artwork Add and Edit pages load the catalogue for its kind; a
@@ -160,8 +193,11 @@ member read only.
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `catalogues`, `catalogueCollaborators`,
 `catalogueInvitations`, `catalogueAccessGrants`, `catalogueUnlockAttempts`,
-`artworks`, `artworkPhotos`, `artworkPhotoVariants`, `artworkDocuments`) and the
-`schema` object the adapter consumes. The Drizzle entity is `catalogues` and the
+`accountWriteWindows`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
+`artworkDocuments`, plus the eight agent-access tables `jwks`, `oauthClient`,
+`oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
+`oauthConsent`, `oauthClientAssertion`) and the `schema` object the adapter
+consumes. The Drizzle entity is `catalogues` and the
 relation property is `catalogueId`, but the physical Postgres tables keep their
 `collections` / `collection_*` names and the physical column stays
 `"collectionId"` — a storage rename is a non-additive migration (ADR-0010). The
@@ -173,7 +209,14 @@ and transfer, which swaps the two membership rows and rewrites the owner.
 `catalogues.passwordHash` is the one password fact; `catalogueAccessGrants`
 holds a grant's token hash and its expiry, and `catalogueUnlockAttempts` is the
 unlock throttle's counter — `(ip, catalogueId, windowStart)` with `attempts`,
-written and read by the unlock route alone.
+written and read by the unlock route alone. `accountWriteWindows` is the agent
+limiter's counter — `(userId, bucket, windowStart)` with the two buckets
+`write` and `import`, claimed by `agentLimiter.ts`. The eight agent-access
+tables are the JWT and OAuth provider plugins', hand-authored against
+`getAuthTables()`; `apps/api/tests/adapter.test.ts` asserts every model and
+field the plugin declares exists. `0011_account_write_windows` and
+`0012_agent_access` are additive and shipped alone, ahead of the code that
+reads them.
 `packages/db/migrations/` is generated; hand edits are the documented exception,
 and there are exactly three: a data backfill appended to the generated file, the
 add-nullable → backfill → set-not-null sequence for a column that cannot be
