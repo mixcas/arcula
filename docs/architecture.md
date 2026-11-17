@@ -129,11 +129,7 @@ means for the surface, as data: the kind's colour (`kindColor`, a literal union
 the screens turn into a CSS variable through `kindColorVar`), the labels, the
 market states a kind offers (a Portfolio's three, an Inventory's four, a
 Collection's none) with their words, whether the catalogue's name is the
-artist's name, and the v1 artwork field table — every
-field visible, only `title` and `artistName` required. The field table is the
-data a later per-kind hiding will read; no v1 screen consumes
-`visible`/`required`, and a screen that reads the module uses the labels, the
-availability values, `availabilityFor`'s default and `newArtworkForm` — what a
+artist's name, `availabilityFor`'s default and `newArtworkForm` — what a
 create form starts as on one kind, values and Artist Name line together.
 `services/` are the API
 clients (`api.ts` is the transport); `auth/` is the Better Auth React client;

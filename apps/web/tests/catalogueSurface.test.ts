@@ -1,10 +1,8 @@
 // What a catalogue's kind means for the surface, as pure data (tier 1).
 //
-// The three answers the app derives from one kind: the two field labels that
-// name whose catalogue it is, the market states a work may carry, and which
-// artwork fields the form shows. v1 changes only the words and the
-// availability axis — every existing artwork field stays visible on every
-// kind, and only title and artist name are required.
+// The answers the app derives from one kind: the two field labels that name
+// whose catalogue it is, the market states a work may carry, and what a create
+// form starts with.
 
 import { describe, expect, it } from "vitest";
 import { EMPTY_ARTWORK_FORM } from "@arcula/shared";
@@ -56,25 +54,6 @@ describe("catalogueSurface", () => {
       "on-consignment",
     ]);
     expect(catalogueSurface("collection").availabilityValues).toEqual([]);
-  });
-
-  it("shows every artwork field it lists on every kind in v1", () => {
-    // The v1 rule is "no hiding yet": the table is the data a later per-kind
-    // hiding will read, so what it must say today is that nothing is hidden.
-    for (const kind of CATALOGUE_KINDS) {
-      const fields = catalogueSurface(kind).artworkFields;
-      expect(fields.length).toBeGreaterThan(0);
-      expect(fields.filter(({ visible }) => !visible)).toEqual([]);
-    }
-  });
-
-  it("requires title and artist name and nothing else, on every kind", () => {
-    for (const kind of CATALOGUE_KINDS) {
-      const required = catalogueSurface(kind)
-        .artworkFields.filter(({ required }) => required)
-        .map(({ field }) => field);
-      expect(required).toEqual(["title", "artistName"]);
-    }
   });
 });
 
