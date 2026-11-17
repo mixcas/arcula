@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { wireTimestamp } from "./document";
 
 /**
- * The consent screen's wire contract.
+ * The Connection wire contract: the consent screen's request, and the account
+ * surface's list.
  *
  * A remote MCP client starts an OAuth authorization; the plugin redirects the
  * browser to the app's `/consent` with the whole signed query. The SPA cannot
@@ -45,3 +47,40 @@ export const connectionConsentResultSchema = z.object({
 export type ConnectionConsentResult = z.infer<
   typeof connectionConsentResultSchema
 >;
+
+/**
+ * One Connection, as "Connected apps" lists it. A Connection is the account's
+ * approval of one client — the consent row the MCP guard reads on every call —
+ * so its `id` is what Revoke names, and deleting it ends that client's access
+ * to this account.
+ *
+ * `clientName` is the client's own claim when it made one; an unnamed client is
+ * named by its `clientId`, which for a CIMD client is the URL it hosts. The
+ * times are the API's wire timestamp shape (like the catalogue and artwork
+ * documents), because the page renders them through `relativeTime`.
+ */
+export const connectionReadSchema = z.object({
+  /** The consent row this Connection is; the id Revoke names. */
+  id: z.string(),
+  clientId: z.string(),
+  clientName: z.string(),
+  /** When the person approved the client (the consent row's `createdAt`). */
+  connectedAt: wireTimestamp,
+  /** When the agent last acted (the guard's touch, at most a minute stale). */
+  lastActedAt: wireTimestamp,
+});
+
+export type ConnectionRead = z.infer<typeof connectionReadSchema>;
+
+/**
+ * GET /api/v1/connections: the account surface's whole block. The endpoint is
+ * the API's own resource URL, never the client's guess from `window.location`
+ * (in dev the SPA and the API are different ports); the list is most recently
+ * acted first and holds one row per client.
+ */
+export const connectionsReadSchema = z.object({
+  endpoint: z.string(),
+  connections: z.array(connectionReadSchema),
+});
+
+export type ConnectionsRead = z.infer<typeof connectionsReadSchema>;
