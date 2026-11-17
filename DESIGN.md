@@ -72,7 +72,8 @@ alternatives are in
 
 ## The data model
 
-Thirteen tables in Postgres with sharing and password protection, defined in
+Fourteen tables in Postgres with sharing, password protection and the write
+limiter's counter, defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 **The entity is a Catalogue; the physical table is `collections`.** The Drizzle
@@ -175,6 +176,19 @@ key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
 catalogue's throttle cannot lock visitors out of another's through a shared
 address. The window length is the route's policy, not the schema's
 (`unlockThrottle.ts`), and the unlock route is the only writer and reader.
+
+### `account_write_windows`
+
+`(userId, bucket, windowStart)` as the primary key, plus `count` defaulting to
+zero — the write limiter's counter for the agent surface. `bucket` is `write`
+(the per-second bucket every write spends) or `import` (the hourly cap an import
+spends in addition), which is what lets one table serve both windows: one row
+per account, bucket and window, and a claim is one `INSERT … ON CONFLICT` that
+adds to `count`. Keyed by the account, never the address, because a hosted
+agent's calls all arrive from one cloud. The window lengths are the surface's
+policy, not the schema's, and both `windowStart` and `count` are the route's to
+floor and spend. The table ships alone: no application code reads or writes it
+yet.
 
 ### `collection_collaborators` and `collection_invitations`
 
