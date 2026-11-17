@@ -8,7 +8,8 @@ right — because a reviewer needs the catalogue when judging a diff, and an
 implementer needs the mechanics once, when writing the test.
 
 It applies to every suite: `packages/shared/tests`, `packages/db/tests`,
-`apps/api/tests`, `apps/web/tests` and `infra/cdk/tests`.
+`apps/api/tests`, `apps/web/tests`, `infra/cdk/tests` and the repository
+tooling's own `scripts/tests`, which runs as `bun run test:scripts`.
 
 ## Three tiers
 
@@ -37,10 +38,12 @@ Three tiers, and the first is where nearly everything belongs:
 
 ## The mutation bar
 
-A test that fails its own mutation earns its place; one that needs three
-separate mutations to kill is usually two tests. A new test is therefore written
-by breaking the line it exists to protect, watching it go red, and restoring the
-line — nothing else tells you the test is doing any work.
+[AGENTS.md](../AGENTS.md) states the bar: change the line a test claims to
+cover, and if it stays green the test was not covering that. A test that fails
+its own mutation earns its place; one that needs three separate mutations to
+kill is usually two tests. A new test is therefore written by breaking the line
+it exists to protect, watching it go red, and restoring the line — nothing else
+tells you the test is doing any work.
 
 ## What the bar removes
 
@@ -67,18 +70,33 @@ neighbours of deleted ones.
 
 ## What the gate catches
 
-`bun run check` runs the type checker over every package, then ESLint, Prettier
-and `knip`; CI runs that command verbatim before the suites that need no
-services. `knip` reports a module nothing reaches, a dependency nothing imports,
-an import of a dependency the package does not declare, a duplicate export, and
-an export nothing references at all.
+`bun run check` runs the type checker over every package and `scripts`, then
+ESLint, Prettier, `check:docs` and `knip`; CI runs that command verbatim before
+the suites that need no services. Two of those steps are checks rather than
+formatters.
 
-It does not report a symbol exported only for its own test, because test usage
-counts as usage, nor a dead member of an exported interface. Both stay review
-calls.
+`knip` reports a module nothing reaches, a dependency nothing imports, an import
+of a dependency the package does not declare, a duplicate export, and an export
+nothing references at all.
 
-The `knip` ignore list does not grow silently: an entry carries a written
-reason, so the next reader can tell a deliberate exception from sediment.
+`check:docs` reports a pointer into the navigation surface — `AGENTS.md`,
+`DESIGN.md`, `GLOSSARY.md` and the docs tree — that resolves to nothing, naming
+the file and the line. Its pointers are markdown links and inline-code spans
+anchored by a leading `/`, `./` or `../` or by a known top-level directory.
+
+Both leave a gap, and both gaps are deliberate. `knip` does not report a symbol
+exported only for its own test, because test usage counts as usage, nor a dead
+member of an exported interface. `check:docs` skips absolute URLs, bare
+anchors, fenced code blocks, globs and placeholders, and unanchored shorthand —
+a bare name or a directory like `routes/` or `src/App.tsx` — so a stale path
+written without an anchor is still a review call.
+
+The `knip` config carries no `ignore` entries. It excludes two rules — `types`,
+because a component's prop type is API even when knip cannot tell it from a dead
+one, and `enumMembers`, which are read through their enum — and it keeps
+`scripts/lambda-smoke.mjs` out of the in-repo project because the file is
+analysed inside the staged Lambda package it is copied into. A suppression
+carries a written reason in the config and is not added silently.
 
 ## Test mechanics
 

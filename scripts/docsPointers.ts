@@ -33,6 +33,11 @@
  * `/api/health`), so a root-anchored pointer must name a file: the last segment
  * carries an extension. That is why the route examples above are not pointers
  * while a root-relative `/docs/adr/0003-….md` is.
+ *
+ * Two further shapes are not paths. A span containing whitespace is a command
+ * line (`scripts/reset-dev.sh --yes`), because no repository path has one. A
+ * `$`-prefixed span is a shell variable expansion (`$STAGE/assets/fonts/`), and
+ * the gate cannot know what it expands to. Neither is a pointer.
  */
 
 /** One document in the navigation surface. `path` is repository-relative. */

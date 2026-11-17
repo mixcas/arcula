@@ -16,34 +16,46 @@ import {
 /** The repository root, derived from this file rather than the caller's cwd. */
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 
+/** Whether a repository-relative path exists; directories included. */
+const exists = (path: string): boolean =>
+  existsSync(join(repositoryRoot, path));
+
 /** The surface's files, deduplicated and sorted for a stable report. */
 function surfaceFiles(): string[] {
   const files = new Set<string>();
   for (const pattern of DOCS_SURFACE) {
-    if (!pattern.includes("*")) {
-      if (existsSync(join(repositoryRoot, pattern))) files.add(pattern);
+    if (pattern.includes("*")) {
+      const glob = new Bun.Glob(pattern);
+      for (const file of glob.scanSync({
+        cwd: repositoryRoot,
+        onlyFiles: true,
+      })) {
+        files.add(file);
+      }
       continue;
     }
-    const glob = new Bun.Glob(pattern);
-    for (const file of glob.scanSync({
-      cwd: repositoryRoot,
-      onlyFiles: true,
-    })) {
-      files.add(file);
-    }
+    if (exists(pattern)) files.add(pattern);
   }
   return [...files].sort();
 }
 
 const files = surfaceFiles();
+
+// An empty surface would make the check pass by having read nothing, so a
+// renamed navigation file has to fail here rather than go unnoticed.
+if (files.length === 0) {
+  console.error(
+    `docs pointers: the navigation surface (${DOCS_SURFACE.join(", ")}) matched no documents`,
+  );
+  process.exit(1);
+}
+
 const documents: SurfaceDocument[] = files.map((path) => ({
   path,
   text: readFileSync(join(repositoryRoot, path), "utf8"),
 }));
 
-const dead = findDeadPointers(documents, (path) =>
-  existsSync(join(repositoryRoot, path)),
-);
+const dead = findDeadPointers(documents, exists);
 
 if (dead.length > 0) {
   for (const pointer of dead) {

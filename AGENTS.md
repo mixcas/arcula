@@ -2,8 +2,8 @@
 
 > The design record lives in **`DESIGN.md`** — the as-built description
 > of the product, its data model and its architecture. This file is the working
-> guide: layout, commands, the sharing rules, and the test doctrine.
-> `README.md` is the user-facing overview.
+> guide: layout, commands, the sharing rules, and the test criterion, whose
+> doctrine is **`docs/testing.md`**. `README.md` is the user-facing overview.
 >
 > The product is **Arcula** (`arcula.art`), and the packages, the repository
 > and the identifiers all say `arcula` too. The product's own vocabulary is in
@@ -124,14 +124,14 @@ sets `NOT NULL` would break the old code's inserts.
 
 All from the repo root (`bun run <script>`):
 
-| Command                                                     | What it does                                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                   |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier + knip — **the gate before a PR**         |
-| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
-| `bun run build`                                             | Build the web app                                                                    |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
+| Command                                                     | What it does                                                                                                |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                                          |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                                       |
+| `bun run check`                                             | Typecheck every package and `scripts`, ESLint, Prettier, `check:docs` and `knip` — **the gate before a PR** |
+| `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk`, `test:scripts`        |
+| `bun run build`                                             | Build the web app                                                                                           |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                                                |
 
 Deploy is a shell script, not a package script. `sh scripts/deploy-prod.sh` and
 `sh scripts/deploy-dev.sh` are thin wrappers over the one sequence in
@@ -349,11 +349,11 @@ drafts and documents included — exactly as the owner does. Access administrati
 is the boundary: the owner alone invites, resends, revokes, removes and
 transfers, and cannot leave without transferring; a collaborator may leave.
 
-A password is a **second condition on a public catalogue**, never a third
-visibility state: membership bypasses it, and a visitor holding an Access grant
-sees exactly what a visitor sees — published, live works, never a draft, never a
-document — while a private catalogue stays shut to them. The unlock throttle is
-per address and per catalogue.
+A password is a **second condition a public catalogue can require, never a third
+visibility state**: membership skips the challenge, an Access grant admits
+exactly the visitor surface — published, live works, never a draft or a
+document — and a grant does not open a private catalogue. The unlock throttle
+counts per address and per catalogue.
 
 The as-built detail — the invitation lifecycle and its two mails, ownership
 transfer without moving media, the grant cookie, the throttle's numbers — is in
@@ -400,14 +400,17 @@ reviewing a diff.
 
 ## Validation
 
-- `bun run check` (tsc over every package + ESLint + Prettier + knip) must pass before
-  and after any change, and before a PR. The `infra/cdk` package is deliberately
+- `bun run check` — `tsc` over every package and `scripts`, ESLint, Prettier,
+  `check:docs` (a pointer into the navigation docs that resolves to nothing
+  fails the gate) and `knip` — must pass before and after any change, and before
+  a PR. The `infra/cdk` package is deliberately
   not a workspace member and installs its own dependencies, so run
   `cd infra/cdk && bun install` once before the check can resolve
   `aws-cdk-lib`.
-- `bun run test` runs every suite; the API and web suites need the local stack
-  (see **What to test** above). `npx vitest run <file>` inside a package runs a
-  single file.
+- `bun run test` runs every suite; the API and web suites need the local stack —
+  the commands they run are under **Test mechanics** in
+  [docs/testing.md](docs/testing.md). `npx vitest run <file>` inside a package
+  runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
   `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end

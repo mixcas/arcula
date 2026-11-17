@@ -425,18 +425,18 @@ An invitation is an offer whose raw token exists only in the mailed link,
 `<CLIENT_ORIGIN>/invite/:token`; the row holds its SHA-256 hash, a seven-day
 expiry and a status that becomes history on acceptance, decline or revocation,
 so a resolved offer never blocks a fresh one. Acceptance is the mail's job and
-needs a session whose normalized address is the invited one; the accepted status
-and the membership row land in one transaction. A decline may also come from the
-invitee's inbox, `GET /me/invitations`, and a resend rotates the token, the
-expiry and the issue time on the same row, no sooner than 60 seconds after the
-last issue. Invalid, expired, revoked and consumed tokens are one uniform
-`not-found`, so the token's state is never disclosed. Sharing sends exactly two
-mails — the invitation, and the notice to a catalogue's new owner with a link to
-the manage page — and both are best effort through
-`apps/api/src/email/provider.ts` (SMTP
-locally, Resend in production): the row or the transfer is the durable fact, so a
-provider failure answers `emailSent: false` and leaves the offer pending and
-resendable rather than failing the write.
+needs a session whose normalized address is the invited one; the accepted
+status and the membership row land in one transaction. A decline may also come
+from the invitee's inbox, `GET /me/invitations`, and a resend rotates the
+token, the expiry and the issue time on the same row, no sooner than 60 seconds
+after the last issue. Invalid, expired, revoked and consumed tokens are one
+uniform `not-found`, so the token's state is never disclosed. Sharing sends
+exactly two mails — the invitation, and the notice to a catalogue's new owner
+with a link to the manage page — and both are best effort through
+`apps/api/src/email/provider.ts` (SMTP locally, Resend in production): the row
+or the transfer is the durable fact, so a provider failure answers
+`emailSent: false` and leaves the offer pending and resendable rather than
+failing the write.
 
 The grant's cookie is `arcula_grant_{id}`, `Path=/api/v1`, `HttpOnly`,
 `SameSite=Lax`, `Secure` in production, and lives twelve hours — `GRANT_TTL_MS`

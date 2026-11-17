@@ -206,7 +206,7 @@ cookie now set, so there is one path to ready.
 - **Access.** `access.ts`'s verdicts gain the grant as a fact beside membership
   and the collection flags — still pure over rows a caller has loaded, with the
   grant's validity decided by a pure module beside `invitations.ts`. The read
-  paths in `collections.ts`, `artworkRead.ts` and `media.ts` ask the extended
+  paths in `catalogues.ts`, `artworkRead.ts` and `media.ts` ask the extended
   verdict rather than a predicate of their own, so the single-authorization-layer
   property holds for the row and the bytes alike.
 - **A wrong password discloses the collection exists.** Accepted and intended:

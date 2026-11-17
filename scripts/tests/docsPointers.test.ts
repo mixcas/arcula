@@ -1,5 +1,14 @@
+import { globSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { findDeadPointers, type SurfaceDocument } from "../docsPointers";
+import {
+  DOCS_SURFACE,
+  findDeadPointers,
+  type SurfaceDocument,
+} from "../docsPointers";
+
+/** The repository root, derived from this suite's own location. */
+const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 /**
  * An `exists` probe over a fixture tree. A directory is implied by the files
@@ -242,5 +251,45 @@ describe("findDeadPointers", () => {
     );
 
     expect(dead).toEqual([]);
+  });
+
+  it("skips a span with whitespace, which is a command line", () => {
+    const dead = findDeadPointers(
+      [
+        document(
+          "AGENTS.md",
+          "`scripts/reset-dev.sh --yes` drops the dev schema.",
+        ),
+      ],
+      tree("scripts/reset-dev.sh"),
+    );
+
+    expect(dead).toEqual([]);
+  });
+
+  it("skips a $-prefixed span, which is a shell expansion", () => {
+    // A code span starting with `$` is already skipped for having no anchor,
+    // so only a link can reach this rule and pin it.
+    const dead = findDeadPointers(
+      [
+        document(
+          "docs/specs/pdf-export.md",
+          "The fonts land in [$STAGE/assets/fonts/]($STAGE/assets/fonts/).",
+        ),
+      ],
+      tree(),
+    );
+
+    expect(dead).toEqual([]);
+  });
+});
+
+describe("DOCS_SURFACE", () => {
+  it("names documents that exist, so a rename cannot shrink the surface", () => {
+    for (const pattern of DOCS_SURFACE) {
+      const matches = globSync(pattern, { cwd: repositoryRoot });
+
+      expect(matches, `${pattern} matches nothing`).not.toEqual([]);
+    }
   });
 });
