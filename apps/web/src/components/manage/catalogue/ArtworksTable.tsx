@@ -42,7 +42,7 @@ interface ArtworksTableProps {
   onConfirmDeleteArtwork: (artwork: Artwork) => void;
   /** A list read is in flight. The previous rows stay on screen. */
   fetching?: boolean;
-  /** Whether this catalogue's kind carries a work's market state. */
+  /** Whether this catalogue records a work's market state. */
   showAvailability?: boolean;
   /** What to say when this page has no rows. The list decides which state that is. */
   emptyLabel: React.ReactNode;
@@ -138,8 +138,9 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
                 Draft
               </Badge>
             ) : null}
-            {/* A market state is the kind's fact: the page says whether this
-                catalogue has one, and the row only says what it is. */}
+            {/* A market state is the Catalogue's choice: the page resolves
+                whether this catalogue records one, and the row only says what
+                this work's is. */}
             {showAvailability && artwork.availability ? (
               <Badge color="teal" variant="light" size="sm">
                 {ARTWORK_AVAILABILITY_LABELS[artwork.availability]}

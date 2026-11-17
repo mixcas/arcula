@@ -22,7 +22,7 @@ export interface Catalogue {
   name: string;
   // What this catalogue is — chosen at creation and fixed, so a Portfolio
   // never turns into an Inventory under the works it holds (ADR-0010). The
-  // surface's labels and the availability axis are derived from it.
+  // surface's labels are derived from it.
   kind: CatalogueKind;
   userId: string; // Reference to the owner
   description?: string;

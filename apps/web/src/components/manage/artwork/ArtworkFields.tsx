@@ -1,6 +1,6 @@
 /**
- * The field body both artwork forms render: the grid of inputs, the
- * status control, and the two uploaders.
+ * The field body both artwork forms render: the grid of inputs, the status
+ * control, the Availability control and the two uploaders.
  *
  * The two pages differ in what they do with the values, not in what they
  * collect, and this block used to be written out in both of them — kept in step
@@ -25,23 +25,22 @@ import DocumentsUploader from "./DocumentsUploader";
 import type { UseArtistNames } from "@/hooks/useArtistNames";
 import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import type { UseArtworkDocuments } from "@/hooks/useArtworkDocuments";
-import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
+import {
+  ARTWORK_AVAILABILITY_LABELS,
+  ARTWORK_AVAILABILITY_STATES,
+} from "@/catalogueSurface";
 import type {
-  ArtworkAvailability,
   ArtworkFieldStates,
   ArtworkFormValues,
   ArtworkPayload,
 } from "@arcula/shared";
 
-/** The states this form offers, in the surface's order, as the Select's
- *  options. The surface decides the list — a Portfolio has no
- *  on-consignment, a Collection has none at all — and the labels are the one
- *  place the words live. */
-const availabilityOptions = (values: readonly ArtworkAvailability[]) =>
-  values.map((value) => ({
-    value,
-    label: ARTWORK_AVAILABILITY_LABELS[value],
-  }));
+/** The four states, as the Select's options. One list for every Kind — whether
+ *  the control is on screen is the Catalogue's decision, not the Kind's. */
+const availabilityOptions = ARTWORK_AVAILABILITY_STATES.map((value) => ({
+  value,
+  label: ARTWORK_AVAILABILITY_LABELS[value],
+}));
 
 interface ArtworkFieldsProps {
   /** The page's own form instance — the fields read and write through it. */
@@ -53,17 +52,11 @@ interface ArtworkFieldsProps {
   /**
    * The record fields this catalogue records, resolved from its Kind and its
    * stored deviations. Title and Artist Name are always rendered; every other
-   * field appears only when its key is enabled, and the page's save omits the
-   * disabled keys entirely — a hidden value is kept, never cleared.
+   * field — Availability included — appears only when its key is enabled, and
+   * the page's save omits the disabled keys entirely: a hidden value is kept,
+   * never cleared.
    */
   enabledFields: ArtworkFieldStates;
-  /**
-   * The market states this catalogue's kind offers, in the surface's order.
-   * Empty (the default) means the kind carries none — a Collection — so the
-   * form renders nothing (and saves nothing) for it. The page derives this
-   * from the catalogue's kind through `catalogueSurface`.
-   */
-  availabilityValues?: readonly ArtworkAvailability[];
   /**
    * Hide the two uploaders. The Edit page sets this while the work is deleted:
    * staging is a server write, and media staged for a work whose Save is shut
@@ -80,7 +73,6 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   documents,
   artistNames,
   enabledFields,
-  availabilityValues = [],
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
@@ -262,12 +254,12 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         is visible only to you.
       </Text>
 
-      {availabilityValues.length > 0 ? (
+      {enabledFields.availability ? (
         <>
           <Select
             key={form.key("availability")}
             label="Availability"
-            data={availabilityOptions(availabilityValues)}
+            data={availabilityOptions}
             allowDeselect={false}
             mb={6}
             {...form.getInputProps("availability")}

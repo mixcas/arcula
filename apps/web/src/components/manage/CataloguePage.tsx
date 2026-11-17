@@ -29,10 +29,10 @@ import {
   artworkSearchSuffix,
   MAX_SEARCH_QUERY_LENGTH,
   parseId,
+  resolveArtworkFields,
   searchQueryOverflow,
 } from "@arcula/shared";
 import ArtworksList from "./catalogue/ArtworksList";
-import { catalogueSurface } from "@/catalogueSurface";
 import type { Artwork, Catalogue } from "@arcula/shared";
 
 // Long enough to collect a word, short enough that the list feels live. The
@@ -253,6 +253,14 @@ const CataloguePage: React.FC = () => {
     return <Text>Catalogue not found</Text>;
   }
 
+  // The badge follows the catalogue's own configuration, not its Kind: a
+  // Collection that records Availability shows the state, and a Portfolio that
+  // switched it off does not.
+  const showAvailability = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled.availability;
+
   return (
     <>
       <Group justify="space-between" mb="xl" wrap="wrap">
@@ -364,7 +372,7 @@ const CataloguePage: React.FC = () => {
         searchError={searchError}
         onRetry={() => void loadArtworks(query)}
         onClearSearch={clearSearch}
-        showAvailability={catalogueSurface(catalogue.kind).availabilityInPlay}
+        showAvailability={showAvailability}
       />
     </>
   );

@@ -1,17 +1,29 @@
 // What a catalogue's kind means for the surface, as pure data (tier 1).
 //
 // The answers the app derives from one kind: the two field labels that name
-// whose catalogue it is, the market states a work may carry, and what a create
-// form starts with.
+// whose catalogue it is, and what a create form starts with. Availability is no
+// longer a Kind answer — all four states are offered everywhere, and whether a
+// new work starts with one follows the Catalogue's resolved Artwork fields.
 
 import { describe, expect, it } from "vitest";
-import { EMPTY_ARTWORK_FORM } from "@arcula/shared";
+import { ARTWORK_FIELD_DEFAULTS, EMPTY_ARTWORK_FORM } from "@arcula/shared";
 import {
+  ARTWORK_AVAILABILITY_LABELS,
+  ARTWORK_AVAILABILITY_STATES,
   CATALOGUE_KINDS,
-  availabilityFor,
   catalogueSurface,
   newArtworkForm,
 } from "@/catalogueSurface";
+import type { ArtworkFieldStates, CatalogueKind } from "@arcula/shared";
+
+/** The catalogue's resolved fields, with Availability at the state under test. */
+const enabled = (
+  kind: CatalogueKind,
+  availability: boolean,
+): ArtworkFieldStates => ({
+  ...ARTWORK_FIELD_DEFAULTS[kind],
+  availability,
+});
 
 describe("catalogueSurface", () => {
   it("names each kind and calls the name and description by whose they are", () => {
@@ -26,34 +38,24 @@ describe("catalogueSurface", () => {
       ["Collection", "Name", "Description"],
     ]);
   });
+});
 
-  it("puts a work's availability in play on a Portfolio and an Inventory only", () => {
-    // A Collection records what the collector owns; there is no market state
-    // to record, which is a presentation rule now and the artwork form's in
-    // #252.
-    expect(
-      CATALOGUE_KINDS.filter(
-        (kind) => catalogueSurface(kind).availabilityInPlay,
-      ),
-    ).toEqual(["portfolio", "inventory"]);
-  });
-
-  it("offers each kind the market states its market has", () => {
-    // ADR-0010: a Portfolio sells the artist's own work, so it never offers
-    // on-consignment; an Inventory represents work it may hold on consignment;
-    // a Collection has no market at all.
-    expect(catalogueSurface("portfolio").availabilityValues).toEqual([
-      "available",
-      "reserved",
-      "sold",
-    ]);
-    expect(catalogueSurface("inventory").availabilityValues).toEqual([
+describe("the market states", () => {
+  it("offers the same four, in one order, on every kind", () => {
+    // The Kind no longer answers which states it offers: the form renders the
+    // whole list wherever Availability is enabled, so a Portfolio may record
+    // on-consignment and a Collection any state.
+    expect([...ARTWORK_AVAILABILITY_STATES]).toEqual([
       "available",
       "reserved",
       "sold",
       "on-consignment",
     ]);
-    expect(catalogueSurface("collection").availabilityValues).toEqual([]);
+    expect(
+      ARTWORK_AVAILABILITY_STATES.map(
+        (state) => ARTWORK_AVAILABILITY_LABELS[state],
+      ),
+    ).toEqual(["Available", "Reserved", "Sold", "On consignment"]);
   });
 });
 
@@ -61,12 +63,15 @@ describe("catalogueSurface", () => {
  * What a create form starts as is a per-kind answer, not a derived fact: a
  * Portfolio's name *is* the artist's name (ADR-0010), so its works start
  * credited to it; an Inventory's name is the gallery's and a Collection's is
- * the collector's, so neither can be guessed. One call answers every kind, so
- * a screen has no branch to skip one with.
+ * the collector's, so neither can be guessed. The market state is not a Kind
+ * answer: it starts at `available` exactly when the Catalogue records
+ * Availability, and is `null` otherwise.
  */
 describe("newArtworkForm", () => {
-  it("starts a Portfolio work credited to the portfolio", () => {
-    expect(newArtworkForm("portfolio", "Flores Solares")).toEqual({
+  it("starts a Portfolio work credited to the portfolio, at available", () => {
+    expect(
+      newArtworkForm("portfolio", "Flores Solares", enabled("portfolio", true)),
+    ).toEqual({
       ...EMPTY_ARTWORK_FORM,
       artistName: "Flores Solares",
       availability: "available",
@@ -76,38 +81,53 @@ describe("newArtworkForm", () => {
   it("leaves an Inventory's Artist Name empty, with its market state", () => {
     // An Inventory sells work it represents, so the state is still there;
     // only the artist is unknown.
-    expect(newArtworkForm("inventory", "Galería Sur")).toEqual({
+    expect(
+      newArtworkForm("inventory", "Galería Sur", enabled("inventory", true)),
+    ).toEqual({
       ...EMPTY_ARTWORK_FORM,
       availability: "available",
     });
   });
 
-  it("gives a Collection exactly the empty form", () => {
+  it("gives a Collection with Availability off exactly the empty form", () => {
     // Nothing prefilled and no market state: a kind that gains no default must
     // not lose the ones the form already had.
-    expect(newArtworkForm("collection", "Colección Privada")).toEqual(
-      EMPTY_ARTWORK_FORM,
-    );
-  });
-});
-
-describe("availabilityFor", () => {
-  it("defaults a surfaced work with no stored state to available", () => {
-    expect(availabilityFor("portfolio", null)).toBe("available");
-    expect(availabilityFor("inventory", undefined)).toBe("available");
+    expect(
+      newArtworkForm(
+        "collection",
+        "Colección Privada",
+        enabled("collection", false),
+      ),
+    ).toEqual(EMPTY_ARTWORK_FORM);
   });
 
-  it("keeps a stored state exactly as it is", () => {
-    expect(availabilityFor("portfolio", "sold")).toBe("sold");
-    expect(availabilityFor("inventory", "on-consignment")).toBe(
-      "on-consignment",
-    );
+  it("starts a Collection that records Availability at available too", () => {
+    // The flattening: a Collection's market state is the same field as any
+    // other Catalogue's, not a Kind that carries nothing.
+    expect(
+      newArtworkForm(
+        "collection",
+        "Colección Privada",
+        enabled("collection", true),
+      ),
+    ).toEqual({
+      ...EMPTY_ARTWORK_FORM,
+      availability: "available",
+    });
   });
 
-  it("hands a kind with no market state nothing", () => {
-    // A Collection's form shows no control; its save must carry no key, even
-    // if the row happens to hold a state the API accepted.
-    expect(availabilityFor("collection", "sold")).toBeNull();
-    expect(availabilityFor("collection", null)).toBeNull();
+  it("holds no state on a Portfolio that switched Availability off", () => {
+    // The enabled set, not the Kind, decides: a default-on Kind can still say
+    // nothing, because the form that follows it has no control to fill.
+    expect(
+      newArtworkForm(
+        "portfolio",
+        "Flores Solares",
+        enabled("portfolio", false),
+      ),
+    ).toEqual({
+      ...EMPTY_ARTWORK_FORM,
+      artistName: "Flores Solares",
+    });
   });
 });

@@ -1,7 +1,8 @@
 // A work's market state: the save routes record it, a member read carries it,
-// a visitor read does not, and it is never a gate. The kind decides only
-// whether the form surfaces the field (ADR-0010); the API accepts availability
-// on every kind and validates it against nothing but the four-word enum.
+// a visitor read does not, and it is never a gate. Whether a form surfaces the
+// field is the Catalogue's choice (the Artwork fields registry); the API
+// accepts all four states on every kind and validates them against nothing but
+// the four-word enum.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ArtworkRead } from "@arcula/shared";
@@ -134,6 +135,21 @@ describe("a Collection's work", () => {
     expect(created.status).toBe(201);
     const body = await json<ArtworkRead>(created);
     expect(body.availability).toBe("reserved");
+  });
+});
+
+describe("the four states are the same on every kind", () => {
+  it("accepts a Portfolio's on-consignment", async () => {
+    // Flattening Availability removed the per-Kind list: a Portfolio can now
+    // record work it holds on consignment, and the server validates the state
+    // against the enum alone.
+    const created = await save(portfolio, "on-consignment");
+    expect(created.status).toBe(201);
+    const body = await json<ArtworkRead>(created);
+    expect(body.availability).toBe("on-consignment");
+
+    const read = await getArtwork(portfolio, body.id, owner.cookies);
+    expect((await json<ArtworkRead>(read)).availability).toBe("on-consignment");
   });
 });
 

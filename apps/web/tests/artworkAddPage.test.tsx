@@ -363,12 +363,11 @@ describe("the Add page — the single write", () => {
 });
 
 /**
- * A market state is surfaced on the two kinds that sell work — a Portfolio and
- * an Inventory — and a new one starts Available. A Collection's form has no
- * such field, and its save carries no availability at all, so its works keep
- * a null (ADR-0010).
+ * Availability is the Catalogue's choice now, not the Kind's: every Kind offers
+ * the same four states, a new work starts Available when the field is enabled,
+ * and neither the control nor the key exists when it is off.
  */
-describe("the Add page — the catalogue kind and a work's availability", () => {
+describe("the Add page — the catalogue's Availability field", () => {
   it.each(["portfolio", "inventory"] as const)(
     "offers a %s work a market state, defaulting to available",
     async (kind) => {
@@ -376,7 +375,7 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
       const user = userEvent.setup();
       renderPage();
 
-      // The select is only there once the catalogue's kind is known.
+      // The select is only there once the catalogue's fields are known.
       const select = await screen.findByRole("combobox", {
         name: /^Availability/,
       });
@@ -388,9 +387,31 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
     },
   );
 
+  it("offers a Collection that records Availability the control too", async () => {
+    // The flattening: a Collection is no longer a Kind that carries no market
+    // state, so switching the field on gives it the same control.
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const select = await screen.findByRole("combobox", {
+      name: /^Availability/,
+    });
+    expect(select).toHaveValue("Available");
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1].availability).toBe("available");
+  });
+
   it("sends the state the owner picks", async () => {
-    // On-consignment is an Inventory's state, so the pick is made there.
-    getCatalogue.mockResolvedValue(catalogue("inventory"));
+    // On-consignment is offered on every Kind now, so the pick is made on the
+    // plainest one.
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
     const user = userEvent.setup();
     renderPage();
 
@@ -415,10 +436,9 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
     expect(createArtwork.mock.calls[0][1].availability).toBe("on-consignment");
   });
 
-  it("offers a Portfolio no on-consignment state", async () => {
-    // The surface's per-kind values are what the Select renders: a Portfolio
-    // sells the artist's own work, so an option it does not have must not be
-    // on screen (ADR-0010).
+  it("offers a Portfolio the on-consignment state too", async () => {
+    // All four states on every Kind: the per-Kind list is gone, and a Portfolio
+    // can record work it holds on consignment.
     getCatalogue.mockResolvedValue(catalogue("portfolio"));
     const user = userEvent.setup();
     renderPage();
@@ -434,15 +454,34 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
       .queryAllByRole("option", { hidden: true })
       .map((entry) => entry.textContent);
     expect(options).toContain("Sold");
-    expect(options).not.toContain("On consignment");
+    expect(options).toContain("On consignment");
   });
 
-  it("offers a Collection no market state and sends none", async () => {
+  it("offers a Collection no market state and sends none by default", async () => {
     const user = userEvent.setup();
     renderPage();
 
     // The catalogue must have loaded before the absence means anything: the
-    // form is only on screen once its kind is known.
+    // form is only on screen once its fields are known.
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1]).not.toHaveProperty("availability");
+  });
+
+  it("sends no availability on a Portfolio that switched the field off", async () => {
+    // The field follows the Catalogue's configuration in both directions: a
+    // Kind whose default is on can still hold nothing.
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { availability: false } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
     await screen.findByLabelText(/^Title/);
     expect(
       screen.queryByRole("combobox", { name: /^Availability/ }),

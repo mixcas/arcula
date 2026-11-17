@@ -1,10 +1,9 @@
 // The Artwork fields registry, tier 1: which record fields a Catalogue can
 // switch, and the per-Kind defaults it switches them from.
 //
-// This is the only seam that can pin the three-Kind × twelve-field table
+// This is the only seam that can pin the three-Kind × thirteen-field table
 // without one request per cell, so the literal table below is the independent
 // source of truth: a default that moves must be changed here on purpose.
-// Availability joins the registry in its own ticket and is deliberately absent.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -29,6 +28,7 @@ const FIELDS: readonly ArtworkFieldKey[] = [
   "notes",
   "condition",
   "currentValue",
+  "availability",
 ];
 
 const on = (): Record<ArtworkFieldKey, boolean> =>
@@ -38,7 +38,7 @@ const on = (): Record<ArtworkFieldKey, boolean> =>
   >;
 
 describe("the registry's field list", () => {
-  it("lists the twelve togglable fields in registry order", () => {
+  it("lists the thirteen togglable fields in registry order", () => {
     expect([...ARTWORK_FIELD_KEYS]).toEqual(FIELDS);
   });
 
@@ -46,14 +46,14 @@ describe("the registry's field list", () => {
     // Title and Artist Name are always recorded (the status is the
     // Draft/Published stamp and is not a record field at all).
     expect([...ARTWORK_FIXED_FIELDS]).toEqual(["title", "artistName"]);
-    for (const fixed of [...ARTWORK_FIXED_FIELDS, "status", "availability"]) {
+    for (const fixed of [...ARTWORK_FIXED_FIELDS, "status"]) {
       expect(ARTWORK_FIELD_KEYS).not.toContain(fixed);
     }
   });
 });
 
 describe("the per-Kind defaults", () => {
-  it("pins the exact table: acquisitions off on a Portfolio and an Inventory", () => {
+  it("pins the exact table: acquisitions off on a Portfolio and an Inventory, availability off on a Collection", () => {
     const everythingOn = on();
 
     expect(ARTWORK_FIELD_DEFAULTS.portfolio).toEqual({
@@ -66,7 +66,12 @@ describe("the per-Kind defaults", () => {
       acquisitionDate: false,
       acquisitionPrice: false,
     });
-    expect(ARTWORK_FIELD_DEFAULTS.collection).toEqual(everythingOn);
+    // A Collection records what the collector owns, so its market state starts
+    // off — a choice the settings card can now reverse.
+    expect(ARTWORK_FIELD_DEFAULTS.collection).toEqual({
+      ...everythingOn,
+      availability: false,
+    });
   });
 });
 
