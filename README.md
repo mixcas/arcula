@@ -149,6 +149,18 @@ window, and changing the password revokes every outstanding grant. The
 decision, and the alternatives it rejected, are in
 [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
 
+## Use from an agent
+
+Arcula hosts an MCP server at `/api/mcp` on the same origin as the app. A member
+adds `https://arcula.art/api/mcp` (or `https://dev.arcula.art/api/mcp`) to a
+remote MCP client, signs in once and approves a Connection. The account profile
+lists every Connection under **Connected apps**, and Revoke ends one without
+signing out of the browser.
+
+[Connecting a client](docs/connecting-a-client.md) has the OpenCode setup — it
+needs the 2026-07-28 protocol pin — and what every client needs to know about
+CIMD, the tools and disconnecting.
+
 ## Mail
 
 Every mail Arcula sends is composed in one place, so the four that exist —

@@ -156,20 +156,23 @@ carries a written reason in the config and is not added silently.
   than a flag. `sh scripts/stack-down.sh api` stops the server by port when the
   checkout that started it is gone: a removed worktree leaves its API listening
   with no pid file of its own.
-- **A worktree borrows the main checkout's stack.** `.env` is gitignored and
-  the compose project is named after the main checkout, so
-  `scripts/local-env.sh` hands every caller the main checkout's `.env`, and
-  `scripts/services.sh` exports `COMPOSE_PROJECT_NAME` so `docker-compose`
-  reaches `arcula-postgres-1` rather than inventing a project named after the
-  worktree directory. One database, one object store and one mail sink serve
-  every checkout, and the shared services keep their data, pid and logs in the
-  main checkout's `.stack/`. Two consequences: `stack-down.sh` run from a
-  worktree stops that shared stack, and one database holds one schema — a
-  branch carrying a migration owns the local DB while it is under test, so a
-  sibling worktree must not assume the schema it expected. A fresh worktree
-  also has no `node_modules`: `sh scripts/worktree-new.sh <branch>` creates one
-  beside the main checkout and runs both installs (the workspace's, then
-  `infra/cdk`'s), which is what `bun run check` needs.
+- **A worktree borrows the main checkout's stack, but gets its own port.**
+  `.env` is gitignored; `sh scripts/worktree-new.sh <branch>` copies the main
+  checkout's values into the worktree and rewrites `PORT`, `AUTH_BASE_URL` and
+  `VITE_API_TARGET` to a port derived from the branch name (moved to the next
+  free one), so two checkouts can run their API and web suites at once. An
+  existing worktree without one copies the main `.env` and sets those three by
+  hand — they move together. The compose project is still named after the main
+  checkout, so `scripts/services.sh` exports `COMPOSE_PROJECT_NAME` and
+  `docker-compose` reaches `arcula-postgres-1` rather than inventing a project
+  named after the worktree directory. One database, one object store and one
+  mail sink serve every checkout, and the shared services keep their data, pid
+  and logs in the main checkout's `.stack/`. Two consequences: `stack-down.sh`
+  run from a worktree stops that shared stack, and one database holds one
+  schema — a branch carrying a migration owns the local DB while it is under
+  test, so a sibling worktree must not assume the schema it expected. A fresh
+  worktree also has no `node_modules`: `worktree-new.sh` runs both installs
+  (the workspace's, then `infra/cdk`'s), which is what `bun run check` needs.
 - **SeaweedFS must advertise an address that still exists.**
   `scripts/stack-up.sh` pins it to loopback, so a DHCP change cannot break a
   stack that script started; a `weed server` started before the pin, or by hand,

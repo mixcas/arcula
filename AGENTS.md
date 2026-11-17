@@ -214,7 +214,9 @@ reads are not.
 
 The as-built detail — the endpoint, the Connection model and its one-install
 limitation, the tool surface, the search contract, the import status rule and
-the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. The
+the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. Client
+setup, including OpenCode's 2026-07-28 protocol pin, is in
+[`docs/connecting-a-client.md`](docs/connecting-a-client.md). The
 implementation contract is
 [`docs/specs/agent-access.md`](docs/specs/agent-access.md), and the decision
 with its rejected alternatives is
@@ -255,10 +257,12 @@ reviewing a diff.
   Prefer subpath imports (`import debounce from "lodash/debounce"`) for smaller
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
-  inlined at build time. The repo-root file is the local fallback: a deploy
-  reads `infra/cdk/.env.<env>` instead (the untracked `.env` there is
-  production's fallback, and dev deliberately has none — falling back would put
-  production's database URL into a dev deploy). Never commit real secrets; see
+  inlined at build time. A worktree made by `scripts/worktree-new.sh` gets its
+  own gitignored `.env` with a per-branch port; otherwise the repo-root file is
+  the local fallback. A deploy reads `infra/cdk/.env.<env>` instead (the
+  untracked `.env` there is production's fallback, and dev deliberately has none
+  — falling back would put production's database URL into a dev deploy). Never
+  commit real secrets; see
   **Two rules that are load-bearing** above.
 
 ## Validation
