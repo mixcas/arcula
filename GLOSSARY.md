@@ -97,11 +97,22 @@ the public view, not to the Catalogue as a member.
 _Avoid_: Session, unlock token, password token
 
 **Catalogue search**:
-A member's query against the recorded fields of the works in one Catalogue. It
-answers with the live works that match; drafts are included, deleted works never
+A query against the recorded fields of the works in one Catalogue. Its free
+text (`q`) is a member's; its structured filters — one or more values of a field,
+text or enumerated — are answered within the reader's verdict, so a visitor
+filters the published works they may already see. Values repeated within a field
+are alternatives, and different fields are all required. It answers with the
+live works that match; drafts are included for a member, deleted works never
 are. The query lives in the page's address, so a search can be linked and
 revisited.
 _Avoid_: Filter, find, lookup
+
+**Facet**:
+The distinct values a filterable field takes across a Catalogue search's
+filtered set, each with the number of works carrying it. Counted before paging,
+so a facet agrees with the search it accompanies; a work with no value for the
+field contributes no entry, and the caller cannot ask for "no value".
+_Avoid_: Tag, category, bucket
 
 **Shared**:
 A Catalogue whose owner has added collaborators. Distinct from **Public**, which
@@ -147,7 +158,9 @@ _Avoid_: Cost, price
 
 **Current value**:
 What the owner believes the work is worth now. Distinct from the acquisition
-price on purpose.
+price on purpose. The app labels it **Current price**; the stored key and the
+import's column identity keep their old name, because a label does not earn a
+migration.
 _Avoid_: Value, price, valuation
 
 **Provenance**:
@@ -167,10 +180,21 @@ The material a work is made of, in the owner's own words — "Oil on canvas",
 _Avoid_: Media, technique, material
 
 **Availability**:
-A work's market state on a Portfolio or an Inventory — whether it is for sale,
-reserved or sold — the "for sale" axis beside **Published** and **Draft**, which
-are about visibility. A Collection carries no availability.
+A work's market state — available, reserved, sold or on consignment — the "for
+sale" axis beside **Published** and **Draft**. It is one of a Catalogue's
+**Artwork fields**: every Kind offers the same four states, and it is present
+exactly when the Catalogue records it.
 _Avoid_: Status, stock, for-sale
+
+**Artwork fields**:
+A Catalogue's choice of which of an Artwork's fields it records — thirteen of
+them, starting from the defaults its Kind brings, with Title and Artist Name
+always recorded. A field a Catalogue does not record is not asked for, is
+refused on a save, is not matched by Catalogue search and is not printed in the
+Catalogue PDF; a value already recorded is kept and returns when the field is
+turned back on. Photos and Other Documents are not fields, and Published or
+Draft is the work's stamp rather than one of its fields.
+_Avoid_: Record fields, field visibility, schema, columns
 
 **Artwork photo**:
 A picture of the artwork itself, ordered with its siblings. The first one is
@@ -185,6 +209,14 @@ _Avoid_: Attachment, file
 **Other documents**:
 The part of an artwork's record that holds its artwork documents.
 _Avoid_: Attachments, files, documents
+
+**Import**:
+Works brought into a Catalogue in a batch — a member's CSV file, or the rows an
+agent extracted from a document — and the act of bringing them. A member's CSV
+import lands them Published; an agent's lands them as Drafts, because a
+conversation is not a review. The status is the payload's, defaulting to
+Published, so the member's workflow is unchanged.
+_Avoid_: Upload, ingestion, batch, bulk add
 
 ### What is seen
 
@@ -284,6 +316,17 @@ _Avoid_: Finalised, committed, moved
 One rendered size of an artwork photo or artwork document, at the size a page
 actually displays it.
 _Avoid_: Thumbnail, rendition, size
+
+### Agents
+
+**Connection**:
+An agent's standing access to one account: the person's approval of one MCP
+client, named for that client, listed in the account profile with when it
+connected and last acted, and revocable on its own. One per account and client,
+so two installations of the same client share one Connection and one Revoke; a
+duplicate approval collapses to the newest. Never the browser session, and
+never a way into it.
+_Avoid_: Token, API key, integration, app, plugin
 
 ### Tiers
 

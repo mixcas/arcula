@@ -19,8 +19,8 @@ import {
 import { CATALOGUE_LIMITS, MINTED_ID_RE } from "@arcula/shared";
 import { canSeeCatalogue, membershipOf } from "../src/access";
 import { closeDb, db } from "../src/db";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
-import { seedCatalogues } from "./helpers/fixtures";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
+import { makeCatalogue, seedCatalogues } from "./helpers/fixtures";
 
 /** The wire timestamp is `{ seconds, nanoseconds }`. */
 function isWireTimestamp(value: unknown): void {
@@ -538,7 +538,7 @@ describe("POST /catalogues/{cid}/import/csv", () => {
     // The contract is the failed field; the message wording is zod's.
     expect(Object.keys(body.rejected[0].errors)).toEqual(["title"]);
 
-    const list = await json<Record<string, unknown>[]>(
+    const list = await listedArtworks(
       await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),
@@ -546,8 +546,8 @@ describe("POST /catalogues/{cid}/import/csv", () => {
     expect(list).toHaveLength(2);
     const byTitle = new Map(list.map((w) => [w.title, w]));
     const red = byTitle.get("Red No. 7")!;
-    redId = String(red.id);
-    blueId = String(byTitle.get("Blue No. 9")!.id);
+    redId = red.id;
+    blueId = byTitle.get("Blue No. 9")!.id;
     expect(redId).toMatch(MINTED_ID_RE);
     expect(red.serie).toBe("Reds");
     expect(red.acquisitionDate).toBe("2024-05-01");
@@ -560,14 +560,145 @@ describe("POST /catalogues/{cid}/import/csv", () => {
     expect(byTitle.get("Blue No. 9")!.status).toBe("published");
   });
 
+  it("imports a row that carries a field the catalogue does not record", async () => {
+    // A Portfolio records neither acquisition field, so a file prepared for
+    // several catalogues can still arrive with those columns filled.
+    const portfolioId = await makeCatalogue(owner.userId, {
+      kind: "portfolio",
+      name: "Import Portfolio",
+    });
+
+    const res = await req(
+      "POST",
+      `/api/v1/catalogues/${portfolioId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: JSON.stringify({
+          rows: [
+            {
+              title: "Ink Study",
+              artistName: "C. Cas",
+              medium: "Ink",
+              acquisitionPrice: "1200",
+              acquisitionDate: "2024-01-02",
+            },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = await json<{
+      inserted: number;
+      rejected: { row: number; errors: Record<string, string> }[];
+    }>(res);
+    // The disabled keys are stripped before validation, so the row is not
+    // rejected over them.
+    expect(body.rejected).toEqual([]);
+    expect(body.inserted).toBe(1);
+
+    const list = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${portfolioId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(list).toHaveLength(1);
+    // Every column the catalogue does record still landed.
+    expect(list[0].title).toBe("Ink Study");
+    expect(list[0].medium).toBe("Ink");
+    // The disabled field's value is not stored: an absent key on the read.
+    expect("acquisitionPrice" in list[0]).toBe(false);
+    expect("acquisitionDate" in list[0]).toBe(false);
+  });
+
+  it("imports a field the catalogue switched on against its Kind's default", async () => {
+    // The strip resolves from the catalogue, not from its Kind: a Portfolio
+    // that turned the acquisition price on imports it.
+    const portfolioId = await makeCatalogue(owner.userId, {
+      kind: "portfolio",
+      name: "Import Portfolio With Price",
+    });
+    const patched = await req("PATCH", `/api/v1/catalogues/${portfolioId}`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({ artworkFields: { acquisitionPrice: true } }),
+    });
+    expect(patched.status).toBe(200);
+
+    const res = await req(
+      "POST",
+      `/api/v1/catalogues/${portfolioId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: JSON.stringify({
+          rows: [
+            {
+              title: "Ink Study",
+              artistName: "C. Cas",
+              acquisitionPrice: "900",
+            },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(
+      (
+        await json<{
+          inserted: number;
+          rejected: unknown[];
+        }>(res)
+      ).inserted,
+    ).toBe(1);
+
+    const list = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${portfolioId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(list[0].acquisitionPrice).toBe("900");
+  });
+
   it("puts every imported work on the visitor list, since all are published", async () => {
-    const visitor = await json<Record<string, unknown>[]>(
+    const visitor = await listedArtworks(
       await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`),
     );
     expect(visitor.map((w) => w.title).sort()).toEqual([
       "Blue No. 9",
       "Red No. 7",
     ]);
+  });
+
+  it("lands the batch as drafts when the payload names a status", async () => {
+    // Its own catalogue, so the published fixtures above stay untouched.
+    const created = await req("POST", "/api/v1/catalogues", {
+      cookies: owner.cookies,
+      body: JSON.stringify({ name: "Draft Imports", isPublic: true }),
+    });
+    expect(created.status).toBe(201);
+    const wallId = String((await json<Record<string, unknown>>(created)).id);
+
+    const res = await req("POST", `/api/v1/catalogues/${wallId}/import/csv`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({
+        status: "draft",
+        rows: [{ title: "Unverified", artistName: "C. Cas" }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ inserted: 1, rejected: [] });
+
+    // A member reads the draft; a visitor is not shown it at all.
+    const memberList = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${wallId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(memberList.map((w) => [w.title, w.status])).toEqual([
+      ["Unverified", "draft"],
+    ]);
+    const visitorList = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${wallId}/artworks`),
+    );
+    expect(visitorList).toEqual([]);
   });
 
   it("403s a non-owner, 401s an anonymous call, 400s a non-array rows", async () => {
@@ -653,7 +784,7 @@ describe("POST /catalogues/{cid}/artworks/bulk-delete", () => {
     );
     expect(visitor.status).toBe(404);
 
-    const live = await json<Record<string, unknown>[]>(
+    const live = await listedArtworks(
       await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),
@@ -719,7 +850,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
     );
     expect((await json<Record<string, unknown>>(red)).deletedAt).toBeNull();
 
-    const live = await json<Record<string, unknown>[]>(
+    const live = await listedArtworks(
       await req("GET", `/api/v1/catalogues/${studyWallId}/artworks`, {
         cookies: owner.cookies,
       }),

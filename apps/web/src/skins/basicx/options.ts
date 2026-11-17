@@ -12,7 +12,10 @@
  * - Which fields appear is the *skin's* decision, not per-catalogue config.
  *   "Artist name, title, photos, or additional fields" varies by skin and by
  *   what the data happens to contain — an option per conceivable field would be
- *   a settings form nobody can reason about.
+ *   a settings form nobody can reason about. Which fields a Catalogue *records*
+ *   is the member's choice (Artwork fields in Settings), and a skin never makes
+ *   it: the layout stays the skin's, the record stays the member's, and the
+ *   skin can only present the fields the Catalogue already has.
  *
  * `showPoweredBy` used to gate the footer's "Powered by Arcula" line. It is
  * gone: that text moved into the nav's right-hand slot, where what belongs is

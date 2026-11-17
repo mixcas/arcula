@@ -16,7 +16,7 @@ interface ArtworkCardProps {
   catalogueParam: string;
   /** The committed Catalogue search; Edit carries it back, View does not. */
   searchQuery?: string;
-  /** Whether this catalogue's kind carries a work's market state. */
+  /** Whether this catalogue records a work's market state. */
   showAvailability?: boolean;
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;

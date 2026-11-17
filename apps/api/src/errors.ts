@@ -16,9 +16,11 @@ export type ApiErrorCode =
   | "password-required"
   | "invalid-password"
   | "too-many-attempts"
+  | "rate-limited"
   | "not-found"
   | "conflict"
   | "limit-reached"
+  | "field-disabled"
   | "field-not-writable"
   | "internal";
 
@@ -40,9 +42,17 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   // window's failures on this catalogue. The window, never the countdown —
   // see the unlock route.
   "too-many-attempts": 429,
+  // The agent surface's per-account allowance: a write past the window is
+  // refused here, and the sentence names the allowance and the window. No
+  // `Retry-After`, like `too-many-attempts` above.
+  "rate-limited": 429,
   "not-found": 404,
   conflict: 409,
   "limit-reached": 409,
+  // A save that names an Artwork field its Catalogue turned off. 400, not
+  // 409: the request is well formed but says something the Catalogue no
+  // longer records, and the remedy is to re-read the Catalogue.
+  "field-disabled": 400,
   "field-not-writable": 409,
   internal: 500,
 };

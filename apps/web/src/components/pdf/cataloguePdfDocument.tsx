@@ -22,12 +22,12 @@ import type { Artwork, Catalogue } from "@arcula/shared";
 
 import type { CataloguePdfPage } from "./cataloguePdfPlan";
 import {
-  ARTWORK_LEFT_FIELDS,
-  ARTWORK_RIGHT_FIELDS,
   IMAGE_UNAVAILABLE,
   PHOTO_PRINT_BOX,
   placeInPhotoBox,
   printedSize,
+  type ArtworkPdfField,
+  type PrintedArtworkFields,
 } from "./cataloguePdfPreflight";
 import type { ConvertedPhoto } from "./photoPipeline";
 
@@ -117,20 +117,27 @@ const metadataOf = (artwork: Artwork): Metadata => ({
 
 const fieldValues = (
   metadata: Metadata,
-  keys: ReadonlyArray<keyof Metadata>,
+  keys: readonly ArtworkPdfField[],
 ): string[] =>
   keys.flatMap((key) => {
     const value = metadata[key];
     return value ? [value] : [];
   });
 
-const leftFields = (metadata: Metadata): string[] =>
-  fieldValues(metadata, ARTWORK_LEFT_FIELDS);
-const rightFields = (metadata: Metadata): string[] =>
-  fieldValues(metadata, ARTWORK_RIGHT_FIELDS);
-const fullFields = (metadata: Metadata): string[] => [
-  ...leftFields(metadata),
-  ...rightFields(metadata),
+const leftFields = (
+  metadata: Metadata,
+  fields: PrintedArtworkFields,
+): string[] => fieldValues(metadata, fields.left);
+const rightFields = (
+  metadata: Metadata,
+  fields: PrintedArtworkFields,
+): string[] => fieldValues(metadata, fields.right);
+const fullFields = (
+  metadata: Metadata,
+  fields: PrintedArtworkFields,
+): string[] => [
+  ...leftFields(metadata, fields),
+  ...rightFields(metadata, fields),
 ];
 
 const styles = StyleSheet.create({
@@ -215,7 +222,10 @@ const PageHeader: React.FC<{ name: string }> = ({ name }) => (
   </Text>
 );
 
-const PhotoMetadata: React.FC<{ artwork: Artwork }> = ({ artwork }) => {
+const PhotoMetadata: React.FC<{
+  artwork: Artwork;
+  fields: PrintedArtworkFields;
+}> = ({ artwork, fields }) => {
   const metadata = metadataOf(artwork);
   return (
     <>
@@ -231,7 +241,7 @@ const PhotoMetadata: React.FC<{ artwork: Artwork }> = ({ artwork }) => {
         {/* Title and Artist are 28.8 pt apart at their layout baselines; a
             wrapped title pushes Artist down by its extra lines. */}
         <View style={{ marginTop: PHOTO_ARTIST_RHYTHM - LINE }}>
-          <FieldStack fields={leftFields(metadata)} />
+          <FieldStack fields={leftFields(metadata, fields)} />
         </View>
       </View>
       <View
@@ -242,7 +252,7 @@ const PhotoMetadata: React.FC<{ artwork: Artwork }> = ({ artwork }) => {
           width: COLUMN_WIDTH,
         }}
       >
-        <FieldStack fields={rightFields(metadata)} />
+        <FieldStack fields={rightFields(metadata, fields)} />
       </View>
     </>
   );
@@ -252,8 +262,9 @@ const PhotoPage: React.FC<{
   artwork: Artwork;
   source: ConvertedPhoto | undefined;
   catalogueName: string;
+  fields: PrintedArtworkFields;
   fontFamily: PdfFontFamily;
-}> = ({ artwork, source, catalogueName, fontFamily }) => {
+}> = ({ artwork, source, catalogueName, fields, fontFamily }) => {
   return (
     <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
       <PageHeader name={catalogueName} />
@@ -275,7 +286,7 @@ const PhotoPage: React.FC<{
           </Text>
         </View>
       )}
-      <PhotoMetadata artwork={artwork} />
+      <PhotoMetadata artwork={artwork} fields={fields} />
     </Page>
   );
 };
@@ -284,7 +295,8 @@ const GridBlock: React.FC<{
   artwork: Artwork;
   x: number;
   titleBaseline: number;
-}> = ({ artwork, x, titleBaseline }) => {
+  fields: PrintedArtworkFields;
+}> = ({ artwork, x, titleBaseline, fields }) => {
   const metadata = metadataOf(artwork);
   return (
     <View
@@ -297,7 +309,7 @@ const GridBlock: React.FC<{
     >
       <Title>{metadata.title}</Title>
       <View style={{ marginTop: TITLE_RHYTHM - LINE }}>
-        <FieldStack fields={fullFields(metadata)} />
+        <FieldStack fields={fullFields(metadata, fields)} />
       </View>
       {/* Identical in every block and independent of which fields are
           present: a grid divider, not a row. */}
@@ -318,14 +330,16 @@ const GridBlock: React.FC<{
 const GridPage: React.FC<{
   artworks: Artwork[];
   catalogueName: string;
+  fields: PrintedArtworkFields;
   fontFamily: PdfFontFamily;
-}> = ({ artworks, catalogueName, fontFamily }) => (
+}> = ({ artworks, catalogueName, fields, fontFamily }) => (
   <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
     <PageHeader name={catalogueName} />
     {artworks.map((artwork, index) => (
       <GridBlock
         key={artwork.id}
         artwork={artwork}
+        fields={fields}
         x={index % 2 === 0 ? MARGIN : RIGHT_COLUMN_LEFT}
         titleBaseline={
           GRID_FIRST_BASELINE + Math.floor(index / 2) * GRID_BLOCK_PITCH
@@ -358,6 +372,8 @@ type PdfPhotoSources = ReadonlyMap<string, ConvertedPhoto>;
 export interface CataloguePdfProps {
   catalogue: Catalogue;
   pages: CataloguePdfPage[];
+  /** The metadata the Catalogue records, in the design's two columns. */
+  fields: PrintedArtworkFields;
   /** Every registered fallback family, in chunk order. */
   fallbackFamilies: string[];
   photoSources: PdfPhotoSources;
@@ -366,6 +382,7 @@ export interface CataloguePdfProps {
 export const CataloguePdf: React.FC<CataloguePdfProps> = ({
   catalogue,
   pages,
+  fields,
   fallbackFamilies,
   photoSources,
 }) => {
@@ -390,6 +407,7 @@ export const CataloguePdf: React.FC<CataloguePdfProps> = ({
               key={`grid-${index}`}
               artworks={page.artworks}
               catalogueName={name}
+              fields={fields}
               fontFamily={fontFamily}
             />
           );
@@ -400,6 +418,7 @@ export const CataloguePdf: React.FC<CataloguePdfProps> = ({
             artwork={page.artwork}
             source={photoSources.get(page.photo.id)}
             catalogueName={name}
+            fields={fields}
             fontFamily={fontFamily}
           />
         );

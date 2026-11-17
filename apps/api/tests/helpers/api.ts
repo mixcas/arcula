@@ -8,6 +8,7 @@
 // union of what they were doing, which is what makes it one helper.
 
 import { expect } from "vitest";
+import type { ArtworkPage, ArtworkRead } from "@arcula/shared";
 import { app } from "../../src/app";
 
 export const API = "http://localhost:8000";
@@ -20,7 +21,6 @@ export const uuid = () => crypto.randomUUID().replace(/-/g, "");
 
 export interface ReqOpts {
   cookies?: string;
-  bearer?: string;
   /** A serialised JSON body, or any value to be serialised. */
   body?: unknown;
   /** Extra headers; an explicit Content-Type wins over the default. */
@@ -38,7 +38,6 @@ export async function req(
 ): Promise<Response> {
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.cookies) headers.Cookie = opts.cookies;
-  if (opts.bearer) headers.Authorization = `Bearer ${opts.bearer}`;
   if (opts.origin !== false) headers.Origin = ORIGIN;
   if (opts.body !== undefined && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
@@ -55,6 +54,16 @@ export async function req(
 
 export async function json<T = unknown>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+/**
+ * The works of the live artwork list's answer. That route answers a page
+ * envelope — `{ artworks, total, limit, offset }` — so a suite that only
+ * cares which works came back asks here, and one that cares about the page
+ * facts reads them with `json<ArtworkPage>`.
+ */
+export async function listedArtworks(res: Response): Promise<ArtworkRead[]> {
+  return (await json<ArtworkPage>(res)).artworks;
 }
 
 /** The error envelope: the code, the failed fields and the structured
@@ -100,15 +109,14 @@ export function sessionCookies(res: Response): string {
  */
 export async function signUp(
   label: string,
-): Promise<{ email: string; cookies: string; token?: string }> {
+): Promise<{ email: string; cookies: string }> {
   const slug = label.toLowerCase();
   const email = `${slug}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
   const res = await req("POST", "/api/auth/sign-up/email", {
     body: { email, password: `${slug}-pass-12345`, name: `${label} Test` },
   });
   expect(res.status).toBe(200);
-  const body = await json<{ token?: string }>(res);
-  return { email, cookies: sessionCookies(res), token: body.token };
+  return { email, cookies: sessionCookies(res) };
 }
 
 /** Sign up, then read /api/v1/me: the session owner a route test needs. */

@@ -9,6 +9,7 @@
 
 import { closeDb } from "../src/db";
 import { app } from "../src/app";
+import { isReservedPath } from "../src/spa";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -117,6 +118,46 @@ describe("the built SPA", () => {
     const unknown = await app.request("/api/v1/definitely-not-a-route");
     expect(unknown.status).toBe(404);
     expect(await unknown.text()).not.toBe(INDEX);
+  });
+
+  it("never answers OAuth discovery with the app shell", async () => {
+    // The exact namespace root is the path the auth mount's `/.well-known/*`
+    // wildcard does not cover: without the refusal in spa.ts it is a client
+    // route and gets the shell. A client parsing HTML as metadata fails here.
+    const namespace = await app.request("/.well-known");
+    expect(namespace.status).toBe(404);
+    expect(await namespace.text()).not.toBe(INDEX);
+
+    // A path the auth handler itself misses is a 404 too, never the shell.
+    const unknown = await app.request("/.well-known/not-a-document");
+    expect(unknown.status).toBe(404);
+    expect(await unknown.text()).not.toBe(INDEX);
+
+    // And the real document is the handler's JSON, not the fixture.
+    const document = await app.request("/.well-known/oauth-protected-resource");
+    expect(document.status).toBe(200);
+    expect(document.headers.get("content-type")).toContain("application/json");
+    expect(await document.text()).not.toBe(INDEX);
+  });
+});
+
+describe("the reserved paths", () => {
+  it("keeps the API and OAuth discovery out of the SPA", () => {
+    // The rule the middleware asks before it looks for a file or a client
+    // route: these must reach the mounts above it or 404.
+    for (const path of [
+      "/api",
+      "/api/mcp",
+      "/.well-known",
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/api/mcp",
+    ]) {
+      expect(isReservedPath(path), path).toBe(true);
+    }
+    // A near-miss is an ordinary client route, not a refusal.
+    for (const path of ["/apiary", "/.well-knownish", "/catalogue/one"]) {
+      expect(isReservedPath(path), path).toBe(false);
+    }
   });
 });
 

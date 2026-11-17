@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { CatalogueKind } from "../types";
-import { MINTED_ID_RE } from "./artwork";
+import {
+  ARTWORK_FIELD_KEYS,
+  type ArtworkFieldDeviations,
+} from "../artworkFields";
+import { MINTED_ID_RE, artworkStatusSchema } from "./artwork";
 
 /**
  * What a catalogue is — an artist's Portfolio, a collector's Collection or a
@@ -24,6 +28,31 @@ type KindEnumIsKind =
     : never;
 const kindEnumIsKind: KindEnumIsKind = true;
 void kindEnumIsKind;
+
+/**
+ * A Catalogue's stored Artwork-field deviations: a sparse map keyed by the
+ * registry's field enum, so an unknown field is a validation error rather than
+ * a silently stored one. `partialRecord` is what makes it sparse — the plain
+ * record form would demand every field.
+ */
+export const artworkFieldDeviationsSchema = z.partialRecord(
+  z.enum(ARTWORK_FIELD_KEYS),
+  z.boolean(),
+);
+
+// The schema's key space and the registry's are the same thirteen. The first
+// direction catches a field the registry knows and the schema refuses; the
+// second catches a key the schema admits that is not a record field.
+type SchemaIsDeviations =
+  z.output<typeof artworkFieldDeviationsSchema> extends ArtworkFieldDeviations
+    ? ArtworkFieldDeviations extends z.output<
+        typeof artworkFieldDeviationsSchema
+      >
+      ? true
+      : never
+    : never;
+const schemaIsDeviations: SchemaIsDeviations = true;
+void schemaIsDeviations;
 
 /**
  * The /api/v1 catalogue payloads. The form side of
@@ -97,6 +126,11 @@ export const catalogueUpdateSchema = z.object({
     .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))
     .nullable()
     .optional(),
+  // The sparse map of fields this catalogue deviates on. Absent leaves the
+  // column alone; `null` and `{}` both mean "back to the Kind's defaults".
+  // The create schema deliberately does not carry it: a new catalogue starts
+  // from its Kind's defaults with nothing stored.
+  artworkFields: artworkFieldDeviationsSchema.nullable().optional(),
   password: passwordSchema.nullable().optional(),
 });
 
@@ -123,9 +157,15 @@ export type CatalogueUnlockPayload = z.infer<typeof catalogueUnlockSchema>;
  * `artworkSchema` belongs in the 200 response's `rejected`, not in a 400
  * that fails the whole batch — the review step already told the user which
  * rows are broken, and the rest of the file still has to land.
+ *
+ * `status` is the batch's, not a row's: the payload names the state every
+ * imported work lands in, and a status a row carries is overridden. Absent
+ * means the import's default (`IMPORTED_WORK_STATUS`), which is what a
+ * member's CSV import has always sent.
  */
 export const artworkImportSchema = z.object({
   rows: z.array(z.unknown()),
+  status: artworkStatusSchema.optional(),
 });
 
 export type ArtworkImportPayload = z.infer<typeof artworkImportSchema>;

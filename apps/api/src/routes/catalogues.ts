@@ -31,21 +31,16 @@ import {
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
   catalogueAccessGrants as grantsTable,
-  catalogueCollaborators as catalogueCollaboratorsTable,
   catalogueInvitations as catalogueInvitationsTable,
   catalogueUnlockAttempts as unlockAttemptsTable,
   catalogues as cataloguesTable,
-  user as userTable,
 } from "@arcula/db";
 import {
-  UPDATABLE_TEXT_FIELDS,
   artworkBulkSelectionSchema,
   artworkImportSchema,
   catalogueCreateSchema,
   catalogueUnlockSchema,
   catalogueUpdateSchema,
-  catalogueLimitForTier,
-  artworkSchema,
   IMPORTED_WORK_STATUS,
   type ArtworkBulkSelectionPayload,
   type ArtworkImportPayload,
@@ -55,6 +50,7 @@ import {
 } from "@arcula/shared";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
+import { importArtworks } from "../artworkImport";
 import { readDeletedArtworkList } from "../artworkRead";
 import {
   loadCatalogue,
@@ -71,17 +67,17 @@ import {
   hashGrantToken,
   mintGrantToken,
 } from "../catalogueGrants";
-import { hashPassword, verifyPassword } from "../cataloguePassword";
-import { collaboratorJoin, readableCataloguesWhere } from "../catalogueScope";
+import { listReadableCatalogues } from "../catalogueList";
+import { createCatalogue, writeCatalogue } from "../catalogueWrite";
+import { verifyPassword } from "../cataloguePassword";
 import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
-import { mintId } from "../ids";
 import { parseMediaKey, stagedCataloguePrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
-import { displayName, serializeCatalogue } from "../serialize";
+import { serializeCatalogue } from "../serialize";
 import {
   UNLOCK_MAX_FAILURES,
   UNLOCK_WINDOW_MINUTES,
@@ -161,93 +157,20 @@ catalogueRoutes.get("/catalogues", async (c) => {
   }
 
   const userId = session.user.id;
-  // One query, so the two halves share one collation and a stray membership
-  // row for the owner cannot list the catalogue twice: the owner column
-  // decides the role, and the join only says "shared with this account".
-  const rows = await db
-    .select({
-      catalogue: cataloguesTable,
-      ownerName: userTable.name,
-      ownerEmail: userTable.email,
-    })
-    .from(cataloguesTable)
-    .innerJoin(userTable, eq(userTable.id, cataloguesTable.userId))
-    .leftJoin(catalogueCollaboratorsTable, collaboratorJoin(userId))
-    .where(readableCataloguesWhere(userId))
-    .orderBy(asc(cataloguesTable.name));
-
-  return c.json(
-    rows.map(({ catalogue, ownerName, ownerEmail }) => {
-      if (catalogue.userId === userId) {
-        return serializeCatalogue(catalogue, {
-          role: "owner",
-          audience: "member",
-        });
-      }
-      // The glossary's "the owner's display name, falling back to email": an
-      // account with no usable name is named by its address.
-      return serializeCatalogue(catalogue, {
-        role: "collaborator",
-        ownerName: displayName(ownerName, ownerEmail),
-        audience: "member",
-      });
-    }),
-  );
+  return c.json(await listReadableCatalogues(userId));
 });
 
 // POST /catalogues — the body validates first, then the cap is checked
 // before the row is written: the count is over the caller's own catalogues,
-// the limit is read off the caller's tier.
+// the limit is read off the caller's tier. The write itself is
+// `createCatalogue`, shared with the agent surface's tool.
 catalogueRoutes.post("/catalogues", requireSession, async (c) => {
   const user = c.get("user");
   const payload: CatalogueCreatePayload = await parseBody(
     c,
     catalogueCreateSchema,
   );
-
-  const limit = catalogueLimitForTier(user.tier);
-  const owned = await db
-    .select({ id: cataloguesTable.id })
-    .from(cataloguesTable)
-    .where(
-      and(
-        eq(cataloguesTable.userId, user.id),
-        // A deleted catalogue frees its slot the moment it is stamped.
-        isNull(cataloguesTable.deletedAt),
-      ),
-    );
-  if (owned.length >= limit) {
-    throw new ApiError(
-      "limit-reached",
-      `Your plan allows at most ${limit} catalogue${limit === 1 ? "" : "s"}`,
-    );
-  }
-
-  const id = mintId();
-  const now = new Date();
-  await db.insert(cataloguesTable).values({
-    id,
-    userId: user.id,
-    // Fixed at creation: the second segment of every final media key, so a
-    // later transfer of the catalogue moves no object. A fresh opaque id,
-    // not the owner's — the owner may change, the namespace may not.
-    mediaNamespaceId: mintId(),
-    name: payload.name,
-    kind: payload.kind,
-    description: payload.description ?? null,
-    isPublic: payload.isPublic,
-    createdAt: now,
-    updatedAt: now,
-  });
-  // The insert just committed; read-back failure is a server bug.
-  const row = await loadCatalogue(id);
-  if (!row) {
-    throw new ApiError(
-      "internal",
-      "The created catalogue could not be read back",
-    );
-  }
-  return c.json(serializeCatalogue(row, { audience: "member" }), 201);
+  return c.json(await createCatalogue(user.id, payload), 201);
 });
 
 // GET one — a member always; a visitor when the catalogue is public. The
@@ -266,73 +189,17 @@ catalogueRoutes.get("/catalogues/:catalogueId", async (c) => {
 // only what changed" payload safe. A body that names nothing writes nothing:
 // no column moves, and `updatedAt` is left alone, so "updated" continues to
 // mean something was.
+//
+// The write is `writeCatalogue`, shared with the agent surface's tool; the
+// membership check stays first here so a non-member's malformed body is the
+// refusal, not a 400.
 catalogueRoutes.patch("/catalogues/:catalogueId", requireSession, async (c) => {
   const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
   const payload: CatalogueUpdatePayload = await parseBody(
     c,
     catalogueUpdateSchema,
   );
-
-  // A password present means a write: a string sets (or overwrites) it,
-  // `null` removes it. Hashing happens before the transaction — it touches
-  // no row — and the update plus the grant revocation share one, so a
-  // change can never leave a reader holding a grant to the old password.
-  // An absent key leaves the column alone, which is why making a catalogue
-  // private and public again returns it to Protected.
-  const passwordHash =
-    payload.password === undefined
-      ? undefined
-      : payload.password === null
-        ? null
-        : await hashPassword(payload.password);
-
-  // Build the update only from the keys the body carried: an absent key
-  // leaves its column alone, and a body that names nothing is a successful
-  // no-op that moves no column and no timestamp.
-  const set: Partial<typeof cataloguesTable.$inferInsert> = {};
-  if (payload.name !== undefined) {
-    set.name = payload.name;
-  }
-  if (payload.isPublic !== undefined) {
-    set.isPublic = payload.isPublic;
-  }
-  if (payload.description !== undefined) {
-    set.description = payload.description ?? null;
-  }
-  if (payload.skin !== undefined) {
-    set.skin = payload.skin ?? null;
-  }
-  if (payload.skinOptions !== undefined) {
-    set.skinOptions = payload.skinOptions ?? null;
-  }
-  if (passwordHash !== undefined) {
-    set.passwordHash = passwordHash;
-  }
-  if (Object.keys(set).length > 0) {
-    set.updatedAt = new Date();
-    await safeTx(async (tx) => {
-      await tx
-        .update(cataloguesTable)
-        .set(set)
-        .where(eq(cataloguesTable.id, catalogue.id));
-      if (passwordHash !== undefined) {
-        // Revocation, in the same transaction: setting and changing are one
-        // operation, and removing has nothing left to admit.
-        await tx
-          .delete(grantsTable)
-          .where(eq(grantsTable.catalogueId, catalogue.id));
-      }
-    });
-  }
-
-  const row = await loadCatalogue(catalogue.id);
-  if (!row) {
-    throw new ApiError(
-      "internal",
-      "The saved catalogue could not be read back",
-    );
-  }
-  return c.json(serializeCatalogue(row, { audience: "member" }));
+  return c.json(await writeCatalogue(catalogue, payload));
 });
 
 // DELETE — owner-only. One transaction stamps `deletedAt`/`updatedAt`,
@@ -493,76 +360,35 @@ catalogueRoutes.post("/catalogues/:catalogueId/unlock", async (c) => {
   return c.json({ unlocked: true }, 201);
 });
 
-// POST …/import/csv — one row per validated artwork. Each row is checked
-// against the shared `artworkSchema` the Add/Edit forms use: a failing row
-// lands in `rejected` (its index plus the failed fields) and the accepted
-// rows are written in one transaction. The ids are minted here — the
-// client's review step has no say in them, and the shared schema is the
-// only place a row's validity is decided.
+// POST …/import/csv — the CSV import's bulk write. The per-row contract lives
+// in `artworkImport.ts`, which the agent surface's `import_artworks` tool
+// calls too: each row is checked against the shared `artworkSchema` the
+// Add/Edit forms use, a failing row lands in `rejected` (its index plus the
+// failed fields), and the accepted rows are written in one transaction.
+//
+// The batch's status is the payload's, and absent leaves it at
+// `IMPORTED_WORK_STATUS`: a person's CSV import has always landed published,
+// and an agent's names `draft`. Membership is asked before the body, so a
+// non-member's malformed payload is a refusal rather than a 400; the import
+// core asks the same verdict for the tool, which has no Context.
 catalogueRoutes.post(
   "/catalogues/:catalogueId/import/csv",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
+    const catalogueId = param(c, "catalogueId");
+    await requireMemberCatalogue(c, catalogueId);
     const payload: ArtworkImportPayload = await parseBody(
       c,
       artworkImportSchema,
     );
-
-    const now = new Date();
-    const rejected: { row: number; errors: Record<string, string> }[] = [];
-    const accepted: (typeof artworksTable.$inferInsert)[] = [];
-    payload.rows.forEach((row, index) => {
-      // The import's own status wins over anything a row says: every
-      // imported work is published (see IMPORTED_WORK_STATUS). A row that is
-      // not an object fails the schema as a missing title.
-      const fields =
-        row !== null && typeof row === "object"
-          ? (row as Record<string, unknown>)
-          : {};
-      const parsed = artworkSchema.safeParse({
-        ...fields,
-        status: IMPORTED_WORK_STATUS,
-      });
-      if (!parsed.success) {
-        const errors: Record<string, string> = {};
-        for (const issue of parsed.error.issues) {
-          errors[issue.path.join(".")] = issue.message;
-        }
-        rejected.push({ row: index, errors });
-        return;
-      }
-      const values = parsed.data;
-      const inserted: typeof artworksTable.$inferInsert = {
-        id: mintId(),
-        // The mirror of the catalogue's owner: an import adds the
-        // catalogue's works, whoever ran it (ADR-0004).
-        userId: catalogue.userId,
-        catalogueId: catalogue.id,
-        title: values.title,
-        artistName: values.artistName,
-        status: values.status,
-        // Always written, as null: the list filters on it, and a missing
-        // field is not a null (the write-path doctrine).
-        deletedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      for (const field of UPDATABLE_TEXT_FIELDS) {
-        inserted[field] = values[field] ?? null;
-      }
-      accepted.push(inserted);
-    });
-
-    if (accepted.length > 0) {
-      await safeTx(async (tx) => {
-        for (const row of accepted) {
-          await tx.insert(artworksTable).values(row);
-        }
-      });
-    }
-
-    return c.json({ inserted: accepted.length, rejected });
+    return c.json(
+      await importArtworks(
+        c.get("user").id,
+        catalogueId,
+        payload.rows,
+        payload.status ?? IMPORTED_WORK_STATUS,
+      ),
+    );
   },
 );
 

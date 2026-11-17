@@ -47,8 +47,11 @@ const bulkRestoreMock = vi.mocked(artworkService.bulkRestoreArtworks);
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const getCatalogueMock = vi.mocked(catalogueService.getCatalogue);
 
-/** The catalogue the page reads for the kind that decides the badge. */
-const catalogue = (kind: CatalogueKind): Catalogue => ({
+/** The catalogue the page reads for the fields that decide the badge. */
+const catalogue = (
+  kind: CatalogueKind,
+  overrides: Partial<Catalogue> = {},
+): Catalogue => ({
   id: "catalogue1",
   name: "Catalogue",
   kind,
@@ -56,6 +59,7 @@ const catalogue = (kind: CatalogueKind): Catalogue => ({
   isPublic: true,
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
+  ...overrides,
 });
 
 const CATALOGUE_PARAM = "deleted-view-catalogue1";
@@ -210,9 +214,9 @@ describe("DeletedArtworksPage", () => {
     expect(draftRow.getByText("Draft")).toBeTruthy();
   });
 
-  it("badges a deleted work's market state when the kind has one", async () => {
+  it("badges a deleted work's market state when the catalogue records it", async () => {
     // The Deleted view is a manage view: it shows the same availability badge
-    // the live table does, and only on the kinds that carry a market state.
+    // the live table does, and the Catalogue's configuration decides it.
     getCatalogueMock.mockResolvedValue(catalogue("portfolio"));
     getDeletedMock.mockResolvedValue([
       deletedArtwork({ id: "a", title: "Sold Out", availability: "sold" }),
@@ -225,7 +229,24 @@ describe("DeletedArtworksPage", () => {
     expect(await row.findByText("Sold")).toBeTruthy();
   });
 
-  it("shows no market-state badge on a kind without one", async () => {
+  it("badges it for a Collection that switched Availability on", async () => {
+    // The flattening: the badge follows the configuration, so a Kind whose
+    // default is off still shows the state it records.
+    getCatalogueMock.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "For Sale", availability: "reserved" }),
+    ]);
+    renderPage();
+
+    const row = within(
+      (await screen.findByText("For Sale")).closest("tr") as HTMLElement,
+    );
+    expect(await row.findByText("Reserved")).toBeTruthy();
+  });
+
+  it("shows no badge on a catalogue that does not record it", async () => {
     // A Collection records what is owned; a stored state must not be shown.
     getDeletedMock.mockResolvedValue([
       deletedArtwork({ id: "a", title: "Owned", availability: "sold" }),
@@ -233,8 +254,23 @@ describe("DeletedArtworksPage", () => {
     renderPage();
 
     await screen.findByText("Owned");
-    // The kind read has resolved by now: the catalogue's kind settles before
+    // The catalogue read has resolved by now: the fields settle before
     // anything could badge.
+    await waitFor(() => expect(getCatalogueMock).toHaveBeenCalled());
+    expect(screen.queryByText("Sold")).toBeNull();
+  });
+
+  it("shows no badge on a Portfolio that switched Availability off", async () => {
+    // The other direction of the same rule: the Kind's default is not enough.
+    getCatalogueMock.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { availability: false } }),
+    );
+    getDeletedMock.mockResolvedValue([
+      deletedArtwork({ id: "a", title: "Hidden", availability: "sold" }),
+    ]);
+    renderPage();
+
+    await screen.findByText("Hidden");
     await waitFor(() => expect(getCatalogueMock).toHaveBeenCalled());
     expect(screen.queryByText("Sold")).toBeNull();
   });

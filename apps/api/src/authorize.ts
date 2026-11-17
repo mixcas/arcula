@@ -163,30 +163,39 @@ export const loadArtworkById = async (
  *
  * The audience comes back with the row because it decides what the read may
  * say: a member's document carries the password state, a visitor's does not.
+ *
+ * `grantHeld` is asked only when the viewer is not a member: a member bypasses
+ * the challenge, so loading the cookie's grant would be a query nobody reads.
+ * The Context version passes the cookie reader; a caller with no request (the
+ * MCP tool layer) takes the default, which is "no grant".
  */
-export async function requireReadableCatalogue(
-  c: Context,
+export async function readableCatalogueFor(
+  viewer: string | null,
   catalogueId: string,
+  grantHeld: () => Promise<boolean> = () => Promise.resolve(false),
 ): Promise<{ catalogue: CatalogueRow; audience: CatalogueAudience }> {
   const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) {
     throw new ApiError("not-found", "The catalogue does not exist");
   }
-  const session = await resolveSession(c);
-  const membership = await loadMembership(
-    catalogueId,
-    catalogue,
-    session?.user.id ?? null,
-  );
-  // A member bypasses the challenge, so the grant is only worth loading for
-  // someone it could admit.
-  const hasValidGrant = isMember(membership)
-    ? false
-    : await grantHeld(c, catalogueId);
+  const membership = await loadMembership(catalogueId, catalogue, viewer);
+  const hasValidGrant = isMember(membership) ? false : await grantHeld();
   if (!canSeeCatalogue(membership, catalogue, hasValidGrant)) {
     throw catalogueRefusal(catalogue);
   }
   return { catalogue, audience: audienceOf(membership) };
+}
+
+/** The Context-bound read check: the session (if any) names the viewer, and
+ *  the grant is this request's cookie. Delegates the verdict to the core. */
+export async function requireReadableCatalogue(
+  c: Context,
+  catalogueId: string,
+): Promise<{ catalogue: CatalogueRow; audience: CatalogueAudience }> {
+  const session = await resolveSession(c);
+  return readableCatalogueFor(session?.user.id ?? null, catalogueId, () =>
+    grantHeld(c, catalogueId),
+  );
 }
 
 /**
@@ -252,24 +261,32 @@ export const grantHeld = async (
  *
  * A missing catalogue is `404`; a non-member is `403`, matching the read
  * side's refusal for a private catalogue.
+ *
+ * The core takes the user id, not a Hono Context: the MCP tool layer has a
+ * verified subject and no request, and both callers must get the same verdict
+ * and the same words.
  */
-export async function requireMemberCatalogue(
-  c: Context,
+export async function memberCatalogueFor(
+  userId: string,
   catalogueId: string,
 ): Promise<CatalogueRow> {
   const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) {
     throw new ApiError("not-found", "The catalogue does not exist");
   }
-  const membership = await loadMembership(
-    catalogueId,
-    catalogue,
-    c.get("user").id,
-  );
+  const membership = await loadMembership(catalogueId, catalogue, userId);
   if (!isMember(membership)) {
     throw new ApiError("forbidden", "You do not have access to this catalogue");
   }
   return catalogue;
+}
+
+/** The Context-bound write check: the session's user, delegated to the core. */
+export async function requireMemberCatalogue(
+  c: Context,
+  catalogueId: string,
+): Promise<CatalogueRow> {
+  return memberCatalogueFor(c.get("user").id, catalogueId);
 }
 
 /**
@@ -295,12 +312,12 @@ export async function requireOwnerCatalogue(
 }
 
 /** The membership check plus the artwork existing inside that catalogue. */
-export async function requireMemberArtwork(
-  c: Context,
+export async function memberArtworkFor(
+  userId: string,
   catalogueId: string,
   artworkId: string,
 ): Promise<{ catalogue: CatalogueRow; artwork: ArtworkRow }> {
-  const catalogue = await requireMemberCatalogue(c, catalogueId);
+  const catalogue = await memberCatalogueFor(userId, catalogueId);
   const artwork = await loadArtworkInCatalogue(catalogueId, artworkId);
   if (!artwork) {
     throw new ApiError("not-found", "The artwork does not exist");
@@ -308,4 +325,13 @@ export async function requireMemberArtwork(
   // `artworks.userId` is not checked: it mirrors the catalogue owner, and no
   // authorization reads it (ADR-0004). The row's catalogue is the fact.
   return { catalogue, artwork };
+}
+
+/** The Context-bound version: the session's user, delegated to the core. */
+export async function requireMemberArtwork(
+  c: Context,
+  catalogueId: string,
+  artworkId: string,
+): Promise<{ catalogue: CatalogueRow; artwork: ArtworkRow }> {
+  return memberArtworkFor(c.get("user").id, catalogueId, artworkId);
 }

@@ -27,7 +27,7 @@ afterAll(async () => {
 });
 
 describe("GET /api/v1/me", () => {
-  it("returns the session user with the custom fields, by cookie and by bearer", async () => {
+  it("returns the session user with the custom fields", async () => {
     const u = await signUp("Me");
 
     const byCookie = await req("GET", "/api/v1/me", { cookies: u.cookies });
@@ -37,9 +37,6 @@ describe("GET /api/v1/me", () => {
     expect(me.tier).toBe("free");
     expect(me.firstName).toBeNull();
     expect(me.settings).toBeNull();
-
-    const byBearer = await req("GET", "/api/v1/me", { bearer: u.token });
-    expect((await json<MeUser>(byBearer)).email).toBe(u.email);
   }, 15000);
 
   it("answers the unauthorized envelope without a session", async () => {

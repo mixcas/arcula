@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Center, Loader } from "@mantine/core";
 import ProductPage from "./components/ProductPage";
 import LoginPage from "./components/auth/LoginPage";
+import ConsentPage from "./components/auth/ConsentPage";
 import SignUpPage from "./components/auth/SignUpPage";
 import ResetRequestPage from "./components/auth/ResetRequestPage";
 import ResetPasswordPage from "./components/auth/ResetPasswordPage";
@@ -36,6 +37,10 @@ const App: React.FC = () => {
         <Route path="/" element={<ProductPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        {/* The OAuth consent screen. Not wrapped in ProtectedRoute: the page
+            itself sends a signed-out visitor to /login with the signed query,
+            which is where the provider put it in the first place. */}
+        <Route path="/consent" element={<ConsentPage />} />
         {/* Password reset is two routes: the bare path asks for the address
             (the door on sign-in), and the token path is the form the mail's
             link lands on. An absent/expired token is the server's 400, not a

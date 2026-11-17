@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { schemaResolver, useForm } from "@mantine/form";
 import { useAuth } from "@/hooks/useAuth";
+import AgentAccessCard from "./AgentAccessCard";
 import { meService } from "@/services/meService";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
@@ -246,6 +247,8 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
           </Group>
         </form>
       </Card>
+
+      <AgentAccessCard />
     </>
   );
 };

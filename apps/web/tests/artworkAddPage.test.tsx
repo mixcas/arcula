@@ -142,7 +142,10 @@ const createArtwork = vi.mocked(artworkService.createArtwork);
 const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const catalogue = (kind: CatalogueKind): Catalogue => ({
+const catalogue = (
+  kind: CatalogueKind,
+  overrides: Partial<Catalogue> = {},
+): Catalogue => ({
   id: CATALOGUE_ID,
   name: CATALOGUE_NAME,
   kind,
@@ -150,6 +153,7 @@ const catalogue = (kind: CatalogueKind): Catalogue => ({
   isPublic: true,
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
+  ...overrides,
 });
 
 /** The router's own location, so a navigation can be asserted. */
@@ -359,12 +363,11 @@ describe("the Add page — the single write", () => {
 });
 
 /**
- * A market state is surfaced on the two kinds that sell work — a Portfolio and
- * an Inventory — and a new one starts Available. A Collection's form has no
- * such field, and its save carries no availability at all, so its works keep
- * a null (ADR-0010).
+ * Availability is the Catalogue's choice now, not the Kind's: every Kind offers
+ * the same four states, a new work starts Available when the field is enabled,
+ * and neither the control nor the key exists when it is off.
  */
-describe("the Add page — the catalogue kind and a work's availability", () => {
+describe("the Add page — the catalogue's Availability field", () => {
   it.each(["portfolio", "inventory"] as const)(
     "offers a %s work a market state, defaulting to available",
     async (kind) => {
@@ -372,7 +375,7 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
       const user = userEvent.setup();
       renderPage();
 
-      // The select is only there once the catalogue's kind is known.
+      // The select is only there once the catalogue's fields are known.
       const select = await screen.findByRole("combobox", {
         name: /^Availability/,
       });
@@ -384,9 +387,31 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
     },
   );
 
+  it("offers a Collection that records Availability the control too", async () => {
+    // The flattening: a Collection is no longer a Kind that carries no market
+    // state, so switching the field on gives it the same control.
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const select = await screen.findByRole("combobox", {
+      name: /^Availability/,
+    });
+    expect(select).toHaveValue("Available");
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1].availability).toBe("available");
+  });
+
   it("sends the state the owner picks", async () => {
-    // On-consignment is an Inventory's state, so the pick is made there.
-    getCatalogue.mockResolvedValue(catalogue("inventory"));
+    // On-consignment is offered on every Kind now, so the pick is made on the
+    // plainest one.
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
     const user = userEvent.setup();
     renderPage();
 
@@ -411,10 +436,9 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
     expect(createArtwork.mock.calls[0][1].availability).toBe("on-consignment");
   });
 
-  it("offers a Portfolio no on-consignment state", async () => {
-    // The surface's per-kind values are what the Select renders: a Portfolio
-    // sells the artist's own work, so an option it does not have must not be
-    // on screen (ADR-0010).
+  it("offers a Portfolio the on-consignment state too", async () => {
+    // All four states on every Kind: the per-Kind list is gone, and a Portfolio
+    // can record work it holds on consignment.
     getCatalogue.mockResolvedValue(catalogue("portfolio"));
     const user = userEvent.setup();
     renderPage();
@@ -430,15 +454,34 @@ describe("the Add page — the catalogue kind and a work's availability", () => 
       .queryAllByRole("option", { hidden: true })
       .map((entry) => entry.textContent);
     expect(options).toContain("Sold");
-    expect(options).not.toContain("On consignment");
+    expect(options).toContain("On consignment");
   });
 
-  it("offers a Collection no market state and sends none", async () => {
+  it("offers a Collection no market state and sends none by default", async () => {
     const user = userEvent.setup();
     renderPage();
 
     // The catalogue must have loaded before the absence means anything: the
-    // form is only on screen once its kind is known.
+    // form is only on screen once its fields are known.
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    expect(createArtwork.mock.calls[0][1]).not.toHaveProperty("availability");
+  });
+
+  it("sends no availability on a Portfolio that switched the field off", async () => {
+    // The field follows the Catalogue's configuration in both directions: a
+    // Kind whose default is on can still hold nothing.
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { availability: false } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
     await screen.findByLabelText(/^Title/);
     expect(
       screen.queryByRole("combobox", { name: /^Availability/ }),
@@ -520,5 +563,64 @@ describe("the Add page — the Artist Name a new work starts with", () => {
 
     expect(await screen.findByText("Artist name is required")).toBeVisible();
     expect(createArtwork).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The form renders the catalogue's Artwork fields, not Arcula's whole list:
+ * a field the catalogue does not record is absent, and a Kind default the
+ * member overrode follows the member's choice. Title and Artist Name are
+ * always there, and the save never names a field the form did not show.
+ */
+describe("the Add page — the catalogue's Artwork fields", () => {
+  it("hides a Portfolio's default-off acquisition fields and shows the rest", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    renderPage();
+
+    // The kind's defaults arrive once the catalogue has loaded.
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Acquisition Price/)).toBeNull();
+    expect(screen.queryByLabelText(/^Acquisition Date/)).toBeNull();
+    // The two fixed fields are always recorded.
+    expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/^Artist Name/, { selector: "input" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a field the member switched on against the Kind default", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { acquisitionPrice: true } }),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByLabelText(/^Acquisition Price/),
+    ).toBeInTheDocument();
+  });
+
+  it("hides a field the member switched off against the Kind default", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { provenance: false } }),
+    );
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Provenance/)).toBeNull();
+  });
+
+  it("sends no key for a disabled field", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { notes: false } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText(/^Medium/), "Oil on canvas");
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    const [, body] = createArtwork.mock.calls[0];
+    expect(body.medium).toBe("Oil on canvas");
+    expect(body).not.toHaveProperty("notes");
   });
 });

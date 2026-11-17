@@ -119,12 +119,15 @@ const PublicTab: React.FC<PublicTabProps> = ({
               </Box>
               <Switch
                 checked={skinOptions[spec.key] === true}
-                onChange={(e) =>
+                onChange={(e) => {
+                  // Read before updating: the updater may run after dispatch,
+                  // with `currentTarget` already null.
+                  const checked = e.currentTarget.checked;
                   setSkinOptions((current) => ({
                     ...current,
-                    [spec.key]: e.currentTarget.checked,
-                  }))
-                }
+                    [spec.key]: checked,
+                  }));
+                }}
                 aria-label={spec.label}
               />
             </Group>
@@ -151,12 +154,14 @@ const PublicTab: React.FC<PublicTabProps> = ({
               label={spec.label}
               description={spec.description}
               value={String(skinOptions[spec.key] ?? spec.default)}
-              onChange={(e) =>
+              onChange={(e) => {
+                // Same reason as the switch above.
+                const value = e.currentTarget.value;
                 setSkinOptions((current) => ({
                   ...current,
-                  [spec.key]: e.currentTarget.value,
-                }))
-              }
+                  [spec.key]: value,
+                }));
+              }}
               mb="md"
             />
           ),

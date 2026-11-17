@@ -15,12 +15,14 @@ Arcula is a **Bun workspaces monorepo**. One product, a few packages, and two
 environments of one deploy shape:
 
 - **`apps/web`** — the React 19 + Vite SPA (Mantine v9), including the public
-  catalogue pages (the "skins").
+  catalogue pages (the "skins"), the Connection consent screen and the account's
+  agent-access card.
 - **`apps/api`** — the Hono API, run by Bun in dev and by a Node 24 Lambda in
-  prod. It also serves the built SPA.
+  prod. It also serves the built SPA and hosts the MCP endpoint.
 - **`packages/shared`** — the client⇄server contract: types, Zod schemas, the
-  file caps, the photo-ordering helpers.
-- **`packages/db`** — the Drizzle schema and the generated migrations.
+  file caps, the photo-ordering helpers and the structured artwork search.
+- **`packages/db`** — the Drizzle schema and the generated migrations, including
+  the agent-access OAuth tables and the write limiter's counter.
 - **`infra/cdk`** — the CDK stack: one Lambda (API + SPA), an S3 media bucket,
   an HTTP API, and the optional custom domain. One class, instantiated once per
   environment.
@@ -96,8 +98,10 @@ needs a compensating migration written by hand.
 
 Hand edits to a generated migration are deliberately few, and there are exactly
 three: a data backfill, the add-nullable → backfill → set-not-null sequence, and
-a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them and
-`0006_enable_rls` carries the third.
+a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them, and
+`0006_enable_rls` carries the third's first instance while
+`0012_account_write_windows` and `0013_agent_access` repeat it for the tables
+that followed.
 
 **A schema change ships alone.** `scripts/deploy.sh` deploys the Lambda before
 it migrates, so a release carrying both a new table and the code that reads it
@@ -156,9 +160,25 @@ web app and the database owns — is in
 [`docs/architecture.md`](docs/architecture.md). Read it before changing a
 module you have not touched; a named file or symbol is still read directly.
 
-The request path is `browser → API Gateway → Lambda (Hono) → Postgres / S3`. In
-production the SPA is that same Lambda, and media is proxied through the API so
-one authorization layer covers both the row and the bytes (`DESIGN.md` →
+The agent surface is `apps/api/src/mcp/` — `guard.ts` (the verified JWT and the
+consent-row check), `server.ts` (the per-request transport), `dispatcher.ts`
+(the tool seam, with no MCP type in its signature), `tool.ts`, `registry.ts`
+and `tools/` (`catalogues`, `artworks`, `import`). Its user-id-taking cores are
+`catalogueWrite.ts`, `artworkWrite.ts` and `artworkImport.ts`; the reads are
+`catalogueList.ts`, `catalogueCounts.ts` and `artworkRead.ts`; `agentLimiter.ts`
+is the write limiter. The account surface is `routes/connections.ts` with
+`connectionList.ts` and `consentQuery.ts`, and the web side is
+`components/auth/ConsentPage.tsx`, `auth/oauthResume.ts` and
+`components/manage/AgentAccessCard.tsx`. The database adds
+`account_write_windows` (`0012_account_write_windows`) and the eight OAuth/JWKS
+tables (`0013_agent_access`); the shared contract adds the structured query in
+`packages/shared/src/artworkSearch.ts` and
+`packages/shared/src/schemas/connection.ts`.
+
+The request path is `browser → API Gateway → Lambda (Hono) → Postgres / S3`; an
+agent takes the same path to the same Lambda at `/api/mcp`. In production the
+SPA is that same Lambda, and media is proxied through the API so one
+authorization layer covers both the row and the bytes (`DESIGN.md` →
 **Architecture at a glance**, and **Media**).
 
 ## Sharing and protected catalogues
@@ -180,6 +200,30 @@ transfer without moving media, the grant cookie, the throttle's numbers — is i
 are in
 [ADR-0004](docs/adr/0004-collections-are-shared-by-membership.md) and
 [ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md).
+
+## Agent access
+
+Arcula hosts an MCP server at `POST /api/mcp` on the same Lambda and origin as
+the app. A person adds that URL in their client's connector settings, signs in
+and approves a **Connection** once; the account profile lists every Connection
+with when it connected and last acted, and Revoke ends one without touching the
+browser session. Nine tools speak Catalogue, Artwork and Kind: list, read,
+create and update Catalogues; search, read, create and update Artworks; and
+import a batch of works as Drafts by default. Writes are metered per account;
+reads are not.
+
+The as-built detail — the endpoint, the Connection model and its one-install
+limitation, the tool surface, the search contract, the import status rule and
+the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. The
+implementation contract is
+[`docs/specs/agent-access.md`](docs/specs/agent-access.md), and the decision
+with its rejected alternatives is
+[ADR-0014](docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md).
+
+A session token is a cookie in a deployment, never an API bearer: production
+mounts no `bearer()` plugin, and the deploy verifier asserts a deploy refuses
+the token as an `Authorization` bearer. Local development and the suites keep
+the bearer form for their own sign-in helpers.
 
 ## What to test
 
@@ -233,11 +277,13 @@ reviewing a diff.
   runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end
-  pass (health, SPA, sign-up, the `Secure` session cookie, a real 12 MP photo
-  through presign → direct PUT → process → save with the bucket's CORS
-  preflight probed against the deployment, a visitor read, and the reset-mail
-  path).
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 23-step end-to-end
+  pass (health, SPA, the agent surface's protected-resource and
+  authorization-server discovery documents and its `401` challenge, sign-up,
+  the `Secure` session cookie, the session token
+  refused as an API bearer, a real 12 MP photo through presign → direct PUT →
+  process → save with the bucket's CORS preflight probed against the
+  deployment, a visitor read, and the reset-mail path).
   The catalogue cap is covered by the API integration suite instead, since
   reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
   either one by hand. It creates a throwaway `verify-<ts>@example.test` account

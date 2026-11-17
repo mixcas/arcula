@@ -33,7 +33,7 @@ import {
   stagedOriginalPrefix,
 } from "../src/media/keys";
 import { listObjects } from "../src/storage";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 import {
   discardEntry,
   makeJpeg,
@@ -104,7 +104,7 @@ const listPath = (id = cid) => `${cataloguePath(id)}/artworks`;
 async function listAs(cookies: string, id = cid): Promise<ArtworkRead[]> {
   const res = await req("GET", listPath(id), { cookies });
   expect(res.status).toBe(200);
-  return await json<ArtworkRead[]>(res);
+  return await listedArtworks(res);
 }
 
 /** The object key a proxy URL names. */

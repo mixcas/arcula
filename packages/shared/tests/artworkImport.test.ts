@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { resolveArtworkFields } from "../src/artworkFields";
 import {
   buildImportRows,
+  enabledImportFields,
   guessColumnMapping,
   isMappingComplete,
   matchHeader,
   parseAcquisitionDate,
+  skippedImportColumns,
   validateImportRow,
   type ColumnMapping,
   type ImportRowValues,
 } from "../src/schemas/artworkImport";
+
+// A Collection records every togglable field, so its resolved set is the whole
+// import surface. The disabled cases below use a Portfolio, whose acquisition
+// pair starts off.
+const everyField = resolveArtworkFields("collection", null).enabled;
+const portfolio = resolveArtworkFields("portfolio", null).enabled;
 
 const row = (overrides: Partial<ImportRowValues>): ImportRowValues => ({
   title: "Nocturne",
@@ -59,12 +68,15 @@ describe("matchHeader", () => {
 
 describe("guessColumnMapping", () => {
   it("maps unambiguous headers and skips noise", () => {
-    const mapping = guessColumnMapping([
-      "title",
-      "buyer-name", // unmapped, ignored
-      "artist",
-      "medium",
-    ]);
+    const mapping = guessColumnMapping(
+      [
+        "title",
+        "buyer-name", // unmapped, ignored
+        "artist",
+        "medium",
+      ],
+      everyField,
+    );
     expect(mapping).toEqual({
       0: "title",
       2: "artistName",
@@ -73,15 +85,71 @@ describe("guessColumnMapping", () => {
   });
 
   it("gives the first column the field when two columns look alike", () => {
-    const mapping = guessColumnMapping(["artist", "artist name", "title"]);
+    const mapping = guessColumnMapping(
+      ["artist", "artist name", "title"],
+      everyField,
+    );
     const fields = Object.values(mapping);
     expect(fields.filter((f) => f === "artistName")).toHaveLength(1);
   });
 
   it("never assigns the same field twice", () => {
-    const mapping = guessColumnMapping(["date", "year", "created"]);
+    const mapping = guessColumnMapping(["date", "year", "created"], everyField);
     const fields = Object.values(mapping);
     expect(fields.filter((f) => f === "dateOfCreation")).toHaveLength(1);
+  });
+
+  it("does not map a column whose field the catalogue does not record", () => {
+    // The Portfolio's acquisition pair is off, so "price paid" has no target
+    // to land in — while every other column still maps.
+    const mapping = guessColumnMapping(
+      ["title", "artist", "price paid", "medium"],
+      portfolio,
+    );
+    expect(mapping).toEqual({
+      0: "title",
+      1: "artistName",
+      3: "medium",
+    });
+  });
+});
+
+describe("enabledImportFields", () => {
+  it("offers every field's own key and drops the disabled ones", () => {
+    const offered = enabledImportFields(portfolio).map((field) => field.key);
+    expect(offered).toContain("serie");
+    expect(offered).not.toContain("acquisitionPrice");
+    expect(offered).not.toContain("acquisitionDate");
+  });
+
+  it("keeps Title and Artist Name, which are never switches", () => {
+    // Neither name exists in the resolved set: they are fixed fields, not
+    // togglable ones, and an import that could not target them could not run.
+    const offered = enabledImportFields(portfolio).map((field) => field.key);
+    expect(offered).toContain("title");
+    expect(offered).toContain("artistName");
+  });
+});
+
+describe("skippedImportColumns", () => {
+  it("names a column whose natural field the catalogue does not record", () => {
+    expect(
+      skippedImportColumns(
+        ["Title", "Artist Name", "Acquisition price", "Medium"],
+        portfolio,
+      ),
+    ).toEqual([
+      { column: 2, header: "Acquisition price", field: "acquisitionPrice" },
+    ]);
+  });
+
+  it("names nothing for a column the catalogue records or cannot place", () => {
+    expect(
+      skippedImportColumns(
+        ["Title", "Artist Name", "Medium", "buyer-name"],
+        portfolio,
+      ),
+    ).toEqual([]);
   });
 });
 

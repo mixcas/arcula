@@ -66,7 +66,7 @@ interface ArtworksListProps {
   onRetry?: () => void;
   /** Leave the search: remove `q` and show the whole catalogue. */
   onClearSearch?: () => void;
-  /** Whether this catalogue's kind carries a work's market state. */
+  /** Whether this catalogue records a work's market state. */
   showAvailability?: boolean;
 }
 

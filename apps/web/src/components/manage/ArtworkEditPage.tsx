@@ -13,7 +13,6 @@ import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
-import { availabilityFor, catalogueSurface } from "@/catalogueSurface";
 import { ApiRequestError } from "@/services/api";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
 import FormActionsBar, {
@@ -24,8 +23,9 @@ import {
   EMPTY_ARTWORK_FORM,
   artworkSchema,
   fromArtwork,
+  resolveArtworkFields,
   toArtworkPayload,
-  type ArtworkAvailability,
+  type ArtworkFieldStates,
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
@@ -87,14 +87,17 @@ const ArtworkEditPage: React.FC = () => {
   // but a save failure must leave the user's input on screen.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The catalogue's kind decides whether this form surfaces a market state and
-  // which states it offers. Loaded with the work, so the control and the
-  // initial value are settled before the form mounts. Its name is kept too:
-  // the action bar's back control names the destination it returns to, and the
-  // page early-returns on a load failure, so it is set whenever the form shows.
-  const [availabilityValues, setAvailabilityValues] = useState<
-    readonly ArtworkAvailability[]
-  >([]);
+  // The catalogue decides whether this form surfaces a market state and which
+  // of the record's fields it shows. Loaded with the work, so the controls and
+  // the initial values are settled before the form mounts. Its name is kept
+  // too: the action bar's back control names the destination it returns to,
+  // and the page early-returns on a load failure, so it is set whenever the
+  // form shows.
+  // The record fields this catalogue records, resolved from the same read.
+  // Null until the load lands, which is only before the form renders.
+  const [enabledFields, setEnabledFields] = useState<ArtworkFieldStates | null>(
+    null,
+  );
   const [catalogueName, setCatalogueName] = useState<string | null>(null);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
@@ -131,9 +134,9 @@ const ArtworkEditPage: React.FC = () => {
 
     const fetchArtwork = async () => {
       try {
-        // The work and its catalogue together: the catalogue's kind decides
-        // whether this form surfaces a market state, and it is what the
-        // control's initial value is defaulted against.
+        // The work and its catalogue together: the catalogue decides whether
+        // this form surfaces a market state, and it is what the control's
+        // initial value is defaulted against.
         const [artwork, catalogue] = await Promise.all([
           artworkService.getArtwork(catalogueId, artworkId),
           catalogueService.getCatalogue(catalogueId),
@@ -147,20 +150,19 @@ const ArtworkEditPage: React.FC = () => {
           return;
         }
 
-        const surface = catalogueSurface(catalogue.kind);
-        setAvailabilityValues(surface.availabilityValues);
+        const enabled = resolveArtworkFields(
+          catalogue.kind,
+          catalogue.artworkFields,
+        ).enabled;
+        setEnabledFields(enabled);
         setCatalogueName(catalogue.name);
 
         const values = fromArtwork(artwork);
-        // A surfaced work with no stored state starts Available; a stored
-        // state is never overwritten, and a kind with no market state is
-        // handed nothing (its save omits the key entirely).
-        const availability = availabilityFor(
-          catalogue.kind,
-          values.availability,
-        );
-        if (availability !== null) {
-          values.availability = availability;
+        // An enabled field with no stored state starts Available; a stored
+        // state is never overwritten, and a disabled field keeps whatever the
+        // row holds — its save omits the key entirely.
+        if (enabled.availability) {
+          values.availability = values.availability ?? "available";
         }
         setLoadedValues(values);
         setLoadedTitle(values.title);
@@ -255,6 +257,12 @@ const ArtworkEditPage: React.FC = () => {
     return <Alert color="red">{loadError}</Alert>;
   }
 
+  // The load resolves the shape with the work, so this is only the compiler's
+  // witness that the form below has one.
+  if (!enabledFields) {
+    return <Loader />;
+  }
+
   return (
     <>
       {isDeleted ? (
@@ -300,11 +308,7 @@ const ArtworkEditPage: React.FC = () => {
             const photosCommit = photos.commit();
             const documentsCommit = documents.commit();
             await artworkService.updateArtwork(catalogueId, artworkId, {
-              ...toArtworkUpdate(
-                loadedValues,
-                payload,
-                availabilityValues.length > 0,
-              ),
+              ...toArtworkUpdate(loadedValues, payload, enabledFields),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
             });
@@ -336,7 +340,7 @@ const ArtworkEditPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
-          availabilityValues={availabilityValues}
+          enabledFields={enabledFields}
           uploadsDisabled={isDeleted}
         />
 

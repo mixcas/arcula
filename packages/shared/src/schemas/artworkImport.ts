@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  ARTWORK_FIXED_FIELDS,
+  type ArtworkFieldStates,
+  type ArtworkFixedField,
+} from "../artworkFields";
 import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
@@ -24,9 +29,10 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  * validates each row against this same `artworkSchema`, so an imported work
  * lands byte-identical to one created by hand.
  *
- * `status` is not a mappable column either, and is pinned to `published`: an
- * import is the owner adding works to a catalogue, not a way to declare one a
- * draft. A work can be turned into a draft afterwards, by id.
+ * `status` is not a mappable column: it is the batch's, not a row's, and the
+ * review step's default is `IMPORTED_WORK_STATUS` (`published`). A caller that
+ * names a status — the agent surface's import always sends `draft` — overrides
+ * any status a row carries; a member's CSV import sends none and is unchanged.
  */
 
 // ---------------------------------------------------------------------------
@@ -34,9 +40,11 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
 // ---------------------------------------------------------------------------
 
 /**
- * The status every imported work lands with. An import adds works to a
- * catalogue; it does not declare any of them drafts. One constant, because
- * the review's per-row check and the route's write must agree.
+ * The status an import lands its works with when the caller names none:
+ * `published`. It is the DEFAULT, not the only answer — a payload may name
+ * `draft` and then the payload wins, and the agent surface's `import_artworks`
+ * always sends `draft`. One constant, because the review's per-row check and
+ * the route's write must agree.
  */
 export const IMPORTED_WORK_STATUS: ArtworkStatus = "published";
 
@@ -111,7 +119,7 @@ export const ARTWORK_IMPORT_FIELDS: readonly ImportFieldMetadata[] = [
   { key: "condition", label: "Condition", required: false, kind: "text" },
   {
     key: "currentValue",
-    label: "Current Value",
+    label: "Current price",
     required: false,
     kind: "text",
   },
@@ -135,6 +143,39 @@ const importableKeysCovered = IMPORTABLE_KEYS.every(
 );
 void importableKeysValid;
 void importableKeysCovered;
+
+/**
+ * The fixed fields are never switches, so an import may always target them.
+ * Derived from the registry's `ARTWORK_FIXED_FIELDS` rather than a second list,
+ * so the two vocabularies cannot part; the predicate stays sound because a key
+ * that matches one of the fixed names is that field.
+ */
+const isFixedImportField = (key: ImportFieldKey): key is ArtworkFixedField =>
+  ARTWORK_FIXED_FIELDS.some((fixed) => fixed === key);
+
+/**
+ * The mapping targets a catalogue records, in the form's order: Title and
+ * Artist Name always, every other field only when its key is enabled. Pure by
+ * design — the mapping step renders exactly this list, so a disabled field has
+ * no option to pick.
+ */
+export const enabledImportFields = (
+  enabled: ArtworkFieldStates,
+): ImportFieldMetadata[] =>
+  ARTWORK_IMPORT_FIELDS.filter(
+    (field) => isFixedImportField(field.key) || enabled[field.key],
+  );
+
+/**
+ * The mapping-target keys a catalogue records, in the same form order the
+ * mapping step offers: Title and Artist Name always, every other field only
+ * when its key is enabled. Auto-mapping and the skipped-column summary read
+ * this one set, so the two cannot disagree about what can land.
+ */
+const enabledImportFieldKeys = (
+  enabled: ArtworkFieldStates,
+): ReadonlySet<ImportFieldKey> =>
+  new Set(enabledImportFields(enabled).map(({ key }) => key));
 
 /** The raw values of one imported row, all strings — "" means "not set". */
 export interface ImportRowValues {
@@ -265,19 +306,54 @@ export const matchHeader = (header: string): ImportFieldKey | null => {
 
 /**
  * Auto-mapping: each field goes to the FIRST header that matches it. Columns
- * that match nothing stay unmapped rather than forcing a questionable guess.
+ * that match nothing — and columns whose field the catalogue does not record —
+ * stay unmapped rather than forcing a guess the import could not honour.
  */
-export const guessColumnMapping = (headers: string[]): ColumnMapping => {
+export const guessColumnMapping = (
+  headers: string[],
+  enabled: ArtworkFieldStates,
+): ColumnMapping => {
+  const allowed = enabledImportFieldKeys(enabled);
   const used = new Set<ImportFieldKey>();
   const mapping: ColumnMapping = {};
   headers.forEach((header, index) => {
     const field = matchHeader(header);
-    if (field && !used.has(field)) {
+    if (field && allowed.has(field) && !used.has(field)) {
       mapping[index] = field;
       used.add(field);
     }
   });
   return mapping;
+};
+
+/** A column the import leaves alone because the catalogue does not record its
+ *  natural field. `header` is the CSV's own text; `field` is what it would
+ *  have imported as. */
+export interface SkippedImportColumn {
+  column: number;
+  header: string;
+  field: ImportFieldKey;
+}
+
+/**
+ * The CSV columns a catalogue's field set leaves unmapped, named so the run
+ * summary can say which parts of the file were not imported. Computed from the
+ * headers and the enabled set alone: a skipped column is not a row failure, so
+ * nothing here looks at the data.
+ */
+export const skippedImportColumns = (
+  headers: string[],
+  enabled: ArtworkFieldStates,
+): SkippedImportColumn[] => {
+  const allowed = enabledImportFieldKeys(enabled);
+  const skipped: SkippedImportColumn[] = [];
+  headers.forEach((header, column) => {
+    const field = matchHeader(header);
+    if (field && !allowed.has(field)) {
+      skipped.push({ column, header: header.trim(), field });
+    }
+  });
+  return skipped;
 };
 
 export const getMappedFields = (mapping: ColumnMapping): ImportFieldKey[] =>

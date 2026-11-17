@@ -36,6 +36,7 @@ import {
 import {
   UPDATABLE_TEXT_FIELDS,
   artworkAvailabilitySchema,
+  artworkFieldDeviationsSchema,
   catalogueKindSchema,
   type ArtworkAvailability,
   type ArtworkRead,
@@ -439,6 +440,16 @@ export function serializeCatalogue(
       throw new ApiError("internal", "Malformed catalogue skin options");
     }
     out.skinOptions = row.skinOptions;
+  }
+  // The deviations ride every audience — a visitor building the public PDF
+  // resolves the same enabled set from them. They reveal only which fields a
+  // catalogue records, and an absent column is an absent key (pure defaults).
+  if (row.artworkFields !== null) {
+    const parsed = artworkFieldDeviationsSchema.safeParse(row.artworkFields);
+    if (!parsed.success) {
+      throw new ApiError("internal", "Malformed catalogue artwork fields");
+    }
+    out.artworkFields = parsed.data;
   }
   return out;
 }

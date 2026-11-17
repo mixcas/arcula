@@ -16,7 +16,7 @@ import {
 } from "@arcula/db";
 import type { ArtworkRead } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 
 let owner: { cookies: string; userId: string };
 let collaborator: { cookies: string; userId: string };
@@ -123,8 +123,10 @@ describe("the artwork list of a shared catalogue", () => {
     for (const cookies of [owner.cookies, collaborator.cookies]) {
       const res = await req("GET", listPath(), { cookies });
       expect(res.status).toBe(200);
-      expect((await json<ArtworkRead[]>(res)).map((work) => work.id)).toEqual(
-        expected,
+      // The set is the claim; the list's default order is the search
+      // contract's and is asserted in the search suite.
+      expect((await listedArtworks(res)).map((work) => work.id).sort()).toEqual(
+        [...expected].sort(),
       );
     }
   });

@@ -2,13 +2,20 @@
  * The Catalogue PDF's preflight facts.
  *
  * Everything here is a pure decision made before rendering: how a photo fits
- * the 300 dpi print box, the complete set of strings the document draws, the
- * large-export warning, and the download filename. Which characters the
- * fallback font must cover is the shared rule's (`pdfFallbackCharacters`,
- * `pdfFallbackChunks`), not this module's. See `docs/specs/pdf-export.md`.
+ * the 300 dpi print box, which metadata the Catalogue's settings leave in the
+ * document, the complete set of strings the document draws, the large-export
+ * warning, and the download filename. Which characters the fallback font must
+ * cover is the shared rule's (`pdfFallbackCharacters`, `pdfFallbackChunks`),
+ * not this module's. See `docs/specs/pdf-export.md`.
  */
 
-import { urlizeName, type Artwork } from "@arcula/shared";
+import {
+  resolveArtworkFields,
+  urlizeName,
+  type Artwork,
+  type ArtworkFieldStates,
+  type Catalogue,
+} from "@arcula/shared";
 
 import {
   buildCataloguePdfPlan,
@@ -112,23 +119,67 @@ export const placeInPhotoBox = (printed: PointSize): PhotoPlacement => {
 export const IMAGE_UNAVAILABLE = "Image unavailable";
 
 /** The metadata fields the document prints, in the design's order. */
-export const ARTWORK_LEFT_FIELDS = ["artistName", "serie", "medium"] as const;
+const ARTWORK_LEFT_FIELDS = ["artistName", "serie", "medium"] as const;
 
-export const ARTWORK_RIGHT_FIELDS = [
+const ARTWORK_RIGHT_FIELDS = [
   "dimensions",
   "editions",
   "dateOfCreation",
   "placeOfOrigin",
 ] as const;
 
-const METADATA_FIELDS = [
-  ...ARTWORK_LEFT_FIELDS,
-  ...ARTWORK_RIGHT_FIELDS,
-] as const satisfies ReadonlyArray<keyof Artwork>;
+export type ArtworkPdfField =
+  (typeof ARTWORK_LEFT_FIELDS)[number] | (typeof ARTWORK_RIGHT_FIELDS)[number];
 
-const valuesFor = (artwork: Artwork): string[] => {
+/** The two metadata columns a record prints on a photo page. */
+export interface PrintedArtworkFields {
+  readonly left: readonly ArtworkPdfField[];
+  readonly right: readonly ArtworkPdfField[];
+}
+
+/**
+ * Artist Name is never a Catalogue choice either: a work is named by it in
+ * lists, addresses and this document. It sits in the left metadata column, so
+ * this guard covers that column's filter only. Title is also always printed,
+ * but it is drawn separately above the columns and never reaches this filter.
+ */
+const alwaysPrintedMetadata = (field: ArtworkPdfField): field is "artistName" =>
+  field === "artistName";
+
+const prints = (field: ArtworkPdfField, enabled: ArtworkFieldStates): boolean =>
+  alwaysPrintedMetadata(field) || enabled[field];
+
+/**
+ * The metadata columns the document prints, given the fields the Catalogue
+ * records. The design's order is preserved and a disabled field's slot simply
+ * disappears; the photo pages and the layout do not change.
+ */
+export function printedArtworkFields(
+  enabled: ArtworkFieldStates,
+): PrintedArtworkFields {
+  return {
+    left: ARTWORK_LEFT_FIELDS.filter((field) => prints(field, enabled)),
+    right: ARTWORK_RIGHT_FIELDS.filter((field) => prints(field, enabled)),
+  };
+}
+
+/**
+ * The same answer, resolved from a Catalogue: the public read carries its
+ * deviations, so a visitor building this PDF resolves exactly what a member
+ * does. Nothing member-only is read.
+ */
+export function cataloguePdfFields(catalogue: Catalogue): PrintedArtworkFields {
+  return printedArtworkFields(
+    resolveArtworkFields(catalogue.kind, catalogue.artworkFields).enabled,
+  );
+}
+
+const valuesFor = (
+  artwork: Artwork,
+  fields: PrintedArtworkFields,
+): string[] => {
   const values = [artwork.title];
-  for (const field of METADATA_FIELDS) {
+  for (const field of [...fields.left, ...fields.right]) {
     const value = artwork[field]?.trim();
     if (value) {
       values.push(value);
@@ -147,12 +198,15 @@ const artworksOnPage = (page: CataloguePdfPage): Artwork[] => {
  * Every distinct string the document draws, in document order.
  *
  * The plan is the source, so only exportable works contribute and the order is
- * the reading order rather than the stored array's. Photo filenames are not
- * drawn and are deliberately absent.
+ * the reading order rather than the stored array's. Only the fields the
+ * Catalogue records join the set — the same set the document prints, which is
+ * what keeps the fallback font covering every character it draws. Photo
+ * filenames are not drawn and are deliberately absent.
  */
 export function cataloguePdfTexts(
   catalogueName: string,
   artworks: Artwork[],
+  fields: PrintedArtworkFields,
 ): string[] {
   const texts = new Set<string>();
 
@@ -162,7 +216,7 @@ export function cataloguePdfTexts(
 
   for (const page of buildCataloguePdfPlan(artworks)) {
     for (const artwork of artworksOnPage(page)) {
-      for (const value of valuesFor(artwork)) {
+      for (const value of valuesFor(artwork, fields)) {
         if (value !== "") {
           texts.add(value);
         }

@@ -8,6 +8,10 @@
 // empty payload — the same fact the disabled Save reads.
 
 import { describe, expect, it } from "vitest";
+import type {
+  ArtworkFieldStates,
+  CatalogueUpdatePayload,
+} from "@arcula/shared";
 import {
   resolveGeneralSave,
   resolvePublicSave,
@@ -18,6 +22,48 @@ import {
   type PublicLoadedValues,
 } from "@/components/manage/catalogueSettingsSave";
 
+/** Every switch on — the plainest buffer there is, and a Portfolio's
+ *  Availability default. */
+const switches = (
+  overrides: Partial<ArtworkFieldStates> = {},
+): ArtworkFieldStates => ({
+  serie: true,
+  dateOfCreation: true,
+  medium: true,
+  dimensions: true,
+  editions: true,
+  acquisitionDate: true,
+  acquisitionPrice: true,
+  placeOfOrigin: true,
+  provenance: true,
+  notes: true,
+  condition: true,
+  currentValue: true,
+  availability: true,
+  ...overrides,
+});
+
+/** A Collection's exact defaults: everything on, Availability off. */
+const collectionSwitches = (
+  overrides: Partial<ArtworkFieldStates> = {},
+): ArtworkFieldStates => switches({ availability: false, ...overrides });
+
+/** A Portfolio's defaults: the acquisition pair is off. */
+const portfolioSwitches = (
+  overrides: Partial<ArtworkFieldStates> = {},
+): ArtworkFieldStates =>
+  switches({
+    acquisitionDate: false,
+    acquisitionPrice: false,
+    ...overrides,
+  });
+
+/** The payload decision, with the defaults/customised state the card reads. */
+const decided = (
+  payload: CatalogueUpdatePayload,
+  artworkFieldsCustomised = false,
+) => ({ kind: "payload", payload, artworkFieldsCustomised });
+
 const generalLoaded = (
   overrides: Partial<GeneralLoadedValues> = {},
 ): GeneralLoadedValues => ({
@@ -25,6 +71,8 @@ const generalLoaded = (
   description: "About the wall",
   isPublic: true,
   isPasswordProtected: false,
+  kind: "collection",
+  artworkFields: null,
   ...overrides,
 });
 
@@ -38,6 +86,7 @@ const generalEdited = (
   confirm: "",
   editingPassword: false,
   removingPassword: false,
+  artworkFields: collectionSwitches(),
   ...overrides,
 });
 
@@ -60,7 +109,7 @@ const publicEdited = (
 describe("resolveGeneralSave", () => {
   it("answers an empty payload for an untouched tab", () => {
     const decision = resolveGeneralSave(generalLoaded(), generalEdited());
-    expect(decision).toEqual({ kind: "payload", payload: {} });
+    expect(decision).toEqual(decided({}));
   });
 
   it("carries only the name when the name is the change", () => {
@@ -68,7 +117,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ name: "Renamed" }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: { name: "Renamed" } });
+    expect(decision).toEqual(decided({ name: "Renamed" }));
   });
 
   it("carries no name when the edit trims back to the loaded value", () => {
@@ -76,7 +125,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ name: "  Flores Solares  " }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: {} });
+    expect(decision).toEqual(decided({}));
   });
 
   it("carries only the visibility when the visibility is the change", () => {
@@ -84,7 +133,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ isPublic: false }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: { isPublic: false } });
+    expect(decision).toEqual(decided({ isPublic: false }));
   });
 
   it("carries the description when it differs", () => {
@@ -92,10 +141,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ description: "New words" }),
     );
-    expect(decision).toEqual({
-      kind: "payload",
-      payload: { description: "New words" },
-    });
+    expect(decision).toEqual(decided({ description: "New words" }));
   });
 
   it("sends an emptied description as an explicit clear, never an empty string", () => {
@@ -103,10 +149,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ description: "" }),
     );
-    expect(decision).toEqual({
-      kind: "payload",
-      payload: { description: null },
-    });
+    expect(decision).toEqual(decided({ description: null }));
   });
 
   it("sends a blanked-to-whitespace description as a clear too", () => {
@@ -114,10 +157,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded(),
       generalEdited({ description: "   " }),
     );
-    expect(decision).toEqual({
-      kind: "payload",
-      payload: { description: null },
-    });
+    expect(decision).toEqual(decided({ description: null }));
   });
 
   it("sends no password key when a Protected catalogue is untouched", () => {
@@ -125,7 +165,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded({ isPasswordProtected: true }),
       generalEdited({ name: "Renamed" }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: { name: "Renamed" } });
+    expect(decision).toEqual(decided({ name: "Renamed" }));
   });
 
   it("carries the password without the confirmation", () => {
@@ -145,7 +185,7 @@ describe("resolveGeneralSave", () => {
       generalLoaded({ isPasswordProtected: true }),
       generalEdited({ removingPassword: true }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: { password: null } });
+    expect(decision).toEqual(decided({ password: null }));
   });
 
   it("answers an error, not a payload, when the password decision refuses", () => {
@@ -174,7 +214,124 @@ describe("resolveGeneralSave", () => {
         confirm: "long-enough",
       }),
     );
-    expect(decision).toEqual({ kind: "payload", payload: { isPublic: false } });
+    expect(decision).toEqual(decided({ isPublic: false }));
+  });
+});
+
+describe("resolveGeneralSave — the Artwork fields switches", () => {
+  it("sends no artworkFields key when the switches follow the defaults", () => {
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "collection" }),
+      generalEdited(),
+    );
+
+    expect(decision).toEqual(decided({}));
+  });
+
+  it("carries a field switched off, as the one deviation", () => {
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "collection" }),
+      generalEdited({
+        artworkFields: collectionSwitches({ provenance: false }),
+      }),
+    );
+
+    expect(decision).toEqual(
+      decided({ artworkFields: { provenance: false } }, true),
+    );
+  });
+
+  it("carries Availability switched on for a Collection", () => {
+    // The switch the flattening adds: a Kind whose default is off can record a
+    // market state because the member said so, and the fold sends that one
+    // choice rather than the whole arrangement.
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "collection" }),
+      generalEdited({
+        artworkFields: collectionSwitches({ availability: true }),
+      }),
+    );
+
+    expect(decision).toEqual(
+      decided({ artworkFields: { availability: true } }, true),
+    );
+  });
+
+  it("carries an explicit on against a default off", () => {
+    // The direction a list of disabled fields could not express: a Portfolio
+    // records what it paid although its Kind starts the field off.
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "portfolio" }),
+      generalEdited({
+        artworkFields: portfolioSwitches({ acquisitionPrice: true }),
+      }),
+    );
+
+    expect(decision).toEqual(
+      decided({ artworkFields: { acquisitionPrice: true } }, true),
+    );
+  });
+
+  it("drops an entry that only restates the Kind's default", () => {
+    // Acquisition date is a Portfolio default off; leaving it off is not a
+    // choice, and the fold must not write it as one.
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "portfolio" }),
+      generalEdited({ artworkFields: portfolioSwitches() }),
+    );
+
+    expect(decision).toEqual(decided({}));
+  });
+
+  it("sends an empty map for Reset and reports the defaults again", () => {
+    const decision = resolveGeneralSave(
+      generalLoaded({
+        kind: "inventory",
+        artworkFields: { medium: false, acquisitionPrice: true },
+      }),
+      generalEdited({ artworkFields: portfolioSwitches() }),
+    );
+
+    // Reset returns the buffer to the Kind's defaults; `{}` is the wire's
+    // "back to defaults", which the API normalises to null.
+    expect(decision).toEqual(decided({ artworkFields: {} }, false));
+  });
+
+  it("sends nothing when the switches match the stored deviations", () => {
+    const decision = resolveGeneralSave(
+      generalLoaded({ kind: "portfolio", artworkFields: { medium: false } }),
+      generalEdited({
+        artworkFields: portfolioSwitches({ medium: false }),
+      }),
+    );
+
+    expect(decision).toEqual(decided({}, true));
+  });
+
+  it("resolves the same buffer against the Kind it loaded", () => {
+    // The same all-on buffer is customised on both Kinds, differently: a
+    // Portfolio's acquisition pair starts off, a Collection's Availability
+    // starts off.
+    const portfolio = resolveGeneralSave(
+      generalLoaded({ kind: "portfolio" }),
+      generalEdited({ artworkFields: switches() }),
+    );
+    expect(portfolio).toEqual(
+      decided(
+        {
+          artworkFields: { acquisitionDate: true, acquisitionPrice: true },
+        },
+        true,
+      ),
+    );
+
+    const collection = resolveGeneralSave(
+      generalLoaded({ kind: "collection" }),
+      generalEdited({ artworkFields: switches() }),
+    );
+    expect(collection).toEqual(
+      decided({ artworkFields: { availability: true } }, true),
+    );
   });
 });
 
