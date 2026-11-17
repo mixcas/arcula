@@ -235,6 +235,21 @@ function acquisitionDateText(value: string): string {
 }
 
 /**
+ * One text field's normalized search text, with the acquisition date carrying
+ * both of its forms. A field with no value contributes the empty string, which
+ * no non-empty search term or filter value occurs in.
+ */
+function artworkFieldText(
+  field: ArtworkSearchField,
+  value: string | null | undefined,
+): string {
+  if (typeof value !== "string" || value.trim() === "") return "";
+  return normalizeSearchText(
+    field === "acquisitionDate" ? acquisitionDateText(value) : value,
+  );
+}
+
+/**
  * One normalized string holding every searchable value of the work, joined by
  * spaces. A field with no value contributes nothing, and the acquisition date
  * contributes both of its forms.
@@ -242,13 +257,8 @@ function acquisitionDateText(value: string): string {
 function searchHaystack(artwork: ArtworkSearchText): string {
   const parts: string[] = [];
   for (const field of ARTWORK_SEARCH_FIELDS) {
-    const value = artwork[field];
-    if (typeof value !== "string" || value.trim() === "") continue;
-    parts.push(
-      normalizeSearchText(
-        field === "acquisitionDate" ? acquisitionDateText(value) : value,
-      ),
-    );
+    const text = artworkFieldText(field, artwork[field]);
+    if (text !== "") parts.push(text);
   }
   return parts.join(" ");
 }
@@ -322,6 +332,12 @@ export type ArtworkSearchQueryParse =
 const isArtworkFilterField = (value: string): value is ArtworkFilterField =>
   (ARTWORK_FILTER_FIELDS as readonly string[]).includes(value);
 
+/** Whether a filter field is one of the two enumerated ones. */
+const isArtworkSearchEnumField = (
+  field: ArtworkFilterField,
+): field is ArtworkSearchEnumField =>
+  field === "status" || field === "availability";
+
 const isArtworkListSort = (value: string): value is ArtworkListSort =>
   (ARTWORK_LIST_SORTS as readonly string[]).includes(value);
 
@@ -384,7 +400,7 @@ export function parseArtworkSearchQuery(
   for (const field of ARTWORK_FILTER_FIELDS) {
     const raw = params[field];
     if (raw === undefined) continue;
-    const isEnum = field === "status" || field === "availability";
+    const isEnum = isArtworkSearchEnumField(field);
     const values = isEnum
       ? [...raw]
       : raw.map((value) => value.trim()).filter((value) => value.length > 0);
@@ -470,22 +486,6 @@ export function parseArtworkSearchQuery(
 }
 
 /**
- * One text field's normalized text for a filter: the stored value, with the
- * acquisition date carrying both of its forms, exactly as `q` sees it. A
- * field with no value contributes the empty string, which no non-empty filter
- * value occurs in.
- */
-function filterFieldText(
-  field: ArtworkSearchField,
-  value: string | null | undefined,
-): string {
-  if (typeof value !== "string" || value.trim() === "") return "";
-  return normalizeSearchText(
-    field === "acquisitionDate" ? acquisitionDateText(value) : value,
-  );
-}
-
-/**
  * Does this work match the structured filters?
  *
  * Values within one field are alternatives — either artist — and different
@@ -506,7 +506,7 @@ export function matchesArtworkFilters(
       .map((value) => normalizeSearchText(value.trim()))
       .filter((value) => value.length > 0);
     if (wanted.length === 0) continue;
-    const text = filterFieldText(field, artwork[field]);
+    const text = artworkFieldText(field, artwork[field]);
     if (!wanted.some((value) => text.includes(value))) return false;
   }
   for (const field of Object.keys(
@@ -543,7 +543,7 @@ function facetValueOf(
   field: ArtworkFilterField,
   artwork: ArtworkFilterable,
 ): string | null {
-  if (field === "status" || field === "availability") {
+  if (isArtworkSearchEnumField(field)) {
     return artwork[field] ?? null;
   }
   const value = artwork[field];
