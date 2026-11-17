@@ -23,7 +23,7 @@ import {
   stagedVariantPrefix,
 } from "../src/media/keys";
 import { listObjects } from "../src/storage";
-import { freshUser, json, req, uuid } from "./helpers/api";
+import { freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 import {
   makeCatalogue,
   makeJpeg,
@@ -199,6 +199,7 @@ async function insertRow(
     status?: "draft" | "published";
     deleted?: boolean;
     createdAt?: Date;
+    updatedAt?: Date;
   } = {},
 ): Promise<string> {
   const id = opts.id ?? uuid();
@@ -212,7 +213,7 @@ async function insertRow(
     status: opts.status ?? "published",
     deletedAt: opts.deleted ? now : null,
     createdAt: opts.createdAt ?? now,
-    updatedAt: now,
+    updatedAt: opts.updatedAt ?? now,
   });
   return id;
 }
@@ -843,15 +844,13 @@ describe("GET reads", () => {
     const draft = await insertRow(cid, { status: "draft" });
     const del = await insertRow(cid, { deleted: true });
 
-    const asOwner = await json<ArtworkRead[]>(
-      await listArtworks(owner.cookies),
-    );
+    const asOwner = await listedArtworks(await listArtworks(owner.cookies));
     const ownerIds = asOwner.map((a) => a.id);
     expect(ownerIds).toContain(pub);
     expect(ownerIds).toContain(draft);
     expect(ownerIds).not.toContain(del);
 
-    const asVisitor = await json<ArtworkRead[]>(await listArtworks(undefined));
+    const asVisitor = await listedArtworks(await listArtworks(undefined));
     const visitorIds = asVisitor.map((a) => a.id);
     expect(visitorIds).toContain(pub);
     expect(visitorIds).not.toContain(draft);
@@ -887,7 +886,7 @@ describe("GET reads", () => {
       expect(created.status).toBe(201);
     }
 
-    const list = await json<ArtworkRead[]>(await listArtworks(owner.cookies));
+    const list = await listedArtworks(await listArtworks(owner.cookies));
     const rows = new Map(list.map((row) => [row.id, row]));
 
     for (const [aid, photo, doc] of [
@@ -915,36 +914,36 @@ describe("GET reads", () => {
     }
   });
 
-  it("answers a list in creation-then-id order, the same on a repeated read", async () => {
+  it("answers a list newest-updated first and then by id, the same on a repeated read", async () => {
     const orderedCid = await makeCatalogue(owner.userId, { isPublic: true });
     const shared = new Date("2026-01-02T03:04:05.000Z");
     const late = await insertRow(orderedCid, {
-      createdAt: new Date("2026-01-03T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-03T00:00:00.000Z"),
     });
     // One timestamp between them: only the id can separate these two, and the
     // row that sorts first is inserted last, so a read that leans on insertion
     // order answers them the wrong way round.
     const tieLater = await insertRow(orderedCid, {
       id: `zzz-tie-${RUN}`,
-      createdAt: shared,
+      updatedAt: shared,
     });
     const tieEarlier = await insertRow(orderedCid, {
       id: `aaa-tie-${RUN}`,
-      createdAt: shared,
+      updatedAt: shared,
     });
     const early = await insertRow(orderedCid, {
-      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     });
 
     const path = `/api/v1/catalogues/${orderedCid}/artworks`;
-    const first = (await json<ArtworkRead[]>(await req("GET", path))).map(
+    const first = (await listedArtworks(await req("GET", path))).map(
       (a) => a.id,
     );
-    const again = (await json<ArtworkRead[]>(await req("GET", path))).map(
+    const again = (await listedArtworks(await req("GET", path))).map(
       (a) => a.id,
     );
 
-    expect(first).toEqual([early, tieEarlier, tieLater, late]);
+    expect(first).toEqual([late, tieEarlier, tieLater, early]);
     expect(again).toEqual(first);
   });
 
@@ -966,9 +965,7 @@ describe("GET reads", () => {
     const catalogue = await loadCatalogue(cid);
     if (!catalogue) throw new Error("the fixture catalogue is missing");
 
-    const visitorList = await json<ArtworkRead[]>(
-      await listArtworks(undefined),
-    );
+    const visitorList = await listedArtworks(await listArtworks(undefined));
     const visitorIds = visitorList.map((a) => a.id);
 
     for (const [id, listed] of [

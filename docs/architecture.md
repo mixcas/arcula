@@ -45,9 +45,12 @@ design record the map points into, including the request path.
   loading the Catalogue and each child table once for the whole page (at most
   five queries, six for a collaborator's membership row) and returning ok,
   not-found, unauthorized or forbidden for the list. The live list also takes
-  an optional member-only search (`q`), refused ahead of the visitor verdict and
-  filtering the rows the list already read — drafts included, deleted works
-  never. The verdict is
+  an optional member-only search (`q`) and the structured query — filters over
+  the ten text fields plus `status`/`availability`, `sort`, `limit`/`offset`
+  and `facets` — both applied to the rows the list already read, after the
+  verdict: drafts included for a member, deleted works never, published works
+  only for a visitor. A page answers `{ artworks, total, limit, offset }` and
+  the facets counted over the filtered set. The verdict is
   `access.ts`'s over rows the module loads through `authorize.ts`, with the
   request's grant validity handed in as a fact; the module carries no Hono type
   and the route owns the wire code. The save routes read their work back
@@ -96,8 +99,10 @@ design record the map points into, including the request path.
 artworkImport, artistNames, catalogue, invitation, document, media, user),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
 `photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
-predicate, its caps, the query suffix helper and `normalizeSearchText`, which
-Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
+predicate and the structured query's whole pure contract — the parse of the
+raw parameters, the per-field filter predicate, the total order and the facet
+counts — plus its caps, the query suffix helper and `normalizeSearchText`,
+which Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
 types), `stagedUpload.ts` (the headers a staged presigned PUT signs — the list
 the media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
 because that package is not a workspace member), `limits.ts` (the

@@ -97,11 +97,22 @@ the public view, not to the Catalogue as a member.
 _Avoid_: Session, unlock token, password token
 
 **Catalogue search**:
-A member's query against the recorded fields of the works in one Catalogue. It
-answers with the live works that match; drafts are included, deleted works never
+A query against the recorded fields of the works in one Catalogue. Its free
+text (`q`) is a member's; its structured filters — one or more values of a field,
+text or enumerated — are answered within the reader's verdict, so a visitor
+filters the published works they may already see. Values repeated within a field
+are alternatives, and different fields are all required. It answers with the
+live works that match; drafts are included for a member, deleted works never
 are. The query lives in the page's address, so a search can be linked and
 revisited.
 _Avoid_: Filter, find, lookup
+
+**Facet**:
+The distinct values a filterable field takes across a Catalogue search's
+filtered set, each with the number of works carrying it. Counted before paging,
+so a facet agrees with the search it accompanies; a work with no value for the
+field contributes no entry, and the caller cannot ask for "no value".
+_Avoid_: Tag, category, bucket
 
 **Shared**:
 A Catalogue whose owner has added collaborators. Distinct from **Public**, which

@@ -37,7 +37,7 @@ import {
 } from "../src/catalogueGrants";
 import { CLIENT_ADDRESS_HEADER } from "../src/clientAddress";
 import { closeDb, db } from "../src/db";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 import {
   makeCatalogue,
   makeJpeg,
@@ -290,9 +290,9 @@ describe("a protected catalogue's visitor half", () => {
     });
     expect(list.status).toBe(200);
     // Exactly what a visitor sees: the published work, and no draft.
-    expect((await json<{ id: string }[]>(list)).map((work) => work.id)).toEqual(
-      [workId],
-    );
+    expect((await listedArtworks(list)).map((work) => work.id)).toEqual([
+      workId,
+    ]);
 
     const single = await req(
       "GET",

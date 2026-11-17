@@ -362,7 +362,18 @@ if (catalogueId) {
     res.status === 200 && typeof body.name === "string",
   );
   const works = await get(`/api/v1/catalogues/${catalogueId}/artworks`);
-  step("visitor reads the catalogue's works", works.status === 200);
+  const page = (await works.json().catch(() => ({}))) as {
+    artworks?: unknown[];
+    total?: number;
+  };
+  step(
+    "visitor reads the catalogue's works",
+    // The list answers its page envelope, and the work saved above is in it.
+    works.status === 200 &&
+      Array.isArray(page.artworks) &&
+      page.artworks.length === 1 &&
+      page.total === 1,
+  );
   const deep = await get(`/catalogue/${catalogueId}`);
   step(
     "the public route serves the shell",
