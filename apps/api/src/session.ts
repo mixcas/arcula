@@ -2,7 +2,7 @@
 // is the only form a deployment accepts. Outside production (local development
 // and the suites) Better Auth's bearer plugin also answers an
 // `Authorization: Bearer` header with the same session; a deployment mounts no
-// such plugin (env.ts → bearerAuthAllowed, ADR-0013).
+// such plugin (env.ts → bearerAuthAllowed, ADR-0014).
 
 import type { Context, MiddlewareHandler } from "hono";
 import { auth } from "./auth";

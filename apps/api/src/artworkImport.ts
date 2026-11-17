@@ -26,6 +26,8 @@ import { artworks as artworksTable } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
   artworkSchema,
+  disabledArtworkFieldsIn,
+  resolveArtworkFields,
   type ArtworkImportOutcome,
   type ArtworkStatus,
 } from "@arcula/shared";
@@ -49,6 +51,12 @@ export async function importArtworks(
   status: ArtworkStatus,
 ): Promise<ArtworkImportOutcome> {
   const catalogue = await memberCatalogueFor(userId, catalogueId);
+  // Resolved from the catalogue in hand: the strip honours the member's
+  // deviations, not just the Kind's defaults.
+  const enabled = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled;
 
   const now = new Date();
   const rejected: ArtworkImportOutcome["rejected"] = [];
@@ -57,8 +65,13 @@ export async function importArtworks(
     // A row that is not an object fails the schema as a missing title.
     const fields =
       row !== null && typeof row === "object"
-        ? (row as Record<string, unknown>)
+        ? { ...(row as Record<string, unknown>) }
         : {};
+    // The same predicate the save routes refuse with, answered by deleting: a
+    // row still lands with every field this catalogue does record.
+    for (const field of disabledArtworkFieldsIn(enabled, fields)) {
+      delete fields[field];
+    }
     // The batch's status is last, so it wins over a status the row names.
     const parsed = artworkSchema.safeParse({ ...fields, status });
     if (!parsed.success) {

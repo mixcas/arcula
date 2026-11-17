@@ -3,8 +3,8 @@
 //
 // What is asserted here is what the tools own rather than the route: the Add
 // form's whole field set reaches one row, an update writes only the fields it
-// names, a Collection records the Availability the API accepts even though no
-// surface shows it, and the write allowance is one account bucket for every
+// names, a Catalogue records the Availability it has switched on, and the write
+// allowance is one account bucket for every
 // tool. The membership verdicts are the app's own — a collaborator writes, a
 // non-member does not — and the route suite (`save.api.test.ts`) keeps the
 // media half.
@@ -81,13 +81,17 @@ beforeAll(async () => {
   owner = await freshUser("ArtworkOwner");
   collaborator = await freshUser("ArtworkCollaborator");
   stranger = await freshUser("ArtworkStranger");
+  // An Inventory drops the acquisition pair by default; these cases record the
+  // Add form's whole set, so the Catalogue switches those fields on.
   inventoryId = await makeCatalogue(owner.userId, {
     name: "Agent Inventory",
     kind: "inventory",
+    artworkFields: { acquisitionDate: true, acquisitionPrice: true },
   });
   sharedId = await makeCatalogue(owner.userId, {
     name: "Agent Shared",
     kind: "inventory",
+    artworkFields: { acquisitionDate: true, acquisitionPrice: true },
   });
   await db
     .insert(collaboratorsTable)
@@ -175,10 +179,12 @@ describe("update_artwork", () => {
     });
   });
 
-  it("records an Availability on a Collection work, where no surface shows it", async () => {
+  it("records an Availability on a Collection that switched it on", async () => {
+    // A Collection's default has Availability off; this one records it.
     const collectionId = await makeCatalogue(owner.userId, {
       name: "Agent Collection",
       kind: "collection",
+      artworkFields: { availability: true },
     });
 
     const created = await create(owner.userId, {
@@ -188,22 +194,21 @@ describe("update_artwork", () => {
       availability: "sold",
     });
 
-    // The API accepts a market state on every Kind, and the row carries it.
+    // The Catalogue records the field, so the row carries the state.
     const [row] = await db
       .select({ availability: artworksTable.availability })
       .from(artworksTable)
       .where(eq(artworksTable.id, created.id));
     expect(row?.availability).toBe("sold");
 
-    // The schema cannot say "this is recorded but never shown"; the prompt
-    // text can, and an agent that does not read it would report a fact the
-    // product never displays.
+    // The prompt text carries the rule the schema cannot express: a field the
+    // Catalogue does not record is refused, and Availability is one of them.
     for (const name of ["create_artwork", "update_artwork"]) {
       const description =
         tools.find((tool) => tool.name === name)?.description ?? "";
       expect(description, name).toMatch(/Availability/);
       expect(description, name).toMatch(/Collection/);
-      expect(description, name).toMatch(/never shown on a Collection/);
+      expect(description, name).toMatch(/field-disabled/);
     }
   });
 

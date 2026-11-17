@@ -3,25 +3,19 @@
  *
  * One module answers the questions a screen would otherwise answer inline:
  * what to call the catalogue's kind, which colour it wears, what its two
- * existing fields mean
- * (`name` names whose art it is, `description` says what it is), whether a
- * work carries an availability at all (and which states that kind's form
- * offers), what Artist Name a new work starts with, and the v1 artwork field
- * table.
+ * existing fields mean (`name` names whose art it is, `description` says what
+ * it is), what a new work starts with, and the words for a work's market
+ * state.
  *
- * It carries the v1 field table whole — every artwork field visible, only
- * `title` and `artistName` required — as the data a later per-kind hiding
- * would read. No v1 screen reads `visible`/`required` yet: the artwork form
- * renders every field it always has, so a per-kind hiding is a change to
- * `ARTWORK_FIELDS` here plus the one screen that consumes it, not a branch in
- * every screen. What v1 screens do read is the labels and the availability
- * axis: the create form, the settings General tab and the dashboard use the
- * words, the artwork form offers the availability values, and the manage views
- * read whether availability is in play at all.
+ * The market state is deliberately *not* a kind answer: every Kind offers the
+ * same four states, and whether a Catalogue records one is the Artwork fields
+ * registry's decision. Screens read the labels and the availability words; the
+ * create form asks for the enabled state it resolved.
  */
 
 import type {
   ArtworkAvailability,
+  ArtworkFieldStates,
   ArtworkFormValues,
   CatalogueKind,
 } from "@arcula/shared";
@@ -58,26 +52,6 @@ type EveryKindIsOffered = CatalogueKind extends (typeof CATALOGUE_KINDS)[number]
 const everyKindIsOffered: EveryKindIsOffered = true;
 void everyKindIsOffered;
 
-/**
- * One artwork field the form may show. Derived from the form's own values, so
- * a field added to the form cannot be silently absent from the surface.
- */
-type ArtworkField = keyof ArtworkFormValues;
-
-/**
- * The fields this table covers. `availability` is deliberately not among them:
- * it is not a per-kind field rule but the `availabilityInPlay` axis above,
- * because the form hides the whole control and the API accepts the value on
- * every kind.
- */
-type SurfaceArtworkField = Exclude<ArtworkField, "availability">;
-
-interface ArtworkFieldSurface {
-  readonly field: SurfaceArtworkField;
-  readonly visible: boolean;
-  readonly required: boolean;
-}
-
 export interface CatalogueSurface {
   readonly kind: CatalogueKind;
   /** "Portfolio" | "Collection" | "Inventory" — the kind, named. */
@@ -90,15 +64,6 @@ export interface CatalogueSurface {
   readonly nameLabel: string;
   /** What the catalogue's `description` asks for on this kind. */
   readonly descriptionLabel: string;
-  /** Whether a work in this kind carries a market state. Derived from
-   *  `availabilityValues`, so the two cannot disagree. */
-  readonly availabilityInPlay: boolean;
-  /** The market states this kind's form offers, in order; empty for a kind
-   *  with no market state. The API accepts all four on every kind — this is a
-   *  presentation rule, not a validation one. */
-  readonly availabilityValues: readonly ArtworkAvailability[];
-  /** The artwork form's fields, in form order, with their v1 rules. */
-  readonly artworkFields: readonly ArtworkFieldSurface[];
   /**
    * Whether the catalogue's own name is the artist's name on this kind — a
    * Portfolio's is (ADR-0010), so a work added to one starts credited to it.
@@ -108,39 +73,6 @@ export interface CatalogueSurface {
    */
   readonly artistNameIsCatalogueName: boolean;
 }
-
-/**
- * v1: every existing artwork field is visible on every kind, and only the two
- * identity fields are required. The list is exhaustive over the form's values
- * — the guard below fails the build if a field is added and not placed here.
- */
-const ARTWORK_FIELDS: readonly ArtworkFieldSurface[] = [
-  { field: "title", visible: true, required: true },
-  { field: "artistName", visible: true, required: true },
-  { field: "serie", visible: true, required: false },
-  { field: "dateOfCreation", visible: true, required: false },
-  { field: "medium", visible: true, required: false },
-  { field: "dimensions", visible: true, required: false },
-  { field: "editions", visible: true, required: false },
-  { field: "acquisitionDate", visible: true, required: false },
-  { field: "acquisitionPrice", visible: true, required: false },
-  { field: "placeOfOrigin", visible: true, required: false },
-  { field: "provenance", visible: true, required: false },
-  { field: "notes", visible: true, required: false },
-  { field: "condition", visible: true, required: false },
-  { field: "currentValue", visible: true, required: false },
-  { field: "status", visible: true, required: false },
-];
-
-type EveryArtworkFieldIsListed =
-  Exclude<
-    SurfaceArtworkField,
-    (typeof ARTWORK_FIELDS)[number]["field"]
-  > extends never
-    ? true
-    : never;
-const everyArtworkFieldIsListed: EveryArtworkFieldIsListed = true;
-void everyArtworkFieldIsListed;
 
 /** The market state's four words, and only those: the record's key type makes
  *  a value the contract names but the surface forgot a build error. */
@@ -152,21 +84,37 @@ export const ARTWORK_AVAILABILITY_LABELS: Record<ArtworkAvailability, string> =
     "on-consignment": "On consignment",
   };
 
-/** The words and the market states, per kind. ADR-0010: a Portfolio sells the
+/** The four states, in the order a form offers them. One list for every Kind:
+ *  Availability stopped being a per-Kind rule in the flattened field set. The
+ *  guard makes a state the contract gains a build error until it is offered. */
+export const ARTWORK_AVAILABILITY_STATES = [
+  "available",
+  "reserved",
+  "sold",
+  "on-consignment",
+] as const satisfies readonly ArtworkAvailability[];
+
+type EveryAvailabilityStateIsOffered =
+  Exclude<
+    ArtworkAvailability,
+    (typeof ARTWORK_AVAILABILITY_STATES)[number]
+  > extends never
+    ? true
+    : never;
+const everyAvailabilityStateIsOffered: EveryAvailabilityStateIsOffered = true;
+void everyAvailabilityStateIsOffered;
+
+/** The words and the colours, per kind. ADR-0010: a Portfolio sells the
  *  artist's own work, an Inventory sells what a gallery represents — including
  *  work it holds on consignment — and a Collection records what the collector
- *  owns, so it has no market state at all. A Portfolio's name is also its
- *  artist's name, which is why its new works start credited to it. */
-const SURFACES: Record<
-  CatalogueKind,
-  Omit<CatalogueSurface, "kind" | "availabilityInPlay" | "artworkFields">
-> = {
+ *  owns. A Portfolio's name is also its artist's name, which is why its new
+ *  works start credited to it. */
+const SURFACES: Record<CatalogueKind, Omit<CatalogueSurface, "kind">> = {
   portfolio: {
     kindLabel: "Portfolio",
     kindColor: "orange",
     nameLabel: "Artist name",
     descriptionLabel: "Bio",
-    availabilityValues: ["available", "reserved", "sold"],
     artistNameIsCatalogueName: true,
   },
   collection: {
@@ -174,7 +122,6 @@ const SURFACES: Record<
     kindColor: "indigo",
     nameLabel: "Name",
     descriptionLabel: "Description",
-    availabilityValues: [],
     artistNameIsCatalogueName: false,
   },
   inventory: {
@@ -182,41 +129,20 @@ const SURFACES: Record<
     kindColor: "lime",
     nameLabel: "Gallery name",
     descriptionLabel: "About",
-    availabilityValues: ["available", "reserved", "sold", "on-consignment"],
     artistNameIsCatalogueName: false,
   },
 };
 
 /** Everything the surface derives from one kind. */
 export function catalogueSurface(kind: CatalogueKind): CatalogueSurface {
-  const surface = SURFACES[kind];
-  return {
-    kind,
-    ...surface,
-    availabilityInPlay: surface.availabilityValues.length > 0,
-    artworkFields: ARTWORK_FIELDS,
-  };
-}
-
-/**
- * The market state a form starts a work with: the stored one when there is
- * one, `available` on a kind that carries a state, and `null` on a kind that
- * does not. Shared by the Add and Edit pages so neither invents its own
- * default — and so a Collection can never be handed a value it does not show.
- */
-export function availabilityFor(
-  kind: CatalogueKind,
-  stored: ArtworkAvailability | null | undefined,
-): ArtworkAvailability | null {
-  const surface = catalogueSurface(kind);
-  if (surface.availabilityValues.length === 0) return null;
-  return stored ?? "available";
+  return { kind, ...SURFACES[kind] };
 }
 
 /**
  * What a create form starts as on one kind: every field at its empty default,
  * the Artist Name credited to the catalogue's own name where that name *is* the
- * artist's — a Portfolio — and a market state where the kind carries one.
+ * artist's — a Portfolio — and a market state exactly when the Catalogue
+ * records Availability.
  *
  * This is a creation-time default, never a derived fact: the field stays
  * editable and required, so a Portfolio work credited to a guest, an estate or
@@ -224,19 +150,21 @@ export function availabilityFor(
  * records. Only a create surface reads it; prefilling the Edit page would
  * rewrite a work's recorded artist on a save that never touched the field.
  *
- * One answer for every kind, so a screen has no per-kind branch that could skip
- * one. A Collection comes out as exactly `EMPTY_ARTWORK_FORM`: it prefills
- * nothing and has no market state.
+ * `enabled` is the resolved Artwork fields, not the Kind: a Portfolio that
+ * switched Availability off, and a Collection that switched it on, each get
+ * what their own configuration says. A Collection with it off comes out as
+ * exactly `EMPTY_ARTWORK_FORM`.
  */
 export function newArtworkForm(
   kind: CatalogueKind,
   catalogueName: string,
+  enabled: ArtworkFieldStates,
 ): ArtworkFormValues {
   return {
     ...EMPTY_ARTWORK_FORM,
     artistName: catalogueSurface(kind).artistNameIsCatalogueName
       ? catalogueName
       : "",
-    availability: availabilityFor(kind, null),
+    availability: enabled.availability ? "available" : null,
   };
 }

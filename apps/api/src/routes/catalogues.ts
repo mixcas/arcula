@@ -381,7 +381,6 @@ catalogueRoutes.post(
       c,
       artworkImportSchema,
     );
-
     return c.json(
       await importArtworks(
         c.get("user").id,

@@ -41,7 +41,8 @@
 // member's drafts are; only the works that survive both the verdict and the
 // predicate load their photos and documents. The predicate itself is
 // `@arcula/shared`'s, so the API and the client share one field list and one
-// normalization.
+// normalization; the Catalogue row the list already loaded decides which of
+// its fields contribute, so a field it does not record is not found.
 //
 // The save routes read their own work back through `readArtwork`, so a save
 // answers exactly what a read of the same work would.
@@ -61,6 +62,7 @@ import {
   matchesArtworkFilters,
   matchesArtworkSearch,
   parseArtworkSearchQuery,
+  resolveArtworkFields,
   searchQueryOverflow,
   type ArtworkFacets,
   type ArtworkRead,
@@ -333,13 +335,20 @@ async function readArtworkListInMode(
     canSeeArtwork(member, catalogue, row, hasValidGrant),
   );
   // The search runs after the verdict: it narrows what the viewer may see and
-  // can never add to it. A committed query with no terms matches nothing, and
-  // the structured filters AND with it. `total` and the facets are counted
-  // here, over the filtered set, before a page is cut.
+  // can never add to it. The Catalogue's own fields decide the haystack and
+  // the filters: a field it does not record contributes no text and cannot
+  // match, so a search never finds what the form and the PDF do not show. A
+  // committed query with no terms matches nothing, and the structured filters
+  // AND with it. `total` and the facets are counted over the filtered set,
+  // before a page is cut.
+  const enabled = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled;
   const works = visible.filter(
     (row) =>
-      (search === null || matchesArtworkSearch(row, search)) &&
-      matchesArtworkFilters(row, query.filters),
+      (search === null || matchesArtworkSearch(row, search, enabled)) &&
+      matchesArtworkFilters(row, query.filters, enabled),
   );
   // The structured order and page are the live list's: the Deleted view keeps
   // its own deletion-time order and answers every row, so it takes neither.
@@ -370,7 +379,7 @@ async function readArtworkListInMode(
     offset: query.offset,
     ...(query.facets.length === 0
       ? {}
-      : { facets: artworkFacets(works, query.facets) }),
+      : { facets: artworkFacets(works, query.facets, enabled) }),
   };
 }
 

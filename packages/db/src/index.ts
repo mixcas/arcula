@@ -29,7 +29,11 @@
 // every query.
 
 import { sql } from "drizzle-orm";
-import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
+import type {
+  ArtworkAvailability,
+  ArtworkFieldDeviations,
+  CatalogueKind,
+} from "@arcula/shared";
 import {
   boolean,
   check,
@@ -375,11 +379,9 @@ export const oauthClientAssertion = pgTable("oauthClientAssertion", {
 
 // A catalogue's artwork-field deviations: an entry records a choice the member
 // made, and an absent key follows the Kind default, so the map stays sparse.
-// `null` and `{}` both mean pure defaults. The thirteen keys and the per-Kind
-// defaults live in `@arcula/shared`'s registry, which ships with the feature
-// that reads this column; this release declares only the shape, because `$type`
-// is compile-time only (no SQL, no migration).
-type ArtworkFieldDeviations = Partial<Record<string, boolean>>;
+// `null` and `{}` both mean pure defaults. The keys and the per-Kind defaults
+// live in `@arcula/shared`'s registry — the table stores the map, it does not
+// define it.
 
 // There is no `artworks: string[]` column: it would be a denormalized list the
 // join replaces.
@@ -405,10 +407,11 @@ export const catalogues = pgTable(
     // `artworks.status` does, so the database refuses an unknown kind even when
     // it arrives from outside the typed reader.
     kind: text("kind").$type<CatalogueKind>().notNull().default("collection"),
-    // The catalogue's artwork-field deviations from that Kind's defaults.
-    // Nullable on purpose: a catalogue that never deviated is the normal state,
-    // so there is no backfill and no tightening step. Nothing reads or writes
-    // it yet; the feature that resolves it ships in a later release.
+    // The catalogue's artwork-field deviations from that Kind's defaults — the
+    // storage for the Artwork fields feature. Nullable on purpose: a catalogue
+    // that never deviated is the normal state, so there is no backfill and no
+    // tightening step. It shipped alone as Release 1
+    // (`0011_catalogue_artwork_fields`), ahead of the code that reads it.
     artworkFields: jsonb(
       "artworkFields",
     ).$type<ArtworkFieldDeviations | null>(),

@@ -3,7 +3,7 @@
 //
 // Keyed by the token's verified subject, never by address: a hosted agent's
 // calls arrive from one cloud, so an address bucket would be one bucket for
-// every account in the product (ADR-0013).
+// every account in the product (ADR-0014).
 //
 // Reads are never metered. A write spends one token from a rolling window of
 // `AGENT_WRITE_CAPACITY` over `AGENT_WRITE_WINDOW_SECONDS` — capacity 20

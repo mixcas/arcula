@@ -38,11 +38,13 @@ import {
   artworkUpdateSchema,
   isBlankSearchQuery,
   parseArtworkSearchQuery,
+  resolveArtworkFields,
   type ArtworkCreatePayload,
   type ArtworkUpdatePayload,
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
+import { assertArtworkFieldsEnabled } from "../artworkFieldRefusal";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   artworkCreateValues,
@@ -167,6 +169,13 @@ artworkRoutes.post(
       c,
       artworkCreateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
+    // What the Catalogue records, resolved once here for the new work's
+    // starting market state. The refusal above answers the same set.
+    const { enabled } = resolveArtworkFields(
+      catalogue.kind,
+      catalogue.artworkFields,
+    );
 
     // An id is a global primary key: reusing one would promote this
     // save's staged entries under the existing row's id.
@@ -193,7 +202,13 @@ artworkRoutes.post(
       await tx
         .insert(artworksTable)
         .values(
-          artworkCreateValues(catalogue, payload.artworkId, payload, now),
+          artworkCreateValues(
+            catalogue,
+            payload.artworkId,
+            payload,
+            now,
+            enabled,
+          ),
         );
       const photos = await writePhotoSequence(
         tx,
@@ -243,6 +258,7 @@ artworkRoutes.patch(
       c,
       artworkUpdateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
 
     // Absent = leave the sequence alone; present = the full new one.
     const currentPhotos = await db

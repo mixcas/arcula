@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ArtworkFacetEntry } from "../artworkSearch";
 import type { Artwork, Catalogue } from "../types";
 import { artworkAvailabilitySchema, artworkStatusSchema } from "./artwork";
-import { catalogueKindSchema } from "./catalogue";
+import { artworkFieldDeviationsSchema, catalogueKindSchema } from "./catalogue";
 
 /**
  * The wire shape of the API's GET responses, parsed at the service boundary.
@@ -158,6 +158,10 @@ export const catalogueReadSchema = z.object({
   skinOptions: z
     .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))
     .optional(),
+  // The sparse deviations the serializer emits on every audience, visitors
+  // included — the public PDF resolves the same enabled set from them. Absent
+  // when the catalogue never deviated.
+  artworkFields: artworkFieldDeviationsSchema.optional(),
   createdAt: wireTimestamp,
   updatedAt: wireTimestamp,
 });

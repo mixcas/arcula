@@ -47,6 +47,10 @@ name, never a subpath:
   throws rather than degrading when the platform has no secure source. Ids
   minted before this module keep their 32-character hex shape; both lengths
   coexist ([ADR-0007](../../docs/adr/0007-ids-are-ten-base62-characters.md)).
+- `artworkFields.ts` — the Artwork fields registry: the togglable record keys,
+  the two fixed ones (`title`, `artistName`), the per-Kind default map, and the
+  `resolveArtworkFields`/`normaliseArtworkFields` pair the server that stores
+  the deviations and the web app that renders the form both call.
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
 - `artworkSearch.ts` — the ten-field Catalogue search predicate and the

@@ -77,7 +77,7 @@ export const mcpResource = `${apiOrigin}/api/mcp`;
 // the bearer plugin's gate. It is a second, undeclared way to act as an
 // account: nothing in the app shows it, and only signing out of the website
 // revokes it. A deployment does not have it; the named replacement is the
-// Connection surface (ADR-0013), so the undeclared one closes.
+// Connection surface (ADR-0014), so the undeclared one closes.
 //
 // The rule is `NODE_ENV`, stated rather than inferred. It is the fact the
 // deploy already owns — the stack sets it (infra/cdk/src/arcula-stack.ts) and

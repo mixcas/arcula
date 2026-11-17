@@ -3,10 +3,16 @@
 //
 // A Catalogue search is a member's query against the recorded fields of one
 // catalogue's works. It is not a filter, a find or a lookup: every term the
-// query carries has to appear somewhere in the ten declared fields, and
-// different terms may appear in different fields. There is no ranking and no
+// query carries has to appear somewhere in the declared fields, and different
+// terms may appear in different fields. There is no ranking and no
 // highlighting — the caller keeps its own order — so this module answers one
 // boolean per work and nothing else.
+//
+// The Catalogue decides which record fields it has: Title and Artist Name
+// always contribute, and the eight togglable fields contribute only while the
+// Catalogue records them. A disabled field's stored text is therefore not
+// found — the promise the form and the PDF keep, that a field the Catalogue
+// does not have is neither asked for nor shown.
 //
 // ## Normalization
 //
@@ -30,32 +36,25 @@
 // It is stored as `YYYY-MM-DD` but shown by the form as `MMMM D, YYYY`. The
 // haystack carries both forms, so "2023" and "March" each find a March 2023
 // acquisition. Date of creation stays free text and is searched as written.
-//
-// ## The structured query
-//
-// The same list read also answers a structured search: repeated parameters
-// filter by any of the ten text fields or the two enumerated ones, and the
-// query names its order, its page and the facets it wants. This module owns
-// the whole pure contract — the parse of the raw query strings, the filter
-// predicate, the order and the facet counts — and the API runs it over the
-// rows `artworkRead.ts` already read. Nothing here knows about HTTP, a task
-// framework or a database.
 
+import type { ArtworkFieldKey, ArtworkFieldStates } from "./artworkFields";
 import {
   artworkAvailabilitySchema,
   artworkStatusSchema,
 } from "./schemas/artwork";
 
 /**
- * The ten fields a Catalogue search reads, declared once.
- *
- * Adding one is a deliberate edit here and in the predicate's test — not a
- * change to a route, a schema or a database query. `title` and `artistName`
- * are required on every work; the rest contribute only when they hold a value.
+ * The two fields a Catalogue search always reads: a work's identity, which the
+ * settings never take away.
  */
-export const ARTWORK_SEARCH_FIELDS = [
-  "title",
-  "artistName",
+const ARTWORK_ALWAYS_SEARCHED_FIELDS = ["title", "artistName"] as const;
+
+/**
+ * The togglable fields a Catalogue search reads. Each contributes only while
+ * the Catalogue records it; the registry owns whether it does, so this list is
+ * the search side's subset, not a second field table.
+ */
+const ARTWORK_TOGGLABLE_SEARCH_FIELDS = [
   "serie",
   "medium",
   "editions",
@@ -64,9 +63,31 @@ export const ARTWORK_SEARCH_FIELDS = [
   "placeOfOrigin",
   "provenance",
   "notes",
-] as const;
+] as const satisfies readonly ArtworkFieldKey[];
 
-export type ArtworkSearchField = (typeof ARTWORK_SEARCH_FIELDS)[number];
+/**
+ * The ten fields a Catalogue search reads, declared once: the two always-read
+ * ones and the eight the Catalogue may switch off.
+ *
+ * Adding one is a deliberate edit here and in the predicate's test — not a
+ * change to a route, a schema or a database query. `title` and `artistName`
+ * are required on every work; the rest contribute only when they hold a value
+ * and the Catalogue records them.
+ */
+export type ArtworkSearchField =
+  | (typeof ARTWORK_ALWAYS_SEARCHED_FIELDS)[number]
+  | (typeof ARTWORK_TOGGLABLE_SEARCH_FIELDS)[number];
+
+/**
+ * The ten fields a Catalogue search reads, in one list: the two always-read
+ * fields and the eight a Catalogue may switch off. The structured filter names
+ * these; whether a Catalogue records one is the resolver's answer, applied by
+ * the predicates below.
+ */
+export const ARTWORK_SEARCH_FIELDS = [
+  ...ARTWORK_ALWAYS_SEARCHED_FIELDS,
+  ...ARTWORK_TOGGLABLE_SEARCH_FIELDS,
+] as const satisfies readonly ArtworkSearchField[];
 
 /**
  * The two enumerated fields a structured filter adds to the ten text ones.
@@ -102,22 +123,14 @@ export type ArtworkSearchText = {
  * enumerated ones. A stored row satisfies it unchanged — both enumerated
  * columns are text with a database CHECK, so the row's own type is `string`,
  * which is what lets the read hand a row straight to the predicate.
- * `availability` may be null, which is every Collection work and every row
- * written before the field. Which values may be *asked for* is the parser's
- * business: it refuses one outside the schema enum before this runs.
+ * `availability` may be null, which is every work in a Catalogue that does not
+ * record the field. Which values may be *asked for* is the parser's business:
+ * it refuses one outside the schema enum before this runs.
  */
 export type ArtworkFilterable = ArtworkSearchText & {
   readonly status?: string | null;
   readonly availability?: string | null;
 };
-
-/**
- * The caps, shared by the form that blocks the request and the API that
- * enforces it for callers that are not this UI. A query at the cap is allowed;
- * one past it is not.
- */
-export const MAX_SEARCH_QUERY_LENGTH = 200;
-export const MAX_SEARCH_TERMS = 10;
 
 /**
  * The structured query's caps. A request at a cap is allowed; one past it is
@@ -132,6 +145,14 @@ export const MAX_SEARCH_FILTER_VALUES = 20;
 export const MAX_SEARCH_FILTER_FIELDS = 8;
 export const MAX_ARTWORK_LIST_LIMIT = 100;
 export const MAX_FACET_VALUES = 500;
+
+/**
+ * The caps, shared by the form that blocks the request and the API that
+ * enforces it for callers that are not this UI. A query at the cap is allowed;
+ * one past it is not.
+ */
+export const MAX_SEARCH_QUERY_LENGTH = 200;
+export const MAX_SEARCH_TERMS = 10;
 
 /**
  * Why a present query cannot be searched: too long, or too many terms.
@@ -249,14 +270,35 @@ function artworkFieldText(
   );
 }
 
+/** Whether a Catalogue records a field: the two fixed fields always are. */
+function searchFieldEnabled(
+  field: ArtworkSearchField,
+  enabled: ArtworkFieldStates,
+): boolean {
+  return (
+    field === "title" ||
+    field === "artistName" ||
+    enabled[field as ArtworkFieldKey]
+  );
+}
+
 /**
  * One normalized string holding every searchable value of the work, joined by
- * spaces. A field with no value contributes nothing, and the acquisition date
- * contributes both of its forms.
+ * spaces. A field with no value contributes nothing, the acquisition date
+ * contributes both of its forms, and a togglable field the Catalogue does not
+ * record contributes nothing even when it holds text.
  */
-function searchHaystack(artwork: ArtworkSearchText): string {
+function searchHaystack(
+  artwork: ArtworkSearchText,
+  enabled: ArtworkFieldStates,
+): string {
   const parts: string[] = [];
-  for (const field of ARTWORK_SEARCH_FIELDS) {
+  for (const field of ARTWORK_ALWAYS_SEARCHED_FIELDS) {
+    const text = artworkFieldText(field, artwork[field]);
+    if (text !== "") parts.push(text);
+  }
+  for (const field of ARTWORK_TOGGLABLE_SEARCH_FIELDS) {
+    if (!enabled[field]) continue;
     const text = artworkFieldText(field, artwork[field]);
     if (text !== "") parts.push(text);
   }
@@ -264,17 +306,20 @@ function searchHaystack(artwork: ArtworkSearchText): string {
 }
 
 /**
- * Does this work match the query? Every term must appear somewhere in the ten
- * fields; terms may match different fields. A query with no terms matches
- * nothing, which is the punctuation-only case.
+ * Does this work match the query? Every term must appear somewhere in the
+ * enabled fields; terms may match different fields. Title and Artist Name are
+ * always in the haystack; the eight togglable fields join it only when the
+ * Catalogue records them. A query with no terms matches nothing, which is the
+ * punctuation-only case.
  */
 export const matchesArtworkSearch = (
   artwork: ArtworkSearchText,
   query: string,
+  enabled: ArtworkFieldStates,
 ): boolean => {
   const terms = searchTerms(query);
   if (terms.length === 0) return false;
-  const haystack = searchHaystack(artwork);
+  const haystack = searchHaystack(artwork, enabled);
   return terms.every((term) => haystack.includes(term));
 };
 
@@ -498,10 +543,12 @@ export function parseArtworkSearchQuery(
 export function matchesArtworkFilters(
   artwork: ArtworkFilterable,
   filters: ArtworkSearchFilters,
+  enabled: ArtworkFieldStates,
 ): boolean {
   for (const field of ARTWORK_SEARCH_FIELDS) {
     const values = filters[field];
     if (values === undefined || values.length === 0) continue;
+    if (!searchFieldEnabled(field, enabled)) return false;
     const wanted = values
       .map((value) => normalizeSearchText(value.trim()))
       .filter((value) => value.length > 0);
@@ -514,6 +561,7 @@ export function matchesArtworkFilters(
   ) as ArtworkSearchEnumField[]) {
     const values = filters[field];
     if (values === undefined || values.length === 0) continue;
+    if (field === "availability" && !enabled.availability) return false;
     const actual = artwork[field];
     if (actual === null || actual === undefined) return false;
     if (!values.includes(actual)) return false;
@@ -542,10 +590,13 @@ export type ArtworkFacets = Partial<
 function facetValueOf(
   field: ArtworkFilterField,
   artwork: ArtworkFilterable,
+  enabled: ArtworkFieldStates,
 ): string | null {
   if (isArtworkSearchEnumField(field)) {
-    return artwork[field] ?? null;
+    if (field === "status") return artwork.status ?? null;
+    return enabled.availability ? (artwork.availability ?? null) : null;
   }
+  if (!searchFieldEnabled(field, enabled)) return null;
   const value = artwork[field];
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -562,12 +613,13 @@ function facetValueOf(
 export function artworkFacets(
   artworks: readonly ArtworkFilterable[],
   fields: readonly ArtworkFilterField[],
+  enabled: ArtworkFieldStates,
 ): ArtworkFacets {
   const facets: ArtworkFacets = {};
   for (const field of fields) {
     const counts = new Map<string, number>();
     for (const artwork of artworks) {
-      const value = facetValueOf(field, artwork);
+      const value = facetValueOf(field, artwork, enabled);
       if (value === null) continue;
       counts.set(value, (counts.get(value) ?? 0) + 1);
     }

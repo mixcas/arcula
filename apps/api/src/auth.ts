@@ -122,7 +122,7 @@ export const auth = betterAuth({
       metadataProfile: "mcp-2026-07-28",
     }),
     // A session token is a cookie, and only a cookie, in a deployment: the
-    // bearer form is the undeclared second credential that ADR-0013 closes.
+    // bearer form is the undeclared second credential that ADR-0014 closes.
     // Local development and the suites keep it (env.ts → bearerAuthAllowed).
     ...(sessionBearerEnabled ? [bearer()] : []),
   ],

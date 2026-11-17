@@ -223,10 +223,12 @@ export const artworkTools = [
       "optional — serie, dateOfCreation, medium, dimensions, editions, " +
       "acquisitionDate, acquisitionPrice, placeOfOrigin, provenance, notes, " +
       "condition, currentValue and status (published or draft; published " +
-      "unless named). Availability is a market state for a Portfolio or an " +
-      "Inventory: a Collection carries no Availability, so one sent on any " +
-      "Kind is recorded, as the API allows, and is never shown on a " +
-      "Collection. Any member — the Owner or a Collaborator — may create " +
+      "unless named). Every Catalogue records a chosen set of fields: a save that " +
+      "names one the Catalogue does not record is refused with " +
+      "`field-disabled`. Availability is one of those fields — on by default " +
+      "for a Portfolio or an Inventory, off by default for a Collection, and " +
+      "either way a choice the member can change. Any member — the Owner or " +
+      "a Collaborator — may create " +
       "works; a non-member is refused. Use search_artworks to read a " +
       "Catalogue's works. Photos and documents are uploaded in the app, not " +
       "here.",
@@ -244,11 +246,12 @@ export const artworkTools = [
       "title, artistName, serie, dateOfCreation, medium, dimensions, " +
       "editions, acquisitionDate, acquisitionPrice, placeOfOrigin, " +
       "provenance, notes, condition, currentValue, status and availability. " +
-      "A text field sent as `null` clears it. A Collection carries no " +
-      "Availability: one sent on any Kind is recorded, as the API allows, " +
-      "and is never shown on a Collection. Any member may write; a missing " +
-      "or invisible Artwork answers `not-found`. Use search_artworks to find " +
-      "an Artwork's id.",
+      "A text field sent as `null` clears it. Every Catalogue records a chosen " +
+      "set of fields: naming one it does not record is refused with " +
+      "`field-disabled`. Availability is one of those fields — on by default " +
+      "for a Portfolio or an Inventory, off by default for a Collection. Any " +
+      "member may write; a missing or invisible Artwork answers `not-found`. " +
+      "Use search_artworks to find an Artwork's id.",
     inputSchema: updateArtworkInput,
     write: true,
     call: async ({ catalogueId, artworkId, ...fields }, userId) =>

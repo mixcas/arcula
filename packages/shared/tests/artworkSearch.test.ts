@@ -21,49 +21,107 @@ import {
   matchesArtworkSearch,
   parseArtworkSearchQuery,
   searchQueryOverflow,
-  type ArtworkSortable,
+  type ArtworkFilterable,
+  type ArtworkFilterField,
+  type ArtworkSearchFilters,
   type ArtworkSearchField,
+  type ArtworkSortable,
 } from "../src/artworkSearch";
+import {
+  resolveArtworkFields,
+  type ArtworkFieldKey,
+  type ArtworkFieldStates,
+} from "../src/artworkFields";
+
+/**
+ * A Catalogue's resolved fields, with the named ones turned off. The
+ * Collection's defaults are all on, so a test names only what it switches.
+ */
+const fields = (off: readonly ArtworkFieldKey[] = []): ArtworkFieldStates => {
+  const enabled = resolveArtworkFields("collection", null).enabled;
+  for (const field of off) {
+    enabled[field] = false;
+  }
+  return enabled;
+};
+
+/** Every togglable field off: a Catalogue that records only the fixed two. */
+const nothingToggled = (): ArtworkFieldStates => {
+  const enabled = fields();
+  for (const field of Object.keys(enabled) as ArtworkFieldKey[]) {
+    enabled[field] = false;
+  }
+  return enabled;
+};
+
+/** Every field on: the structured-filter tests are about the filter, not the settings. */
+const filterFields = (): ArtworkFieldStates => {
+  const enabled = fields();
+  for (const field of Object.keys(enabled) as ArtworkFieldKey[]) {
+    enabled[field] = true;
+  }
+  return enabled;
+};
+
+/** The structured-filter predicates, over every field enabled. */
+const filterMatch = (
+  work: ArtworkFilterable,
+  filters: ArtworkSearchFilters,
+): boolean => matchesArtworkFilters(work, filters, filterFields());
+
+/** The facet counts, over every field enabled. */
+const facetCount = (
+  works: readonly ArtworkFilterable[],
+  fields: readonly ArtworkFilterField[],
+) => artworkFacets(works, fields, filterFields());
 
 describe("matching", () => {
   it("ignores case", () => {
-    expect(matchesArtworkSearch({ title: "Blue Period" }, "blue")).toBe(true);
-    expect(matchesArtworkSearch({ artistName: "Picasso" }, "PICASSO")).toBe(
-      true,
-    );
+    expect(
+      matchesArtworkSearch({ title: "Blue Period" }, "blue", fields()),
+    ).toBe(true);
+    expect(
+      matchesArtworkSearch({ artistName: "Picasso" }, "PICASSO", fields()),
+    ).toBe(true);
   });
 
   it("ignores accents by decomposing and stripping the marks", () => {
-    expect(matchesArtworkSearch({ artistName: "Dalí" }, "dali")).toBe(true);
-    expect(matchesArtworkSearch({ title: "Cézanne" }, "cezanne")).toBe(true);
-    expect(matchesArtworkSearch({ placeOfOrigin: "Málaga" }, "malaga")).toBe(
+    expect(matchesArtworkSearch({ artistName: "Dalí" }, "dali", fields())).toBe(
       true,
     );
+    expect(
+      matchesArtworkSearch({ title: "Cézanne" }, "cezanne", fields()),
+    ).toBe(true);
+    expect(
+      matchesArtworkSearch({ placeOfOrigin: "Málaga" }, "malaga", fields()),
+    ).toBe(true);
   });
 
   it("treats punctuation as a separator, so a query reads the same either way", () => {
     const work = { artistName: "Dalí", dateOfCreation: "1889" };
-    expect(matchesArtworkSearch(work, "Dalí, 1889")).toBe(true);
-    expect(matchesArtworkSearch(work, "Dali 1889")).toBe(true);
-    expect(matchesArtworkSearch(work, "(dali) — 1889")).toBe(true);
+    expect(matchesArtworkSearch(work, "Dalí, 1889", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "Dali 1889", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "(dali) — 1889", fields())).toBe(true);
   });
 
   it("requires every term, and lets terms match different fields", () => {
     const work = { title: "Blue Harbour", artistName: "Pablo Picasso" };
-    expect(matchesArtworkSearch(work, "picasso blue")).toBe(true);
-    expect(matchesArtworkSearch(work, "PICASSO, Blue")).toBe(true);
+    expect(matchesArtworkSearch(work, "picasso blue", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "PICASSO, Blue", fields())).toBe(true);
 
     // One term present is not enough: every term must be somewhere.
     expect(
       matchesArtworkSearch(
         { title: "Blue Harbour", artistName: "Claude Monet" },
         "picasso blue",
+        fields(),
       ),
     ).toBe(false);
     expect(
       matchesArtworkSearch(
         { title: "Red Harbour", artistName: "Pablo Picasso" },
         "picasso blue",
+        fields(),
       ),
     ).toBe(false);
   });
@@ -92,7 +150,7 @@ describe("matching", () => {
 
     for (const { field, value, query } of cases) {
       expect(
-        matchesArtworkSearch({ [field]: value }, query),
+        matchesArtworkSearch({ [field]: value }, query, fields()),
         `${field} should match "${query}"`,
       ).toBe(true);
     }
@@ -102,10 +160,15 @@ describe("matching", () => {
     // A variable, not a fresh literal: the extra fields are exactly what a
     // stored row carries, and the predicate must ignore them.
     const sized = { title: "Untitled", dimensions: "120 x 80 cm" };
-    expect(matchesArtworkSearch(sized, "120")).toBe(false);
+    expect(matchesArtworkSearch(sized, "120", fields())).toBe(false);
 
     const conditioned = { title: "Untitled", condition: "excellent" };
-    expect(matchesArtworkSearch(conditioned, "excellent")).toBe(false);
+    expect(matchesArtworkSearch(conditioned, "excellent", fields())).toBe(
+      false,
+    );
+
+    const priced = { title: "Untitled", acquisitionPrice: "1,200 EUR" };
+    expect(matchesArtworkSearch(priced, "1200", fields())).toBe(false);
   });
 
   it("lets a field with no value contribute nothing", () => {
@@ -113,21 +176,83 @@ describe("matching", () => {
       matchesArtworkSearch(
         { title: "Blue", notes: null, serie: undefined },
         "blue",
+        fields(),
       ),
     ).toBe(true);
-    expect(matchesArtworkSearch({}, "blue")).toBe(false);
+    expect(matchesArtworkSearch({}, "blue", fields())).toBe(false);
   });
 
   it("matches an acquisition date in its stored and English long forms", () => {
     const work = { title: "Nocturne", acquisitionDate: "2023-03-05" };
     // A year and a month name both find it, as do the ISO form and the long
     // form the form itself displays.
-    expect(matchesArtworkSearch(work, "2023")).toBe(true);
-    expect(matchesArtworkSearch(work, "march")).toBe(true);
-    expect(matchesArtworkSearch(work, "March 5, 2023")).toBe(true);
-    expect(matchesArtworkSearch(work, "2023-03-05")).toBe(true);
-    expect(matchesArtworkSearch(work, "april")).toBe(false);
-    expect(matchesArtworkSearch(work, "2022")).toBe(false);
+    expect(matchesArtworkSearch(work, "2023", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "march", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "March 5, 2023", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "2023-03-05", fields())).toBe(true);
+    expect(matchesArtworkSearch(work, "april", fields())).toBe(false);
+    expect(matchesArtworkSearch(work, "2022", fields())).toBe(false);
+  });
+});
+
+describe("the Catalogue's enabled fields", () => {
+  it("matches each togglable field only while the Catalogue records it", () => {
+    const cases: {
+      field: ArtworkFieldKey;
+      value: string;
+      query: string;
+    }[] = [
+      { field: "serie", value: "Coastal Studies", query: "coastal" },
+      { field: "medium", value: "Oil on canvas", query: "canvas" },
+      { field: "editions", value: "Edition 7 of 25", query: "edition" },
+      { field: "dateOfCreation", value: "circa 1889", query: "circa" },
+      { field: "acquisitionDate", value: "2023-03-05", query: "2023" },
+      { field: "placeOfOrigin", value: "Málaga", query: "malaga" },
+      {
+        field: "provenance",
+        value: "Gifted by the artist's estate",
+        query: "estate",
+      },
+      { field: "notes", value: "Needs conservation", query: "conservation" },
+    ];
+
+    for (const { field, value, query } of cases) {
+      const work = { [field]: value };
+      expect(
+        matchesArtworkSearch(work, query, fields()),
+        `${field} should match "${query}" while enabled`,
+      ).toBe(true);
+      expect(
+        matchesArtworkSearch(work, query, fields([field])),
+        `${field} should not match "${query}" while disabled`,
+      ).toBe(false);
+    }
+  });
+
+  it("always matches Title and Artist Name, whatever the settings say", () => {
+    const none = nothingToggled();
+
+    expect(
+      matchesArtworkSearch({ title: "Harbour at Dusk" }, "harbour", none),
+    ).toBe(true);
+    expect(
+      matchesArtworkSearch({ artistName: "Winslow Homer" }, "homer", none),
+    ).toBe(true);
+    // A disabled sibling does not take them with it.
+    expect(
+      matchesArtworkSearch(
+        { title: "Harbour", artistName: "Homer", notes: "conservation" },
+        "harbour homer",
+        none,
+      ),
+    ).toBe(true);
+    expect(
+      matchesArtworkSearch(
+        { title: "Harbour", notes: "conservation" },
+        "conservation",
+        none,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -146,8 +271,10 @@ describe("blank versus no terms", () => {
   });
 
   it("matches nothing when a committed query normalizes to zero terms", () => {
-    expect(matchesArtworkSearch({ title: "Blue" }, "—")).toBe(false);
-    expect(matchesArtworkSearch({ title: "Blue" }, " , . ! ")).toBe(false);
+    expect(matchesArtworkSearch({ title: "Blue" }, "—", fields())).toBe(false);
+    expect(matchesArtworkSearch({ title: "Blue" }, " , . ! ", fields())).toBe(
+      false,
+    );
   });
 });
 
@@ -171,6 +298,7 @@ describe("the shared caps", () => {
       matchesArtworkSearch(
         { title: "a b c d e f g h i j k" },
         "a-b-c-d-e-f-g-h-i-j-k",
+        fields(),
       ),
     ).toBe(true);
 
@@ -372,24 +500,22 @@ describe("the structured filters' matching", () => {
   };
 
   it("means either value within a field", () => {
-    expect(
-      matchesArtworkFilters(work, { artistName: ["Matisse", "Picasso"] }),
-    ).toBe(true);
-    expect(
-      matchesArtworkFilters(work, { artistName: ["Matisse", "Monet"] }),
-    ).toBe(false);
+    expect(filterMatch(work, { artistName: ["Matisse", "Picasso"] })).toBe(
+      true,
+    );
+    expect(filterMatch(work, { artistName: ["Matisse", "Monet"] })).toBe(false);
   });
 
   it("means every populated field across fields", () => {
     expect(
-      matchesArtworkFilters(work, {
+      filterMatch(work, {
         artistName: ["Matisse", "Picasso"],
         medium: ["canvas"],
       }),
     ).toBe(true);
     // The artist matches, the serie does not: AND, not OR.
     expect(
-      matchesArtworkFilters(work, {
+      filterMatch(work, {
         artistName: ["Picasso"],
         serie: ["Coastal"],
       }),
@@ -398,51 +524,56 @@ describe("the structured filters' matching", () => {
 
   it("normalizes both sides and matches within the named field only", () => {
     const accented = { title: "Cézanne Study", artistName: "Salvador Dalí" };
-    expect(matchesArtworkFilters(accented, { artistName: ["dali"] })).toBe(
-      true,
-    );
-    expect(matchesArtworkFilters(accented, { artistName: ["DALÍ"] })).toBe(
-      true,
-    );
+    expect(filterMatch(accented, { artistName: ["dali"] })).toBe(true);
+    expect(filterMatch(accented, { artistName: ["DALÍ"] })).toBe(true);
 
     // The value appears in the work, but not in the field that was filtered.
     const noted = { title: "Red Field", notes: "Blue Harbour" };
-    expect(matchesArtworkFilters(noted, { title: ["harbour"] })).toBe(false);
+    expect(filterMatch(noted, { title: ["harbour"] })).toBe(false);
   });
 
   it("matches an acquisition date in its stored and displayed forms", () => {
     const dated = { acquisitionDate: "2023-03-05" };
-    expect(matchesArtworkFilters(dated, { acquisitionDate: ["2023"] })).toBe(
-      true,
-    );
-    expect(matchesArtworkFilters(dated, { acquisitionDate: ["March"] })).toBe(
-      true,
-    );
+    expect(filterMatch(dated, { acquisitionDate: ["2023"] })).toBe(true);
+    expect(filterMatch(dated, { acquisitionDate: ["March"] })).toBe(true);
   });
 
   it("compares an enumerated field exactly, never by prefix", () => {
-    expect(matchesArtworkFilters(work, { status: ["published"] })).toBe(true);
-    expect(matchesArtworkFilters(work, { status: ["pub"] })).toBe(false);
-    expect(matchesArtworkFilters(work, { status: ["draft"] })).toBe(false);
-    expect(matchesArtworkFilters(work, { availability: ["available"] })).toBe(
-      true,
-    );
-    expect(matchesArtworkFilters(work, { availability: ["avail"] })).toBe(
-      false,
-    );
-    expect(matchesArtworkFilters(work, { availability: ["sold"] })).toBe(false);
+    expect(filterMatch(work, { status: ["published"] })).toBe(true);
+    expect(filterMatch(work, { status: ["pub"] })).toBe(false);
+    expect(filterMatch(work, { status: ["draft"] })).toBe(false);
+    expect(filterMatch(work, { availability: ["available"] })).toBe(true);
+    expect(filterMatch(work, { availability: ["avail"] })).toBe(false);
+    expect(filterMatch(work, { availability: ["sold"] })).toBe(false);
+  });
+
+  it("does not match or facet a field the Catalogue does not record", () => {
+    const withoutMedium = filterFields();
+    withoutMedium.medium = false;
+    expect(
+      matchesArtworkFilters(work, { medium: ["canvas"] }, withoutMedium),
+    ).toBe(false);
+    expect(artworkFacets([work], ["medium"], withoutMedium)).toEqual({
+      medium: [],
+    });
+    const withoutAvailability = filterFields();
+    withoutAvailability.availability = false;
+    expect(
+      matchesArtworkFilters(
+        work,
+        { availability: ["available"] },
+        withoutAvailability,
+      ),
+    ).toBe(false);
   });
 
   it("lets a field with no value fail its filter, and ignores an empty one", () => {
-    expect(matchesArtworkFilters(work, { serie: ["Coastal"] })).toBe(false);
+    expect(filterMatch(work, { serie: ["Coastal"] })).toBe(false);
     // An absent availability is not the empty string: a filter names a state.
     expect(
-      matchesArtworkFilters(
-        { title: "Untitled" },
-        { availability: ["available"] },
-      ),
+      filterMatch({ title: "Untitled" }, { availability: ["available"] }),
     ).toBe(false);
-    expect(matchesArtworkFilters(work, { artistName: [] })).toBe(true);
+    expect(filterMatch(work, { artistName: [] })).toBe(true);
   });
 });
 
@@ -469,7 +600,7 @@ describe("facet counts", () => {
   ];
 
   it("counts each value of the field over the given set, normalized", () => {
-    expect(artworkFacets(works, ["artistName"])).toEqual({
+    expect(facetCount(works, ["artistName"])).toEqual({
       artistName: [
         { value: "pablo picasso", count: 2 },
         { value: "dali", count: 1 },
@@ -478,7 +609,7 @@ describe("facet counts", () => {
   });
 
   it("counts an enumerated field by its stored value and leaves an absent one out", () => {
-    expect(artworkFacets(works, ["status", "availability"])).toEqual({
+    expect(facetCount(works, ["status", "availability"])).toEqual({
       status: [
         { value: "published", count: 2 },
         { value: "draft", count: 1 },
@@ -497,7 +628,7 @@ describe("facet counts", () => {
       { artistName: "Monet" },
       { artistName: "Cézanne" },
     ];
-    expect(artworkFacets(tied, ["artistName"]).artistName).toEqual([
+    expect(facetCount(tied, ["artistName"]).artistName).toEqual([
       { value: "monet", count: 2 },
       { value: "cezanne", count: 1 },
       { value: "dali", count: 1 },
@@ -505,9 +636,9 @@ describe("facet counts", () => {
   });
 
   it("answers an empty list for a field with no values, and skips blank text", () => {
-    expect(artworkFacets([], ["title"])).toEqual({ title: [] });
+    expect(facetCount([], ["title"])).toEqual({ title: [] });
     expect(
-      artworkFacets([{ title: "  " }, { title: null }], ["title"]).title,
+      facetCount([{ title: "  " }, { title: null }], ["title"]).title,
     ).toEqual([]);
   });
 
@@ -515,7 +646,7 @@ describe("facet counts", () => {
     const many = Array.from({ length: MAX_FACET_VALUES + 1 }, (_, i) => ({
       title: `work-${String(i).padStart(3, "0")}`,
     }));
-    const facet = artworkFacets(many, ["title"]).title ?? [];
+    const facet = facetCount(many, ["title"]).title ?? [];
     expect(facet).toHaveLength(MAX_FACET_VALUES);
     expect(facet[0]?.value).toBe("work-000");
     expect(facet.at(-1)?.value).toBe("work-499");

@@ -3,7 +3,7 @@
 **Status: implementation-ready.** This is the contract for Arcula's agent
 surface: a hosted MCP server that lets a person drive their Catalogues and
 Artworks from an agent. The decision and its rejected alternatives are
-[ADR-0013](../adr/0013-agents-reach-arcula-through-a-hosted-mcp-server.md); this
+[ADR-0014](../adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md); this
 document is the build.
 
 The product vocabulary is [GLOSSARY.md](../../GLOSSARY.md)'s: **Catalogue**,
@@ -88,9 +88,10 @@ The descriptions carry three rules the schema cannot express:
 
 - **Kind is fixed at creation**; a Portfolio's name is the artist's name and its
   description is their bio; an Inventory's are the gallery's.
-- **A Collection carries no Availability.** `create_artwork` and `update_artwork`
-  accept it on any kind, as the API does; on a Collection it is recorded and
-  never shown.
+- **A Catalogue records a chosen set of Artwork fields.** `create_artwork` and
+  `update_artwork` name only fields the Catalogue records; one it has turned off
+  is refused with `field-disabled`. Availability is one of those fields: on by
+  default for a Portfolio or an Inventory, off for a Collection.
 - **The free tier owns ten Catalogues**; exceeding it answers `limit-reached`,
   which is terminal and is relayed to the person, not retried.
 

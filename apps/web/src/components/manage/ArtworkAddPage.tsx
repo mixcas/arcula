@@ -9,8 +9,8 @@ import { useArtworkDocuments } from "@/hooks/useArtworkDocuments";
 import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
-import { catalogueSurface, newArtworkForm } from "@/catalogueSurface";
-import { withoutAvailability } from "@/schemas/artwork";
+import { newArtworkForm } from "@/catalogueSurface";
+import { withoutDisabledArtworkFields } from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
 import { trackEvent } from "@/telemetry/logRocket";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
@@ -23,6 +23,7 @@ import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 
 import {
   artworkSchema,
+  resolveArtworkFields,
   toArtworkPayload,
   toArtworkCreatePayload,
   type ArtworkFormValues,
@@ -44,8 +45,8 @@ import {
  * not.
  *
  * The page owns the route, the minted id and the catalogue; the form below it
- * is mounted only once the catalogue's kind is known, because the form's
- * starting values are a per-kind answer (`newArtworkForm`).
+ * is mounted only once the catalogue's configuration is known, because both the
+ * fields it shows and its starting values come from it.
  */
 const ArtworkAddPage: React.FC = () => {
   const { catalogueId: param } = useParams<{ catalogueId: string }>();
@@ -74,10 +75,10 @@ const ArtworkAddPage: React.FC = () => {
   const documents = useArtworkDocuments({ catalogueId, artworkId });
   const artistNames = useArtistNames();
 
-  // The catalogue's kind is what decides the form's starting values: the
-  // artist a new work is credited to, whether it carries a market state at
-  // all, and which states the form offers. The page loads it before showing
-  // the form, so neither the fields nor the control can flicker.
+  // The catalogue decides the form's starting values and the fields it shows:
+  // the artist a new work is credited to, whether it records a market state,
+  // and which inputs are rendered. The page loads it before showing the form,
+  // so neither the fields nor the controls can flicker.
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -153,13 +154,13 @@ interface ArtworkAddFormProps {
 }
 
 /**
- * The form itself, mounted once the kind is known.
+ * The form itself, mounted once the catalogue's fields are known.
  *
- * Every kind's form is built from the surface's one answer for it: the values
- * the fields start with. There is no per-kind branch here, so a kind with
- * nothing prefilled — an Inventory, a Collection — is still initialised exactly
- * like the others instead of falling through a condition written for the market
- * state.
+ * Every Kind's form is built from one resolved answer: the fields the catalogue
+ * records and the values they start with. There is no per-kind branch here, so
+ * a Kind with nothing prefilled — an Inventory, a Collection — is still
+ * initialised exactly like the others instead of falling through a condition
+ * written for the market state.
  */
 const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
   catalogue,
@@ -172,14 +173,19 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
   artistNames,
 }) => {
   const navigate = useNavigate();
-  // The catalogue's kind is read once here, at mount: this component exists
-  // only because the catalogue arrived, and the form's initial values are the
-  // one thing it cannot take later.
-  const initialValues = newArtworkForm(catalogue.kind, catalogue.name);
-  const availabilityValues = catalogueSurface(
+  // The catalogue's configuration is read once here, at mount: this component
+  // exists only because the catalogue arrived, and the form's initial values
+  // are the one thing it cannot take later. The resolved fields decide both
+  // which inputs render and what a new work starts with.
+  const enabledFields = resolveArtworkFields(
     catalogue.kind,
-  ).availabilityValues;
-  const availabilityInPlay = availabilityValues.length > 0;
+    catalogue.artworkFields,
+  ).enabled;
+  const initialValues = newArtworkForm(
+    catalogue.kind,
+    catalogue.name,
+    enabledFields,
+  );
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
@@ -211,11 +217,11 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
           try {
             // One write: the fields plus the staged entries, promoted in the
             // same transaction. `commit()` answers null when the list is
-            // unchanged, which on a new artwork means "nothing staged".
+            // unchanged, which on a new artwork means "nothing staged". A
+            // field the catalogue does not record — Availability included —
+            // is dropped from the payload for every Kind.
             const body = toArtworkCreatePayload(
-              // A Collection has no market state, so its save says nothing
-              // about one; the API writes null for the absent key.
-              availabilityInPlay ? payload : withoutAvailability(payload),
+              withoutDisabledArtworkFields(payload, enabledFields),
               artworkId,
               photos.commit() ?? [],
               documents.commit() ?? [],
@@ -255,7 +261,7 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
           photos={photos}
           documents={documents}
           artistNames={artistNames}
-          availabilityValues={availabilityValues}
+          enabledFields={enabledFields}
         />
 
         {error ? (

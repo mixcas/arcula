@@ -30,7 +30,7 @@ interface ArtworksGridProps {
   catalogueParam: string;
   /** The committed Catalogue search; Edit carries it back. */
   searchQuery?: string;
-  /** Whether this catalogue's kind carries a work's market state. */
+  /** Whether this catalogue records a work's market state. */
   showAvailability?: boolean;
   /** Ask the list to confirm and soft-delete one work. */
   onConfirmDeleteArtwork: (artwork: Artwork) => void;

@@ -6,7 +6,7 @@ sharing tables from
 two password tables from
 [ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
 the write limiter's counter from
-[ADR-0013](../../docs/adr/0013-agents-reach-arcula-through-a-hosted-mcp-server.md)
+[ADR-0014](../../docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md)
 and the eight tables that ADR's OAuth provider and JWT plugin write.
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`

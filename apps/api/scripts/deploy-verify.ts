@@ -141,7 +141,7 @@ const post = (path: string, body: unknown, authed = false) =>
   );
 
   // 3b. The session token is not a second credential in a deployment. A deploy
-  //     mounts no bearer plugin (env.ts → bearerAuthAllowed, ADR-0013), so the
+  //     mounts no bearer plugin (env.ts → bearerAuthAllowed, ADR-0014), so the
   //     token the sign-up just minted is a cookie session and nothing else:
   //     presenting it as `Authorization: Bearer` must not resolve a session.
   //     This is the deployed side of the rule the pure predicate carries, and

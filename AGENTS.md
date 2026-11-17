@@ -218,7 +218,7 @@ the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. The
 implementation contract is
 [`docs/specs/agent-access.md`](docs/specs/agent-access.md), and the decision
 with its rejected alternatives is
-[ADR-0013](docs/adr/0013-agents-reach-arcula-through-a-hosted-mcp-server.md).
+[ADR-0014](docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md).
 
 A session token is a cookie in a deployment, never an API bearer: production
 mounts no `bearer()` plugin, and the deploy verifier asserts a deploy refuses

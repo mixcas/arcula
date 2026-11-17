@@ -65,8 +65,8 @@ connection are two credentials for the same account, and neither is the other.
 tool per route: nine intent-level tools — list and read Catalogues, create and
 update one, search Artworks, read/create/update one, import works — whose
 descriptions carry the rules a person would otherwise have to be told (the Kind
-is fixed at creation; a Collection carries no Availability; the free tier owns
-ten Catalogues). Their names use Catalogue and Artwork, never the deprecated
+is fixed at creation; a Catalogue records a chosen set of Artwork fields; the
+free tier owns ten Catalogues). Their names use Catalogue and Artwork, never the deprecated
 `collection`.
 
 **The tool layer calls the modules, never the routes.** `authorize.ts`,
@@ -141,7 +141,9 @@ listed, revocable connection, and a session token nothing names.
   `catalogueSurface.ts` lives in `apps/web`, so a strict tool would need that
   table moved to `packages/shared` first. The first release is permissive about
   Availability on a Collection, exactly as the API is; nothing renders it
-  publicly.
+  publicly. (Later, ADR-0013 moved the field registry to `packages/shared` and
+  made every togglable field, Availability included, a per-Catalogue choice; the
+  tool descriptions and the refusal follow that registry.)
 
 ## Consequences
 

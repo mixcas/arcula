@@ -1,8 +1,9 @@
 import React from "react";
 import { Button, Card, Group, Select, Table, Text } from "@mantine/core";
 import {
-  ARTWORK_IMPORT_FIELDS,
+  enabledImportFields,
   guessColumnMapping,
+  type ArtworkFieldStates,
   type ColumnMapping,
   type ImportFieldKey,
 } from "@arcula/shared";
@@ -13,23 +14,36 @@ interface MapColumnsStepProps {
   sampleRows: string[][];
   mapping: ColumnMapping;
   onMappingChange: (mapping: ColumnMapping) => void;
+  /**
+   * The record fields this catalogue records, resolved from its Kind and its
+   * stored deviations. Title and Artist Name are always offered; every other
+   * field appears as a target only when its key is enabled, so a column for a
+   * field the catalogue cannot hold stays unmapped.
+   */
+  enabledFields: ArtworkFieldStates;
 }
 
 /**
  * Stepper step 2: decide which CSV column feeds which artwork field.
  *
- * The Select shows a "Don't import this column" option plus every importable
- * field (with the required marker). A field already claimed by another column
- * is disabled so two columns cannot both feed `title`. Completeness — both
- * `title` and `artistName` mapped — is what unlocks the Next button; it is
- * evaluated here so the button state can derive from it.
+ * The Select shows a "Don't import this column" option plus the fields this
+ * catalogue records (with the required marker). A field already claimed by
+ * another column is disabled so two columns cannot both feed `title`, and a
+ * disabled field has no option at all. Completeness — both `title` and
+ * `artistName` mapped — is what unlocks the Next button; it is evaluated here
+ * so the button state can derive from it.
  */
 const MapColumnsStep: React.FC<MapColumnsStepProps> = ({
   headers,
   sampleRows,
   mapping,
   onMappingChange,
+  enabledFields,
 }) => {
+  // The targets this catalogue records; `guessColumnMapping` reads the same
+  // set, so auto-map and the dropdown cannot disagree.
+  const offered = enabledImportFields(enabledFields);
+
   // Fields already assigned, so the same field cannot map twice.
   const claimed = new Set(
     Object.values(mapping).filter(Boolean) as ImportFieldKey[],
@@ -65,7 +79,9 @@ const MapColumnsStep: React.FC<MapColumnsStepProps> = ({
         </Text>
         <Button
           variant="light"
-          onClick={() => onMappingChange(guessColumnMapping(headers))}
+          onClick={() =>
+            onMappingChange(guessColumnMapping(headers, enabledFields))
+          }
           disabled={headers.length === 0}
         >
           Auto-map columns
@@ -100,7 +116,7 @@ const MapColumnsStep: React.FC<MapColumnsStepProps> = ({
                     placeholder="Don't import this column"
                     data={[
                       { value: "", label: "Don't import this column" },
-                      ...ARTWORK_IMPORT_FIELDS.map((field) => ({
+                      ...offered.map((field) => ({
                         value: field.key,
                         label: `${field.label}${field.required ? " (required)" : ""}`,
                         disabled:

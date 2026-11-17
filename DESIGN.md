@@ -31,11 +31,15 @@ the owner, and given a public page whose presentation is chosen by a "skin".
 A catalogue carries a **kind**, fixed at creation: a **Portfolio** is one
 artist's body of work, a **Collection** is what a collector owns, and an
 **Inventory** is what a gallery represents for sale. The kind shapes the surface
-(the name and description labels, and whether a work carries an availability) —
-it is not an account role, because one account may hold all three at once
+(the name and description labels, and the defaults a new Catalogue's **Artwork
+fields** start from) — it is not an account role, because one account may hold
+all three at once
 ([ADR-0010](docs/adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md)).
-A work in a Portfolio or an Inventory carries an **availability** beside its
-published/draft status; a Collection's works do not.
+Which fields a Catalogue's works record is then the Catalogue's own choice,
+made from one fixed registry and resolved against those defaults
+([ADR-0013](docs/adr/0013-artwork-fields-are-a-per-catalogue-choice.md)). A
+work's **availability** — the market state beside its published/draft status —
+is one of those fields, on every kind.
 
 The design bet, stated in the README, is that art is not tidy data: an unset
 field is not an empty one, `acquisitionDate` is a string ("circa 1889") rather
@@ -166,12 +170,22 @@ the three values. Nothing writes it after create: a catalogue never changes
 meaning underneath the works it holds. `0009_catalogue_kind` is pure generated
 SQL — a constant default needs no backfill.
 
-`artworkFields` is a catalogue's sparse map of deviations from its Kind's
-defaults: an absent key follows the default, and `null` and `{}` both mean pure
-defaults. `0011_catalogue_artwork_fields` adds it nullable with no default, so
-every existing catalogue is already right and no backfill or tightening step is
-owed. Nothing reads it yet; the registry that names its keys and the surfaces
-that write it ship separately.
+`artworkFields` is the Catalogue's sparse map of deviations from its Kind's
+Artwork-field defaults: a nullable jsonb whose entries are the fields the member
+decided, an absent key meaning "follow the Kind", and `null` or `{}` meaning pure
+defaults. The registry — the thirteen togglable keys, the two fixed ones, the
+per-Kind defaults, the resolver, the normaliser and the refusal predicate — lives
+in `packages/shared/src/artworkFields.ts`, not in the row: the column stores the
+choice, it does not define the vocabulary. The write path normalises on save, so
+an entry equal to the Kind's default is dropped and an empty map is stored as
+`null`; every audience's read carries the map, visitors included, because the
+public Catalogue PDF resolves the same enabled set from it. The feature's
+decision and rejected alternatives are in
+[ADR-0013](docs/adr/0013-artwork-fields-are-a-per-catalogue-choice.md).
+`0011_catalogue_artwork_fields` added the column nullable and read by nothing, in
+its own release; the registry, the contract, the API and the web surfaces shipped
+in the next one, because the deploy replaces the Lambda before it migrates.
+Nothing backfills: a Catalogue that never deviated is the normal state.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
 namespace every final media key uses. The schema shipped in two releases:
@@ -270,10 +284,11 @@ is the string that is stored — plus `availability` (nullable), `status`
 
 `availability` is `available`, `reserved`, `sold` or `on-consignment`, nullable
 with no default and CHECK-constrained to the four values. Null means no market
-state, which is every Collection work, so `0010_artwork_availability` is pure
-generated SQL and needs no backfill. The API accepts it on any work and never
-checks it against the catalogue's kind; which kinds surface it is a presentation
-decision.
+state recorded. It is the thirteenth **Artwork field**: all four states exist on
+every Kind, and whether a Catalogue records one is that Catalogue's choice, not
+its Kind's. `0010_artwork_availability` is pure generated SQL and needs no
+backfill. The API accepts it on every work whose Catalogue records the field and
+never validates it against the Kind.
 
 `userId` is a mirror of the catalogue owner, kept in step when a catalogue is
 transferred; no route authorizes on it, and media URLs no longer derive their
@@ -531,11 +546,15 @@ timestamp and the media-proxy `url` fields).
 
 An artwork save carries `availability` like any other optional field: create
 writes the value it names and null when it names none; PATCH sets a value,
-clears it with `null`, and leaves the column alone when the key is absent. The
-API never checks it against the catalogue's kind — the kind shapes the form,
-not the schema — so a Collection's work may carry a state and keeps it. A
-member read always emits the key, null included; a visitor's document does not
-carry it at all, and no route gates on it.
+clears it with `null`, and leaves the column alone when the key is absent. Which
+fields a save may name is the Catalogue's Artwork fields rather than its Kind:
+the create and update routes resolve the enabled set and refuse any payload key
+the Catalogue turned off with `400 field-disabled`, naming the fields in
+`error.fields` and in the message (`apps/api/src/artworkFieldRefusal.ts`). That
+is a separate code from `field-not-writable` because the remedy differs — a stale
+form must re-read the Catalogue, not stop sending a server-managed field. A
+member read always emits `availability`, null included; a visitor's document does
+not carry it, and no route gates on it.
 
 Sharing is built. The owner creates an invitation; the mail is the only place
 the raw token exists, and the invited account previews, accepts or declines it.
@@ -570,6 +589,16 @@ continues to mean something was. The relaxation is strictly additive: a
 bundle cached from before it still sends both fields and is still accepted,
 and the two halves cannot skew, because the client and the server ship as one
 Lambda.
+
+The same write carries the Artwork fields. `artworkFields` is the sparse map of
+deviations, keyed by the registry's thirteen names, so an unknown key is a
+validation error rather than a silently stored one; it is optional and nullable
+like the other keys, and an absent key leaves the column alone. The route
+normalises it against the row's own Kind — an entry that restates a default is
+dropped, and `null` or `{}` becomes `null` when nothing is left — so "back to the
+defaults" is a state the member lands in rather than a value the column keeps.
+The create contract does not accept the map: a new Catalogue is its Kind's
+defaults with nothing stored.
 
 The kind is chosen once. `POST /catalogues` accepts `kind` — `portfolio`,
 `collection` or `inventory` — defaulting to `collection`, the collector's case
@@ -617,10 +646,12 @@ normalizes both sides (NFD, diacritics stripped, lowercased), splits the query
 on punctuation and requires every term to appear somewhere in the joined text of
 the ten declared fields (title, artist name, serie, medium, editions, date of
 creation, acquisition date, place of origin, provenance, notes); terms may match
-different fields, and a query that normalizes to no terms matches nothing. The
-acquisition date is searched in both its stored `YYYY-MM-DD` and its displayed
-`MMMM D, YYYY` form. An absent, empty or whitespace-only `q` leaves the search
-unchanged.
+different fields, and a query that normalizes to no terms matches nothing. Title
+and Artist Name always contribute; the other eight contribute only while the
+Catalogue records them, so a field it turned off is not found even when the
+stored row still holds its text. The acquisition date is searched in both its
+stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. An absent, empty or
+whitespace-only `q` leaves the search unchanged.
 
 Its structured half — the contract an agent's search builds on — filters on the
 same ten text fields plus `status` and `availability`. A repeated parameter
@@ -629,18 +660,19 @@ oil medium is one request; at most 20 values in a field and 8 fields are
 allowed. A text value is normalized and matched within its own field only
 (`medium=oil` finds "Oil on canvas"; a work's note never answers a title
 filter), while an enumerated value is compared exactly and one outside its list
-is `400 validation`, never ignored. `q` ANDs with the filters. `sort` is
-`updated` (the default, newest first), `title`, `artistName` or
-`dateOfCreation`, compared normalized, each ending on `id`, so the order is
-total and a paged read can neither skip nor repeat a row. An absent `limit` is
-every match — which is what the web reads — a present one is capped at 100, and
-`offset` without `limit` is `400 validation`. The answer is the page envelope
-`{ artworks, total, limit, offset }`: `total` counts the matches before paging
-and `limit` is `null` when the caller named none. `facets` names one or more
-filterable fields and adds `facets: { <field>: [{ value, count }] }`, counted
-over the filtered set rather than the page, ordered by count descending then
-value and capped at 500 per field; an unknown field or facet is `400
-validation` naming it.
+is `400 validation`, never ignored. Filters and facets read the same enabled set
+the free text does: a field the Catalogue does not record matches no filter and
+yields no facet entries. `q` ANDs with the filters. `sort` is `updated` (the
+default, newest first), `title`, `artistName` or `dateOfCreation`, compared
+normalized, each ending on `id`, so the order is total and a paged read can
+neither skip nor repeat a row. An absent `limit` is every match — which is what
+the web reads — a present one is capped at 100, and `offset` without `limit` is
+`400 validation`. The answer is the page envelope `{ artworks, total, limit,
+offset }`: `total` counts the matches before paging and `limit` is `null` when
+the caller named none. `facets` names one or more filterable fields and adds
+`facets: { <field>: [{ value, count }] }`, counted over the filtered set rather
+than the page, ordered by count descending then value and capped at 500 per
+field; an unknown field or facet is `400 validation` naming it.
 
 Deleted works are never candidates and a member's drafts are; a visitor filters
 published works only, exactly the verdict the unfiltered read gives. Both halves
@@ -789,11 +821,12 @@ descriptions carry the three rules the schemas cannot:
 
 - **Kind is fixed at creation.** A Portfolio's name is the artist's name and its
   description their bio; an Inventory's are the gallery's.
-- **A Collection carries no Availability.** `create_artwork` and
-  `update_artwork` accept it on any Kind, as the API does; on a Collection it is
-  recorded and never shown. The stored value still rides the full record
-  `get_artwork` answers — what the app never does is display it, so "never
-  shown" is about the interface, not the row.
+- **A Catalogue records a chosen set of Artwork fields.** `create_artwork` and
+  `update_artwork` name only fields the Catalogue records; one it has turned off
+  is refused with `field-disabled`. Availability is one of those fields — on by
+  default for a Portfolio or an Inventory, off for a Collection — and the
+  registry behind the choice (`@arcula/shared`) is the one the forms, the CSV
+  import, the PDF and the tools all resolve.
 - **The free tier owns ten Catalogues**, and a `limit-reached` refusal is
   terminal: it is relayed to the person, never retried.
 
@@ -965,27 +998,30 @@ invitations addressed to the signed-in account, each naming its catalogue and
 inviter and offering decline only — acceptance is the mailed link, and the card
 says so.
 
-One pure module answers what a kind means for the surface.
-`src/catalogueSurface.ts` returns, for a kind, the kind's own label and colour,
-the labels of `name` and `description`, the market states that kind offers,
-whether that name is the artist's name, and the artwork form's field table with
-`visible` and `required` rules. The colour
+One pure module answers what a kind means for the surface, and one answers what
+a Catalogue records. `src/catalogueSurface.ts` returns, for a kind, the kind's
+own label and colour, the labels of `name` and `description`, the four market
+state words, and whether that name is the artist's name. The colour
 is a name from a literal union, never a Mantine type or a hex, and the record's
 key type makes a fourth kind a build error until it has one; one presentational
 badge renders it as a shade-3 fill with dark text, and that badge is the only
-kind badge in the app. The table is v1's whole rule — every existing artwork
-field visible on every kind, only `title` and `artistName` required — and it is
-the data a later per-kind hiding will read; no v1 screen consumes the rules yet.
-What screens do read is the labels, the availability values and the two
-creation defaults: `availabilityFor`, the one default that starts a surfaced
-work at `available` and hands a Collection nothing, and `newArtworkForm`, which
-answers what a create form starts as on one kind — in one call, so a screen has
-no per-kind branch that could skip a kind. On a Portfolio its new work starts
-credited to the portfolio's artist — the catalogue's own name, because on that
-kind the two are the same fact; on an Inventory and a Collection the field
-starts empty. The artist default is a starting value, never a derived fact: the
-field stays editable and required, so a work credited to a guest, an estate or
-an attribution saves exactly as typed, and only the create form reads it.
+kind badge in the app. The market state is deliberately not a kind answer: every
+kind offers the same four states, and whether a Catalogue records one is the
+**Artwork fields** registry's decision. `packages/shared/src/artworkFields.ts`
+owns the thirteen togglable fields, the two fixed ones, the per-Kind defaults,
+`resolveArtworkFields`, `normaliseArtworkFields` and the predicate the save routes
+refuse with; the form, the settings card, search, the PDF and the import all call
+it, so no screen and no route keeps its own field list. `newArtworkForm` takes the
+kind, the catalogue's name and the resolved fields, and answers what a create form
+starts as — in one call, so a screen has no per-kind branch that could skip a
+kind. On a Portfolio its new work starts credited to the portfolio's artist — the
+catalogue's own name, because on that kind the two are the same fact; on an
+Inventory and a Collection the field starts empty, and a new work starts with a
+market state exactly when the Catalogue records Availability. The artist default
+is a starting value, never a derived fact: the field stays editable and required,
+so a work credited to a guest, an estate or an attribution saves exactly as typed,
+and only the create form reads it.
+
 The create form asks the kind with three cards
 and no default, and the two fields below them stay away until one is chosen:
 each card carries the kind's icon, its persona (Artist, Gallery, Art Collector)
@@ -1001,20 +1037,29 @@ colour-coded badge, so what the catalogue is stays clear after creation; the
 dashboard badges every row with that badge. Nothing writes the kind after
 creation.
 
-Availability is the one artwork field the kind gates. On a Portfolio the
-artwork form offers Available, Reserved and Sold beside Status — a Portfolio
-sells the artist's own work, so it never offers on-consignment — and an
-Inventory offers those three plus On consignment, for work it represents but
-does not own. A work with no stored state starts Available; a stored value is
-shown as it is and never overwritten by opening the form. A Collection's form
-renders nothing for it and sends no key, so its works keep a null. The manage
-list, the grid and the Deleted view badge a work's availability beside its
-Draft badge on the two kinds only: the page derives one `showAvailability` from
-the catalogue's kind and passes it down, so a value a Collection's work happens
-to carry is never shown. The public views render none of it — availability is a
-member-facing market fact, never a second gate, so a sold published work stays
-visible to a visitor and the API leaves the key off a visitor's document
-altogether.
+Availability is the thirteenth Artwork field, not a gate its kind sets. Every
+kind offers the same four states — Available, Reserved, Sold and On consignment —
+and a Catalogue records the field or it does not. On a Catalogue that records it,
+the artwork form offers all four beside Status and starts a work with no stored
+state at Available; a stored value is shown as it is and is never overwritten by
+opening the form. On a Catalogue that does not, the form renders no control and
+its save omits the key, so a stored value is kept and never cleared. The Add and
+Edit forms render every field the same way: a disabled field's input is simply
+not there, and the save omits its key, so a hidden value survives. The manage
+list, the grid and the Deleted view badge a work's availability beside its Draft
+badge exactly when the Catalogue records the field: the page resolves the enabled
+set from the catalogue's kind and stored deviations and passes `showAvailability`
+down, so a value the Catalogue does not record is never shown. The public views
+render none of it — availability is a member-facing market fact, never a second
+gate, so a sold published work stays visible to a visitor and the API leaves the
+key off a visitor's document altogether.
+
+The **Catalogue PDF** prints the fields the Catalogue records. Title and Artist
+Name always print; each metadata line the design prints appears only while its
+field is enabled, and a disabled field's line simply disappears from the column —
+the photo pages, the grid and the layout do not move. A visitor building the PDF
+resolves the same set from the deviations the public catalogue read carries, so
+the exported document is the Catalogue it claims to be.
 
 The catalogue page's search is address state, not component state: `q` in the
 URL is the source of truth. The query is written as the collector types,
@@ -1054,10 +1099,12 @@ collapse and the client's matching deliberately differ: typing `maria` misses a
 recorded "María López".
 
 The catalogue settings page is four tabs, each with its own save:
-**General** (the name and description its kind labels, public or private, and
-the password control), **Public view** (the skin and the options the selected
-skin declares, with the notice that some stored options are unused), **Access**
-(the card described below) and **Data** (the CSV import card). Each tab is an
+**General** (the name and description its kind labels, public or private, the
+password control, and the Artwork fields card), **Public view** (the skin and the
+options the selected skin declares, with the notice that some stored options are
+unused), **Access** (the card described below) and **Data** (the CSV import
+card, whose mapping offers only the fields the Catalogue records and whose run
+summary names the columns it skipped). Each tab is an
 address —
 `/settings/general`, `/settings/public`, `/settings/access`,
 `/settings/data` — and a bare or unknown segment lands on General through the
@@ -1070,6 +1117,21 @@ save keeps the input on screen; and the Save is off while the tab's decision
 answers an empty payload. The inactive panels are not kept mounted, which is
 why the access card fetches nothing until its tab is reached and a tab left
 mid-edit comes back to the stored values.
+
+The General tab's **Artwork fields** card is a sibling card after the privacy
+section. It opens with the statement that Title and Artist Name are always
+recorded, groups the thirteen switches into _About the work_ and _Market &
+acquisition_ (the four market fields carrying a line of explanation each), and
+heads them with "Using the Portfolio defaults" or "Customised · Reset to
+defaults". Reset puts the switches back on the kind's defaults in the buffer; the
+card saves with the tab's existing Save, because a second save button on one tab
+would break the page's one-save rule. The tab's pure save fold compares the
+normalised maps, so a switch that merely restates a default writes nothing and a
+Reset sends an empty map, which the API stores as `null`. Any member may change
+it, owner and collaborator alike, like the rest of Settings; a field that still
+holds a value is explained by one static line rather than a count, and it gets no
+affordance in the Artwork form — the settings card is the one place the record's
+shape is decided.
 
 The settings page's access card carries the access administration: the owner
 sees the invite form, every pending offer (expired ones marked, with resend

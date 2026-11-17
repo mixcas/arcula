@@ -1,7 +1,7 @@
 // The bearer form's rule, as a predicate rather than an instance.
 //
 // A session token in an `Authorization: Bearer` header is the second,
-// undeclared credential (ADR-0013): a deployment does not accept it, local
+// undeclared credential (ADR-0014): a deployment does not accept it, local
 // development and the suites do. `auth.ts` mounts Better Auth's bearer plugin
 // from this predicate, so the rule is testable without constructing a second
 // auth instance — and the deployed side is asserted end-to-end by

@@ -24,10 +24,13 @@ import { eq } from "drizzle-orm";
 import { artworks as artworksTable } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
+  resolveArtworkFields,
   type ArtworkCreatePayload,
+  type ArtworkFieldStates,
   type ArtworkRead,
   type ArtworkUpdatePayload,
 } from "@arcula/shared";
+import { assertArtworkFieldsEnabled } from "./artworkFieldRefusal";
 import { readArtwork } from "./artworkRead";
 import {
   loadArtworkById,
@@ -71,6 +74,7 @@ export const artworkCreateValues = (
   artworkId: string,
   payload: ArtworkCreateFields,
   now: Date,
+  enabled: ArtworkFieldStates,
 ): typeof artworksTable.$inferInsert => ({
   id: artworkId,
   // The mirror of the catalogue's owner, not the session user: a
@@ -92,9 +96,15 @@ export const artworkCreateValues = (
   condition: payload.condition ?? null,
   currentValue: payload.currentValue ?? null,
   status: payload.status,
-  // Always written, null included: a save that names no market state stores
-  // the absence, which is what every Collection work carries.
-  availability: payload.availability ?? null,
+  // A new work starts `available` where the Catalogue records a market state;
+  // where it does not, the absence is null. A save that names a state — null
+  // included — keeps it, so an explicit clear survives.
+  availability:
+    payload.availability !== undefined
+      ? payload.availability
+      : enabled.availability
+        ? "available"
+        : null,
   deletedAt: null,
   createdAt: now,
   updatedAt: now,
@@ -185,11 +195,18 @@ export async function createArtworkFor(
   payload: ArtworkCreateFields & { artworkId?: string },
 ): Promise<ArtworkRead> {
   const catalogue = await memberCatalogueFor(userId, catalogueId);
+  assertArtworkFieldsEnabled(catalogue, payload);
+  const { enabled } = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  );
   const artworkId = payload.artworkId ?? mintId();
   await assertArtworkIdFree(artworkId);
   await db
     .insert(artworksTable)
-    .values(artworkCreateValues(catalogue, artworkId, payload, new Date()));
+    .values(
+      artworkCreateValues(catalogue, artworkId, payload, new Date(), enabled),
+    );
   return readSavedArtwork(catalogue.id, artworkId, userId);
 }
 
@@ -209,6 +226,7 @@ export async function updateArtworkFor(
     catalogueId,
     artworkId,
   );
+  assertArtworkFieldsEnabled(catalogue, payload);
   const set = artworkUpdateSet(payload, new Date());
   if (Object.keys(set).length > 0) {
     await db

@@ -20,7 +20,7 @@ import type { Artwork, Catalogue } from "@arcula/shared";
 
 import { recheckCatalogueAccess } from "./cataloguePdfAccess";
 import { buildCataloguePdfPlan } from "./cataloguePdfPlan";
-import { cataloguePdfTexts } from "./cataloguePdfPreflight";
+import { cataloguePdfFields, cataloguePdfTexts } from "./cataloguePdfPreflight";
 import { CataloguePdf } from "./cataloguePdfDocument";
 import { loadFallbackFamilies } from "./fallbackFonts";
 import {
@@ -57,6 +57,10 @@ export async function exportCatalogue(
   options: ExportOptions = {},
 ): Promise<CataloguePdfResult> {
   const pages = buildCataloguePdfPlan(artworks);
+  // Which metadata the record has is the Catalogue's decision, resolved from
+  // the same deviations both a member's read and a visitor's carry. The
+  // document and the fallback font's character set therefore agree.
+  const fields = cataloguePdfFields(catalogue);
 
   const photoSources = await preparePhotos(scheduledPhotos(pages), {
     signal: options.signal,
@@ -69,7 +73,7 @@ export async function exportCatalogue(
   throwIfAborted(options.signal);
 
   const fallbackFamilies = await loadFallbackFamilies(
-    cataloguePdfTexts(catalogue.name, artworks),
+    cataloguePdfTexts(catalogue.name, artworks, fields),
     options.signal,
   );
   throwIfAborted(options.signal);
@@ -81,6 +85,7 @@ export async function exportCatalogue(
   const document = createElement(CataloguePdf, {
     catalogue,
     pages,
+    fields,
     fallbackFamilies,
     photoSources,
   }) as Parameters<typeof pdf>[0];

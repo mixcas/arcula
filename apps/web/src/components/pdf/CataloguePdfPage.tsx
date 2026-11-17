@@ -79,7 +79,9 @@ const readCatalogue = async (catalogueId: string): Promise<LoadState> => {
   }
   // One list route for both callers: a member's answer includes drafts, a
   // visitor's is published-only. The page plan filters to published, live
-  // works again either way.
+  // works again either way. Both reads carry the Catalogue's field deviations
+  // — the public read included — so a visitor's export resolves exactly the
+  // printed set a member's does.
   const artworks = await artworkService.getCatalogueArtworks(catalogueId);
   return { status: "ready", value: { catalogue, artworks } };
 };

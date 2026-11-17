@@ -158,7 +158,9 @@ _Avoid_: Cost, price
 
 **Current value**:
 What the owner believes the work is worth now. Distinct from the acquisition
-price on purpose.
+price on purpose. The app labels it **Current price**; the stored key and the
+import's column identity keep their old name, because a label does not earn a
+migration.
 _Avoid_: Value, price, valuation
 
 **Provenance**:
@@ -178,10 +180,21 @@ The material a work is made of, in the owner's own words — "Oil on canvas",
 _Avoid_: Media, technique, material
 
 **Availability**:
-A work's market state on a Portfolio or an Inventory — whether it is for sale,
-reserved or sold — the "for sale" axis beside **Published** and **Draft**, which
-are about visibility. A Collection carries no availability.
+A work's market state — available, reserved, sold or on consignment — the "for
+sale" axis beside **Published** and **Draft**. It is one of a Catalogue's
+**Artwork fields**: every Kind offers the same four states, and it is present
+exactly when the Catalogue records it.
 _Avoid_: Status, stock, for-sale
+
+**Artwork fields**:
+A Catalogue's choice of which of an Artwork's fields it records — thirteen of
+them, starting from the defaults its Kind brings, with Title and Artist Name
+always recorded. A field a Catalogue does not record is not asked for, is
+refused on a save, is not matched by Catalogue search and is not printed in the
+Catalogue PDF; a value already recorded is kept and returns when the field is
+turned back on. Photos and Other Documents are not fields, and Published or
+Draft is the work's stamp rather than one of its fields.
+_Avoid_: Record fields, field visibility, schema, columns
 
 **Artwork photo**:
 A picture of the artwork itself, ordered with its siblings. The first one is
