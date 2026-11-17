@@ -19,6 +19,7 @@ export type ApiErrorCode =
   | "not-found"
   | "conflict"
   | "limit-reached"
+  | "field-disabled"
   | "field-not-writable"
   | "internal";
 
@@ -43,6 +44,10 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   "not-found": 404,
   conflict: 409,
   "limit-reached": 409,
+  // A save that names an Artwork field its Catalogue turned off. 400, not
+  // 409: the request is well formed but says something the Catalogue no
+  // longer records, and the remedy is to re-read the Catalogue.
+  "field-disabled": 400,
   "field-not-writable": 409,
   internal: 500,
 };

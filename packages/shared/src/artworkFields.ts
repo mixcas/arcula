@@ -188,3 +188,24 @@ export function normaliseArtworkFields(
   }
   return Object.keys(normalised).length === 0 ? null : normalised;
 }
+
+/**
+ * The togglable fields a save payload names that the Catalogue does not
+ * record. The one predicate the create and the update routes share, so the
+ * two refusals cannot disagree about which key count as a field.
+ *
+ * Derived from the registry rather than a second list: a field added to
+ * `ARTWORK_FIELD_KEYS` is covered by construction. A key is named when it is
+ * present with any value, `null` included — a clear names the field as surely
+ * as a set does — while an absent key leaves the field alone. Fixed fields,
+ * the status and any other key outside the registry are not togglable and
+ * never answer.
+ */
+export function disabledArtworkFieldsIn(
+  enabled: ArtworkFieldStates,
+  payload: Partial<Record<ArtworkFieldKey, unknown>>,
+): ArtworkFieldKey[] {
+  return ARTWORK_FIELD_KEYS.filter(
+    (field) => !enabled[field] && payload[field] !== undefined,
+  );
+}

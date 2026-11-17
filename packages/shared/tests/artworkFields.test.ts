@@ -10,6 +10,7 @@ import {
   ARTWORK_FIXED_FIELDS,
   ARTWORK_FIELD_DEFAULTS,
   ARTWORK_FIELD_KEYS,
+  disabledArtworkFieldsIn,
   normaliseArtworkFields,
   resolveArtworkFields,
   type ArtworkFieldKey,
@@ -152,5 +153,42 @@ describe("normaliseArtworkFields", () => {
     expect(normaliseArtworkFields("collection", { notes: false })).toEqual({
       notes: false,
     });
+  });
+});
+
+describe("disabledArtworkFieldsIn", () => {
+  const allOff = (): Record<ArtworkFieldKey, boolean> =>
+    Object.fromEntries(FIELDS.map((field) => [field, false])) as Record<
+      ArtworkFieldKey,
+      boolean
+    >;
+
+  it("answers every registry field a payload names, whichever value it carries", () => {
+    const payload = Object.fromEntries(
+      FIELDS.map((field) => [field, field === "provenance" ? null : "a value"]),
+    );
+
+    expect(disabledArtworkFieldsIn(allOff(), payload)).toEqual(FIELDS);
+  });
+
+  it("never answers an absent key or a key outside the registry", () => {
+    expect(disabledArtworkFieldsIn(allOff(), {})).toEqual([]);
+    expect(
+      disabledArtworkFieldsIn(allOff(), { provenance: undefined }),
+    ).toEqual([]);
+    // Title, Artist Name and the status are outside the registry and are
+    // never refused, whatever a save carries them as.
+    const fixedPayload: Record<string, unknown> = {
+      title: "A Work",
+      artistName: "A. Artist",
+      status: "draft",
+    };
+    expect(disabledArtworkFieldsIn(allOff(), fixedPayload)).toEqual([]);
+  });
+
+  it("never answers an enabled field", () => {
+    expect(
+      disabledArtworkFieldsIn(on(), { provenance: "The artist's studio" }),
+    ).toEqual([]);
   });
 });
