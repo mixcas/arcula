@@ -186,6 +186,12 @@ _Avoid_: Attachment, file
 The part of an artwork's record that holds its artwork documents.
 _Avoid_: Attachments, files, documents
 
+**Import**:
+A file a member brings into a Catalogue and the works drawn from it. A member's
+CSV import lands them Published; an agent's lands them as Drafts, because a
+conversation is not a review.
+_Avoid_: Upload, ingestion, batch, bulk add
+
 ### What is seen
 
 **Public**:
@@ -284,6 +290,14 @@ _Avoid_: Finalised, committed, moved
 One rendered size of an artwork photo or artwork document, at the size a page
 actually displays it.
 _Avoid_: Thumbnail, rendition, size
+
+### Agents
+
+**Connection**:
+An agent's standing access to one account, approved by the person, named for the
+client that made it, listed and revocable on its own. Never the browser session,
+and never a way into it.
+_Avoid_: Token, API key, integration, app, plugin
 
 ### Tiers
 
