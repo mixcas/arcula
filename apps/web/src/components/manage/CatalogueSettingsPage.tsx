@@ -217,6 +217,8 @@ const CatalogueSettingsPage: React.FC = () => {
         description: catalogue.description ?? null,
         isPublic: catalogue.isPublic === true,
         isPasswordProtected: catalogue.isPasswordProtected === true,
+        kind: catalogue.kind,
+        artworkFields: catalogue.artworkFields ?? null,
       },
       edited,
     );

@@ -10,7 +10,10 @@ import { useArtistNames } from "@/hooks/useArtistNames";
 import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
 import { catalogueSurface, newArtworkForm } from "@/catalogueSurface";
-import { withoutAvailability } from "@/schemas/artwork";
+import {
+  withoutAvailability,
+  withoutDisabledArtworkFields,
+} from "@/schemas/artwork";
 import { ApiRequestError } from "@/services/api";
 import { trackEvent } from "@/telemetry/logRocket";
 import ArtworkFields from "@/components/manage/artwork/ArtworkFields";
@@ -23,6 +26,7 @@ import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 
 import {
   artworkSchema,
+  resolveArtworkFields,
   toArtworkPayload,
   toArtworkCreatePayload,
   type ArtworkFormValues,
@@ -180,6 +184,12 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
     catalogue.kind,
   ).availabilityValues;
   const availabilityInPlay = availabilityValues.length > 0;
+  // The record's shape, resolved from the same catalogue document: a field
+  // the catalogue does not record is neither rendered nor sent.
+  const enabledFields = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled;
 
   const form = useForm<ArtworkFormValues, ArtworkPayload>({
     mode: "uncontrolled",
@@ -214,8 +224,12 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
             // unchanged, which on a new artwork means "nothing staged".
             const body = toArtworkCreatePayload(
               // A Collection has no market state, so its save says nothing
-              // about one; the API writes null for the absent key.
-              availabilityInPlay ? payload : withoutAvailability(payload),
+              // about one; the API writes null for the absent key. A field the
+              // catalogue does not record is dropped for every Kind.
+              withoutDisabledArtworkFields(
+                availabilityInPlay ? payload : withoutAvailability(payload),
+                enabledFields,
+              ),
               artworkId,
               photos.commit() ?? [],
               documents.commit() ?? [],
@@ -255,6 +269,7 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
           photos={photos}
           documents={documents}
           artistNames={artistNames}
+          enabledFields={enabledFields}
           availabilityValues={availabilityValues}
         />
 

@@ -24,8 +24,10 @@ import {
   EMPTY_ARTWORK_FORM,
   artworkSchema,
   fromArtwork,
+  resolveArtworkFields,
   toArtworkPayload,
   type ArtworkAvailability,
+  type ArtworkFieldStates,
   type ArtworkFormValues,
   type ArtworkPayload,
 } from "@arcula/shared";
@@ -95,6 +97,11 @@ const ArtworkEditPage: React.FC = () => {
   const [availabilityValues, setAvailabilityValues] = useState<
     readonly ArtworkAvailability[]
   >([]);
+  // The record fields this catalogue records, resolved from the same read.
+  // Null until the load lands, which is only before the form renders.
+  const [enabledFields, setEnabledFields] = useState<ArtworkFieldStates | null>(
+    null,
+  );
   const [catalogueName, setCatalogueName] = useState<string | null>(null);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
@@ -149,6 +156,9 @@ const ArtworkEditPage: React.FC = () => {
 
         const surface = catalogueSurface(catalogue.kind);
         setAvailabilityValues(surface.availabilityValues);
+        setEnabledFields(
+          resolveArtworkFields(catalogue.kind, catalogue.artworkFields).enabled,
+        );
         setCatalogueName(catalogue.name);
 
         const values = fromArtwork(artwork);
@@ -255,6 +265,12 @@ const ArtworkEditPage: React.FC = () => {
     return <Alert color="red">{loadError}</Alert>;
   }
 
+  // The load resolves the shape with the work, so this is only the compiler's
+  // witness that the form below has one.
+  if (!enabledFields) {
+    return <Loader />;
+  }
+
   return (
     <>
       {isDeleted ? (
@@ -304,6 +320,7 @@ const ArtworkEditPage: React.FC = () => {
                 loadedValues,
                 payload,
                 availabilityValues.length > 0,
+                enabledFields,
               ),
               ...(photosCommit ? { photos: photosCommit } : {}),
               ...(documentsCommit ? { documents: documentsCommit } : {}),
@@ -336,6 +353,7 @@ const ArtworkEditPage: React.FC = () => {
           photos={photos}
           documents={documents}
           artistNames={artistNames}
+          enabledFields={enabledFields}
           availabilityValues={availabilityValues}
           uploadsDisabled={isDeleted}
         />

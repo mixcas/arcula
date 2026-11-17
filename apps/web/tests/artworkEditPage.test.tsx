@@ -144,7 +144,10 @@ const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
 const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const catalogue = (kind: CatalogueKind): Catalogue => ({
+const catalogue = (
+  kind: CatalogueKind,
+  overrides: Partial<Catalogue> = {},
+): Catalogue => ({
   id: CATALOGUE_ID,
   name: CATALOGUE_NAME,
   kind,
@@ -152,6 +155,7 @@ const catalogue = (kind: CatalogueKind): Catalogue => ({
   isPublic: true,
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
+  ...overrides,
 });
 
 /** The router's own location, so a navigation can be asserted. */
@@ -514,5 +518,67 @@ describe("the Edit page — returning to the active search", () => {
     expect(
       screen.getByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
     ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}`);
+  });
+});
+
+/**
+ * The Edit page resolves the same Artwork fields from the catalogue it loads
+ * with the work. A disabled field is absent even when the work already holds a
+ * value for it — and the save omits the key rather than clearing it, which is
+ * what makes the stored value survive the field being off.
+ */
+describe("the Edit page — the catalogue's Artwork fields", () => {
+  const field = (label: RegExp) => screen.queryByLabelText(label);
+
+  it("hides a Portfolio's default-off acquisition field and shows the rest", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(field(/^Acquisition Price/)).toBeNull();
+    expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
+  });
+
+  it("shows a field the member switched on and its stored value", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { acquisitionPrice: true } }),
+    );
+    getArtwork.mockResolvedValue(stored({ acquisitionPrice: "1200" }));
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Acquisition Price/)).toHaveValue(
+      "1200",
+    );
+  });
+
+  it("omits a hidden field's stored value from the save instead of clearing it", async () => {
+    // The Portfolio default is off, so this stored price has no control. A
+    // save must leave the column alone: absent, never `null`.
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ acquisitionPrice: "1200" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    const title = await screen.findByLabelText(/^Title/);
+    await user.type(title, " (edited)");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    const patch = await sentPatch();
+    expect(patch).not.toHaveProperty("acquisitionPrice");
+  });
+
+  it("omits a field the member switched off on a Collection", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { provenance: false } }),
+    );
+    getArtwork.mockResolvedValue(stored({ provenance: "Bought at auction" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText(/^Title/);
+    expect(field(/^Provenance/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(await sentPatch()).not.toHaveProperty("provenance");
   });
 });

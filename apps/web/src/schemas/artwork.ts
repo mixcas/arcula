@@ -11,8 +11,9 @@
  * to be built against the loaded values, and that comparison belongs next to
  * the form that owns both.
  */
-import { UPDATABLE_TEXT_FIELDS } from "@arcula/shared";
+import { ARTWORK_FIELD_KEYS, UPDATABLE_TEXT_FIELDS } from "@arcula/shared";
 import type {
+  ArtworkFieldStates,
   ArtworkFormValues,
   ArtworkPayload,
   ArtworkUpdatePayload,
@@ -37,6 +38,7 @@ export const toArtworkUpdate = (
   loaded: ArtworkFormValues,
   payload: ArtworkPayload,
   availabilityInPlay = false,
+  enabled: ArtworkFieldStates,
 ): ArtworkUpdatePayload => {
   const update: ArtworkUpdatePayload = {
     // Required on the wire: the schema guarantees both are non-blank on a
@@ -51,6 +53,12 @@ export const toArtworkUpdate = (
     status: payload.status ?? "published",
   };
   for (const field of UPDATABLE_TEXT_FIELDS) {
+    // A field the catalogue does not record is not in the payload at all:
+    // its stored value stays untouched, and the form's loaded buffer — which
+    // still holds it — never turns into a `null` clear.
+    if (!enabled[field]) {
+      continue;
+    }
     const next = payload[field];
     if (typeof next === "string") {
       update[field] = next;
@@ -83,5 +91,27 @@ export const withoutAvailability = (
 ): ArtworkPayload => {
   const copy = { ...payload };
   delete copy.availability;
+  return copy;
+};
+
+/**
+ * Drop every field the catalogue does not record from a create payload.
+ *
+ * The form validates and submits every field's value whether or not its input
+ * is on screen, so a hidden field that still holds a value would otherwise be
+ * written again on the next save. A disabled key is left out entirely — never
+ * sent as `null` — which keeps the stored value and makes the server's later
+ * refusal of a disabled field unreachable from this form.
+ */
+export const withoutDisabledArtworkFields = (
+  payload: ArtworkPayload,
+  enabled: ArtworkFieldStates,
+): ArtworkPayload => {
+  const copy = { ...payload };
+  for (const field of ARTWORK_FIELD_KEYS) {
+    if (!enabled[field]) {
+      delete copy[field];
+    }
+  }
   return copy;
 };

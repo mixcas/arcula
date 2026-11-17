@@ -47,6 +47,7 @@ import {
   catalogueLimitForTier,
   artworkSchema,
   IMPORTED_WORK_STATUS,
+  normaliseArtworkFields,
   type ArtworkBulkSelectionPayload,
   type ArtworkImportPayload,
   type CatalogueCreatePayload,
@@ -304,6 +305,15 @@ catalogueRoutes.patch("/catalogues/:catalogueId", requireSession, async (c) => {
   }
   if (payload.skinOptions !== undefined) {
     set.skinOptions = payload.skinOptions ?? null;
+  }
+  if (payload.artworkFields !== undefined) {
+    // Normalised against the row's own Kind: an entry equal to the default is
+    // dropped, and nothing left stores `null` — the sparse map's one state for
+    // "pure defaults". `{}` and `null` both land there.
+    set.artworkFields = normaliseArtworkFields(
+      catalogue.kind,
+      payload.artworkFields,
+    );
   }
   if (passwordHash !== undefined) {
     set.passwordHash = passwordHash;

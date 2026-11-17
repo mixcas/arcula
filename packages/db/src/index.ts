@@ -27,7 +27,11 @@
 // every query.
 
 import { sql } from "drizzle-orm";
-import type { ArtworkAvailability, CatalogueKind } from "@arcula/shared";
+import type {
+  ArtworkAvailability,
+  ArtworkFieldDeviations,
+  CatalogueKind,
+} from "@arcula/shared";
 import {
   boolean,
   check,
@@ -124,11 +128,9 @@ export const verification = pgTable("verification", {
 
 // A catalogue's artwork-field deviations: an entry records a choice the member
 // made, and an absent key follows the Kind default, so the map stays sparse.
-// `null` and `{}` both mean pure defaults. The thirteen keys and the per-Kind
-// defaults live in `@arcula/shared`'s registry, which ships with the feature
-// that reads this column; this release declares only the shape, because `$type`
-// is compile-time only (no SQL, no migration).
-type ArtworkFieldDeviations = Partial<Record<string, boolean>>;
+// `null` and `{}` both mean pure defaults. The keys and the per-Kind defaults
+// live in `@arcula/shared`'s registry — the table stores the map, it does not
+// define it.
 
 // There is no `artworks: string[]` column: it would be a denormalized list the
 // join replaces.

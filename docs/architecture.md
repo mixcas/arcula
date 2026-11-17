@@ -94,6 +94,8 @@ design record the map points into, including the request path.
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
 artworkImport, artistNames, catalogue, invitation, document, media, user),
+`artworkFields.ts` (the Artwork fields registry: the togglable keys, the two
+fixed ones, the per-Kind defaults, the resolver and the normaliser),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
 `photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
 predicate, its caps, the query suffix helper and `normalizeSearchText`, which

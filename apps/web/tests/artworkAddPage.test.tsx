@@ -142,7 +142,10 @@ const createArtwork = vi.mocked(artworkService.createArtwork);
 const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const catalogue = (kind: CatalogueKind): Catalogue => ({
+const catalogue = (
+  kind: CatalogueKind,
+  overrides: Partial<Catalogue> = {},
+): Catalogue => ({
   id: CATALOGUE_ID,
   name: CATALOGUE_NAME,
   kind,
@@ -150,6 +153,7 @@ const catalogue = (kind: CatalogueKind): Catalogue => ({
   isPublic: true,
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
+  ...overrides,
 });
 
 /** The router's own location, so a navigation can be asserted. */
@@ -520,5 +524,64 @@ describe("the Add page — the Artist Name a new work starts with", () => {
 
     expect(await screen.findByText("Artist name is required")).toBeVisible();
     expect(createArtwork).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The form renders the catalogue's Artwork fields, not Arcula's whole list:
+ * a field the catalogue does not record is absent, and a Kind default the
+ * member overrode follows the member's choice. Title and Artist Name are
+ * always there, and the save never names a field the form did not show.
+ */
+describe("the Add page — the catalogue's Artwork fields", () => {
+  it("hides a Portfolio's default-off acquisition fields and shows the rest", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    renderPage();
+
+    // The kind's defaults arrive once the catalogue has loaded.
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Acquisition Price/)).toBeNull();
+    expect(screen.queryByLabelText(/^Acquisition Date/)).toBeNull();
+    // The two fixed fields are always recorded.
+    expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/^Artist Name/, { selector: "input" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a field the member switched on against the Kind default", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { acquisitionPrice: true } }),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByLabelText(/^Acquisition Price/),
+    ).toBeInTheDocument();
+  });
+
+  it("hides a field the member switched off against the Kind default", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { provenance: false } }),
+    );
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Provenance/)).toBeNull();
+  });
+
+  it("sends no key for a disabled field", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { notes: false } }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText(/^Medium/), "Oil on canvas");
+    await save(user);
+
+    await waitFor(() => expect(landedAt()).toBe(editPath()));
+    const [, body] = createArtwork.mock.calls[0];
+    expect(body.medium).toBe("Oil on canvas");
+    expect(body).not.toHaveProperty("notes");
   });
 });

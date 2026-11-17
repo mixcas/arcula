@@ -10,6 +10,7 @@ export * from "./ids";
 export * from "./invitationTime";
 export * from "./limits";
 export * from "./pdfFallback";
+export * from "./artworkFields";
 export * from "./artworkPhotos";
 export * from "./artworkSearch";
 export * from "./slug";
