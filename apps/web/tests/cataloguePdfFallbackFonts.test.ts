@@ -8,9 +8,7 @@ const FALLBACK_PATH = "/api/v1/pdf/font-fallback";
 
 /** The chunk a request carried, read back out of its URL. */
 const requestedText = (url: string): string => {
-  const [path, query = ""] = url.split("?");
-  expect(path).toBe(FALLBACK_PATH);
-  expect(query.startsWith("text=")).toBe(true);
+  const [, query = ""] = url.split("?");
   return decodeURIComponent(query.slice("text=".length));
 };
 
@@ -40,9 +38,19 @@ describe("loadFallbackFamilies chunks", () => {
 
     const families = await loadFallbackFamilies(["é" + han]);
 
+    const requests = fetchMock.mock.calls.map(([url]) => String(url));
+
+    expect(requests.map((url) => url.split("?")[0])).toEqual([
+      FALLBACK_PATH,
+      FALLBACK_PATH,
+    ]);
     expect(
-      fetchMock.mock.calls.map(([url]) => requestedText(String(url))),
-    ).toEqual(["é" + han.slice(0, 511), han.slice(511)]);
+      requests.every((url) => url.split("?")[1]?.startsWith("text=")),
+    ).toBe(true);
+    expect(requests.map(requestedText)).toEqual([
+      "é" + han.slice(0, 511),
+      han.slice(511),
+    ]);
     expect(families).toEqual(["Arcula Fallback 1", "Arcula Fallback 2"]);
   });
 });

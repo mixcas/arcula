@@ -252,8 +252,12 @@ Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
 types), `stagedUpload.ts` (the headers a staged presigned PUT signs — the list
 the media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
 because that package is not a workspace member), `limits.ts` (the
-per-tier catalogue cap), `email.ts` (`normalizeEmail`, the trim-and-lowercase
-both sides use),
+per-tier catalogue cap), `pdfFallback.ts` (the Catalogue PDF fallback face's
+character rule — `pdfFallbackCharacters`, the distinct code points above
+U+007F, ascending, and `pdfFallbackChunks`, that string split by code point at
+`MAX_PDF_FALLBACK_CODE_POINTS`; the web export and the API subsetter both read
+it, so the two sides cannot drift),
+`email.ts` (`normalizeEmail`, the trim-and-lowercase both sides use),
 `invitationTime.ts` (the invitation durations and the two questions the access
 card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
 `MINTED_ID_SHAPE_RE`, `mintId`; ten base62 characters, older ids permanent),

@@ -61,6 +61,32 @@ describe("pdfFallbackCharacters", () => {
 
     expect(pdfFallbackCharacters([atCap])).toBe(atCap);
   });
+
+  it("answers a set one past the cap whole, rather than truncating at it", () => {
+    // The cap is a request's, not the rule's: 513 distinct Han characters must
+    // all come back, ascending and whole, or the character that fell off the
+    // end draws blank in an exported catalogue PDF.
+    const pastCap = Array.from(
+      { length: MAX_PDF_FALLBACK_CODE_POINTS + 1 },
+      (_, index) => String.fromCodePoint(0x4e00 + index),
+    ).join("");
+
+    const characters = pdfFallbackCharacters([pastCap]);
+
+    expect(characters).toBe(pastCap);
+    expect(Array.from(characters)).toHaveLength(
+      MAX_PDF_FALLBACK_CODE_POINTS + 1,
+    );
+
+    // One past the cap is two chunks, and the second is the one character.
+    const chunks = pdfFallbackChunks(characters);
+
+    expect(chunks.map((chunk) => Array.from(chunk).length)).toEqual([
+      MAX_PDF_FALLBACK_CODE_POINTS,
+      1,
+    ]);
+    expect(chunks.join("")).toBe(pastCap);
+  });
 });
 
 describe("pdfFallbackChunks", () => {
