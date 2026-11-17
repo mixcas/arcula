@@ -17,9 +17,11 @@
  * user it creates follows the same precedent as the API suite's).
  *
  * Env comes from the build script (the root .env with DATABASE_URL
- * pointed at the compose-network `postgres` service).
+ * pointed at the compose-network `postgres` service), plus `SMOKE_ENV`:
+ * the package cannot know which environment it was built for, and dev's
+ * mapping chain gets an assertion that production must not have.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -127,7 +129,7 @@ console.log("spa + binary: ok");
 
 // 4. Sharp, the headline: a real 12 MP source through the exact pipeline
 //    the process route runs. Measured separately for decode+orient and
-//    the five encodes.
+//    the six encodes.
 const sharp = (await import("sharp")).default;
 const W = 4000;
 const H = 3000;
@@ -156,7 +158,11 @@ t = Date.now();
 const variants = await generateVariants(oriented);
 const variantsMs = Date.now() - t;
 
-if (variants.length !== 5) fail(`expected 5 variants, got ${variants.length}`);
+// The recipe's own count (apps/api/src/media/variants.ts): six since
+// `xxlarge` joined for the Catalogue PDF and the fullscreen slideshow. A
+// literal, not an import — the smoke's job is to notice when the recipe and
+// the package disagree, so it must not read its expectation from the recipe.
+if (variants.length !== 6) fail(`expected 6 variants, got ${variants.length}`);
 for (const v of variants) {
   if (v.contentType !== "image/webp" || v.buffer.length === 0) {
     fail(`variant ${v.key} is not a non-empty WebP`);
@@ -166,8 +172,84 @@ for (const v of variants) {
   );
 }
 console.log(
-  `sharp: orient ${orientMs}ms + 5 encodes ${variantsMs}ms = ${orientMs + variantsMs}ms per photo`,
+  `sharp: orient ${orientMs}ms + ${variants.length} encodes ${variantsMs}ms = ${orientMs + variantsMs}ms per photo`,
 );
+
+// 5. Dev's mapping chain. The Lambda runs this bundle with
+//    NODE_OPTIONS=--enable-source-maps, which reads the reference the build
+//    appended and the map it names — so both must reach the package, and the
+//    map must resolve THIS bundle's code back to TypeScript. A map parsed
+//    from a different build passes a structural check and still breaks every
+//    trace, so the last assertion resolves a token the bundle carries through
+//    the map's tables and requires a frame in this repo's entry. Production
+//    makes no new assertion here: the build's tree gate already proves the
+//    absence of the map and the reference, and a second negative assertion
+//    would only re-prove it.
+if (process.env.SMOKE_ENV === "dev") {
+  const bundle = await readFile("index.js", "utf8");
+  if (!bundle.includes("//# sourceMappingURL=index.js.map")) {
+    fail("dev bundle carries no sourceMappingURL reference to index.js.map");
+  }
+
+  let map;
+  try {
+    map = JSON.parse(await readFile("index.js.map", "utf8"));
+  } catch (err) {
+    fail(`dev's index.js.map does not parse: ${err.message}`);
+  }
+  if (map === null || typeof map !== "object") {
+    fail(`dev's index.js.map is ${typeof map}, not a source map object`);
+  }
+  if (map.version !== 3) {
+    fail(`dev's map is version ${map.version}, expected 3`);
+  }
+  if (!Array.isArray(map.sources) || map.sources.length === 0) {
+    fail("dev's map lists no sources");
+  }
+  const entrySource = "apps/api/src/lambda.ts";
+  if (!map.sources.some((source) => source.endsWith(entrySource))) {
+    fail(`dev's map does not source ${entrySource}`);
+  }
+  if (!map.sources.some((source) => source.endsWith(".ts"))) {
+    fail("dev's map resolves to no TypeScript source");
+  }
+  if (!Array.isArray(map.sourcesContent) || map.sourcesContent.length === 0) {
+    fail("dev's map embeds no sourcesContent (the source text)");
+  }
+
+  // A token both files carry — the adapter's header builder. Its generated
+  // line/column comes from the bundle exactly as the runtime computes it.
+  const token = "function gatewayHeaders";
+  const at = bundle.indexOf(token);
+  if (at < 0)
+    fail(`dev bundle carries no "${token}" to resolve through the map`);
+  const tokenAt = at + "function ".length;
+  const head = bundle.slice(0, tokenAt);
+  const generatedLine = head.split("\n").length - 1;
+  const generatedColumn = tokenAt - head.lastIndexOf("\n") - 1;
+
+  let entry;
+  try {
+    const { SourceMap } = await import("node:module");
+    entry = new SourceMap(map).findEntry(generatedLine, generatedColumn);
+  } catch (err) {
+    fail(`dev's map is not resolvable: ${err.message}`);
+  }
+  const position = `index.js:${generatedLine + 1}:${generatedColumn}`;
+  if (!entry) {
+    fail(
+      `dev's map has no entry for ${position} — it does not match this bundle`,
+    );
+  }
+  if (!entry.originalSource.endsWith(entrySource)) {
+    fail(
+      `dev's map resolves ${position} to ${entry.originalSource}, expected ${entrySource}`,
+    );
+  }
+  console.log(
+    `source map: ${position} → ${entry.originalSource}:${entry.originalLine + 1}:${entry.originalColumn}`,
+  );
+}
 
 console.log(`SMOKE OK (total ${Date.now() - started}ms)`);
 
