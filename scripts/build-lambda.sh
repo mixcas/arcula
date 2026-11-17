@@ -8,9 +8,14 @@
 # its own file, so a dev build never disturbs production's artifact. That
 # package is the code bundle, Sharp's native prebuilt and the built SPA
 # (web/dist, served by spa.ts with WEB_DIST=/var/task/web/dist) — with the
-# handler at `index.handler` (index.js). The smoke runs the package INSIDE
-# the container, so a broken bundle or a Sharp prebuilt that does not load
-# stops the build instead of shipping.
+# handler at `index.handler` (index.js). Dev's package also carries the
+# bundle's external map (index.js.map, with the reference appended by this
+# script) and the SPA's maps, which the dev function reads with
+# NODE_OPTIONS=--enable-source-maps; production's carries neither, because a
+# map publishes the source. Step 5 refuses to zip an artifact that breaks
+# either half. The smoke runs the package INSIDE the container, so a broken
+# bundle or a Sharp prebuilt that does not load stops the build instead of
+# shipping.
 #
 # Runtime note: the target is the Lambda Node.js 24 runtime — the stack
 # pins `NODEJS_24_X` (glibc, arm64). The AWS public ECR images are not
@@ -66,8 +71,25 @@ echo "==> bundling ($ENV)"
 #    `require.resolve` that loads it, which resolves to nothing in /var/task.
 #    External, the subsetter resolves `harfbuzzjs/…` through the package that
 #    step 3 installs — the same mechanism that ships Sharp.
-bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
+#
+#    Source maps are the mirror image of the SPA's: dev's package carries the
+#    bundle's external map so a CloudWatch trace names the TypeScript file and
+#    line (the stack switches the reading on with NODE_OPTIONS), and
+#    production's carries none, because a map publishes the source. Bun writes
+#    the map beside the bundle but omits the `sourceMappingURL` reference, so
+#    dev's reference is appended by hand; inline maps are rejected (one 17 MB
+#    unreadable file, and the dev/prod difference stops being visible in a
+#    listing). The gate in step 5 is what makes this a fact.
+if [ "$ENV" = prod ]; then
+  bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --outdir "$STAGE"
+else
+  bun build apps/api/src/lambda.ts --target node --format esm --external sharp --external harfbuzzjs --define "$DEFINE_NODE_ENV" --sourcemap=external --outdir "$STAGE"
+fi
 mv "$STAGE/lambda.js" "$STAGE/index.js"
+if [ "$ENV" = dev ]; then
+  mv "$STAGE/lambda.js.map" "$STAGE/index.js.map"
+  printf '\n//# sourceMappingURL=index.js.map\n' >>"$STAGE/index.js"
+fi
 
 # 1b. The Catalogue PDF's fallback face travels beside the bundle: the
 #     bundle is one index.js, so the module's import.meta.url-relative
@@ -169,8 +191,45 @@ else
     sh -c "npm install --omit=dev --no-audit --no-fund && node lambda-smoke.mjs"
 fi
 
-# 5. Zip the package (the smoke files are not part of the deploy).
+# 5. Gate the staged tree, then zip it. The smoke files are not part of the
+#    deploy, so they go first: what is checked is exactly what ships.
+#
+#    This is the same doctrine the bundle already applies to NODE_ENV: the
+#    property is defined and checked, not inherited from a default. Production
+#    must carry no map file and no reference to one, in the bundle or in the
+#    SPA it serves — a map on arcula.art would publish the source. Dev must
+#    carry the bundle's map, the reference the build appended, and the SPA's
+#    maps, or "dev is debuggable" is a hope rather than a fact. Reading the
+#    staged tree (not the inputs) means an upstream change that drops either
+#    half fails here, before anything can be zipped or deployed by hand.
+echo "==> checking the staged artifact"
+gate_fail() {
+  echo "artifact gate ($ENV): $1" >&2
+  echo "refusing to zip $OUT — see the source-map rules in this script" >&2
+  exit 1
+}
 rm -f "$STAGE/lambda-smoke.mjs" "$STAGE/smoke.js"
+if [ "$ENV" = prod ]; then
+  [ -z "$(find "$STAGE" -maxdepth 1 -name '*.map' -print)" ] ||
+    gate_fail "a map file reached the bundle root: $(find "$STAGE" -maxdepth 1 -name '*.map' -print)"
+  [ -z "$(find "$STAGE/web/dist" -name '*.map' -print)" ] ||
+    gate_fail "a map file reached the served SPA: $(find "$STAGE/web/dist" -name '*.map' -print | head -3)"
+  if grep -rlF 'sourceMappingURL' "$STAGE/index.js" "$STAGE/web/dist" >/dev/null; then
+    gate_fail "a sourceMappingURL reference reached the artifact: $(grep -rlF 'sourceMappingURL' "$STAGE/index.js" "$STAGE/web/dist" | head -3)"
+  fi
+else
+  [ -f "$STAGE/index.js.map" ] ||
+    gate_fail "the bundle's external map is missing (index.js.map)"
+  grep -qF 'sourceMappingURL=index.js.map' "$STAGE/index.js" ||
+    gate_fail "the bundle carries no sourceMappingURL reference to index.js.map"
+  [ -n "$(find "$STAGE/web/dist/assets" -name '*.js.map' -print)" ] ||
+    gate_fail "the served SPA carries no .js.map (the build did not emit source maps)"
+  for js in "$STAGE"/web/dist/assets/*.js; do
+    grep -qF 'sourceMappingURL=' "$js" ||
+      gate_fail "the served SPA script $js names no source map"
+  done
+fi
+
 echo "==> zipping"
 (cd "$STAGE" && zip -qr "$ROOT/$OUT" .)
 du -h "$OUT"

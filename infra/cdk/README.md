@@ -11,7 +11,7 @@ Both environments share one AWS account and one bootstrap; see
 the isolation that buys and does not.
 
 Only what must differ by environment does: the stack's name and description,
-the API's display name, the Lambda artifact, and — on dev only — two function
+the API's display name, the Lambda artifact, and — on dev only — three function
 environment variables. Construct ids and logical ids never vary, so the dev
 stack's existence does not change production's template.
 
@@ -53,9 +53,9 @@ Nothing secret is committed; the deploy passes `-c KEY=value`:
 
 `ENV` is required: an absent or unknown value fails synthesis rather than
 defaulting, so a stack is never built without knowing which environment it is.
-The two dev-only function variables — `DEPLOYED_COMMIT` and `NOINDEX` — are
-wired only when `ENV=dev`; production's function environment never carries
-them.
+The three dev-only function variables — `DEPLOYED_COMMIT`, `NOINDEX` and
+`NODE_OPTIONS` (the source-map mapping flag) — are wired only when `ENV=dev`;
+production's function environment never carries them.
 
 At synth, absent secrets fall back to placeholders, so `cdk synth` stays green
 with no AWS account and no secrets. `scripts/deploy.sh` enforces their presence
