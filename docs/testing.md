@@ -130,10 +130,33 @@ carries a written reason in the config and is not added silently.
   `apps/web/tests/helpers/carouselMock.tsx` is that mock, loaded through an
   `async` `vi.mock` factory because `vi.mock` is hoisted above the imports.
 - **`bun run test:api` and `bun run test:web` need the local stack.** `test:api`
-  sources the root `.env` and runs `stack-up.sh postgres s3 mailpit` before
-  vitest. `test:web` needs those services and a running API: the root script
-  runs `stack-up.sh`, then `scripts/ensure-api.sh`, which leaves an API already
-  listening on `PORT` alone and otherwise starts one and polls `/api/health`.
+  sources the resolved local environment and runs
+  `stack-up.sh postgres s3 mailpit` before vitest. `test:web` needs those
+  services and a running API: the root script runs `stack-up.sh`, then
+  `scripts/ensure-api.sh`, which leaves an API of this checkout already
+  listening on `PORT` alone, refuses one from another checkout, and otherwise
+  starts this checkout's and polls `/api/health`.
+- **The API on a port names its checkout.** A dev server started from the main
+  checkout keeps answering after a worktree begins, so the API carries
+  `ARCULA_CHECKOUT` (put there by `ensure-api.sh` and by `apps/api`'s `dev`) and
+  `/api/health` answers with it; production's body carries no such key.
+  `ensure-api.sh` refuses a stranger with both paths, and the web transport
+  (`apps/web/tests/helpers/stackFetch.ts`) asks once per worker before its first
+  proxied request, so a bare `vitest run` cannot test another branch either. The
+  way out is to stop that API or to give this checkout its own port — `PORT`,
+  `AUTH_BASE_URL` and `CORS_ORIGINS` move together, so it is a recipe rather
+  than a flag.
+- **A worktree borrows the main checkout's stack.** `.env` is gitignored and
+  the compose project is named after the main checkout, so
+  `scripts/local-env.sh` hands every caller the main checkout's `.env`, and
+  `scripts/services.sh` exports `COMPOSE_PROJECT_NAME` so `docker-compose`
+  reaches `arcula-postgres-1` rather than inventing a project named after the
+  worktree directory. One database, one object store and one mail sink serve
+  every checkout, and the shared services keep their data, pid and logs in the
+  main checkout's `.stack/`. Two consequences: `stack-down.sh` run from a
+  worktree stops that shared stack, and one database holds one schema — a
+  branch carrying a migration owns the local DB while it is under test, so a
+  sibling worktree must not assume the schema it expected.
 - **SeaweedFS must advertise an address that still exists.**
   `scripts/stack-up.sh` pins it to loopback, so a DHCP change cannot break a
   stack that script started; a `weed server` started before the pin, or by hand,

@@ -48,13 +48,23 @@ export function canonicalRedirect(
 /**
  * The liveness body. The deployed commit is carried only when the
  * deployment configured one, so an environment without it answers exactly
- * `{ "status": "ok" }` — the key absent, not empty.
+ * `{ "status": "ok" }` — the key absent, not empty. The checkout follows the
+ * same rule: a local API names the working tree serving it, and nothing else
+ * does.
  */
-export function healthBody(commit: string): {
+export function healthBody(
+  commit: string,
+  checkout: string,
+): {
   status: "ok";
   commit?: string;
+  checkout?: string;
 } {
-  return commit ? { status: "ok", commit } : { status: "ok" };
+  return {
+    status: "ok",
+    ...(commit ? { commit } : {}),
+    ...(checkout ? { checkout } : {}),
+  };
 }
 
 /**

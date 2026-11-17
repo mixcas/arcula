@@ -40,6 +40,13 @@ export const replyToConfigured =
 // key at all.
 export const deployedCommit = (process.env.DEPLOYED_COMMIT ?? "").trim();
 
+// The checkout whose code this process runs, set by the local scripts that
+// start it (`scripts/ensure-api.sh`, apps/api's `dev`). Locally several
+// worktrees can share one port, so `/api/health` names its checkout and the
+// caller refuses a stranger. The Lambda never sets it, so production's body
+// carries no key at all.
+export const checkout = (process.env.ARCULA_CHECKOUT ?? "").trim();
+
 // Dev-only: keep this environment out of search indexes. Unset everywhere
 // else, where both the header and the robots path behave exactly as they
 // always have.

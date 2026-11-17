@@ -13,7 +13,13 @@ import {
   noindexEnabled,
 } from "./responsePolicy";
 import { errorResponse } from "./errors";
-import { clientOrigin, corsOrigins, deployedCommit, noindexFlag } from "./env";
+import {
+  checkout,
+  clientOrigin,
+  corsOrigins,
+  deployedCommit,
+  noindexFlag,
+} from "./env";
 import { accessRoutes } from "./routes/access";
 import { artistNameRoutes } from "./routes/artistNames";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
@@ -57,7 +63,7 @@ app.use("/api/*", cors({ origin: corsOrigins, credentials: true }));
 
 // Liveness. Unversioned on purpose — it is not a resource. The body carries
 // the deployed commit only when the environment configured one.
-app.get("/api/health", (c) => c.json(healthBody(deployedCommit)));
+app.get("/api/health", (c) => c.json(healthBody(deployedCommit, checkout)));
 
 // /api/auth/* — Better Auth, native. The handler produces Better Auth's
 // own response shape, which is what @better-auth/react consumes; the

@@ -21,15 +21,17 @@ fi
 for s in $WANT; do
   case "$s" in
     postgres)
+      # The project is the main checkout's, so this stops the one database a
+      # worktree and its main checkout share.
       if docker-compose stop postgres 2>/dev/null; then
-        echo "postgres: stopped"
+        echo "postgres: stopped ($COMPOSE_PROJECT)"
       else
         echo "postgres: not running (docker daemon down? colima start)"
       fi ;;
     s3)
-      if [ -f "$ROOT/.stack/seaweedfs.pid" ] && kill "$(cat "$ROOT/.stack/seaweedfs.pid")" 2>/dev/null; then
+      if [ -f "$STACK_STATE/seaweedfs.pid" ] && kill "$(cat "$STACK_STATE/seaweedfs.pid")" 2>/dev/null; then
         echo "s3 (SeaweedFS): stopped"
-        rm -f "$ROOT/.stack/seaweedfs.pid"
+        rm -f "$STACK_STATE/seaweedfs.pid"
       else
         echo "s3 (SeaweedFS): not running"
       fi ;;

@@ -119,24 +119,39 @@ describe("canonicalRedirect", () => {
 describe("healthBody", () => {
   const cases: Array<{
     commit: string;
-    expected: { status: "ok"; commit?: string };
-    hasCommit: boolean;
+    checkout: string;
+    expected: { status: "ok"; commit?: string; checkout?: string };
   }> = [
     {
       commit: "abc1234",
-      expected: { status: "ok", commit: "abc1234" },
-      hasCommit: true,
+      checkout: "/src/arcula",
+      expected: {
+        status: "ok",
+        commit: "abc1234",
+        checkout: "/src/arcula",
+      },
     },
-    { commit: "", expected: { status: "ok" }, hasCommit: false },
+    {
+      commit: "abc1234",
+      checkout: "",
+      expected: { status: "ok", commit: "abc1234" },
+    },
+    {
+      commit: "",
+      checkout: "/src/arcula-worktree",
+      expected: { status: "ok", checkout: "/src/arcula-worktree" },
+    },
+    // Production's body: no commit, no checkout, and the keys absent rather
+    // than empty — which `toEqual` alone would not prove.
+    { commit: "", checkout: "", expected: { status: "ok" } },
   ];
 
   for (const c of cases) {
-    it(`for commit ${JSON.stringify(c.commit)}`, () => {
-      const body = healthBody(c.commit);
+    it(`for commit ${JSON.stringify(c.commit)} and checkout ${JSON.stringify(c.checkout)}`, () => {
+      const body = healthBody(c.commit, c.checkout);
       expect(body).toEqual(c.expected);
-      // toEqual ignores an undefined-key; this is the assertion that the key
-      // is genuinely absent when no commit is configured — production's body.
-      expect("commit" in body).toBe(c.hasCommit);
+      expect("commit" in body).toBe(c.commit !== "");
+      expect("checkout" in body).toBe(c.checkout !== "");
     });
   }
 });
