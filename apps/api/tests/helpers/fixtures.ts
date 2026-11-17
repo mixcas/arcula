@@ -14,7 +14,7 @@ import {
   catalogueInvitations as invitationsTable,
   catalogues as cataloguesTable,
 } from "@arcula/db";
-import type { CatalogueKind } from "@arcula/shared";
+import type { ArtworkFieldDeviations, CatalogueKind } from "@arcula/shared";
 import { req, uuid } from "./api";
 import { db } from "../../src/db";
 import {
@@ -32,6 +32,9 @@ export async function makeCatalogue(
     /** The kind decides which surface reads the catalogue; the physical
      *  default is a Collection, as it is for a row written before the column. */
     kind?: CatalogueKind;
+    /** The Catalogue's stored deviations from its Kind's Artwork-field
+     *  defaults; absent is "pure defaults", the state a new catalogue has. */
+    artworkFields?: ArtworkFieldDeviations | null;
   } = {},
 ): Promise<string> {
   const id = uuid();
@@ -44,6 +47,7 @@ export async function makeCatalogue(
     mediaNamespaceId: opts.mediaNamespaceId ?? userId,
     name: opts.name ?? "Test Catalogue",
     kind: opts.kind ?? "collection",
+    artworkFields: opts.artworkFields ?? null,
     isPublic: opts.isPublic ?? true,
     createdAt: new Date(),
     updatedAt: new Date(),

@@ -46,6 +46,7 @@ import {
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
+import { assertArtworkFieldsEnabled } from "../artworkFieldRefusal";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   grantHeld,
@@ -167,6 +168,7 @@ artworkRoutes.post(
       c,
       artworkCreateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
 
     // An id is a global primary key: reusing one would promote this
     // save's staged entries under the existing row's id.
@@ -273,6 +275,7 @@ artworkRoutes.patch(
       c,
       artworkUpdateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
 
     // Absent = leave the sequence alone; present = the full new one.
     const currentPhotos = await db
