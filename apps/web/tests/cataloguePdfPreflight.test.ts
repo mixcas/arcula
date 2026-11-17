@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cataloguePdfFields,
   cataloguePdfFileName,
   cataloguePdfTexts,
   fitInsideBox,
@@ -8,13 +9,19 @@ import {
   PHOTO_PRINT_BOX,
   placeInPhotoBox,
   PRINT_BOX_PX,
+  printedArtworkFields,
   printedSize,
   shouldWarnForLargeExport,
 } from "@/components/pdf/cataloguePdfPreflight";
 import {
+  ARTWORK_FIELD_KEYS,
   pdfFallbackCharacters,
+  resolveArtworkFields,
   type Artwork,
+  type ArtworkFieldDeviations,
+  type ArtworkFieldStates,
   type ArtworkPhoto,
+  type Catalogue,
 } from "@arcula/shared";
 
 const photo = (id: string, name = `${id}.jpg`): ArtworkPhoto => ({
@@ -39,6 +46,18 @@ const artwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   documents: [],
   ...overrides,
 });
+
+const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
+  id: "catalogue-1",
+  name: "Flores Solares",
+  kind: "collection",
+  userId: "owner-1",
+  isPublic: true,
+  ...overrides,
+});
+
+/** The printed set of a plain Collection: every field on. */
+const printed = () => cataloguePdfFields(catalogue());
 
 describe("PRINT_BOX_PX", () => {
   it("is the 504 x 580 pt box at 300 dpi: 2100 x 2417 px", () => {
@@ -164,19 +183,23 @@ describe("placeInPhotoBox", () => {
 
 describe("cataloguePdfTexts", () => {
   it("collects the catalogue name, titles, metadata values and placeholder", () => {
-    const texts = cataloguePdfTexts("Flores Solares", [
-      artwork({
-        title: "Estudio en rojo",
-        artistName: "María López",
-        serie: "Rojo",
-        medium: "Oil",
-        dimensions: "100 × 80 cm",
-        editions: "3/5",
-        dateOfCreation: "2024",
-        placeOfOrigin: "Madrid",
-        photos: [photo("one", "IMG_1234.webp")],
-      }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "Flores Solares",
+      [
+        artwork({
+          title: "Estudio en rojo",
+          artistName: "María López",
+          serie: "Rojo",
+          medium: "Oil",
+          dimensions: "100 × 80 cm",
+          editions: "3/5",
+          dateOfCreation: "2024",
+          placeOfOrigin: "Madrid",
+          photos: [photo("one", "IMG_1234.webp")],
+        }),
+      ],
+      printed(),
+    );
 
     expect(texts).toEqual([
       "Flores Solares",
@@ -193,58 +216,72 @@ describe("cataloguePdfTexts", () => {
   });
 
   it("excludes the photo filename", () => {
-    const texts = cataloguePdfTexts("Flores Solares", [
-      artwork({ photos: [photo("one", "IMG_1234.webp")] }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "Flores Solares",
+      [artwork({ photos: [photo("one", "IMG_1234.webp")] })],
+      printed(),
+    );
 
     expect(texts).not.toContain("IMG_1234.webp");
     expect(texts.join(" ")).not.toContain("IMG_1234");
   });
 
   it("omits absent and blank metadata values", () => {
-    const texts = cataloguePdfTexts("C", [
-      artwork({
-        title: "Sparse",
-        artistName: "Ana",
-        serie: "   ",
-        medium: "",
-      }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          title: "Sparse",
+          artistName: "Ana",
+          serie: "   ",
+          medium: "",
+        }),
+      ],
+      printed(),
+    );
 
     expect(texts).toEqual(["C", "Sparse", "Ana", IMAGE_UNAVAILABLE]);
   });
 
   it("excludes drafts and deleted works", () => {
-    const texts = cataloguePdfTexts("C", [
-      artwork({
-        id: "draft",
-        title: "Secret draft",
-        artistName: "Draft Artist",
-        status: "draft",
-      }),
-      artwork({
-        id: "deleted",
-        title: "Deleted work",
-        artistName: "Deleted Artist",
-        deletedAt: { seconds: 1, nanoseconds: 0 },
-      }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          id: "draft",
+          title: "Secret draft",
+          artistName: "Draft Artist",
+          status: "draft",
+        }),
+        artwork({
+          id: "deleted",
+          title: "Deleted work",
+          artistName: "Deleted Artist",
+          deletedAt: { seconds: 1, nanoseconds: 0 },
+        }),
+      ],
+      printed(),
+    );
 
     expect(texts).toEqual(["C", IMAGE_UNAVAILABLE]);
   });
 
   it("keeps document order: photo pages before the grid", () => {
-    const texts = cataloguePdfTexts("C", [
-      // Sorts first by artist, but it is a grid work and comes after the
-      // photo pages in the document.
-      artwork({ id: "grid", title: "Alpha", artistName: "Ana" }),
-      artwork({
-        id: "photo",
-        title: "Zulu",
-        artistName: "Zoe",
-        photos: [photo("one")],
-      }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        // Sorts first by artist, but it is a grid work and comes after the
+        // photo pages in the document.
+        artwork({ id: "grid", title: "Alpha", artistName: "Ana" }),
+        artwork({
+          id: "photo",
+          title: "Zulu",
+          artistName: "Zoe",
+          photos: [photo("one")],
+        }),
+      ],
+      printed(),
+    );
 
     expect(texts).toEqual([
       "C",
@@ -257,32 +294,193 @@ describe("cataloguePdfTexts", () => {
   });
 
   it("dedupes repeated values", () => {
-    const texts = cataloguePdfTexts("C", [
-      artwork({ id: "a", title: "One", artistName: "Same Artist" }),
-      artwork({ id: "b", title: "Two", artistName: "Same Artist" }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({ id: "a", title: "One", artistName: "Same Artist" }),
+        artwork({ id: "b", title: "Two", artistName: "Same Artist" }),
+      ],
+      printed(),
+    );
 
     expect(texts.filter((text) => text === "Same Artist")).toHaveLength(1);
   });
 
   it("feeds a non-ASCII title and catalogue name to the fallback set", () => {
-    const texts = cataloguePdfTexts("收藏", [
-      artwork({ title: "Été 日本", artistName: "Ana" }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "收藏",
+      [artwork({ title: "Été 日本", artistName: "Ana" })],
+      printed(),
+    );
 
     expect(pdfFallbackCharacters(texts)).toBe("Éé收日本藏");
   });
 
   it("does not feed a non-ASCII photo filename to the fallback set", () => {
-    const texts = cataloguePdfTexts("C", [
-      artwork({
-        title: "Plain",
-        artistName: "Ana",
-        photos: [photo("one", "写真.jpg")],
-      }),
-    ]);
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          title: "Plain",
+          artistName: "Ana",
+          photos: [photo("one", "写真.jpg")],
+        }),
+      ],
+      printed(),
+    );
 
     expect(pdfFallbackCharacters(texts)).not.toContain("写");
+  });
+});
+
+/** Every togglable field off: a Catalogue that records only the fixed two. */
+const everyFieldOff = (): ArtworkFieldDeviations =>
+  Object.fromEntries(ARTWORK_FIELD_KEYS.map((field) => [field, false]));
+
+describe("the fields the Catalogue records", () => {
+  it("prints the fields the enabled set holds, in the design's order", () => {
+    const enabled: ArtworkFieldStates = resolveArtworkFields("collection", {
+      medium: false,
+      editions: false,
+    }).enabled;
+
+    expect(printedArtworkFields(enabled)).toEqual({
+      left: ["artistName", "serie"],
+      right: ["dimensions", "dateOfCreation", "placeOfOrigin"],
+    });
+  });
+
+  it("drops a disabled field's line and keeps the design's order", () => {
+    const fields = cataloguePdfFields(
+      catalogue({ artworkFields: { medium: false, editions: false } }),
+    );
+
+    expect(fields).toEqual({
+      left: ["artistName", "serie"],
+      right: ["dimensions", "dateOfCreation", "placeOfOrigin"],
+    });
+
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          title: "Title",
+          artistName: "Artist",
+          serie: "Serie",
+          medium: "Oil",
+          dimensions: "100 × 80 cm",
+          editions: "3/5",
+          dateOfCreation: "2024",
+          placeOfOrigin: "Madrid",
+        }),
+      ],
+      fields,
+    );
+
+    // The disabled fields' values are absent; the layout's order is untouched.
+    expect(texts).toEqual([
+      "C",
+      "Title",
+      "Artist",
+      "Serie",
+      "100 × 80 cm",
+      "2024",
+      "Madrid",
+      IMAGE_UNAVAILABLE,
+    ]);
+  });
+
+  it("always prints Title and Artist Name, even with every togglable field off", () => {
+    const fields = cataloguePdfFields(
+      catalogue({ artworkFields: everyFieldOff() }),
+    );
+
+    expect(fields).toEqual({ left: ["artistName"], right: [] });
+
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          title: "Still Named",
+          artistName: "Still Credited",
+          serie: "Hidden",
+          notes: "Hidden too",
+        }),
+      ],
+      fields,
+    );
+
+    expect(texts).toEqual([
+      "C",
+      "Still Named",
+      "Still Credited",
+      IMAGE_UNAVAILABLE,
+    ]);
+  });
+
+  it("keeps the photo pages when a field is disabled", () => {
+    const fields = cataloguePdfFields(
+      catalogue({ artworkFields: { medium: false } }),
+    );
+
+    const texts = cataloguePdfTexts(
+      "C",
+      [
+        artwork({
+          id: "grid",
+          title: "Alpha",
+          artistName: "Ana",
+          medium: "Oil",
+        }),
+        artwork({
+          id: "photo",
+          title: "Zulu",
+          artistName: "Zoe",
+          medium: "Oil",
+          photos: [photo("one")],
+        }),
+      ],
+      fields,
+    );
+
+    // The photo page still leads the document; only the disabled line is gone.
+    expect(texts).toEqual([
+      "C",
+      "Zulu",
+      "Zoe",
+      "Alpha",
+      "Ana",
+      IMAGE_UNAVAILABLE,
+    ]);
+  });
+
+  it("filters a visitor's PDF exactly as a member's, from the public read", () => {
+    const works = [
+      artwork({
+        title: "Title",
+        artistName: "Artist",
+        serie: "Serie",
+        medium: "Oil",
+      }),
+    ];
+    // A member's read adds the role and the password bit; the public read is
+    // the same document without them. The printed set reads neither.
+    const member = catalogue({
+      artworkFields: { medium: false },
+      role: "owner",
+      isPasswordProtected: false,
+    });
+    const visitor = catalogue({ artworkFields: { medium: false } });
+
+    expect(cataloguePdfFields(visitor)).toEqual(cataloguePdfFields(member));
+    expect(
+      cataloguePdfTexts(visitor.name, works, cataloguePdfFields(visitor)),
+    ).toEqual(
+      cataloguePdfTexts(member.name, works, cataloguePdfFields(member)),
+    );
+    expect(
+      cataloguePdfTexts(visitor.name, works, cataloguePdfFields(visitor)),
+    ).not.toContain("Oil");
   });
 });
 

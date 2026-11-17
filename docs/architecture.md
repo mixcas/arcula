@@ -47,11 +47,17 @@ design record the map points into, including the request path.
   not-found, unauthorized or forbidden for the list. The live list also takes
   an optional member-only search (`q`), refused ahead of the visitor verdict and
   filtering the rows the list already read — drafts included, deleted works
-  never. The verdict is
+  never, and only the fields the Catalogue records. The verdict is
   `access.ts`'s over rows the module loads through `authorize.ts`, with the
   request's grant validity handed in as a fact; the module carries no Hono type
   and the route owns the wire code. The save routes read their work back
   through it.
+- `artworkFieldRefusal.ts` — the one refusal a save earns when it names an
+  Artwork field its Catalogue turned off: `assertArtworkFieldsEnabled` resolves
+  the Catalogue's enabled set through the shared registry and throws
+  `field-disabled` (400), with the offending fields in `error.fields` and named
+  in the message. The create and update artwork routes call it after parsing and
+  before the transaction opens, so a refused save moves no row.
 - `artistNames.ts` — the caller's Artist Name suggestions for the artwork form:
   the aggregate read over live works in the live catalogues the caller owns or
   collaborates on (the caller scope recorded in
@@ -68,8 +74,10 @@ design record the map points into, including the request path.
   of a row: `isInvitationUsable` (pending and not past `expiresAt`) and
   `isInvitationResendable` (pending, and the last issue older than the
   60-second cooldown — expiry is deliberately not part of it).
-- `routes/` — `catalogues` (the reads, the settings write, `…/unlock`, the
-  import, the Deleted list and the batch delete/restore), `access` (the access
+- `routes/` — `catalogues` (the reads, the settings write — the Artwork fields
+  deviations included — `…/unlock`, the import, which strips a field the
+  Catalogue does not record before validation, the Deleted list and the batch
+  delete/restore), `access` (the access
   read, removal, leaving and transfer), `invitations` (create,
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
@@ -94,10 +102,15 @@ design record the map points into, including the request path.
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
 artworkImport, artistNames, catalogue, invitation, document, media, user),
+`artworkFields.ts` (the Artwork fields registry: the thirteen togglable keys,
+the two fixed ones, the per-Kind defaults, `resolveArtworkFields`,
+`normaliseArtworkFields` and `disabledArtworkFieldsIn`, the predicate the save
+routes and the import share),
 `artworkPhotos.ts` (the `order` invariant, `sortPhotos`/`reindexPhotos`, the
-`photoUrl` ladder), `artworkSearch.ts` (the ten-field Catalogue search
-predicate, its caps, the query suffix helper and `normalizeSearchText`, which
-Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
+`photoUrl` ladder), `artworkSearch.ts` (the Catalogue search predicate over the
+fields a Catalogue records — Title and Artist Name always, the other eight only
+while enabled — its caps, the query suffix helper and `normalizeSearchText`,
+which Artist Name suggestions also collapse on), `caps.ts` (file caps + accepted
 types), `stagedUpload.ts` (the headers a staged presigned PUT signs — the list
 the media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
 because that package is not a workspace member), `limits.ts` (the
@@ -114,43 +127,49 @@ card asks of a row), `ids.ts` (the one mint — `ID_LENGTH`, `ID_ALPHABET`,
 `artworkAvailabilitySchema` (`available`/`reserved`/`sold`/`on-consignment`,
 both pinned to their client types); the save schemas accept availability as
 `.nullable()`, the create treating an absent key as null and the update as
-"leave it alone", and the read schema requires the key because the serializer
-always emits it. The API never validates it against the catalogue's kind — a
-Collection's work may carry one. `schemas/catalogue.ts` holds
-`catalogueKindSchema` (`portfolio`/`collection`/`inventory`, pinned to
-`CatalogueKind`); the create
-schema accepts `kind` defaulting to `collection` and the update schema does
-not, so the kind is the one field fixed at creation. `schemas/document.ts`'s
-`catalogueReadSchema` carries it, and the API's serializer validates a row
-against the three values (`catalogueKindOf`) before emitting it.
+"leave it alone", and the read schema makes it optional because a visitor's
+document does not carry it. The API never validates it against the Kind; the
+create and update routes refuse it only when the Catalogue's Artwork fields turn
+it off. `schemas/catalogue.ts` holds `catalogueKindSchema`
+(`portfolio`/`collection`/`inventory`, pinned to `CatalogueKind`) and
+`artworkFieldDeviationsSchema`, the sparse map keyed by the registry's thirteen
+names; the create schema accepts `kind` defaulting to `collection` and does not
+accept the map, so a new Catalogue is its Kind's defaults with nothing stored,
+and the update schema accepts the map nullable and optional, so an absent key
+leaves the column alone. `schemas/document.ts`'s `catalogueReadSchema` carries
+both, the deviations on every audience because the public PDF resolves them; the
+API's serializer validates a row against the three kind values
+(`catalogueKindOf`) and the deviation map before emitting them.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
 means for the surface, as data: the kind's colour (`kindColor`, a literal union
 the screens turn into a CSS variable through `kindColorVar`), the labels, the
-market states a kind offers (a Portfolio's three, an Inventory's four, a
-Collection's none) with their words, whether the catalogue's name is the
-artist's name, and the v1 artwork field table — every
-field visible, only `title` and `artistName` required. The field table is the
-data a later per-kind hiding will read; no v1 screen consumes
-`visible`/`required`, and a screen that reads the module uses the labels, the
-availability values, `availabilityFor`'s default and `newArtworkForm` — what a
-create form starts as on one kind, values and Artist Name line together.
-`services/` are the API
-clients (`api.ts` is the transport); `auth/` is the Better Auth React client;
-`telemetry/logRocket.ts` is the session-replay hook, redacted at the client
+four market-state words, whether the catalogue's name is the artist's name, and
+`newArtworkForm` — what a create form starts as on one Kind, given the resolved
+Artwork fields. `services/` are the API clients (`api.ts` is the transport);
+`auth/` is the Better Auth React client; `telemetry/logRocket.ts` is the
+session-replay hook, redacted at the client
 ([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
 `components/manage` and `components/catalogue`; `skins/` is the public-view
-system. The artwork Add and Edit pages load the catalogue for its kind; a
-Collection's form renders no availability control and sends no key, while a
-Portfolio or an Inventory defaults a surfaced work with no stored state to
-`available` through `availabilityFor`, and offers only the states that kind
-carries. The Add page also opens a Portfolio's new work credited to the
-portfolio's artist, and it builds every kind's form from that one surface answer
-rather than branching on the market state; a typed name wins, and the Edit page
-shows the artist the work records.
-The manage page and the Deleted view pass `showAvailability` down from
-the kind; no public page renders availability at all, and the API emits it on a
-member read only.
+system.
+
+The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
+forms render: a disabled field has no input, and the save omits its key rather
+than clearing it, so a hidden value survives. Availability is one of those
+fields — a Catalogue on any Kind may record it, the form offers the same four
+states everywhere, and a new work starts Available when it is recorded. The
+Add page also opens a Portfolio's new work credited to the portfolio's artist,
+and it builds every Kind's form from that one resolved answer rather than
+branching on the market state; a typed name wins, and the Edit page shows the
+artist the work records.
+The manage page and the Deleted view resolve `showAvailability` from the
+Catalogue's Kind and stored deviations, not from the Kind alone, and no public
+page renders availability at all; the API emits it on a member read only.
+The General tab's Artwork fields card edits the same resolved set, and its save
+fold (`catalogueSettingsSave.ts`) normalises it back into the sparse map. The
+Catalogue PDF's preflight filters its printed columns by the enabled set, and
+the CSV import offers only enabled fields as mapping targets and names the
+columns it skipped.
 
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `catalogues`, `catalogueCollaborators`,

@@ -89,6 +89,7 @@ describe("ImportRunStep", () => {
               selectedRowIds={new Set(["row-0", "row-1"])}
               catalogueId="catalogue-1"
               catalogueSlugParam="my-catalogue-catalogue-1"
+              skippedColumns={[]}
               onReset={vi.fn()}
             />
           </MemoryRouter>
@@ -129,6 +130,7 @@ describe("ImportRunStep", () => {
             selectedRowIds={new Set(["row-0", "row-1"])}
             catalogueId="catalogue-1"
             catalogueSlugParam="my-catalogue-catalogue-1"
+            skippedColumns={[]}
             onReset={vi.fn()}
           />
         </MemoryRouter>
@@ -140,6 +142,40 @@ describe("ImportRunStep", () => {
     expect(await screen.findByText("1 imported, 1 rejected")).toBeTruthy();
     expect(screen.getByText("Dawn")).toBeTruthy();
     expect(screen.getByText(/title: Title is required/i)).toBeTruthy();
+  });
+
+  it("names the columns a catalogue's field set leaves out of the import", async () => {
+    createArtworksMock.mockResolvedValue({ inserted: 1, rejected: [] });
+
+    render(
+      <MantineProvider>
+        <MemoryRouter>
+          <ImportRunStep
+            rows={[row("row-0", "Nocturne")]}
+            selectedRowIds={new Set(["row-0"])}
+            catalogueId="catalogue-1"
+            catalogueSlugParam="my-catalogue-catalogue-1"
+            skippedColumns={[
+              {
+                column: 2,
+                header: "Acquisition price",
+                field: "acquisitionPrice",
+              },
+            ]}
+            onReset={vi.fn()}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    // The summary is the only place the flow can say a column in the file
+    // never landed, so the skipped column must be named there.
+    expect(await screen.findByText("1 artwork imported")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Skipped columns: Acquisition price — not recorded by this catalogue",
+      ),
+    ).toBeTruthy();
   });
 
   it("says the catalogue was left unchanged when the request itself fails", async () => {
@@ -155,6 +191,7 @@ describe("ImportRunStep", () => {
             selectedRowIds={new Set(["row-0"])}
             catalogueId="catalogue-1"
             catalogueSlugParam="my-catalogue-catalogue-1"
+            skippedColumns={[]}
             onReset={vi.fn()}
           />
         </MemoryRouter>

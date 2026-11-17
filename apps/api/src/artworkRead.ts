@@ -41,7 +41,8 @@
 // member's drafts are; only the works that survive both the verdict and the
 // predicate load their photos and documents. The predicate itself is
 // `@arcula/shared`'s, so the API and the client share one field list and one
-// normalization.
+// normalization; the Catalogue row the list already loaded decides which of
+// its fields contribute, so a field it does not record is not found.
 //
 // The save routes read their own work back through `readArtwork`, so a save
 // answers exactly what a read of the same work would.
@@ -55,6 +56,7 @@ import {
 } from "@arcula/db";
 import {
   matchesArtworkSearch,
+  resolveArtworkFields,
   type ArtworkRead,
   searchQueryOverflow,
   type SearchQueryOverflow,
@@ -302,11 +304,19 @@ async function readArtworkListInMode(
     canSeeArtwork(member, catalogue, row, hasValidGrant),
   );
   // The search runs after the verdict: it narrows what the viewer may see and
-  // can never add to it. A committed query with no terms matches nothing.
-  const works =
-    search === null
-      ? visible
-      : visible.filter((row) => matchesArtworkSearch(row, search));
+  // can never add to it. The Catalogue's own fields decide the haystack, so a
+  // field it does not record is not found. A committed query with no terms
+  // matches nothing.
+  let works = visible;
+  if (search !== null) {
+    const searchable = resolveArtworkFields(
+      catalogue.kind,
+      catalogue.artworkFields,
+    ).enabled;
+    works = visible.filter((row) =>
+      matchesArtworkSearch(row, search, searchable),
+    );
+  }
   const artworkIds = works.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {

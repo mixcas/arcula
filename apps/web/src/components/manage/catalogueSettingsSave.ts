@@ -8,7 +8,13 @@
 // are then the same answer, not two definitions of "changed". No DOM and no
 // fetch, in the shape the password control's pair already established.
 
-import type { CatalogueUpdatePayload } from "@arcula/shared";
+import type {
+  ArtworkFieldDeviations,
+  ArtworkFieldStates,
+  CatalogueKind,
+  CatalogueUpdatePayload,
+} from "@arcula/shared";
+import { normaliseArtworkFields } from "@arcula/shared";
 import type { SkinOptionValue } from "@/skins/types";
 import { resolvePasswordWrite } from "./cataloguePassword";
 
@@ -32,6 +38,10 @@ export interface GeneralLoadedValues {
   description: string | null;
   isPublic: boolean;
   isPasswordProtected: boolean;
+  /** The Kind the stored deviations are resolved against. */
+  kind: CatalogueKind;
+  /** The sparse map the catalogue holds; null/absent means pure defaults. */
+  artworkFields: ArtworkFieldDeviations | null;
 }
 
 /** The General tab's half of the PATCH, as the form currently holds it. */
@@ -46,11 +56,44 @@ export interface GeneralEditedValues {
   editingPassword: boolean;
   /** A member asked to remove it; applied by the next save. */
   removingPassword: boolean;
+  /**
+   * The Artwork fields switches as they stand — every field's state, never a
+   * sparse map. The fold normalises it against the Kind, so the buffer may
+   * hold a value equal to the default and still produce no write.
+   */
+  artworkFields: ArtworkFieldStates;
 }
 
 export type GeneralSaveDecision =
-  | { kind: "payload"; payload: CatalogueUpdatePayload }
-  | { kind: "error"; message: string };
+  | {
+      kind: "payload";
+      payload: CatalogueUpdatePayload;
+      /** Whether the switches diverge from the Kind's defaults, as edited. */
+      artworkFieldsCustomised: boolean;
+    }
+  | {
+      kind: "error";
+      message: string;
+      /** Whether the switches diverge from the Kind's defaults, as edited. */
+      artworkFieldsCustomised: boolean;
+    };
+
+/** Two sparse deviation maps name the same choices, order aside. */
+const sameDeviations = (
+  a: ArtworkFieldDeviations | null,
+  b: ArtworkFieldDeviations | null,
+): boolean => {
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+  for (const key of keys) {
+    if (
+      a?.[key as keyof ArtworkFieldDeviations] !==
+      b?.[key as keyof ArtworkFieldDeviations]
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
 
 /**
  * What the General tab's Save writes.
@@ -80,6 +123,24 @@ export const resolveGeneralSave = (
     payload.description = description === "" ? null : description;
   }
 
+  // The switches resolve against the Kind the page loaded: normalising both
+  // sides drops entries that only restate a default, so "changed" means a
+  // different arrangement rather than a different object. An empty normalised
+  // map is `{}` on the wire — the Reset a member asked for — and the API
+  // stores it as null.
+  const loadedFields = normaliseArtworkFields(
+    loaded.kind,
+    loaded.artworkFields,
+  );
+  const editedFields = normaliseArtworkFields(
+    loaded.kind,
+    edited.artworkFields,
+  );
+  if (!sameDeviations(loadedFields, editedFields)) {
+    payload.artworkFields = editedFields ?? {};
+  }
+  const artworkFieldsCustomised = editedFields !== null;
+
   const passwordWrite = resolvePasswordWrite({
     isPublic: edited.isPublic,
     isPasswordProtected: loaded.isPasswordProtected,
@@ -89,7 +150,11 @@ export const resolveGeneralSave = (
     confirm: edited.confirm,
   });
   if (passwordWrite.kind === "error") {
-    return { kind: "error", message: passwordWrite.message };
+    return {
+      kind: "error",
+      message: passwordWrite.message,
+      artworkFieldsCustomised,
+    };
   }
   if (passwordWrite.kind === "set") {
     payload.password = passwordWrite.password;
@@ -97,7 +162,7 @@ export const resolveGeneralSave = (
   if (passwordWrite.kind === "remove") {
     payload.password = null;
   }
-  return { kind: "payload", payload };
+  return { kind: "payload", payload, artworkFieldsCustomised };
 };
 
 /** The Public view tab's half of the PATCH, over the values it loaded. */

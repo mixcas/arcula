@@ -1,6 +1,6 @@
 /**
- * The field body both artwork forms render: the grid of inputs, the
- * status control, and the two uploaders.
+ * The field body both artwork forms render: the grid of inputs, the status
+ * control, the Availability control and the two uploaders.
  *
  * The two pages differ in what they do with the values, not in what they
  * collect, and this block used to be written out in both of them — kept in step
@@ -25,22 +25,22 @@ import DocumentsUploader from "./DocumentsUploader";
 import type { UseArtistNames } from "@/hooks/useArtistNames";
 import type { UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
 import type { UseArtworkDocuments } from "@/hooks/useArtworkDocuments";
-import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
+import {
+  ARTWORK_AVAILABILITY_LABELS,
+  ARTWORK_AVAILABILITY_STATES,
+} from "@/catalogueSurface";
 import type {
-  ArtworkAvailability,
+  ArtworkFieldStates,
   ArtworkFormValues,
   ArtworkPayload,
 } from "@arcula/shared";
 
-/** The states this form offers, in the surface's order, as the Select's
- *  options. The surface decides the list — a Portfolio has no
- *  on-consignment, a Collection has none at all — and the labels are the one
- *  place the words live. */
-const availabilityOptions = (values: readonly ArtworkAvailability[]) =>
-  values.map((value) => ({
-    value,
-    label: ARTWORK_AVAILABILITY_LABELS[value],
-  }));
+/** The four states, as the Select's options. One list for every Kind — whether
+ *  the control is on screen is the Catalogue's decision, not the Kind's. */
+const availabilityOptions = ARTWORK_AVAILABILITY_STATES.map((value) => ({
+  value,
+  label: ARTWORK_AVAILABILITY_LABELS[value],
+}));
 
 interface ArtworkFieldsProps {
   /** The page's own form instance — the fields read and write through it. */
@@ -50,12 +50,13 @@ interface ArtworkFieldsProps {
   /** The caller's Artist Name suggestions, fetched once by the page. */
   artistNames: UseArtistNames;
   /**
-   * The market states this catalogue's kind offers, in the surface's order.
-   * Empty (the default) means the kind carries none — a Collection — so the
-   * form renders nothing (and saves nothing) for it. The page derives this
-   * from the catalogue's kind through `catalogueSurface`.
+   * The record fields this catalogue records, resolved from its Kind and its
+   * stored deviations. Title and Artist Name are always rendered; every other
+   * field — Availability included — appears only when its key is enabled, and
+   * the page's save omits the disabled keys entirely: a hidden value is kept,
+   * never cleared.
    */
-  availabilityValues?: readonly ArtworkAvailability[];
+  enabledFields: ArtworkFieldStates;
   /**
    * Hide the two uploaders. The Edit page sets this while the work is deleted:
    * staging is a server write, and media staged for a work whose Save is shut
@@ -71,7 +72,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
   photos,
   documents,
   artistNames,
-  availabilityValues = [],
+  enabledFields,
   uploadsDisabled = false,
 }) => (
   <Grid gap="xl">
@@ -103,104 +104,128 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("artistName")}
       />
 
-      <TextInput
-        key={form.key("serie")}
-        label="Serie"
-        placeholder="Serie name"
-        mb="md"
-        {...form.getInputProps("serie")}
-      />
+      {enabledFields.serie ? (
+        <TextInput
+          key={form.key("serie")}
+          label="Serie"
+          placeholder="Serie name"
+          mb="md"
+          {...form.getInputProps("serie")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("medium")}
-        label="Medium"
-        placeholder="e.g. Oil on canvas, Bronze, Mixed media"
-        mb="md"
-        {...form.getInputProps("medium")}
-      />
+      {enabledFields.medium ? (
+        <TextInput
+          key={form.key("medium")}
+          label="Medium"
+          placeholder="e.g. Oil on canvas, Bronze, Mixed media"
+          mb="md"
+          {...form.getInputProps("medium")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("dimensions")}
-        label="Dimensions"
-        placeholder="e.g. 100x80 cm"
-        mb="md"
-        {...form.getInputProps("dimensions")}
-      />
+      {enabledFields.dimensions ? (
+        <TextInput
+          key={form.key("dimensions")}
+          label="Dimensions"
+          placeholder="e.g. 100x80 cm"
+          mb="md"
+          {...form.getInputProps("dimensions")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("editions")}
-        label="Editions"
-        placeholder="e.g. 3/10, Open edition"
-        mb="md"
-        {...form.getInputProps("editions")}
-      />
+      {enabledFields.editions ? (
+        <TextInput
+          key={form.key("editions")}
+          label="Editions"
+          placeholder="e.g. 3/10, Open edition"
+          mb="md"
+          {...form.getInputProps("editions")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("dateOfCreation")}
-        label="Date of Creation"
-        placeholder="YYYY-MM-DD"
-        mb="md"
-        {...form.getInputProps("dateOfCreation")}
-      />
+      {enabledFields.dateOfCreation ? (
+        <TextInput
+          key={form.key("dateOfCreation")}
+          label="Date of Creation"
+          placeholder="YYYY-MM-DD"
+          mb="md"
+          {...form.getInputProps("dateOfCreation")}
+        />
+      ) : null}
 
-      <DateInput
-        key={form.key("acquisitionDate")}
-        label="Acquisition Date"
-        placeholder="Select date"
-        mb="md"
-        clearable
-        {...form.getInputProps("acquisitionDate")}
-      />
+      {enabledFields.acquisitionDate ? (
+        <DateInput
+          key={form.key("acquisitionDate")}
+          label="Acquisition Date"
+          placeholder="Select date"
+          mb="md"
+          clearable
+          {...form.getInputProps("acquisitionDate")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("acquisitionPrice")}
-        label="Acquisition Price"
-        placeholder="Price in currency"
-        mb="md"
-        {...form.getInputProps("acquisitionPrice")}
-      />
+      {enabledFields.acquisitionPrice ? (
+        <TextInput
+          key={form.key("acquisitionPrice")}
+          label="Acquisition Price"
+          placeholder="Price in currency"
+          mb="md"
+          {...form.getInputProps("acquisitionPrice")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("placeOfOrigin")}
-        label="Place of Origin"
-        placeholder="City, Country"
-        mb="md"
-        {...form.getInputProps("placeOfOrigin")}
-      />
+      {enabledFields.placeOfOrigin ? (
+        <TextInput
+          key={form.key("placeOfOrigin")}
+          label="Place of Origin"
+          placeholder="City, Country"
+          mb="md"
+          {...form.getInputProps("placeOfOrigin")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("provenance")}
-        label="Provenance"
-        placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
-        mb="md"
-        {...form.getInputProps("provenance")}
-      />
+      {enabledFields.provenance ? (
+        <TextInput
+          key={form.key("provenance")}
+          label="Provenance"
+          placeholder="Where acquired, e.g. Gallery, Auction, Private collection"
+          mb="md"
+          {...form.getInputProps("provenance")}
+        />
+      ) : null}
 
-      <Textarea
-        key={form.key("notes")}
-        label="Notes"
-        placeholder="Additional information about the artwork"
-        mb="md"
-        autosize
-        minRows={4}
-        {...form.getInputProps("notes")}
-      />
+      {enabledFields.notes ? (
+        <Textarea
+          key={form.key("notes")}
+          label="Notes"
+          placeholder="Additional information about the artwork"
+          mb="md"
+          autosize
+          minRows={4}
+          {...form.getInputProps("notes")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("condition")}
-        label="Condition"
-        placeholder="Excellent, Good, Fair, etc."
-        mb="md"
-        {...form.getInputProps("condition")}
-      />
+      {enabledFields.condition ? (
+        <TextInput
+          key={form.key("condition")}
+          label="Condition"
+          placeholder="Excellent, Good, Fair, etc."
+          mb="md"
+          {...form.getInputProps("condition")}
+        />
+      ) : null}
 
-      <TextInput
-        key={form.key("currentValue")}
-        label="Current Value"
-        placeholder="Value in currency"
-        mb="md"
-        {...form.getInputProps("currentValue")}
-      />
+      {enabledFields.currentValue ? (
+        <TextInput
+          key={form.key("currentValue")}
+          label="Current price"
+          placeholder="Value in currency"
+          mb="md"
+          {...form.getInputProps("currentValue")}
+        />
+      ) : null}
     </Grid.Col>
     <Grid.Col span={{ base: 12, sm: 4 }}>
       <Text size="sm" fw={500} mb={4}>
@@ -229,12 +254,12 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         is visible only to you.
       </Text>
 
-      {availabilityValues.length > 0 ? (
+      {enabledFields.availability ? (
         <>
           <Select
             key={form.key("availability")}
             label="Availability"
-            data={availabilityOptions(availabilityValues)}
+            data={availabilityOptions}
             allowDeselect={false}
             mb={6}
             {...form.getInputProps("availability")}

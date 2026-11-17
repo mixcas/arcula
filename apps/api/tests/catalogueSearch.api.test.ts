@@ -299,6 +299,49 @@ describe("a member's search", () => {
   });
 });
 
+describe("a catalogue's enabled fields", () => {
+  it("finds text in a recorded field and not the same text in a disabled one", async () => {
+    const narrowId = uuid();
+    const createdAt = new Date("2026-03-01T00:00:00.000Z");
+    await db.insert(cataloguesTable).values({
+      id: narrowId,
+      userId: owner.userId,
+      mediaNamespaceId: uuid(),
+      name: "The Narrow Record",
+      isPublic: true,
+      artworkFields: { provenance: false },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    const disabledField = await insertWork(narrowId, owner.userId, {
+      title: "Hidden Provenance",
+      artistName: "Ana",
+      provenance: "auction",
+      createdAt,
+    });
+    const enabledField = await insertWork(narrowId, owner.userId, {
+      title: "Sibling Record",
+      artistName: "Ana",
+      medium: "auction",
+      createdAt: new Date(createdAt.getTime() + 1),
+    });
+
+    // The same word lives in a disabled field and an enabled one: only the
+    // recorded field contributes it to the search.
+    const recorded = await req("GET", searchPath("auction", narrowId), {
+      cookies: owner.cookies,
+    });
+    expect(await idsOf(recorded)).toEqual([enabledField]);
+
+    // Title is never taken away, so the disabled-field work is still found by
+    // its own name.
+    const byTitle = await req("GET", searchPath("provenance", narrowId), {
+      cookies: owner.cookies,
+    });
+    expect(await idsOf(byTitle)).toEqual([disabledField]);
+  });
+});
+
 describe("an absent, empty or whitespace-only query", () => {
   it("leaves the list exactly as it was without one", async () => {
     const plain = await req("GET", listPath(), { cookies: owner.cookies });

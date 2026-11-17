@@ -2,13 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Loader, Stepper, Text } from "@mantine/core";
 import { useNavigate, useParams } from "react-router-dom";
 import { catalogueService } from "@/services/catalogueService";
-import { catalogueSlug, parseId } from "@arcula/shared";
+import { catalogueSlug, parseId, resolveArtworkFields } from "@arcula/shared";
+import type { Catalogue } from "@arcula/shared";
 import { parseCsvText, type ParsedCsv } from "@/utils/csv";
 import {
   attachIssues,
   buildImportRows,
   getMappedFields,
   isMappingComplete,
+  skippedImportColumns,
   type ColumnMapping,
   type ImportRow,
 } from "@arcula/shared";
@@ -32,9 +34,10 @@ const CsvImportPage: React.FC = () => {
   const catalogueId = parseId(param ?? "");
   const navigate = useNavigate();
 
-  // The catalogue the import writes into; its name feeds the canonical-URL
-  // rewrite below, mirroring CatalogueSettingsPage.
-  const [loadedName, setLoadedName] = useState<string | null>(null);
+  // The catalogue the import writes into: its name feeds the canonical-URL
+  // rewrite below, mirroring CatalogueSettingsPage, and its Kind plus stored
+  // deviations decide which fields the mapping may target.
+  const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Step 0 — file.
@@ -74,12 +77,12 @@ const CsvImportPage: React.FC = () => {
     }
     const fetchCatalogue = async () => {
       try {
-        const catalogue = await catalogueService.getCatalogue(catalogueId);
-        if (!catalogue) {
+        const loaded = await catalogueService.getCatalogue(catalogueId);
+        if (!loaded) {
           setLoadError("Catalogue not found");
           return;
         }
-        setLoadedName(catalogue.name ?? "");
+        setCatalogue(loaded);
       } catch (error) {
         console.error("Error loading import page:", error);
         setLoadError("Failed to load the catalogue. Please try again.");
@@ -87,6 +90,19 @@ const CsvImportPage: React.FC = () => {
     };
     void fetchCatalogue();
   }, [catalogueId]);
+
+  const loadedName = catalogue?.name ?? null;
+
+  // The record's shape, resolved from the same catalogue document the server
+  // resolves: the mapping may only target these fields, and the run summary
+  // names the columns whose field is not among them.
+  const enabledFields = useMemo(
+    () =>
+      catalogue
+        ? resolveArtworkFields(catalogue.kind, catalogue.artworkFields).enabled
+        : null,
+    [catalogue],
+  );
 
   // Keep the canonical "{slug}-{id}" in the address bar once the name is known.
   useEffect(() => {
@@ -142,6 +158,14 @@ const CsvImportPage: React.FC = () => {
   const mappingComplete = isMappingComplete(mapping);
 
   const mappedFields = useMemo(() => getMappedFields(mapping), [mapping]);
+
+  // The columns the file carries that this catalogue cannot hold. Computed
+  // from the headers and the enabled set, never from a row, and handed to the
+  // run summary — a skipped column is not a row failure.
+  const skippedColumns = useMemo(
+    () => (enabledFields ? skippedImportColumns(headers, enabledFields) : []),
+    [headers, enabledFields],
+  );
 
   // The rows the review table shows, with validation recomputed on every edit.
   const reviewRows = useMemo(() => attachIssues(rows), [rows]);
@@ -206,7 +230,7 @@ const CsvImportPage: React.FC = () => {
   if (loadError) {
     return <Alert color="red">{loadError}</Alert>;
   }
-  if (loadedName === null) {
+  if (loadedName === null || enabledFields === null) {
     return <Loader />;
   }
 
@@ -255,6 +279,7 @@ const CsvImportPage: React.FC = () => {
               sampleRows={sampleRows}
               mapping={mapping}
               onMappingChange={setMapping}
+              enabledFields={enabledFields}
             />
           ) : null}
           <Group justify="space-between" mt="xl">
@@ -303,6 +328,7 @@ const CsvImportPage: React.FC = () => {
             selectedRowIds={selectedRowIds}
             catalogueId={catalogueId}
             catalogueSlugParam={catalogueSlug(loadedName, catalogueId)}
+            skippedColumns={skippedColumns}
             onReset={resetFlow}
           />
         </Stepper.Step>

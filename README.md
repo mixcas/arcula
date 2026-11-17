@@ -76,7 +76,8 @@ Early, and honest about what is missing:
 | Artwork list                                | ✅                                                            |
 | Add and edit an artwork                     | ✅                                                            |
 | Published/draft status per artwork          | ✅                                                            |
-| Record a work's availability                | ✅ Portfolio and Inventory only; never a visitor gate         |
+| Record a work's availability                | ✅ A field on every Kind; four states; never a visitor gate   |
+| Choose which fields a catalogue records     | ✅ Artwork fields in Settings; starts from Kind defaults      |
 | Public catalogue and single-artwork pages   | ✅                                                            |
 | Catalogue PDF                               | ✅                                                            |
 | Photo uploads                               | ✅                                                            |

@@ -46,7 +46,10 @@ import {
   catalogueUpdateSchema,
   catalogueLimitForTier,
   artworkSchema,
+  disabledArtworkFieldsIn,
   IMPORTED_WORK_STATUS,
+  normaliseArtworkFields,
+  resolveArtworkFields,
   type ArtworkBulkSelectionPayload,
   type ArtworkImportPayload,
   type CatalogueCreatePayload,
@@ -305,6 +308,15 @@ catalogueRoutes.patch("/catalogues/:catalogueId", requireSession, async (c) => {
   if (payload.skinOptions !== undefined) {
     set.skinOptions = payload.skinOptions ?? null;
   }
+  if (payload.artworkFields !== undefined) {
+    // Normalised against the row's own Kind: an entry equal to the default is
+    // dropped, and nothing left stores `null` — the sparse map's one state for
+    // "pure defaults". `{}` and `null` both land there.
+    set.artworkFields = normaliseArtworkFields(
+      catalogue.kind,
+      payload.artworkFields,
+    );
+  }
   if (passwordHash !== undefined) {
     set.passwordHash = passwordHash;
   }
@@ -499,6 +511,12 @@ catalogueRoutes.post("/catalogues/:catalogueId/unlock", async (c) => {
 // rows are written in one transaction. The ids are minted here — the
 // client's review step has no say in them, and the shared schema is the
 // only place a row's validity is decided.
+//
+// A field the catalogue does not record is stripped from every row before
+// validation, so a file prepared for several catalogues imports here with
+// every column this one can hold. Rejecting the row instead would make the
+// feature hostile to exactly the reuse it exists for; the web's run summary
+// names the columns it skipped.
 catalogueRoutes.post(
   "/catalogues/:catalogueId/import/csv",
   requireSession,
@@ -508,6 +526,12 @@ catalogueRoutes.post(
       c,
       artworkImportSchema,
     );
+    // Resolved from the catalogue already in hand: the strip honours the
+    // member's deviations, not just the Kind's defaults.
+    const enabled = resolveArtworkFields(
+      catalogue.kind,
+      catalogue.artworkFields,
+    ).enabled;
 
     const now = new Date();
     const rejected: { row: number; errors: Record<string, string> }[] = [];
@@ -518,8 +542,13 @@ catalogueRoutes.post(
       // not an object fails the schema as a missing title.
       const fields =
         row !== null && typeof row === "object"
-          ? (row as Record<string, unknown>)
+          ? { ...(row as Record<string, unknown>) }
           : {};
+      // The same predicate the save routes refuse with, answered by deleting:
+      // a row still lands with every field this catalogue does record.
+      for (const field of disabledArtworkFieldsIn(enabled, fields)) {
+        delete fields[field];
+      }
       const parsed = artworkSchema.safeParse({
         ...fields,
         status: IMPORTED_WORK_STATUS,

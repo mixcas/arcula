@@ -144,7 +144,10 @@ const restoreArtwork = vi.mocked(artworkService.restoreArtwork);
 const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 /* eslint-enable @typescript-eslint/unbound-method */
 
-const catalogue = (kind: CatalogueKind): Catalogue => ({
+const catalogue = (
+  kind: CatalogueKind,
+  overrides: Partial<Catalogue> = {},
+): Catalogue => ({
   id: CATALOGUE_ID,
   name: CATALOGUE_NAME,
   kind,
@@ -152,6 +155,7 @@ const catalogue = (kind: CatalogueKind): Catalogue => ({
   isPublic: true,
   createdAt: { seconds: 1, nanoseconds: 0 },
   updatedAt: { seconds: 1, nanoseconds: 0 },
+  ...overrides,
 });
 
 /** The router's own location, so a navigation can be asserted. */
@@ -203,8 +207,9 @@ beforeEach(() => {
   getArtwork.mockResolvedValue(stored());
   updateArtwork.mockResolvedValue(stored());
   restoreArtwork.mockResolvedValue({ restored: true });
-  // A Collection by default: no market-state control. The availability tests
-  // below ask for a Portfolio, which is the kind that carries one.
+  // A Collection by default: Availability starts off there, so the plain form
+  // has no market-state control. The availability tests below ask for the
+  // Catalogues that record one.
   getCatalogue.mockResolvedValue(catalogue("collection"));
 });
 
@@ -297,10 +302,11 @@ describe("the Edit page — the artist a work records", () => {
 });
 
 /**
- * A market state belongs to the kinds that sell work. The Edit page learns the
- * catalogue's kind, defaults a surfaced work with no stored state to Available,
- * and never overwrites a stored one. A Collection's form has neither the field
- * nor a key in the save (ADR-0010).
+ * Availability is the Catalogue's choice, not the Kind's. The Edit page learns
+ * its configuration with the work, shows the stored state when the field is
+ * enabled — a null or absent one starts at Available — and omits the key
+ * entirely when it is not, leaving the stored state alone. All four states are
+ * offered on every Kind (ADR-0010's per-kind list is gone).
  */
 describe("the Edit page — a work's availability", () => {
   it("defaults a Portfolio work with no stored state to available", async () => {
@@ -330,6 +336,18 @@ describe("the Edit page — a work's availability", () => {
     expect((await sentPatch()).availability).toBe("sold");
   });
 
+  it("shows a Portfolio's stored on-consignment state", async () => {
+    // The visible cost of flattening: a state the old per-kind list did not
+    // offer a Portfolio is now a value it can record and read back.
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ availability: "on-consignment" }));
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("On consignment");
+  });
+
   it("offers an Inventory the control too", async () => {
     getCatalogue.mockResolvedValue(catalogue("inventory"));
     renderPage();
@@ -339,7 +357,23 @@ describe("the Edit page — a work's availability", () => {
     ).toHaveValue("Available");
   });
 
-  it("offers a Collection no market state and sends none", async () => {
+  it("offers a Collection that records Availability the control and its state", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { availability: true } }),
+    );
+    getArtwork.mockResolvedValue(stored({ availability: "reserved" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Availability/ }),
+    ).toHaveValue("Reserved");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect((await sentPatch()).availability).toBe("reserved");
+  });
+
+  it("offers a Collection no market state by default and sends none", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -351,6 +385,23 @@ describe("the Edit page — a work's availability", () => {
 
     // Absent, not null: the Collection's stored value stays exactly as it
     // was, which is null for a work this form never surfaces.
+    expect(await sentPatch()).not.toHaveProperty("availability");
+  });
+
+  it("keeps a stored state when the field is switched off", async () => {
+    // The field is off, so there is no control and no key: the value on the
+    // row survives a save that never mentioned it. Sending `null` here would
+    // destroy a state the member only hid.
+    getArtwork.mockResolvedValue(stored({ availability: "sold" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText(/^Title/);
+    expect(
+      screen.queryByRole("combobox", { name: /^Availability/ }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
     expect(await sentPatch()).not.toHaveProperty("availability");
   });
 });
@@ -514,5 +565,67 @@ describe("the Edit page — returning to the active search", () => {
     expect(
       screen.getByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
     ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}`);
+  });
+});
+
+/**
+ * The Edit page resolves the same Artwork fields from the catalogue it loads
+ * with the work. A disabled field is absent even when the work already holds a
+ * value for it — and the save omits the key rather than clearing it, which is
+ * what makes the stored value survive the field being off.
+ */
+describe("the Edit page — the catalogue's Artwork fields", () => {
+  const field = (label: RegExp) => screen.queryByLabelText(label);
+
+  it("hides a Portfolio's default-off acquisition field and shows the rest", async () => {
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
+    expect(field(/^Acquisition Price/)).toBeNull();
+    expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
+  });
+
+  it("shows a field the member switched on and its stored value", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { acquisitionPrice: true } }),
+    );
+    getArtwork.mockResolvedValue(stored({ acquisitionPrice: "1200" }));
+    renderPage();
+
+    expect(await screen.findByLabelText(/^Acquisition Price/)).toHaveValue(
+      "1200",
+    );
+  });
+
+  it("omits a hidden field's stored value from the save instead of clearing it", async () => {
+    // The Portfolio default is off, so this stored price has no control. A
+    // save must leave the column alone: absent, never `null`.
+    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getArtwork.mockResolvedValue(stored({ acquisitionPrice: "1200" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    const title = await screen.findByLabelText(/^Title/);
+    await user.type(title, " (edited)");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    const patch = await sentPatch();
+    expect(patch).not.toHaveProperty("acquisitionPrice");
+  });
+
+  it("omits a field the member switched off on a Collection", async () => {
+    getCatalogue.mockResolvedValue(
+      catalogue("collection", { artworkFields: { provenance: false } }),
+    );
+    getArtwork.mockResolvedValue(stored({ provenance: "Bought at auction" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText(/^Title/);
+    expect(field(/^Provenance/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(await sentPatch()).not.toHaveProperty("provenance");
   });
 });

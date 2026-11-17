@@ -1,3 +1,5 @@
+import type { ArtworkFieldDeviations } from "./artworkFields";
+
 // `Timestamp` is the wire shape the API serializer emits:
 // `{ seconds, nanoseconds }`. The plain interface carries those two fields and
 // nothing else — no methods for the client to ignore.
@@ -20,7 +22,7 @@ export interface Catalogue {
   name: string;
   // What this catalogue is — chosen at creation and fixed, so a Portfolio
   // never turns into an Inventory under the works it holds (ADR-0010). The
-  // surface's labels and the availability axis are derived from it.
+  // surface's labels are derived from it.
   kind: CatalogueKind;
   userId: string; // Reference to the owner
   description?: string;
@@ -49,6 +51,13 @@ export interface Catalogue {
   // back to the default, so a stale or hand-edited value cannot corrupt a
   // catalogue. Nothing outside the skin reads it.
   skinOptions?: Record<string, boolean | number | string>;
+  // The Artwork fields this catalogue deviates on, as the sparse map the API
+  // stores: an entry is a field the member decided, an absent key follows the
+  // Kind's default. Null/absent means pure defaults. The wire carries the
+  // deviations, not the resolved set, so a setting can tell "untouched" from
+  // "chosen" without a second key; both sides resolve it through
+  // `resolveArtworkFields`.
+  artworkFields?: ArtworkFieldDeviations;
   // Stamped by the web's catalogue service, not by callers.
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

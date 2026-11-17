@@ -40,12 +40,14 @@ import {
   artworkCreateSchema,
   artworkUpdateSchema,
   isBlankSearchQuery,
+  resolveArtworkFields,
   type ArtworkCreatePayload,
   type ArtworkRead,
   type ArtworkUpdatePayload,
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
+import { assertArtworkFieldsEnabled } from "../artworkFieldRefusal";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
   grantHeld,
@@ -167,6 +169,13 @@ artworkRoutes.post(
       c,
       artworkCreateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
+    // What the Catalogue records, resolved once here for the new work's
+    // starting market state. The refusal above answers the same set.
+    const { enabled } = resolveArtworkFields(
+      catalogue.kind,
+      catalogue.artworkFields,
+    );
 
     // An id is a global primary key: reusing one would promote this
     // save's staged entries under the existing row's id.
@@ -216,9 +225,15 @@ artworkRoutes.post(
         condition: payload.condition ?? null,
         currentValue: payload.currentValue ?? null,
         status: payload.status,
-        // Always written, null included: a save that names no market state
-        // stores the absence, which is what every Collection work carries.
-        availability: payload.availability ?? null,
+        // A new work starts `available` where the Catalogue records a market
+        // state; where it does not, the absence is null. A save that names a
+        // state — null included — keeps it, so an explicit clear survives.
+        availability:
+          payload.availability !== undefined
+            ? payload.availability
+            : enabled.availability
+              ? "available"
+              : null,
         // Always written, as null: the list filters on it, and a missing
         // field is not a null (the write-path doctrine).
         deletedAt: null,
@@ -273,6 +288,7 @@ artworkRoutes.patch(
       c,
       artworkUpdateSchema,
     );
+    assertArtworkFieldsEnabled(catalogue, payload);
 
     // Absent = leave the sequence alone; present = the full new one.
     const currentPhotos = await db
