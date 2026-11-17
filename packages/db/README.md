@@ -25,10 +25,11 @@ tables are in the schema, and the feature code reads them on every access
 question and writes them through the invitation, removal, leaving and transfer
 routes. The two password tables and `collections.passwordHash` are read and
 written by the password routes — and `collection_unlock_attempts` by the unlock
-route alone, which is the throttle's whole surface. `account_write_windows` has
-no reader and no writer yet: it ships alone, ahead of the MCP write limiter
-that will claim it, per the rule that a schema change is deployed before the
-code that reads it.
+route alone, which is the throttle's whole surface. `account_write_windows` is
+the MCP write limiter's counter, claimed by `agentLimiter.ts`: a rolling
+20-write / 20-second window and a fixed hourly import window. The table shipped
+alone, ahead of the limiter that reads it, per the rule that a schema change is
+deployed before the code that reads it.
 
 The Drizzle entity is **`catalogues`** and every sharing table is exported under
 its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
