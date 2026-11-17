@@ -3,10 +3,16 @@
 //
 // A Catalogue search is a member's query against the recorded fields of one
 // catalogue's works. It is not a filter, a find or a lookup: every term the
-// query carries has to appear somewhere in the ten declared fields, and
-// different terms may appear in different fields. There is no ranking and no
+// query carries has to appear somewhere in the declared fields, and different
+// terms may appear in different fields. There is no ranking and no
 // highlighting — the caller keeps its own order — so this module answers one
 // boolean per work and nothing else.
+//
+// The Catalogue decides which record fields it has: Title and Artist Name
+// always contribute, and the eight togglable fields contribute only while the
+// Catalogue records them. A disabled field's stored text is therefore not
+// found — the promise the form and the PDF keep, that a field the Catalogue
+// does not have is neither asked for nor shown.
 //
 // ## Normalization
 //
@@ -31,16 +37,20 @@
 // haystack carries both forms, so "2023" and "March" each find a March 2023
 // acquisition. Date of creation stays free text and is searched as written.
 
+import type { ArtworkFieldKey, ArtworkFieldStates } from "./artworkFields";
+
 /**
- * The ten fields a Catalogue search reads, declared once.
- *
- * Adding one is a deliberate edit here and in the predicate's test — not a
- * change to a route, a schema or a database query. `title` and `artistName`
- * are required on every work; the rest contribute only when they hold a value.
+ * The two fields a Catalogue search always reads: a work's identity, which the
+ * settings never take away.
  */
-const ARTWORK_SEARCH_FIELDS = [
-  "title",
-  "artistName",
+const ARTWORK_ALWAYS_SEARCHED_FIELDS = ["title", "artistName"] as const;
+
+/**
+ * The togglable fields a Catalogue search reads. Each contributes only while
+ * the Catalogue records it; the registry owns whether it does, so this list is
+ * the search side's subset, not a second field table.
+ */
+const ARTWORK_TOGGLABLE_SEARCH_FIELDS = [
   "serie",
   "medium",
   "editions",
@@ -49,9 +59,20 @@ const ARTWORK_SEARCH_FIELDS = [
   "placeOfOrigin",
   "provenance",
   "notes",
-] as const;
+] as const satisfies readonly ArtworkFieldKey[];
 
-export type ArtworkSearchField = (typeof ARTWORK_SEARCH_FIELDS)[number];
+/**
+ * The ten fields a Catalogue search reads, declared once: the two always-read
+ * ones and the eight the Catalogue may switch off.
+ *
+ * Adding one is a deliberate edit here and in the predicate's test — not a
+ * change to a route, a schema or a database query. `title` and `artistName`
+ * are required on every work; the rest contribute only when they hold a value
+ * and the Catalogue records them.
+ */
+export type ArtworkSearchField =
+  | (typeof ARTWORK_ALWAYS_SEARCHED_FIELDS)[number]
+  | (typeof ARTWORK_TOGGLABLE_SEARCH_FIELDS)[number];
 
 /**
  * The searchable shape of a work: the ten fields, any of which may be absent
@@ -172,34 +193,47 @@ function acquisitionDateText(value: string): string {
 
 /**
  * One normalized string holding every searchable value of the work, joined by
- * spaces. A field with no value contributes nothing, and the acquisition date
- * contributes both of its forms.
+ * spaces. A field with no value contributes nothing, the acquisition date
+ * contributes both of its forms, and a togglable field the Catalogue does not
+ * record contributes nothing even when it holds text.
  */
-function searchHaystack(artwork: ArtworkSearchText): string {
+function searchHaystack(
+  artwork: ArtworkSearchText,
+  enabled: ArtworkFieldStates,
+): string {
   const parts: string[] = [];
-  for (const field of ARTWORK_SEARCH_FIELDS) {
+
+  const add = (field: ArtworkSearchField): void => {
     const value = artwork[field];
-    if (typeof value !== "string" || value.trim() === "") continue;
+    if (typeof value !== "string" || value.trim() === "") return;
     parts.push(
       normalizeSearchText(
         field === "acquisitionDate" ? acquisitionDateText(value) : value,
       ),
     );
+  };
+
+  for (const field of ARTWORK_ALWAYS_SEARCHED_FIELDS) add(field);
+  for (const field of ARTWORK_TOGGLABLE_SEARCH_FIELDS) {
+    if (enabled[field]) add(field);
   }
   return parts.join(" ");
 }
 
 /**
- * Does this work match the query? Every term must appear somewhere in the ten
- * fields; terms may match different fields. A query with no terms matches
- * nothing, which is the punctuation-only case.
+ * Does this work match the query? Every term must appear somewhere in the
+ * enabled fields; terms may match different fields. Title and Artist Name are
+ * always in the haystack; the eight togglable fields join it only when the
+ * Catalogue records them. A query with no terms matches nothing, which is the
+ * punctuation-only case.
  */
 export const matchesArtworkSearch = (
   artwork: ArtworkSearchText,
   query: string,
+  enabled: ArtworkFieldStates,
 ): boolean => {
   const terms = searchTerms(query);
   if (terms.length === 0) return false;
-  const haystack = searchHaystack(artwork);
+  const haystack = searchHaystack(artwork, enabled);
   return terms.every((term) => haystack.includes(term));
 };
