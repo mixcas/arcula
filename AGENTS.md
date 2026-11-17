@@ -393,8 +393,8 @@ reviewing a diff.
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
   inlined at build time. The repo-root file is the local fallback: a deploy
-  reads `infra/cdk/.env.<env>` instead (`infra/cdk/.env` is production's
-  fallback, and dev deliberately has none — falling back would put
+  reads `infra/cdk/.env.<env>` instead (the untracked `.env` there is
+  production's fallback, and dev deliberately has none — falling back would put
   production's database URL into a dev deploy). Never commit real secrets; see
   **Two rules that are load-bearing** above.
 

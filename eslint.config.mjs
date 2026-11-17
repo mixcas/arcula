@@ -97,6 +97,9 @@ export default tseslint.config(
       "apps/api/scripts/**/*.ts",
       "apps/api/tests/**/*.ts",
       "apps/api/vitest.config.ts",
+      // Repository tooling: the pointer resolver and its suite, run by bun.
+      "scripts/**/*.ts",
+      "scripts/tests/**/*.ts",
       // The standalone CDK app (own tsconfig, own tsc at synth; Node
       // context — process, __dirname, fs).
       "infra/cdk/src/**/*.ts",

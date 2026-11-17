@@ -13,7 +13,7 @@ and adds a challenge in front of it. Nothing about membership
 and collaborators never face the challenge, because membership is already the
 strongest verdict.
 
-The vocabulary is in [GLOSSARY.md](../GLOSSARY.md): **Protected**, **Access
+The vocabulary is in [GLOSSARY.md](../../GLOSSARY.md): **Protected**, **Access
 grant**, **Public**, **Private**.
 
 ## Decision
@@ -74,7 +74,7 @@ the protection covers the works rather than the collection's existence, and the
 existence is disclosed only by a direct link. That is the deliberate contrast
 with an invitation token, where the artefact _is_ the secret and every failure
 answers one uniform `not-found`
-([`invitations.ts`](../apps/api/src/invitations.ts)). Here a wrong password is
+([`invitations.ts`](../../apps/api/src/invitations.ts)). Here a wrong password is
 `403 invalid-password`: the reader already knows the collection exists, so a
 uniform refusal would buy no secrecy and only cost the prompt the ability to say
 "that is not it".
@@ -194,7 +194,7 @@ cookie now set, so there is one path to ready.
   `collection_access_grants`, carries the grants, and a thirteenth,
   `collection_unlock_attempts`, the unlock throttle's counter. The design needs
   **two** releases, one per step, following the
-  forward-only rule in [AGENTS.md](../AGENTS.md): `0005_…` adds the nullable
+  forward-only rule in [AGENTS.md](../../AGENTS.md): `0005_…` adds the nullable
   column and the new tables, read by nothing; the feature code follows in the
   next. There is no second tightening migration — a collection without a
   password is the normal state, not a gap to backfill — so the contrast with

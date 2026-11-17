@@ -39,7 +39,7 @@ find a broken upload would be a collector.
 - Because deploys are merges, rollback is a revert commit on the branch that
   deploys — and the schema does not roll back with it. A revert is safe only
   when the release's migration was additive. See the forward-only rule in
-  [AGENTS.md](../AGENTS.md).
+  [AGENTS.md](../../AGENTS.md).
 - Branch protection, required checks and the two GitHub Environments together
   keep a branch from feeding any environment but its own. The first two gate
   merges; the Environments are what scopes each set of secrets to one branch.

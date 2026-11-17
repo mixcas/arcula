@@ -58,7 +58,7 @@ and the schema suite pass, and no route mentions the new columns.
 
 Ordered so each step is independently testable.
 
-1. **`apps/api/src/collectionPassword.ts`** — pure module:
+1. **`apps/api/src/cataloguePassword.ts`** — pure module:
    `hashPassword` / `verifyPassword` over `node:crypto` `scrypt`, salt and
    parameters encoded as `scrypt$N$r$p$salt$hash`. Tier-1 tested directly.
 2. **`collectionGrants.ts`** — pure facts beside `invitations.ts`: mint a
