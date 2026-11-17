@@ -372,12 +372,15 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
               key={field}
               label={ARTWORK_FIELD_LABELS[field]}
               checked={artworkFields[field]}
-              onChange={(e) =>
+              onChange={(e) => {
+                // Read the value now: the updater may run after the event has
+                // been dispatched, when `currentTarget` is already null.
+                const checked = e.currentTarget.checked;
                 setArtworkFields((current) => ({
                   ...current,
-                  [field]: e.currentTarget.checked,
-                }))
-              }
+                  [field]: checked,
+                }));
+              }}
             />
           ))}
         </Stack>
@@ -394,12 +397,14 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
               label={ARTWORK_FIELD_LABELS[field]}
               description={MARKET_DESCRIPTIONS[field]}
               checked={artworkFields[field]}
-              onChange={(e) =>
+              onChange={(e) => {
+                // Same reason as the group above: capture before the updater.
+                const checked = e.currentTarget.checked;
                 setArtworkFields((current) => ({
                   ...current,
-                  [field]: e.currentTarget.checked,
-                }))
-              }
+                  [field]: checked,
+                }));
+              }}
             />
           ))}
         </Stack>
