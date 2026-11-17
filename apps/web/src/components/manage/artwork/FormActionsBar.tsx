@@ -93,7 +93,7 @@ const FormActionsBar: React.FC<FormActionsBarProps> = ({
     px="lg"
     // The app theme is dark, and a translucent bar would show the page scrolling
     // under it — including the text of the field being edited.
-    bg="var(--mantine-color-body)"
+    bg="gray.1"
     style={{
       zIndex: BAR_Z,
       borderTop: "1px solid var(--mantine-color-default-border)",

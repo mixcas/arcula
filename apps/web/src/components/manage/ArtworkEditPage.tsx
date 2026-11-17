@@ -257,9 +257,6 @@ const ArtworkEditPage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2" mb="xl">
-        Edit Artwork
-      </Text>
       {isDeleted ? (
         <Alert color="orange" title="This artwork is deleted" mb="md">
           <Text size="sm">

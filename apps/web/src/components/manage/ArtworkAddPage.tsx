@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Loader, Text } from "@mantine/core";
+import { Alert, Loader } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -141,10 +141,6 @@ const ArtworkAddPage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2" mb="xl">
-        Add New Artwork
-      </Text>
-
       <form
         // Room for the fixed action bar. Without it the bar sits permanently on
         // top of `currentValue` and the error alerts, which is exactly the

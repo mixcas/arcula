@@ -281,15 +281,16 @@ describe("a catalogue's nav bar", () => {
 
     // Both items in one query: they render together, and reading them from a
     // single snapshot keeps a transition from closing the menu between reads.
-    const hrefs = (await screen.findAllByRole("menuitem")).map((item) =>
-      item.getAttribute("href"),
-    );
+    // Sorted, because the menu's order is a presentation choice and not this
+    // test's subject.
+    const hrefs = (await screen.findAllByRole("menuitem"))
+      .map((item) => item.getAttribute("href"))
+      .sort();
     // Those pages do not search; carrying `q` would pretend they do. Back
     // still restores the results because the commit left a history entry.
-    expect(hrefs).toEqual([
-      `${CANONICAL_PATH}/deleted`,
-      `${CANONICAL_PATH}/settings`,
-    ]);
+    expect(hrefs).toEqual(
+      [`${CANONICAL_PATH}/deleted`, `${CANONICAL_PATH}/settings`].sort(),
+    );
   });
 });
 
