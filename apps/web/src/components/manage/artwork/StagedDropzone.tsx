@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { Alert, Group, Progress, Stack, Text } from "@mantine/core";
 import { Dropzone, type FileRejection } from "@mantine/dropzone";
+import { IconAlertTriangle } from "@tabler/icons-react";
 import type { Rejection } from "@/hooks/useUploadPool";
 
 /**
- * The words one list uses for the files it holds, and its alert icon.
+ * The words one list uses for the files it holds, and the glyph its drop zone
+ * wears.
  *
  * The lines the two lists share are written once; the ones that name the list
  * ("images" against "files", and the accept line) come from here.
@@ -19,7 +21,12 @@ export interface StagedDropzoneWords {
   idle: React.ReactNode;
   /** The alert's noun, singular: "3 images could not be added". */
   noun: string;
-  icon: React.ReactNode;
+  /**
+   * The large glyph above the caption, inside the zone. It carries no colour of
+   * its own: `Dropzone.Accept` tints its children, so the same node turns green
+   * while a draggable file is over the zone.
+   */
+  glyph: React.ReactNode;
 }
 
 interface StagedDropzoneProps {
@@ -108,13 +115,19 @@ const StagedDropzone: React.FC<StagedDropzoneProps> = ({
           style={{ pointerEvents: "none" }}
         >
           <Dropzone.Accept>
-            <Text size="sm">{words.accept}</Text>
+            <Stack align="center" gap={4}>
+              {words.glyph}
+              <Text size="sm">{words.accept}</Text>
+            </Stack>
           </Dropzone.Accept>
           <Dropzone.Reject>
             <Text size="sm">That file cannot be added</Text>
           </Dropzone.Reject>
           <Dropzone.Idle>
-            <Text size="sm">{words.idle}</Text>
+            <Stack align="center" gap={4}>
+              {words.glyph}
+              <Text size="sm">{words.idle}</Text>
+            </Stack>
           </Dropzone.Idle>
         </Group>
       </Dropzone>
@@ -130,7 +143,10 @@ const StagedDropzone: React.FC<StagedDropzoneProps> = ({
       {rejected.length > 0 ? (
         <Alert
           color="yellow"
-          icon={words.icon}
+          // Fixed here rather than taken from the caller: the alert is the same
+          // "something did not arrive" warning for both lists, and a caller that
+          // passed a photo glyph over a list of documents said the wrong thing.
+          icon={<IconAlertTriangle size={16} />}
           title={`${rejected.length} ${words.noun}${
             rejected.length === 1 ? "" : "s"
           } could not be added`}

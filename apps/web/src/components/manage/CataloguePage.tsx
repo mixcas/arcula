@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import {
   IconDotsVertical,
-  IconFolderCancel,
+  IconTrash,
   IconSettings,
   IconZoom,
 } from "@tabler/icons-react";
@@ -337,17 +337,17 @@ const CataloguePage: React.FC = () => {
             <Menu.Dropdown>
               <Menu.Item
                 component={Link}
-                to={`/manage/catalogue/${param}/deleted`}
-                leftSection={<IconFolderCancel size={16} />}
-              >
-                Deleted
-              </Menu.Item>
-              <Menu.Item
-                component={Link}
                 to={`/manage/catalogue/${param}/settings`}
                 leftSection={<IconSettings size={16} />}
               >
                 Settings
+              </Menu.Item>
+              <Menu.Item
+                component={Link}
+                to={`/manage/catalogue/${param}/deleted`}
+                leftSection={<IconTrash size={16} />}
+              >
+                Deleted
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>

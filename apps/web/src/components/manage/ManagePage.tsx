@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader, Badge } from "@mantine/core";
 import { Link } from "react-router-dom";
+import { IconStackPlus } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 import { catalogueService } from "@/services/catalogueService";
 import { catalogueLimitForTier, catalogueSlug } from "@arcula/shared";
@@ -81,24 +82,14 @@ const ManagePage: React.FC = () => {
             {owned.length} of {limit} catalogue
             {limit === 1 ? "" : "s"}
           </Text>
-          {atCap ? (
-            // A disabled button, not a disabled link: an anchor's
-            // `disabled` is not an attribute, so a `component={Link}`
-            // button at the cap would still navigate to a form the server
-            // refuses. A real disabled control cannot, and it is the one
-            // that reads as "not offered".
-            <Button variant="outline" disabled>
-              New catalogue
-            </Button>
-          ) : (
-            <Button
-              component={Link}
-              to="/manage/catalogue/new"
-              variant="outline"
-            >
-              New catalogue
-            </Button>
-          )}
+          <Button
+            disabled={atCap}
+            component={atCap ? undefined : Link}
+            to="/manage/catalogue/new"
+            leftSection={<IconStackPlus size={18} />}
+          >
+            New catalogue
+          </Button>
         </Group>
       </Group>
 
