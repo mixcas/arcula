@@ -9,12 +9,16 @@
 // output is a complete font — `cmap`, `post`, `name`, `OS/2` and all — which is
 // what the renderer needs, and what a glyph-only subsetter leaves out.
 //
-// Three decisions live here, and they are ours rather than the library's:
+// What a text normalizes to is not this module's decision: the shared
+// `pdfFallbackCharacters` is the one rule for which code points count and in
+// what order, because the export builds its requests from it. What does live
+// here, ours rather than the library's:
 //
-//  - what the request text normalizes to — distinct non-ASCII code points,
-//    sorted by code point, capped at 512;
-//  - the warm-Lambda cache — the sorted character string is the key, 32
-//    entries, a 24-hour TTL, oldest inserted evicted first;
+//  - the boundary — an empty normalised set, or one past the shared cap, is
+//    this API's `validation` error (400), and the normalised string is the
+//    cache key;
+//  - the warm-Lambda cache — 32 entries, a 24-hour TTL, oldest inserted
+//    evicted first;
 //  - a subsetting failure is the API's `internal` error (500), never a leak.
 //
 // The face itself ships beside the bundle (see scripts/build-lambda.sh), so
@@ -24,12 +28,12 @@
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { MAX_PDF_FALLBACK_CODE_POINTS } from "@arcula/shared";
+import {
+  MAX_PDF_FALLBACK_CODE_POINTS,
+  pdfFallbackCharacters,
+} from "@arcula/shared";
 import subsetFont from "subset-font";
 import { ApiError } from "./errors";
-
-/** The client sends the document's set in chunks of this size. */
-const MAX_FALLBACK_CODE_POINTS = MAX_PDF_FALLBACK_CODE_POINTS;
 
 const CACHE_LIMIT = 32;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -39,29 +43,24 @@ const FONT_FILE = fileURLToPath(
 );
 
 /**
- * Distinct non-ASCII code points, sorted by code point and joined back into a
- * string. ASCII belongs to Darker Grotesque; asking for it would only grow
- * the subset and can shift a glyph off the brand face.
+ * The request text as the shared fallback rule normalises it, with this
+ * boundary's two refusals: nothing to cover, or more distinct code points than
+ * one request may carry. The rule walks code points — an astral character is
+ * one entry — and keeps `> U+007F` only: ASCII and DEL belong to the brand
+ * face, and asking for them would only grow the subset.
  */
 export function subsetCharacters(text: string): string {
-  const codePoints = new Set<number>();
-  for (const char of text) {
-    const codePoint = char.codePointAt(0) ?? 0;
-    if (codePoint > 0x7f) codePoints.add(codePoint);
-  }
-  if (codePoints.size === 0) {
+  const characters = pdfFallbackCharacters([text]);
+  if (characters.length === 0) {
     throw new ApiError("validation", "No non-ASCII text to cover");
   }
-  if (codePoints.size > MAX_FALLBACK_CODE_POINTS) {
+  if (Array.from(characters).length > MAX_PDF_FALLBACK_CODE_POINTS) {
     throw new ApiError(
       "validation",
-      `At most ${MAX_FALLBACK_CODE_POINTS} distinct non-ASCII characters per request`,
+      `At most ${MAX_PDF_FALLBACK_CODE_POINTS} distinct non-ASCII characters per request`,
     );
   }
-  return [...codePoints]
-    .sort((a, b) => a - b)
-    .map((codePoint) => String.fromCodePoint(codePoint))
-    .join("");
+  return characters;
 }
 
 interface CacheEntry {
