@@ -77,10 +77,10 @@ Layout:
   `authenticated` is appended by hand. The guard is deliberate: Supabase creates
   those roles, while the local stack and CI have neither, so an unguarded
   `REVOKE … FROM anon` would fail every `db:migrate` with `role "anon" does not
-exist`. `0011_account_write_windows` repeats that append for the one table that
+exist`. `0012_account_write_windows` repeats that append for the one table that
   ships after `0006`: the generated half is the `CREATE TABLE`, the primary key
   and the check, and the revoke is added by hand, because a migration can only
-  lock down the tables it can see. `0012_agent_access` repeats it for the eight
+  lock down the tables it can see. `0013_agent_access` repeats it for the eight
   agent-access tables, which also ship after `0006`; its generated half is the
   eight `CREATE TABLE`s, the foreign keys, the unique constraints and the
   indexes. `0009_catalogue_kind` and
@@ -109,7 +109,10 @@ object; and `collection_invitations` stores the token's hash, never the token,
 with one pending offer per catalogue and address as a partial unique index.
 `catalogues.kind` is fixed at creation (`portfolio`, `collection`, `inventory`)
 and `artworks.availability` is nullable (`available`, `reserved`, `sold`,
-`on-consignment`), each guarded by a CHECK.
+`on-consignment`), each guarded by a CHECK. `collections.artworkFields` is a
+nullable jsonb map of a catalogue's deviations from its Kind's defaults, with
+`null` and `{}` both meaning pure defaults; the registry that names the keys
+ships with the feature that reads it.
 `artworks.userId` is a mirror of the catalogue owner, not an authorization
 fact. `collections.passwordHash` is nullable and holds a one-way hash with its
 salt and parameters in the string — there is no read-back and no default, and
@@ -162,5 +165,5 @@ sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
 `src/index.ts` and regenerate; the hand-added statements are the data backfill,
 appended with a comment saying what it reads, the
 add-nullable → backfill → set-not-null sequence above, and the guarded grant
-revoke in `0006_enable_rls`, repeated by `0011_account_write_windows` and
-`0012_agent_access` for the tables that followed.
+revoke in `0006_enable_rls`, repeated by `0012_account_write_windows` and
+`0013_agent_access` for the tables that followed.

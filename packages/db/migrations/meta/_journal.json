@@ -82,15 +82,22 @@
     {
       "idx": 11,
       "version": "7",
-      "when": 1794942392485,
-      "tag": "0011_account_write_windows",
+      "when": 1794947511038,
+      "tag": "0011_catalogue_artwork_fields",
       "breakpoints": true
     },
     {
       "idx": 12,
       "version": "7",
-      "when": 1794943693789,
-      "tag": "0012_agent_access",
+      "when": 1794952796765,
+      "tag": "0012_account_write_windows",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794952803920,
+      "tag": "0013_agent_access",
       "breakpoints": true
     }
   ]

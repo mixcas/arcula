@@ -1,5 +1,5 @@
 {
-  "id": "c578ed8b-90f3-4b2a-9935-1d91e2f1b69b",
+  "id": "c0cb80ce-e07a-4014-8ee8-a95a5bd034ad",
   "prevId": "c36b692a-0b34-4992-9cc8-497b05c14e12",
   "version": "7",
   "dialect": "postgresql",
@@ -109,58 +109,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "public.account_write_windows": {
-      "name": "account_write_windows",
-      "schema": "",
-      "columns": {
-        "userId": {
-          "name": "userId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bucket": {
-          "name": "bucket",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "windowStart": {
-          "name": "windowStart",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "account_write_windows_userId_bucket_windowStart_pk": {
-          "name": "account_write_windows_userId_bucket_windowStart_pk",
-          "columns": [
-            "userId",
-            "bucket",
-            "windowStart"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "account_write_windows_bucket_check": {
-          "name": "account_write_windows_bucket_check",
-          "value": "\"bucket\" in ('write', 'import')"
-        }
-      },
       "isRLSEnabled": true
     },
     "public.artwork_documents": {
@@ -897,6 +845,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'collection'"
+        },
+        "artworkFields": {
+          "name": "artworkFields",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "description": {
           "name": "description",

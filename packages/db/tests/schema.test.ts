@@ -202,12 +202,16 @@ const KIND_SQL = readMigration("0009_catalogue_kind");
 // work and on every work written before the column existed.
 const AVAILABILITY_SQL = readMigration("0010_artwork_availability");
 
+// The committed artwork fields: a catalogue's sparse map of deviations from its
+// Kind's defaults, absent on every catalogue that never deviated.
+const ARTWORK_FIELDS_SQL = readMigration("0011_catalogue_artwork_fields");
+
 // The committed write limiter's counter: one additive table, alone.
-const WRITE_WINDOWS_SQL = readMigration("0011_account_write_windows");
+const WRITE_WINDOWS_SQL = readMigration("0012_account_write_windows");
 
 // The OAuth provider and JWT plugin's eight tables: additive, alone, ahead of
 // the MCP code that reads them.
-const AGENT_ACCESS_SQL = readMigration("0012_agent_access");
+const AGENT_ACCESS_SQL = readMigration("0013_agent_access");
 
 // The four market states, as the spec names them. Shared by the Drizzle check
 // assertion and the committed migration, so the two cannot disagree.
@@ -404,6 +408,16 @@ describe("the twenty-two-table schema", () => {
       name: "collections_kind_check",
       sql: "\"kind\" in ('portfolio', 'collection', 'inventory')",
     });
+  });
+
+  it("catalogues carries a nullable artwork-fields map, with no default to hide a gap", () => {
+    const c = cols(catalogues);
+    // Sparse by design: an absent key follows the Kind default, so null is the
+    // normal state and no backfill or NOT NULL step is owed later. A default
+    // would store a choice no member made.
+    expect(c.artworkFields.dataType).toBe("json");
+    expect(c.artworkFields.notNull).toBe(false);
+    expect(c.artworkFields.hasDefault).toBe(false);
   });
 
   it("catalogue_access_grants keeps the token's hash, and indexes the catalogue for revocation", () => {
@@ -1041,6 +1055,32 @@ describe("the committed availability migration (as it will actually be applied)"
     expect(dataWrites(AVAILABILITY_SQL)).toEqual([]);
     expect(AVAILABILITY_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(AVAILABILITY_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+});
+
+describe("the committed artwork-fields migration (as it will actually be applied)", () => {
+  it("adds a nullable jsonb map of deviations, with no default and no NOT NULL step", () => {
+    expect(ARTWORK_FIELDS_SQL).toContain(
+      'ALTER TABLE "collections" ADD COLUMN "artworkFields" jsonb;',
+    );
+    // Nullable is load-bearing: a catalogue that never deviated stores nothing,
+    // so every existing row is already right. A default would store a choice no
+    // member made, and NOT NULL would fail on every existing row.
+    expect(ARTWORK_FIELDS_SQL).not.toMatch(
+      /ADD COLUMN "artworkFields"[^;]*NOT NULL/,
+    );
+    expect(ARTWORK_FIELDS_SQL).not.toMatch(
+      /ADD COLUMN "artworkFields"[^;]*DEFAULT/,
+    );
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The column ships alone, ahead of the code that reads it: null is already
+    // the truth for every existing catalogue, so there is nothing to backfill
+    // and nothing to reverse.
+    expect(dataWrites(ARTWORK_FIELDS_SQL)).toEqual([]);
+    expect(ARTWORK_FIELDS_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(ARTWORK_FIELDS_SQL).not.toMatch(/ALTER COLUMN/);
   });
 });
 

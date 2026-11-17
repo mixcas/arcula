@@ -100,7 +100,7 @@ Hand edits to a generated migration are deliberately few, and there are exactly
 three: a data backfill, the add-nullable → backfill → set-not-null sequence, and
 a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them, and
 `0006_enable_rls` carries the third's first instance while
-`0011_account_write_windows` and `0012_agent_access` repeat it for the tables
+`0012_account_write_windows` and `0013_agent_access` repeat it for the tables
 that followed.
 
 **A schema change ships alone.** `scripts/deploy.sh` deploys the Lambda before
@@ -170,8 +170,8 @@ is the write limiter. The account surface is `routes/connections.ts` with
 `connectionList.ts` and `consentQuery.ts`, and the web side is
 `components/auth/ConsentPage.tsx`, `auth/oauthResume.ts` and
 `components/manage/AgentAccessCard.tsx`. The database adds
-`account_write_windows` (`0011_account_write_windows`) and the eight OAuth/JWKS
-tables (`0012_agent_access`); the shared contract adds the structured query in
+`account_write_windows` (`0012_account_write_windows`) and the eight OAuth/JWKS
+tables (`0013_agent_access`); the shared contract adds the structured query in
 `packages/shared/src/artworkSearch.ts` and
 `packages/shared/src/schemas/connection.ts`.
 

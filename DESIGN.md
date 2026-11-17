@@ -150,20 +150,28 @@ one Revoke. Different clients are separate rows. Per-install listing and
 revocation would need an install identity the protocol does not supply here, so
 it is not implemented.
 
-`0012_agent_access` is additive and landed alone, ahead of the MCP code, per
+`0013_agent_access` is additive and landed alone, ahead of the MCP code, per
 [A schema change ships alone](AGENTS.md#migrations-are-forward-only).
 
 ### `collections`
 
 `id`, `userId`, `mediaNamespaceId`, `name`, `kind` (default `collection`),
-`description?`, `skin?`, `skinOptions` (jsonb), `isPublic` (default `true`),
-`passwordHash?`, `deletedAt?`, `createdAt`, `updatedAt`.
+`artworkFields?` (jsonb), `description?`, `skin?`, `skinOptions` (jsonb),
+`isPublic` (default `true`), `passwordHash?`, `deletedAt?`, `createdAt`,
+`updatedAt`.
 
 `kind` is `portfolio`, `collection` or `inventory`, `NOT NULL` with a constant
 default (every row that predates it is a collector's) and CHECK-constrained to
 the three values. Nothing writes it after create: a catalogue never changes
 meaning underneath the works it holds. `0009_catalogue_kind` is pure generated
 SQL — a constant default needs no backfill.
+
+`artworkFields` is a catalogue's sparse map of deviations from its Kind's
+defaults: an absent key follows the default, and `null` and `{}` both mean pure
+defaults. `0011_catalogue_artwork_fields` adds it nullable with no default, so
+every existing catalogue is already right and no backfill or tightening step is
+owed. Nothing reads it yet; the registry that names its keys and the surfaces
+that write it ship separately.
 
 `userId` is the owner. `mediaNamespaceId` is fixed at creation and is the
 namespace every final media key uses. The schema shipped in two releases:
@@ -229,7 +237,7 @@ agent's calls all arrive from one cloud. The window lengths are the surface's
 policy, not the schema's: `agentLimiter.ts` floors `windowStart`, spends a
 write in the current whole second (a rolling 20-write / 20-second window) or an
 import in the current UTC hour (5 an hour), and prunes the rows that can no
-longer count. `0011_account_write_windows` is additive and landed alone, ahead
+longer count. `0012_account_write_windows` is additive and landed alone, ahead
 of the limiter that reads it.
 
 ### `collection_collaborators` and `collection_invitations`
@@ -900,7 +908,7 @@ unmetered.
 
 ### Schema and release
 
-`0011_account_write_windows` and `0012_agent_access` (the eight OAuth/JWKS
+`0012_account_write_windows` and `0013_agent_access` (the eight OAuth/JWKS
 tables) are both additive and landed alone, ahead of the code that reads them,
 per [A schema change ships alone](AGENTS.md#migrations-are-forward-only). No
 release has shipped either separately: a single dev→main release carrying a
