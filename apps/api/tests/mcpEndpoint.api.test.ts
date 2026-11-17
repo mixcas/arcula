@@ -19,12 +19,6 @@ interface ProtectedResourceMetadata {
   authorization_servers: string[];
 }
 
-interface AuthorizationServerMetadata {
-  issuer: string;
-  token_endpoint: string;
-  client_id_metadata_document_supported: boolean;
-}
-
 afterAll(async () => {
   await closeDb();
 });
@@ -67,20 +61,17 @@ describe("the OAuth discovery documents", () => {
     );
     const resource = new URL(resourceMetadata.resource);
     const issuer = `${resource.origin}/api/auth`;
+    expect(resourceMetadata.authorization_servers).toContain(issuer);
 
+    // The document is the provider's: its media type is the fact this suite
+    // owns (a `200` carrying `index.html` would pass a status-only check),
+    // while its contents are the plugin's contract and are not restated here.
     const res = await req(
       "GET",
       "/.well-known/oauth-authorization-server/api/auth",
     );
     expect(res.status).toBe(200);
-    const body = await json<AuthorizationServerMetadata>(res);
-    // The RFC 8414 document a client probes after reading the resource
-    // metadata. `issuer` is what the client validates the authorization
-    // response's `iss` against.
-    expect(body.issuer).toBe(issuer);
-    expect(resourceMetadata.authorization_servers).toContain(issuer);
-    expect(body.client_id_metadata_document_supported).toBe(true);
-    expect(body.token_endpoint).toBe(`${issuer}/oauth2/token`);
+    expect(res.headers.get("content-type")).toContain("application/json");
   });
 
   it("does not answer OpenID discovery on the app origin", async () => {

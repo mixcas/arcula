@@ -129,6 +129,10 @@ describe("GET /api/v1/connections", () => {
 
     const res = await req("GET", "/api/v1/connections", {
       cookies: owner.cookies,
+      // The endpoint comes from the deployment's own environment, not from the
+      // request: a foreign `Host` must not move it (in-process the request URL
+      // already shares the origin, so only this proves the difference).
+      headers: { Host: "evil.example" },
     });
     expect(res.status).toBe(200);
     const body = connectionsReadSchema.parse(await json<unknown>(res));

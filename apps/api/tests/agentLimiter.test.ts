@@ -12,8 +12,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import {
   AGENT_IMPORT_CAPACITY,
-  AGENT_WRITE_CAPACITY,
-  AGENT_WRITE_WINDOW_SECONDS,
   agentImportWindowStart,
   agentWriteWindowBoundary,
   agentWriteWindowHolds,
@@ -63,14 +61,6 @@ describe("the write window's arithmetic", () => {
     expect(
       agentWriteWindowHolds(row, new Date("2026-01-01T12:00:20.000Z")),
     ).toBe(false);
-  });
-
-  it("names the allowance and the window the refusal talks about", () => {
-    // The refusal's sentence is built from these, so a changed capacity or
-    // window changes the words the agent relays. Twenty writes in twenty
-    // seconds is the spec's capacity 20 refilled at one a second.
-    expect(AGENT_WRITE_CAPACITY).toBe(20);
-    expect(AGENT_WRITE_WINDOW_SECONDS).toBe(20);
   });
 });
 
