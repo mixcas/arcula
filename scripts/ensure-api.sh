@@ -5,8 +5,9 @@
 # fight that. Idempotent: an API already listening on PORT is left alone
 # (including one started by `bun run dev`), otherwise a plain
 # `bun src/main.ts` is nohup'd and the script polls /api/health until it
-# answers. The API process env is the repo-root .env, sourced here — bun
-# does not walk up parent directories for .env, so sourcing is mandatory.
+# answers. The API process env is the resolved local .env (services.sh: this
+# checkout's, or the main checkout's from a worktree), sourced here — bun does
+# not walk up parent directories for .env, so sourcing is mandatory.
 #
 #   sh scripts/ensure-api.sh
 #
@@ -16,8 +17,9 @@ set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/services.sh"
+require_env_file
 set -a
-. "$ROOT/.env"
+. "$ENV_FILE"
 set +a
 
 PORT=${PORT:-8000}

@@ -152,7 +152,9 @@ performed, is in `infra/cdk/README.md`.
 
 The **local stack** is Postgres (a docker/colima container), SeaweedFS (the S3
 stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
-`scripts/stack-up.sh` is idempotent.
+`scripts/stack-up.sh` is idempotent, and the stack is one per machine: a git
+worktree borrows the main checkout's `.env` and compose project, so the suites
+run there against the same services (the mechanics are in `docs/testing.md`).
 
 ## Where things live
 
