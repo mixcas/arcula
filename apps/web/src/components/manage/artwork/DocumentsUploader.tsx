@@ -12,9 +12,9 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import {
+  IconFilePlus,
   IconFileText,
   IconFileTypePdf,
-  IconPhoto,
   IconTrash,
 } from "@tabler/icons-react";
 import ImagePreviewModal from "./ImagePreviewModal";
@@ -79,11 +79,11 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
           idle: (
             <>
               Drag files here, or click to choose up to{" "}
-              {MAX_ARTWORK_DOCUMENTS - documents.count} more
+              {MAX_ARTWORK_DOCUMENTS - documents.count}
             </>
           ),
           noun: "file",
-          icon: <IconPhoto size={16} />,
+          glyph: <IconFilePlus size={36} stroke={1} />,
         }}
       />
 

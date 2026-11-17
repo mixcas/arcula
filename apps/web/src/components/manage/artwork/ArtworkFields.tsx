@@ -181,6 +181,8 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         label="Notes"
         placeholder="Additional information about the artwork"
         mb="md"
+        autosize
+        minRows={4}
         {...form.getInputProps("notes")}
       />
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Loader, Text } from "@mantine/core";
+import { Alert, Loader } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { schemaResolver } from "@mantine/form";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -47,8 +47,8 @@ const ArtworkAddPage: React.FC = () => {
   const catalogueId = parseId(param ?? "");
   const navigate = useNavigate();
   // Add is reached from a search result set; the query travels with the page
-  // so Cancel returns to it and the new work's Edit page keeps it. Built from
-  // `q` alone — no other parameter belongs on either destination.
+  // so the back control returns to it and the new work's Edit page keeps it.
+  // Built from `q` alone — no other parameter belongs on either destination.
   const [searchParams] = useSearchParams();
   const search = (searchParams.get("q") ?? "").trim();
   const searchSuffix = artworkSearchSuffix(search);
@@ -141,10 +141,6 @@ const ArtworkAddPage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2" mb="xl">
-        Add New Artwork
-      </Text>
-
       <form
         // Room for the fixed action bar. Without it the bar sits permanently on
         // top of `currentValue` and the error alerts, which is exactly the
@@ -219,7 +215,8 @@ const ArtworkAddPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Artwork"
           submitting={form.submitting}
-          cancelTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
+          backTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
+          backLabel={`Back to ${catalogue?.name ?? "catalogue"}`}
         />
       </form>
     </>

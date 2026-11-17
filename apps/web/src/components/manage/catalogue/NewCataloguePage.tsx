@@ -215,10 +215,6 @@ const NewCataloguePage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2" mb="lg">
-        Create New Catalogue
-      </Text>
-
       {error && (
         <Alert color="red" mb="md">
           {error}

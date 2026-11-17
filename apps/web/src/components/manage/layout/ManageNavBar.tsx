@@ -30,7 +30,7 @@ const ManageNavBar: React.FC = () => {
   const initial = label.charAt(0).toUpperCase() || "?";
 
   return (
-    <Group h="100%" px="md" justify="space-between">
+    <Group h="100%" px="md" justify="space-between" bg="gray.1">
       <Button variant="subtle" component={Link} to={`/manage`}>
         <AppTitle />
       </Button>

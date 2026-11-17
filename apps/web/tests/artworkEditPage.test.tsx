@@ -121,6 +121,7 @@ Object.defineProperty(window, "matchMedia", {
 const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
 const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
+const CATALOGUE_NAME = "Flores Solares";
 const ARTWORK_PARAM = `estudio-en-rojo-${ARTWORK_ID}`;
 
 /** The server's answer for a stored work. */
@@ -145,7 +146,7 @@ const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 
 const catalogue = (kind: CatalogueKind): Catalogue => ({
   id: CATALOGUE_ID,
-  name: "Flores Solares",
+  name: CATALOGUE_NAME,
   kind,
   userId: "owner-1",
   isPublic: true,
@@ -444,12 +445,12 @@ describe("the Edit page — a deleted work", () => {
 
 /**
  * The Edit page is one of the two pages a search can send the collector to, so
- * it has to give the query back: the canonical address keeps it, and Cancel
- * returns to the same results. `q` is inert here — the page never reads it as a
- * filter — which is why carrying it is safe.
+ * it has to give the query back: the canonical address keeps it, and the back
+ * control returns to the same results. `q` is inert here — the page never reads
+ * it as a filter — which is why carrying it is safe.
  */
 describe("the Edit page — returning to the active search", () => {
-  it("keeps the query through the canonical rewrite and on Cancel", async () => {
+  it("keeps the query through the canonical rewrite and on the back control", async () => {
     // A bare id forces the rewrite, so the assertion below covers both the
     // slug swap and the search it has to preserve.
     renderPage(ARTWORK_ID, "?q=picasso");
@@ -459,13 +460,12 @@ describe("the Edit page — returning to the active search", () => {
         `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}?q=picasso`,
       ),
     );
-    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
-      "href",
-      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
-    );
+    expect(
+      screen.getByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
+    ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`);
   });
 
-  it("keeps the address and Cancel empty when no search is active", async () => {
+  it("keeps the address and the back control empty when no search is active", async () => {
     renderPage(ARTWORK_ID);
 
     await waitFor(() =>
@@ -473,9 +473,8 @@ describe("the Edit page — returning to the active search", () => {
         `/manage/catalogue/${CATALOGUE_PARAM}/artwork/${ARTWORK_PARAM}`,
       ),
     );
-    expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
-      "href",
-      `/manage/catalogue/${CATALOGUE_PARAM}`,
-    );
+    expect(
+      screen.getByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
+    ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}`);
   });
 });

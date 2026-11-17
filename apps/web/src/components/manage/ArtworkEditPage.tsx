@@ -52,8 +52,8 @@ const ArtworkEditPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   // Edit can be opened from a search result set. The query is inert on this
-  // page, but Cancel has to return to the results it came from — built from
-  // `q` alone, so nothing else in the address follows the user back.
+  // page, but the back control has to return to the results it came from —
+  // built from `q` alone, so nothing else in the address follows the user back.
   const [searchParams] = useSearchParams();
   const search = (searchParams.get("q") ?? "").trim();
   const searchSuffix = artworkSearchSuffix(search);
@@ -89,10 +89,13 @@ const ArtworkEditPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   // The catalogue's kind decides whether this form surfaces a market state and
   // which states it offers. Loaded with the work, so the control and the
-  // initial value are settled before the form mounts.
+  // initial value are settled before the form mounts. Its name is kept too:
+  // the action bar's back control names the destination it returns to, and the
+  // page early-returns on a load failure, so it is set whenever the form shows.
   const [availabilityValues, setAvailabilityValues] = useState<
     readonly ArtworkAvailability[]
   >([]);
+  const [catalogueName, setCatalogueName] = useState<string | null>(null);
 
   // A deleted work still loads — the read admits a member to a tombstoned work
   // so it can be restored from here. Save stays shut while it is deleted, and
@@ -146,6 +149,7 @@ const ArtworkEditPage: React.FC = () => {
 
         const surface = catalogueSurface(catalogue.kind);
         setAvailabilityValues(surface.availabilityValues);
+        setCatalogueName(catalogue.name);
 
         const values = fromArtwork(artwork);
         // A surfaced work with no stored state starts Available; a stored
@@ -199,7 +203,8 @@ const ArtworkEditPage: React.FC = () => {
       {
         pathname: `/manage/catalogue/${catalogueParam}/artwork/${canonical}`,
         // The search came in on the address and must survive the rewrite, or
-        // Cancel would lose the result set a moment after the page loaded.
+        // the back control would lose the result set a moment after the page
+        // loaded.
         search: location.search,
       },
       { replace: true },
@@ -252,9 +257,6 @@ const ArtworkEditPage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2" mb="xl">
-        Edit Artwork
-      </Text>
       {isDeleted ? (
         <Alert color="orange" title="This artwork is deleted" mb="md">
           <Text size="sm">
@@ -352,7 +354,8 @@ const ArtworkEditPage: React.FC = () => {
           submitLabel="Save Changes"
           submitting={form.submitting}
           submitDisabled={isDeleted}
-          cancelTo={`/manage/catalogue/${catalogueParam ?? ""}${searchSuffix}`}
+          backTo={`/manage/catalogue/${catalogueParam ?? ""}${searchSuffix}`}
+          backLabel={`Back to ${catalogueName ?? "catalogue"}`}
         />
       </form>
     </>
