@@ -376,94 +376,16 @@ A test that answers _the library_ is asserting the library's behaviour. It costs
 a reader and buys nothing — the library tests itself, and when ours goes red we
 have learned nothing that was not visible in the diff.
 
-Three tiers, and the first is where nearly everything belongs:
-
-1. **Pure logic over our own data.** Test directly, no DOM and no server:
-   `variantSize` / `coverCrop` (`apps/api/src/media/variants.ts`),
-   `parseAcquisitionDate` (`packages/shared/src/schemas/artworkImport.ts`),
-   `sortPhotos` / `reindexPhotos` (`packages/shared/src/artworkPhotos.ts`),
-   `catalogueLimitForTier` (`packages/shared/src/limits.ts`),
-   `publicCatalogueState` / `publicFailure`
-   (`apps/web/src/components/catalogue/usePublicCatalogue.ts`),
-   `catalogueSurface` (`apps/web/src/catalogueSurface.ts`),
-   `resolveSkinOptions` (`apps/web/src/skins/registry.ts`), and the access
-   verdict (`apps/api/src/access.ts`). Ours end to end, and where a real
-   regression lives.
-2. **Our value going into the library — only when the failure is invisible in
-   review or in a screenshot.** `apps/web/tests/skinHost.test.tsx` reads the
-   emitted style tags to prove `cssVariablesSelector` is not `:root`, because a
-   skin's type scale leaking onto `/manage` appears in no screenshot anyone
-   takes. The Basicx chrome tests read computed `pointer-events`, because jsdom
-   does no hit testing and the bug was a link that looked live and went nowhere.
-3. **Everything else — don't.** Copy that a `Text` renders, props handed to
-   Mantine, a mock's call count with no behavioural meaning, a constant asserted
-   against its own value.
-
 **Mutation testing is the acceptance bar for anything new.** Change the line the
-test claims to cover; if it stays green, the test was not covering that. A test
-that fails its own mutation earns its place; one that needs three separate
-mutations to kill is usually two tests.
+test claims to cover; if it stays green, the test was not covering that.
 
-**What the bar removes**, so it stays legible rather than theoretical — each of
-these could only fail by editing the thing it read:
-
-- A constant against its own value. `MAX_ARTWORK_PHOTOS` is a product choice
-  (`packages/shared/src/caps.ts`); asserting it equals `10` cross-checks nothing.
-  A **correctness floor** is the other case and it stays: getting it wrong is a
-  _silent_ failure rather than a changed preference.
-- A set against itself — looping `Object.keys(ACCEPTED_IMAGE_TYPES)` through
-  `isAcceptedImageType`, which is `type in ACCEPTED_IMAGE_TYPES`.
-- A duplicate, checked at the stronger one first.
-- Copy. Rendering a component and asserting a string we wrote appeared.
-- A title claiming more than its assertion.
-
-**What has not moved**, because the rule cuts one way and it is easy to overshoot
-it in a tidy-up: the pure-logic half, essentially in full; every tier-2 DOM test;
-the API integration suite (it drives the real app against the real local stack —
-Postgres, SeaweedFS, Mailpit — so it is the one place the wire, the schema and
-the storage path meet); and correct-altitude cases that happen to be near
-neighbours of deleted ones.
-
-Test **mechanics** — `afterEach(cleanup)`, the `matches: query === ""` stub,
-`ModalsProvider`, the carousel mock — are in **Gotchas** below and are not
-restated here.
+The tiers, the catalogue of tests that do not earn their place, what the gate
+catches and what it does not, and the mechanics a test file has to get right are
+in [docs/testing.md](docs/testing.md). Read it before writing a test, and when
+reviewing a diff.
 
 ## Gotchas
 
-- **Component tests need an explicit `afterEach(cleanup)`.** Test files run per
-  file with a `// @vitest-environment jsdom` docblock, and the vitest configs
-  deliberately do **not** set `globals`, so Testing Library's automatic cleanup
-  never registers. Without it, each render stays in the document and the next
-  test's queries match the previous test's rows and dialogs. DOM matchers come
-  from `import "@testing-library/jest-dom/vitest"`.
-- In jsdom, a `matchMedia` stub that answers `matches: false` for everything
-  makes every `mantine-datatable` column vanish, leaving only the selection
-  column. The datatable resolves a column's `visibleMediaQuery` through
-  Mantine's `useMediaQuery`, which for a column without one calls
-  `window.matchMedia("")` in an effect and overwrites its optimistic `true` with
-  the stub's answer; Chrome answers an empty query with `true`. Stub
-  `matches: query === ""`.
-- `useModals()` throws without `ModalsProvider`, so any component under test
-  that (transitively) renders a `modals.openConfirmModal` call needs
-  `MantineProvider` + `ModalsProvider` + `MemoryRouter` wrapped around it.
-- `@mantine/modals` ships **no** stylesheet in v9 — Modal and Overlay styles
-  come from `@mantine/core/styles.css`. `@mantine/notifications` does ship one,
-  and `<Notifications />` must be mounted (it is, in `apps/web/src/main.tsx`) for
-  `notifications.show` to render.
-- **A skin must not use a portaled Mantine component.** `Modal`, `Drawer`,
-  `Menu`, `Popover`, `Select`, `Combobox` and `Tooltip` all render into
-  `document.body`, outside the skin's scope, and would silently pick up the app
-  theme. A skin's test suite also needs a mock for `@mantine/carousel` — embla
-  measures real rects, so a real `Carousel` initialises against nothing in
-  jsdom. `apps/web/tests/helpers/carouselMock.tsx` is that mock, loaded through
-  an `async` `vi.mock` factory because `vi.mock` is hoisted above the imports.
-- **`bun run test:api` needs the local stack** — it sources the root `.env` and
-  runs `stack-up.sh postgres s3 mailpit` first. **`bun run test:web` needs the
-  stack _and_ a running API** (`scripts/ensure-api.sh` starts one).
-- **SeaweedFS binds a LAN IP at start.** If the machine's address changes (a
-  laptop that moved networks) its own internal replication dials a host that no
-  longer exists, and storage tests 500 or time out with nothing pointing at the
-  cause. Restart it: `pkill -f "weed server"` then `sh scripts/stack-up.sh s3`.
 - Mantine guidelines are saved in **`.opencode/docs/mantine-llms.txt`** —
   reference it when building UI components or form controls.
 - `lodash` is a dependency of `apps/web` and `@types/lodash` is installed.
@@ -484,9 +406,8 @@ restated here.
   `cd infra/cdk && bun install` once before the check can resolve
   `aws-cdk-lib`.
 - `bun run test` runs every suite; the API and web suites need the local stack
-  (see Gotchas). `npx vitest run <file>` inside a package runs a single file.
-- Before writing a test, read **What to test** above. A green suite is not the
-  goal; a test that fails only when we change something is.
+  (see **What to test** above). `npx vitest run <file>` inside a package runs a
+  single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
   `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end
