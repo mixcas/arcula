@@ -95,6 +95,8 @@ let deletedId = "";
 let blueNudeId = "";
 let guitarId = "";
 let sketchId = "";
+/** The member-visible Deleted row `get_artwork` must still refuse. */
+let lostWorkId = "";
 
 beforeAll(async () => {
   owner = await freshUser("Owner");
@@ -148,8 +150,9 @@ beforeAll(async () => {
     availability: "available",
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   });
-  // Deleted: never in a count, a search or a page, for anyone.
-  await insertWork(studioId, owner.userId, {
+  // Deleted: never in a count, a search or a page, and never answered by id
+  // to an agent — the app's Deleted view is not the agent's.
+  lostWorkId = await insertWork(studioId, owner.userId, {
     title: "Lost Work",
     artistName: "Henri Matisse",
     medium: "Oil on canvas",
@@ -451,6 +454,20 @@ describe("get_artwork", () => {
     const answer = await getArtwork(stranger.userId, studioId, blueNudeId);
     expect(answer.title).toBe("Blue Nude");
     expect(answer).not.toHaveProperty("availability");
+  });
+
+  it("answers not-found for a deleted work, even to a member who may list it", async () => {
+    // The app's Deleted view is a member read of a deleted row; an agent's
+    // answer never carries one (user story #35). The same member still reads a
+    // live work, so the refusal is the deletion stamp and not the membership.
+    await expect(
+      getArtwork(collaborator.userId, studioId, lostWorkId),
+    ).rejects.toMatchObject({
+      code: "not-found",
+      message: "The artwork does not exist",
+    });
+    const live = await getArtwork(collaborator.userId, studioId, guitarId);
+    expect(live.title).toBe("Guitar");
   });
 
   it("refuses a draft to a non-member as the app does", async () => {
