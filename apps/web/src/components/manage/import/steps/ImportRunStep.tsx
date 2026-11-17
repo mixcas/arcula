@@ -14,6 +14,7 @@ import {
   isRowImportable,
   type ArtworkImportOutcome,
   type ReviewRow,
+  type SkippedImportColumn,
 } from "@arcula/shared";
 
 interface ImportRunStepProps {
@@ -21,6 +22,12 @@ interface ImportRunStepProps {
   selectedRowIds: Set<string>;
   catalogueId: string;
   catalogueSlugParam: string;
+  /**
+   * The CSV columns the catalogue's field set left unmapped, named so the
+   * summary can say what the file carried that the import did not. Not a row
+   * failure: rows import with every column the catalogue does record.
+   */
+  skippedColumns: SkippedImportColumn[];
   onReset: () => void;
 }
 
@@ -39,6 +46,7 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
   selectedRowIds,
   catalogueId,
   catalogueSlugParam,
+  skippedColumns,
   onReset,
 }) => {
   const [total, setTotal] = useState(0);
@@ -162,6 +170,13 @@ const ImportRunStep: React.FC<ImportRunStepProps> = ({
           </Stack>
         ) : null}
         {requestError ? <Text size="sm">{requestError}</Text> : null}
+        {skippedColumns.length > 0 ? (
+          <Text size="sm" mt="xs">
+            Skipped columns:{" "}
+            {skippedColumns.map((column) => column.header).join(", ")} — not
+            recorded by this catalogue
+          </Text>
+        ) : null}
       </Alert>
 
       <Group justify="center" mt="xl">

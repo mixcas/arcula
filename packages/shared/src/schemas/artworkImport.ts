@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ArtworkFieldStates, ArtworkFixedField } from "../artworkFields";
 import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
@@ -136,6 +137,28 @@ const importableKeysCovered = IMPORTABLE_KEYS.every(
 void importableKeysValid;
 void importableKeysCovered;
 
+/**
+ * The fixed fields are never switches, so an import may always target them.
+ * The predicate also keeps the two vocabularies in step: if the registry's two
+ * fixed names ever part from the import's, the indexed read in
+ * `enabledImportFields` becomes a type error.
+ */
+const isFixedImportField = (key: ImportFieldKey): key is ArtworkFixedField =>
+  key === "title" || key === "artistName";
+
+/**
+ * The mapping targets a catalogue records, in the form's order: Title and
+ * Artist Name always, every other field only when its key is enabled. Pure by
+ * design — the mapping step renders exactly this list, so a disabled field has
+ * no option to pick.
+ */
+export const enabledImportFields = (
+  enabled: ArtworkFieldStates,
+): ImportFieldMetadata[] =>
+  ARTWORK_IMPORT_FIELDS.filter(
+    (field) => isFixedImportField(field.key) || enabled[field.key],
+  );
+
 /** The raw values of one imported row, all strings — "" means "not set". */
 export interface ImportRowValues {
   title: string;
@@ -265,19 +288,54 @@ export const matchHeader = (header: string): ImportFieldKey | null => {
 
 /**
  * Auto-mapping: each field goes to the FIRST header that matches it. Columns
- * that match nothing stay unmapped rather than forcing a questionable guess.
+ * that match nothing — and columns whose field the catalogue does not record —
+ * stay unmapped rather than forcing a guess the import could not honour.
  */
-export const guessColumnMapping = (headers: string[]): ColumnMapping => {
+export const guessColumnMapping = (
+  headers: string[],
+  enabled: ArtworkFieldStates,
+): ColumnMapping => {
+  const allowed = new Set(enabledImportFields(enabled).map(({ key }) => key));
   const used = new Set<ImportFieldKey>();
   const mapping: ColumnMapping = {};
   headers.forEach((header, index) => {
     const field = matchHeader(header);
-    if (field && !used.has(field)) {
+    if (field && allowed.has(field) && !used.has(field)) {
       mapping[index] = field;
       used.add(field);
     }
   });
   return mapping;
+};
+
+/** A column the import leaves alone because the catalogue does not record its
+ *  natural field. `header` is the CSV's own text; `field` is what it would
+ *  have imported as. */
+export interface SkippedImportColumn {
+  column: number;
+  header: string;
+  field: ImportFieldKey;
+}
+
+/**
+ * The CSV columns a catalogue's field set leaves unmapped, named so the run
+ * summary can say which parts of the file were not imported. Computed from the
+ * headers and the enabled set alone: a skipped column is not a row failure, so
+ * nothing here looks at the data.
+ */
+export const skippedImportColumns = (
+  headers: string[],
+  enabled: ArtworkFieldStates,
+): SkippedImportColumn[] => {
+  const allowed = new Set(enabledImportFields(enabled).map(({ key }) => key));
+  const skipped: SkippedImportColumn[] = [];
+  headers.forEach((header, column) => {
+    const field = matchHeader(header);
+    if (field && !allowed.has(field)) {
+      skipped.push({ column, header: header.trim(), field });
+    }
+  });
+  return skipped;
 };
 
 export const getMappedFields = (mapping: ColumnMapping): ImportFieldKey[] =>

@@ -20,7 +20,7 @@ import { CATALOGUE_LIMITS, MINTED_ID_RE } from "@arcula/shared";
 import { canSeeCatalogue, membershipOf } from "../src/access";
 import { closeDb, db } from "../src/db";
 import { err, freshUser, json, req, uuid } from "./helpers/api";
-import { seedCatalogues } from "./helpers/fixtures";
+import { makeCatalogue, seedCatalogues } from "./helpers/fixtures";
 
 /** The wire timestamp is `{ seconds, nanoseconds }`. */
 function isWireTimestamp(value: unknown): void {
@@ -558,6 +558,103 @@ describe("POST /catalogues/{cid}/import/csv", () => {
     expect(red.status).toBe("published");
     expect(red.deletedAt).toBeNull();
     expect(byTitle.get("Blue No. 9")!.status).toBe("published");
+  });
+
+  it("imports a row that carries a field the catalogue does not record", async () => {
+    // A Portfolio records neither acquisition field, so a file prepared for
+    // several catalogues can still arrive with those columns filled.
+    const portfolioId = await makeCatalogue(owner.userId, {
+      kind: "portfolio",
+      name: "Import Portfolio",
+    });
+
+    const res = await req(
+      "POST",
+      `/api/v1/catalogues/${portfolioId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: JSON.stringify({
+          rows: [
+            {
+              title: "Ink Study",
+              artistName: "C. Cas",
+              medium: "Ink",
+              acquisitionPrice: "1200",
+              acquisitionDate: "2024-01-02",
+            },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = await json<{
+      inserted: number;
+      rejected: { row: number; errors: Record<string, string> }[];
+    }>(res);
+    // The disabled keys are stripped before validation, so the row is not
+    // rejected over them.
+    expect(body.rejected).toEqual([]);
+    expect(body.inserted).toBe(1);
+
+    const list = await json<Record<string, unknown>[]>(
+      await req("GET", `/api/v1/catalogues/${portfolioId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(list).toHaveLength(1);
+    // Every column the catalogue does record still landed.
+    expect(list[0].title).toBe("Ink Study");
+    expect(list[0].medium).toBe("Ink");
+    // The disabled field's value is not stored: an absent key on the read.
+    expect("acquisitionPrice" in list[0]).toBe(false);
+    expect("acquisitionDate" in list[0]).toBe(false);
+  });
+
+  it("imports a field the catalogue switched on against its Kind's default", async () => {
+    // The strip resolves from the catalogue, not from its Kind: a Portfolio
+    // that turned the acquisition price on imports it.
+    const portfolioId = await makeCatalogue(owner.userId, {
+      kind: "portfolio",
+      name: "Import Portfolio With Price",
+    });
+    const patched = await req("PATCH", `/api/v1/catalogues/${portfolioId}`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({ artworkFields: { acquisitionPrice: true } }),
+    });
+    expect(patched.status).toBe(200);
+
+    const res = await req(
+      "POST",
+      `/api/v1/catalogues/${portfolioId}/import/csv`,
+      {
+        cookies: owner.cookies,
+        body: JSON.stringify({
+          rows: [
+            {
+              title: "Ink Study",
+              artistName: "C. Cas",
+              acquisitionPrice: "900",
+            },
+          ],
+        }),
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(
+      (
+        await json<{
+          inserted: number;
+          rejected: unknown[];
+        }>(res)
+      ).inserted,
+    ).toBe(1);
+
+    const list = await json<Record<string, unknown>[]>(
+      await req("GET", `/api/v1/catalogues/${portfolioId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(list[0].acquisitionPrice).toBe("900");
   });
 
   it("puts every imported work on the visitor list, since all are published", async () => {
