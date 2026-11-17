@@ -31,6 +31,7 @@ import {
 } from "@mantine/core";
 import {
   ARTWORK_FIELD_DEFAULTS,
+  ARTWORK_FIELD_LABELS,
   resolveArtworkFields,
   type ArtworkFieldKey,
   type ArtworkFieldStates,
@@ -43,24 +44,6 @@ import {
   resolveGeneralSave,
   type GeneralEditedValues,
 } from "./catalogueSettingsSave";
-
-/** The words each switch carries. A record over the registry's keys, so a
- *  field added there cannot ship without a label. */
-const FIELD_LABELS: Record<ArtworkFieldKey, string> = {
-  serie: "Serie",
-  dateOfCreation: "Date of creation",
-  medium: "Medium",
-  dimensions: "Dimensions",
-  editions: "Editions",
-  acquisitionDate: "Acquisition date",
-  acquisitionPrice: "Acquisition price",
-  placeOfOrigin: "Place of origin",
-  provenance: "Provenance",
-  notes: "Notes",
-  condition: "Condition",
-  currentValue: "Current price",
-  availability: "Availability",
-};
 
 /** The two switch groups. Provenance belongs to the work: it describes the
  *  chain of hands, not a market fact. */
@@ -90,7 +73,7 @@ const MARKET_DESCRIPTIONS: Record<(typeof MARKET_FIELDS)[number], string> = {
     "Whether a work is available, reserved, sold, or on consignment.",
   acquisitionDate: "When the work entered this catalogue's hands.",
   acquisitionPrice: "What was paid for it, in the catalogue's own currency.",
-  currentValue: "What it is worth now, labelled as the current price.",
+  currentValue: "What the work is worth now.",
 };
 
 // Every registry key is placed in exactly one group: an addition that lands in
@@ -387,7 +370,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
           {WORK_FIELDS.map((field) => (
             <Switch
               key={field}
-              label={FIELD_LABELS[field]}
+              label={ARTWORK_FIELD_LABELS[field]}
               checked={artworkFields[field]}
               onChange={(e) =>
                 setArtworkFields((current) => ({
@@ -408,7 +391,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
           {MARKET_FIELDS.map((field) => (
             <Switch
               key={field}
-              label={FIELD_LABELS[field]}
+              label={ARTWORK_FIELD_LABELS[field]}
               description={MARKET_DESCRIPTIONS[field]}
               checked={artworkFields[field]}
               onChange={(e) =>

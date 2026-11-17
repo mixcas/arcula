@@ -68,6 +68,28 @@ void everyArtworkFieldIsListed;
 void everyListedFieldIsAnArtworkField;
 
 /**
+ * The product's sentence-case label for every togglable field, keyed by the
+ * registry so a newly added field cannot ship without one. The settings card
+ * and the refusal's prose read the same words, so a field is not called one
+ * thing where it is chosen and another where a save is refused.
+ */
+export const ARTWORK_FIELD_LABELS: Readonly<Record<ArtworkFieldKey, string>> = {
+  serie: "Serie",
+  dateOfCreation: "Date of creation",
+  medium: "Medium",
+  dimensions: "Dimensions",
+  editions: "Editions",
+  acquisitionDate: "Acquisition date",
+  acquisitionPrice: "Acquisition price",
+  placeOfOrigin: "Place of origin",
+  provenance: "Provenance",
+  notes: "Notes",
+  condition: "Condition",
+  currentValue: "Current price",
+  availability: "Availability",
+};
+
+/**
  * A Catalogue's choices, as stored: an entry means the member decided this
  * field, and an absent key means "follow the Kind's default". The map is sparse
  * by design — a full snapshot could not survive a later change to the defaults

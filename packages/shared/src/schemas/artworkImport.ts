@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { ArtworkFieldStates, ArtworkFixedField } from "../artworkFields";
+import {
+  ARTWORK_FIXED_FIELDS,
+  type ArtworkFieldStates,
+  type ArtworkFixedField,
+} from "../artworkFields";
 import type { ArtworkStatus } from "../types";
 import { artworkSchema, type ArtworkFormValues } from "./artwork";
 
@@ -139,12 +143,12 @@ void importableKeysCovered;
 
 /**
  * The fixed fields are never switches, so an import may always target them.
- * The predicate also keeps the two vocabularies in step: if the registry's two
- * fixed names ever part from the import's, the indexed read in
- * `enabledImportFields` becomes a type error.
+ * Derived from the registry's `ARTWORK_FIXED_FIELDS` rather than a second list,
+ * so the two vocabularies cannot part; the predicate stays sound because a key
+ * that matches one of the fixed names is that field.
  */
 const isFixedImportField = (key: ImportFieldKey): key is ArtworkFixedField =>
-  key === "title" || key === "artistName";
+  ARTWORK_FIXED_FIELDS.some((fixed) => fixed === key);
 
 /**
  * The mapping targets a catalogue records, in the form's order: Title and
@@ -158,6 +162,17 @@ export const enabledImportFields = (
   ARTWORK_IMPORT_FIELDS.filter(
     (field) => isFixedImportField(field.key) || enabled[field.key],
   );
+
+/**
+ * The mapping-target keys a catalogue records, in the same form order the
+ * mapping step offers: Title and Artist Name always, every other field only
+ * when its key is enabled. Auto-mapping and the skipped-column summary read
+ * this one set, so the two cannot disagree about what can land.
+ */
+const enabledImportFieldKeys = (
+  enabled: ArtworkFieldStates,
+): ReadonlySet<ImportFieldKey> =>
+  new Set(enabledImportFields(enabled).map(({ key }) => key));
 
 /** The raw values of one imported row, all strings — "" means "not set". */
 export interface ImportRowValues {
@@ -295,7 +310,7 @@ export const guessColumnMapping = (
   headers: string[],
   enabled: ArtworkFieldStates,
 ): ColumnMapping => {
-  const allowed = new Set(enabledImportFields(enabled).map(({ key }) => key));
+  const allowed = enabledImportFieldKeys(enabled);
   const used = new Set<ImportFieldKey>();
   const mapping: ColumnMapping = {};
   headers.forEach((header, index) => {
@@ -327,7 +342,7 @@ export const skippedImportColumns = (
   headers: string[],
   enabled: ArtworkFieldStates,
 ): SkippedImportColumn[] => {
-  const allowed = new Set(enabledImportFields(enabled).map(({ key }) => key));
+  const allowed = enabledImportFieldKeys(enabled);
   const skipped: SkippedImportColumn[] = [];
   headers.forEach((header, column) => {
     const field = matchHeader(header);

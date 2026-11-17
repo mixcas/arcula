@@ -157,6 +157,62 @@ describe("a Collection's work", () => {
   });
 });
 
+describe("a new work's starting availability", () => {
+  it("starts at available where the Catalogue records a market state", async () => {
+    const cid = await makeCatalogue(owner.userId, {
+      kind: "collection",
+      isPublic: true,
+      artworkFields: { availability: true },
+    });
+    const created = await createArtwork(cid, {
+      artworkId: uuid(),
+      title: "New Work",
+      artistName: "A. Collector",
+    });
+    expect(created.status).toBe(201);
+    const body = await json<ArtworkRead>(created);
+    expect(body.availability).toBe("available");
+
+    const read = await getArtwork(cid, body.id, owner.cookies);
+    expect((await json<ArtworkRead>(read)).availability).toBe("available");
+  });
+
+  it("stores no state where the Catalogue's Availability is off", async () => {
+    // A Portfolio starts with Availability on, so switching it off is the
+    // deliberate deviation; a work created in it has no market state to be in.
+    const cid = await makeCatalogue(owner.userId, {
+      kind: "portfolio",
+      isPublic: true,
+      artworkFields: { availability: false },
+    });
+    const created = await createArtwork(cid, {
+      artworkId: uuid(),
+      title: "Not For Sale",
+      artistName: "A. Artist",
+    });
+    expect(created.status).toBe(201);
+    const body = await json<ArtworkRead>(created);
+    expect(body.availability).toBeNull();
+  });
+
+  it("keeps an explicit null in a Catalogue that records availability", async () => {
+    const cid = await makeCatalogue(owner.userId, {
+      kind: "collection",
+      isPublic: true,
+      artworkFields: { availability: true },
+    });
+    const created = await createArtwork(cid, {
+      artworkId: uuid(),
+      title: "Cleared On Creation",
+      artistName: "A. Collector",
+      availability: null,
+    });
+    expect(created.status).toBe(201);
+    const body = await json<ArtworkRead>(created);
+    expect(body.availability).toBeNull();
+  });
+});
+
 describe("the four states are the same on every kind", () => {
   it("accepts a Portfolio's on-consignment", async () => {
     // Flattening Availability removed the per-Kind list: a Portfolio can now

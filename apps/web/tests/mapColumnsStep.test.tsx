@@ -58,8 +58,8 @@ const renderStep = () =>
 
 // Mantine's Select is a readonly combobox whose option rows live in a portal,
 // outside `screen`'s base element; jsdom gives them no accessible name, so
-// they are read by visible text, with `hidden` because only the portal
-// renders them.
+// they are read as elements, with `hidden` because only the portal renders
+// them.
 const openColumn = async (
   user: ReturnType<typeof userEvent.setup>,
   column: number,
@@ -67,10 +67,12 @@ const openColumn = async (
   const select = screen.getAllByRole("combobox")[column];
   await user.click(select);
   await waitFor(() => expect(select).toHaveAttribute("aria-expanded", "true"));
-  return screen
-    .queryAllByRole("option", { hidden: true })
-    .map((option) => option.textContent ?? "");
+  return screen.queryAllByRole("option", { hidden: true });
 };
+
+/** An option's field key, which is what the step maps to — not its label. */
+const optionValue = (option: HTMLElement): string | null =>
+  option.getAttribute("value");
 
 describe("MapColumnsStep", () => {
   beforeEach(() => {
@@ -86,10 +88,10 @@ describe("MapColumnsStep", () => {
     // Column 3 is the acquisition price: its field is off on this Portfolio,
     // so the Select has nothing for it to target.
     const options = await openColumn(user, 2);
-    expect(options).not.toContain("Acquisition Price");
+    expect(options.map(optionValue)).not.toContain("acquisitionPrice");
     // The enabled fields are still there, Title among them.
-    expect(options).toContain("Medium");
-    expect(options).toContain("Title (required)");
+    expect(options.map(optionValue)).toContain("medium");
+    expect(options.map(optionValue)).toContain("title");
   });
 
   it("auto-maps around a column the catalogue does not record", async () => {

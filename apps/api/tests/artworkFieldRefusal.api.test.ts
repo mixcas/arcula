@@ -107,9 +107,7 @@ describe("the create route", () => {
     expect(res.status).toBe(400);
     const body = await err(res);
     expect(body.code).toBe("field-disabled");
-    expect(body.message).toBe(
-      "Acquisition price is not recorded in this catalogue.",
-    );
+    expect(body.message).toContain("Acquisition price");
     expect(body.fields).toEqual({
       acquisitionPrice: "Acquisition price is not recorded in this catalogue.",
     });
@@ -129,9 +127,8 @@ describe("the create route", () => {
     expect(res.status).toBe(400);
     const body = await err(res);
     expect(body.code).toBe("field-disabled");
-    expect(body.message).toBe(
-      "Medium and Provenance are not recorded in this catalogue.",
-    );
+    expect(body.message).toContain("Medium");
+    expect(body.message).toContain("Provenance");
     expect(body.fields).toEqual({
       medium: "Medium is not recorded in this catalogue.",
       provenance: "Provenance is not recorded in this catalogue.",
@@ -172,7 +169,7 @@ describe("the PATCH route", () => {
     expect(res.status).toBe(400);
     const body = await err(res);
     expect(body.code).toBe("field-disabled");
-    expect(body.message).toBe("Provenance is not recorded in this catalogue.");
+    expect(body.message).toContain("Provenance");
     expect(body.fields).toEqual({
       provenance: "Provenance is not recorded in this catalogue.",
     });

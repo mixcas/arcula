@@ -796,9 +796,9 @@ describe("the committed kind migration (as it will actually be applied)", () => 
   });
 
   it("is additive and forward-only: no row write, no drop, no default to backfill", () => {
-    // The column ships alone, ahead of the code that reads it: every existing
-    // row takes the constant default, so there is nothing to backfill and
-    // nothing to reverse.
+    // The column shipped in Release 1, ahead of the code that reads it: every
+    // existing row takes the constant default, so there is nothing to backfill
+    // and nothing to reverse.
     expect(dataWrites(KIND_SQL)).toEqual([]);
     expect(KIND_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(KIND_SQL).not.toMatch(/ALTER COLUMN/);
@@ -817,9 +817,9 @@ describe("the committed availability migration (as it will actually be applied)"
   });
 
   it("is additive and forward-only: no row write, no drop, no alter column", () => {
-    // The column ships alone, ahead of the code that reads it: null is already
-    // the truth for every existing work, so there is nothing to backfill and
-    // nothing to reverse.
+    // The column shipped in Release 1, ahead of the code that reads it: null
+    // is already the truth for every existing work, so there is nothing to
+    // backfill and nothing to reverse.
     expect(dataWrites(AVAILABILITY_SQL)).toEqual([]);
     expect(AVAILABILITY_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(AVAILABILITY_SQL).not.toMatch(/ALTER COLUMN/);
@@ -843,9 +843,9 @@ describe("the committed artwork-fields migration (as it will actually be applied
   });
 
   it("is additive and forward-only: no row write, no drop, no alter column", () => {
-    // The column ships alone, ahead of the code that reads it: null is already
-    // the truth for every existing catalogue, so there is nothing to backfill
-    // and nothing to reverse.
+    // The column shipped in Release 1, ahead of the code that reads it: null
+    // is already the truth for every existing catalogue, so there is nothing
+    // to backfill and nothing to reverse.
     expect(dataWrites(ARTWORK_FIELDS_SQL)).toEqual([]);
     expect(ARTWORK_FIELDS_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
     expect(ARTWORK_FIELDS_SQL).not.toMatch(/ALTER COLUMN/);

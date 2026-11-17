@@ -138,15 +138,16 @@ export interface PrintedArtworkFields {
 }
 
 /**
- * Title and Artist Name are never a Catalogue choice: a work is named by them
- * in lists, addresses and this document. Artist Name sits in the left column;
- * Title is drawn separately above it.
+ * Artist Name is never a Catalogue choice either: a work is named by it in
+ * lists, addresses and this document. It sits in the left metadata column, so
+ * this guard covers that column's filter only. Title is also always printed,
+ * but it is drawn separately above the columns and never reaches this filter.
  */
-const alwaysPrinted = (field: ArtworkPdfField): field is "artistName" =>
+const alwaysPrintedMetadata = (field: ArtworkPdfField): field is "artistName" =>
   field === "artistName";
 
 const prints = (field: ArtworkPdfField, enabled: ArtworkFieldStates): boolean =>
-  alwaysPrinted(field) || enabled[field];
+  alwaysPrintedMetadata(field) || enabled[field];
 
 /**
  * The metadata columns the document prints, given the fields the Catalogue

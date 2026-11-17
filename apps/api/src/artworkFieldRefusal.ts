@@ -13,6 +13,7 @@
 // too, because a human reads the message before the client reacts to the code.
 
 import {
+  ARTWORK_FIELD_LABELS,
   disabledArtworkFieldsIn,
   resolveArtworkFields,
   type ArtworkFieldKey,
@@ -20,28 +21,9 @@ import {
 import { ApiError } from "./errors";
 import type { CatalogueRow } from "./serialize";
 
-/**
- * Keys whose prose differs from the key read as words. Sentence case: the
- * refusal is a sentence ("Provenance is not recorded…"). A field the registry
- * gains later reads off its key and needs no edit here.
- */
-const IRREGULAR_LABELS: Readonly<Partial<Record<ArtworkFieldKey, string>>> = {
-  dateOfCreation: "Date of creation",
-  acquisitionDate: "Acquisition date",
-  acquisitionPrice: "Acquisition price",
-  placeOfOrigin: "Place of origin",
-  currentValue: "Current price",
-};
-
-const labelOf = (field: ArtworkFieldKey): string =>
-  IRREGULAR_LABELS[field] ??
-  field
-    .replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)
-    .replace(/^./, (letter) => letter.toUpperCase());
-
 /** "Provenance", "Medium and Provenance", "Medium, Provenance and Notes". */
 const proseNames = (fields: readonly ArtworkFieldKey[]): string => {
-  const labels = fields.map(labelOf);
+  const labels = fields.map((field) => ARTWORK_FIELD_LABELS[field]);
   if (labels.length === 1) {
     return labels[0];
   }
@@ -78,7 +60,7 @@ export function assertArtworkFieldsEnabled(
       fields: Object.fromEntries(
         disabled.map((field) => [
           field,
-          `${labelOf(field)} is not recorded in this catalogue.`,
+          `${ARTWORK_FIELD_LABELS[field]} is not recorded in this catalogue.`,
         ]),
       ),
     },
