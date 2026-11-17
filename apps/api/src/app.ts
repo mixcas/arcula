@@ -7,6 +7,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "./auth";
+import { mcpPost } from "./mcp/guard";
 import {
   canonicalRedirect,
   healthBody,
@@ -25,6 +26,7 @@ import { artistNameRoutes } from "./routes/artistNames";
 import { artworkMediaRoutes } from "./routes/artworkMedia";
 import { artworkRoutes } from "./routes/artworks";
 import { catalogueRoutes } from "./routes/catalogues";
+import { connectionRoutes } from "./routes/connections";
 import { invitationRoutes } from "./routes/invitations";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
@@ -73,6 +75,18 @@ app.route(
   new Hono().all("*", (c) => auth.handler(c.req.raw)),
 );
 
+// RFC 9728 / RFC 8414 discovery. The plugins answer these from an onRequest
+// hook, which only runs for requests the auth handler sees — so the
+// well-known namespace is routed there. An unmatched well-known path is a 404
+// from Hono, never the SPA shell (spa.ts refuses it too).
+app.all("/.well-known/*", (c) => auth.handler(c.req.raw));
+
+// The MCP endpoint: one stateless Streamable HTTP surface for the agent
+// tools. Its `all` matters — the SDK answers a GET or DELETE with its own
+// 405, where a POST-only route would fall through to the SPA refusal and a
+// bare 404.
+app.all("/api/mcp", (c) => mcpPost(c.req.raw));
+
 // /api/v1/* — the resource API. Each route module mounts at /api/v1
 // under its own paths.
 app.route("/api/v1", meRoutes);
@@ -83,6 +97,7 @@ app.route("/api/v1", accessRoutes);
 app.route("/api/v1", invitationRoutes);
 app.route("/api/v1", artworkMediaRoutes);
 app.route("/api/v1", artworkRoutes);
+app.route("/api/v1", connectionRoutes);
 app.route("/api/v1", pdfRoutes);
 
 // Dev-only indexing guard, after every API mount so it wraps only the SPA.

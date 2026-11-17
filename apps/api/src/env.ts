@@ -58,6 +58,21 @@ export const noindexFlag = process.env.NOINDEX;
 // is plain http, where a browser rejects it.
 export const useSecureCookies = process.env.NODE_ENV === "production";
 
+// The API's own origin, derived from AUTH_BASE_URL: in production the CDK
+// hands the Lambda `PUBLIC_URL` as AUTH_BASE_URL (no path), while a local
+// `.env` may write the full Better Auth base (`http://localhost:8000/api/auth`).
+// `URL.origin` is the one reading that is right for both: it drops the path
+// whether or not one is present, which is what makes the MCP resource
+// (`/api/mcp`) sit beside the auth mount rather than under it. The local
+// default is the port the README's dev API already uses.
+const apiOrigin = new URL(process.env.AUTH_BASE_URL ?? "http://localhost:8000")
+  .origin;
+
+// The MCP endpoint's URL, which is also every access token's audience (RFC
+// 8707). One value, so the plugin's `resource`, the guard's expected audience
+// and the challenge's `resource_metadata` cannot disagree.
+export const mcpResource = `${apiOrigin}/api/mcp`;
+
 // Whether a session token is accepted in an `Authorization: Bearer` header —
 // the bearer plugin's gate. It is a second, undeclared way to act as an
 // account: nothing in the app shows it, and only signing out of the website

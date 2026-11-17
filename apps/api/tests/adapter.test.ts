@@ -10,10 +10,10 @@
 // local compose DB.
 
 import { getTableColumns } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 import { schema, user } from "@arcula/db";
 import { CATALOGUE_LIMITS } from "@arcula/shared";
 import { getAuthTables } from "better-auth/db";
-import type { BetterAuthOptions } from "better-auth/types";
 import { describe, expect, it } from "vitest";
 
 // auth.ts builds the betterAuth instance at import, which needs a secret;
@@ -32,7 +32,10 @@ const userColumns = getTableColumns(user);
 // fields the adapter will address. A model it cannot find fails the first
 // request with `The model "…" was not found in the schema object`, so this is
 // the same class of opaque failure the custom-user-column test above kills.
-const authTables = getAuthTables(auth.options as BetterAuthOptions);
+const authTables = getAuthTables(auth.options);
+
+// The schema object keyed the way the adapter addresses it: model name → table.
+const tables: Record<string, PgTable> = schema;
 
 // The adapter compares types loosely but the driver does not: a `string[]`
 // written into a scalar `text` column corrupts silently, and a `date` written
@@ -59,18 +62,14 @@ describe("every model Better Auth writes exists in the Drizzle schema", () => {
 
   it("has every declared field as a column, with the declared type", () => {
     for (const [model, table] of Object.entries(authTables)) {
-      const columns = getTableColumns(
-        schema[model as keyof typeof schema] as never,
-      );
+      const columns = getTableColumns(tables[String(model)]);
       for (const [key, field] of Object.entries(table.fields)) {
         const name = field.fieldName || key;
         const column = columns[name];
         expect(column, `${model}.${name} is missing`).toBeDefined();
-        const expected = DRIZZLE_TYPE[field.type];
-        expect(
-          expected,
-          `unknown Better Auth type ${field.type}`,
-        ).toBeDefined();
+        const fieldType = field.type as unknown as string;
+        const expected = DRIZZLE_TYPE[fieldType];
+        expect(expected, `unknown Better Auth type ${fieldType}`).toBeDefined();
         expect(column.dataType, `${model}.${name} type`).toBe(expected);
       }
     }
