@@ -38,7 +38,7 @@
  * change to a route, a schema or a database query. `title` and `artistName`
  * are required on every work; the rest contribute only when they hold a value.
  */
-export const ARTWORK_SEARCH_FIELDS = [
+const ARTWORK_SEARCH_FIELDS = [
   "title",
   "artistName",
   "serie",

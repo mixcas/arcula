@@ -8,7 +8,7 @@ import { wireTimestamp } from "./document";
  * nothing about the works inside.
  */
 
-export const invitationStatusSchema = z.enum([
+const invitationStatusSchema = z.enum([
   "pending",
   "accepted",
   "declined",

@@ -18,7 +18,7 @@ import {
 import { ARTWORK_AVAILABILITY_LABELS } from "@/catalogueSurface";
 import type { Artwork } from "@arcula/shared";
 
-export interface ArtworksTableProps {
+interface ArtworksTableProps {
   /** The page slice, already sorted and cut by the list. */
   records: Artwork[];
   /** Every selected artwork, across pages — the datatable's controlled selection. */

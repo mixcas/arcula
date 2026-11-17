@@ -128,7 +128,7 @@ All from the repo root (`bun run <script>`):
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `bun run dev`                                               | Bring up the local stack, then the API (`:8000`) and web (`:3000`)                   |
 | `bun run stack:up` / `stack:down`                           | The local stack alone                                                                |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**                |
+| `bun run check`                                             | Typecheck all packages + ESLint + Prettier + knip — **the gate before a PR**         |
 | `bun run test`                                              | All suites in parallel: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
 | `bun run build`                                             | Build the web app                                                                    |
 | `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                         |
@@ -400,7 +400,7 @@ reviewing a diff.
 
 ## Validation
 
-- `bun run check` (tsc over every package + ESLint + Prettier) must pass before
+- `bun run check` (tsc over every package + ESLint + Prettier + knip) must pass before
   and after any change, and before a PR. The `infra/cdk` package is deliberately
   not a workspace member and installs its own dependencies, so run
   `cd infra/cdk && bun install` once before the check can resolve

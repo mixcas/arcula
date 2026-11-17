@@ -15,14 +15,14 @@ import { invitationSummarySchema } from "./invitation";
  */
 
 /** The role enum, pinned to the client's `CatalogueRole` at compile time. */
-export const catalogueRoleSchema = z.enum([
+const catalogueRoleSchema = z.enum([
   "owner",
   "collaborator",
 ]) satisfies z.ZodType<CatalogueRole>;
 
 /** One account with access. `name` is the display name, falling back to the
  *  email address, exactly as the dashboard names an owner. */
-export const catalogueMemberSchema = z.object({
+const catalogueMemberSchema = z.object({
   userId: z.string(),
   name: z.string(),
   email: z.string(),

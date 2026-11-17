@@ -7,7 +7,7 @@
 // sliding window is visible without reading SQL. No database and no Hono.
 
 /** Ten minutes, fixed: the span one counter row counts (ADR-0005). */
-export const UNLOCK_WINDOW_MS = 10 * 60 * 1000;
+const UNLOCK_WINDOW_MS = 10 * 60 * 1000;
 
 /** The window in whole minutes, for the refusal's own words. */
 export const UNLOCK_WINDOW_MINUTES = UNLOCK_WINDOW_MS / 60_000;

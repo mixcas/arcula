@@ -152,5 +152,3 @@ export const keySequence = (prefix: string): (() => string) => {
     return `${prefix}-${counter}`;
   };
 };
-
-export type UseUploadPool = ReturnType<typeof useUploadPool>;

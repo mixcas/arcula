@@ -7,7 +7,7 @@ const MAILPIT = "http://127.0.0.1:8025";
 
 // Mailpit's REST API is PascalCase; the list gives snippets, the
 // single-message endpoint gives the full plain-text body.
-export type MailpitAddress = { Name: string; Address: string };
+type MailpitAddress = { Name: string; Address: string };
 
 export type MailpitMessage = {
   ID: string;

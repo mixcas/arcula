@@ -41,7 +41,7 @@ import {
 import type { CataloguePdfPage } from "./cataloguePdfPlan";
 
 /** How many photos may be fetched and encoded at the same time. */
-export const PHOTO_CONCURRENCY = 4;
+const PHOTO_CONCURRENCY = 4;
 
 /** The JPEG the document embeds. */
 const JPEG_TYPE = "image/jpeg";
@@ -58,7 +58,7 @@ const WHITE = "#ffffff";
  * box. The `original` is the ladder's last resort, never a first choice: it may
  * be WebP, may carry EXIF orientation and can be arbitrarily large.
  */
-export const PHOTO_SOURCE_KEYS = ["xxlarge", "xlarge"] as const;
+const PHOTO_SOURCE_KEYS = ["xxlarge", "xlarge"] as const;
 
 /** One readable object of a photo: where it is, and its own pixels. */
 export interface PhotoSource {
@@ -154,7 +154,7 @@ export interface ConvertedPhoto {
 }
 
 /** The browser as one conversion uses it. */
-export interface PhotoBitmap {
+interface PhotoBitmap {
   width: number;
   height: number;
   close(): void;
@@ -241,7 +241,7 @@ const browserSurface = (width: number, height: number): PhotoSurface => {
   };
 };
 
-export const browserPhotoEnv: PhotoConversionEnv = {
+const browserPhotoEnv: PhotoConversionEnv = {
   fetch: (input, init) => fetch(input, init),
   // The variant is written already oriented, but the ladder's fallback is the
   // original, which carries the uploader's EXIF orientation. Decoding "from

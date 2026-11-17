@@ -32,7 +32,7 @@ import type { PublicState } from "@/components/catalogue/usePublicCatalogue";
 import { cataloguePdfFileName } from "./cataloguePdfPreflight";
 
 /** The bar's title until a read names the Catalogue, and its subtitle after. */
-export const CATALOGUE_PDF = "Catalogue PDF";
+const CATALOGUE_PDF = "Catalogue PDF";
 
 /** The one fact the bar needs from a read that succeeded. */
 export interface PdfBarCatalogue {

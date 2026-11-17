@@ -62,7 +62,7 @@ void everyKindIsOffered;
  * One artwork field the form may show. Derived from the form's own values, so
  * a field added to the form cannot be silently absent from the surface.
  */
-export type ArtworkField = keyof ArtworkFormValues;
+type ArtworkField = keyof ArtworkFormValues;
 
 /**
  * The fields this table covers. `availability` is deliberately not among them:
@@ -72,7 +72,7 @@ export type ArtworkField = keyof ArtworkFormValues;
  */
 type SurfaceArtworkField = Exclude<ArtworkField, "availability">;
 
-export interface ArtworkFieldSurface {
+interface ArtworkFieldSurface {
   readonly field: SurfaceArtworkField;
   readonly visible: boolean;
   readonly required: boolean;

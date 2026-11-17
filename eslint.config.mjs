@@ -6,8 +6,6 @@
 
 import js from "@eslint/js";
 import globals from "globals";
-import tsParser from "@typescript-eslint/parser";
-import plugin from "@typescript-eslint/eslint-plugin";
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
@@ -24,6 +22,9 @@ export default tseslint.config(
     "**/cdk.out/**",
     "apps/web/public/**",
     "eslint.config.mjs",
+    // Root tooling config with no root tsconfig for type-aware linting; knip
+    // reads it, Prettier formats it.
+    "knip.config.ts",
   ]),
 
   // Stand-alone JS / build & config scripts (Node context, no TS types)
@@ -47,7 +48,7 @@ export default tseslint.config(
       ...tseslint.configs.recommendedTypeChecked,
     ],
     plugins: {
-      "@typescript-eslint": plugin,
+      "@typescript-eslint": tseslint.plugin,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
     },
@@ -55,7 +56,7 @@ export default tseslint.config(
       ecmaVersion: "latest",
       sourceType: "module",
       globals: { ...globals.browser },
-      parser: tsParser,
+      parser: tseslint.parser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
         project: true,

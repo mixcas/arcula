@@ -20,7 +20,7 @@ import {
 } from "./cataloguePdfPlan";
 
 /** The density the print box is measured at. */
-export const PRINT_DPI = 300;
+const PRINT_DPI = 300;
 
 /**
  * The photo box on a photo page, in points, measured from the page's top-left.
@@ -113,7 +113,7 @@ export const placeInPhotoBox = (printed: PointSize): PhotoPlacement => {
 };
 
 /** The API accepts at most this many distinct code points per subset. */
-export const FALLBACK_CHUNK_SIZE = MAX_PDF_FALLBACK_CODE_POINTS;
+const FALLBACK_CHUNK_SIZE = MAX_PDF_FALLBACK_CODE_POINTS;
 
 /**
  * The distinct non-ASCII code points in the drawn text, ascending.
