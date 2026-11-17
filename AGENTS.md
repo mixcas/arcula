@@ -281,19 +281,15 @@ reviewing a diff.
   runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 23-step end-to-end
-  pass (health, SPA, the agent surface's protected-resource and
-  authorization-server discovery documents and its `401` challenge, sign-up,
-  the `Secure` session cookie, the session token
-  refused as an API bearer, a real 12 MP photo through presign → direct PUT →
-  process → save with the bucket's CORS preflight probed against the
-  deployment, a visitor read, and the reset-mail path).
-  The catalogue cap is covered by the API integration suite instead, since
-  reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
-  either one by hand. It creates a throwaway `verify-<ts>@example.test` account
-  per run, so treat it as a write against the environment. A deploy whose host
-  does not resolve yet prints the DNS records and exits successfully instead of
-  verifying — that is the first dev deploy's shape, not a failure.
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the end-to-end pass
+  against the deployed URL; the script's header lists its current steps, so
+  this guide does not repeat them. The catalogue cap is covered by the API
+  integration suite instead, since reaching it would mean ten creates per run.
+  It takes the URL, not an environment, so it runs against either one by hand.
+  It creates a throwaway `verify-<ts>@example.test` account per run, so treat
+  it as a write against the environment. A deploy whose host does not resolve
+  yet prints the DNS records and exits successfully instead of verifying —
+  that is the first dev deploy's shape, not a failure.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and
