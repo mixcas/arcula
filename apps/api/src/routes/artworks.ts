@@ -34,21 +34,24 @@ import {
 import {
   MAX_ARTWORK_DOCUMENTS,
   MAX_ARTWORK_PHOTOS,
-  UPDATABLE_TEXT_FIELDS,
   artworkCreateSchema,
   artworkUpdateSchema,
   isBlankSearchQuery,
   parseArtworkSearchQuery,
   type ArtworkCreatePayload,
-  type ArtworkRead,
   type ArtworkUpdatePayload,
   type StagedEntry,
 } from "@arcula/shared";
 import { Hono } from "hono";
 import { readArtwork, readArtworkList } from "../artworkRead";
 import {
+  artworkCreateValues,
+  artworkUpdateSet,
+  assertArtworkIdFree,
+  readSavedArtwork,
+} from "../artworkWrite";
+import {
   grantHeld,
-  loadArtworkById,
   requireMemberArtwork,
   requireMemberCatalogue,
 } from "../authorize";
@@ -65,24 +68,6 @@ import {
   writeDocumentSequence,
   writePhotoSequence,
 } from "./artworkSave";
-
-// ---------------------------------------------------------------------------
-// Reads
-// ---------------------------------------------------------------------------
-
-/** The work a save must read back; absence after a successful save is a
- *  server bug, not a half-shaped response. */
-async function readSavedArtwork(
-  catalogueId: string,
-  artworkId: string,
-  viewer: string,
-): Promise<ArtworkRead> {
-  const read = await readArtwork(catalogueId, artworkId, viewer);
-  if (read.status !== "ok") {
-    throw new ApiError("internal", "The saved artwork could not be read back");
-  }
-  return read.artwork;
-}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -185,12 +170,7 @@ artworkRoutes.post(
 
     // An id is a global primary key: reusing one would promote this
     // save's staged entries under the existing row's id.
-    const clash = await loadArtworkById(payload.artworkId);
-    if (clash) {
-      throw new ApiError("validation", "The artwork id is already in use", {
-        fields: { artworkId: "The artwork id is already in use" },
-      });
-    }
+    await assertArtworkIdFree(payload.artworkId);
     checkUniqueEntryIds(payload.photos, "photos");
     checkUniqueEntryIds(payload.documents, "documents");
     if (payload.photos.length > MAX_ARTWORK_PHOTOS) {
@@ -210,36 +190,11 @@ artworkRoutes.post(
 
     const now = new Date();
     const stagedKeys = await safeTx(async (tx) => {
-      await tx.insert(artworksTable).values({
-        id: payload.artworkId,
-        // The mirror of the catalogue's owner, not the session user: a
-        // collaborator saves work into someone else's catalogue (ADR-0004).
-        userId: catalogue.userId,
-        catalogueId: catalogue.id,
-        title: payload.title,
-        artistName: payload.artistName,
-        serie: payload.serie ?? null,
-        dateOfCreation: payload.dateOfCreation ?? null,
-        medium: payload.medium ?? null,
-        dimensions: payload.dimensions ?? null,
-        editions: payload.editions ?? null,
-        acquisitionDate: payload.acquisitionDate ?? null,
-        acquisitionPrice: payload.acquisitionPrice ?? null,
-        placeOfOrigin: payload.placeOfOrigin ?? null,
-        provenance: payload.provenance ?? null,
-        notes: payload.notes ?? null,
-        condition: payload.condition ?? null,
-        currentValue: payload.currentValue ?? null,
-        status: payload.status,
-        // Always written, null included: a save that names no market state
-        // stores the absence, which is what every Collection work carries.
-        availability: payload.availability ?? null,
-        // Always written, as null: the list filters on it, and a missing
-        // field is not a null (the write-path doctrine).
-        deletedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      await tx
+        .insert(artworksTable)
+        .values(
+          artworkCreateValues(catalogue, payload.artworkId, payload, now),
+        );
       const photos = await writePhotoSequence(
         tx,
         catalogue,
@@ -339,28 +294,9 @@ artworkRoutes.patch(
 
     const now = new Date();
     const result = await safeTx(async (tx) => {
-      const set: Partial<typeof artworksTable.$inferInsert> = {
-        title: payload.title,
-        artistName: payload.artistName,
-        updatedAt: now,
-      };
-      // Present sets (or, as null, clears); absent leaves the column.
-      for (const field of UPDATABLE_TEXT_FIELDS) {
-        if (payload[field] !== undefined) {
-          set[field] = payload[field] ?? null;
-        }
-      }
-      if (payload.status !== undefined) {
-        set.status = payload.status;
-      }
-      // Present sets (or, as null, clears); absent leaves the column — the
-      // same three states the text fields have.
-      if (payload.availability !== undefined) {
-        set.availability = payload.availability;
-      }
       await tx
         .update(artworksTable)
-        .set(set)
+        .set(artworkUpdateSet(payload, now))
         .where(eq(artworksTable.id, artwork.id));
 
       const photos =
