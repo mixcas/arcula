@@ -97,11 +97,22 @@ the public view, not to the Catalogue as a member.
 _Avoid_: Session, unlock token, password token
 
 **Catalogue search**:
-A member's query against the recorded fields of the works in one Catalogue. It
-answers with the live works that match; drafts are included, deleted works never
+A query against the recorded fields of the works in one Catalogue. Its free
+text (`q`) is a member's; its structured filters — one or more values of a field,
+text or enumerated — are answered within the reader's verdict, so a visitor
+filters the published works they may already see. Values repeated within a field
+are alternatives, and different fields are all required. It answers with the
+live works that match; drafts are included for a member, deleted works never
 are. The query lives in the page's address, so a search can be linked and
 revisited.
 _Avoid_: Filter, find, lookup
+
+**Facet**:
+The distinct values a filterable field takes across a Catalogue search's
+filtered set, each with the number of works carrying it. Counted before paging,
+so a facet agrees with the search it accompanies; a work with no value for the
+field contributes no entry, and the caller cannot ask for "no value".
+_Avoid_: Tag, category, bucket
 
 **Shared**:
 A Catalogue whose owner has added collaborators. Distinct from **Public**, which
@@ -198,6 +209,14 @@ _Avoid_: Attachment, file
 **Other documents**:
 The part of an artwork's record that holds its artwork documents.
 _Avoid_: Attachments, files, documents
+
+**Import**:
+Works brought into a Catalogue in a batch — a member's CSV file, or the rows an
+agent extracted from a document — and the act of bringing them. A member's CSV
+import lands them Published; an agent's lands them as Drafts, because a
+conversation is not a review. The status is the payload's, defaulting to
+Published, so the member's workflow is unchanged.
+_Avoid_: Upload, ingestion, batch, bulk add
 
 ### What is seen
 
@@ -297,6 +316,17 @@ _Avoid_: Finalised, committed, moved
 One rendered size of an artwork photo or artwork document, at the size a page
 actually displays it.
 _Avoid_: Thumbnail, rendition, size
+
+### Agents
+
+**Connection**:
+An agent's standing access to one account: the person's approval of one MCP
+client, named for that client, listed in the account profile with when it
+connected and last acted, and revocable on its own. One per account and client,
+so two installations of the same client share one Connection and one Revoke; a
+duplicate approval collapses to the newest. Never the browser session, and
+never a way into it.
+_Avoid_: Token, API key, integration, app, plugin
 
 ### Tiers
 

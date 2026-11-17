@@ -23,8 +23,9 @@ name, never a subpath:
 - `schemas/` — the Zod schemas: `access` (the access read, the transfer
   payload and its answer), `artwork`, `artworkImport`, `catalogue` —
   including `passwordSchema` for the settings write and
-  `catalogueUnlockSchema` for the unlock route's guess — `invitation`
-  (create, summary, preview), `document`, `user`.
+  `catalogueUnlockSchema` for the unlock route's guess — `connection` (the
+  consent request, the consent result and the account's Connections read),
+  `invitation` (create, summary, preview), `document`, `user`.
 - `caps.ts` — the per-file size caps and the accepted-type maps.
 - `limits.ts` — `CATALOGUE_LIMITS` and `catalogueLimitForTier`, the per-tier
   catalogue quota the API enforces on create. The quota counts owned
@@ -52,9 +53,11 @@ name, never a subpath:
   the deviations and the web app that renders the form both call.
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
-- `artworkSearch.ts` — the ten-field Catalogue search predicate and its caps,
-  the query suffix helper, and `normalizeSearchText`, the collapse Artist Name
-  suggestions also use.
+- `artworkSearch.ts` — the ten-field Catalogue search predicate and the
+  structured query's whole pure contract: the parse of the raw parameters, the
+  per-field filter (OR within a field, AND across fields), the total order with
+  its id tiebreak, and the facet counts; plus its caps, the query suffix helper
+  and `normalizeSearchText`, the collapse Artist Name suggestions also use.
 - `stagedUpload.ts` — the headers a staged presigned PUT signs: the list the
   media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
   because that package is not a workspace member.

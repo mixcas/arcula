@@ -19,6 +19,7 @@ export * from "./schemas/artistNames";
 export * from "./schemas/artwork";
 export * from "./schemas/artworkImport";
 export * from "./schemas/catalogue";
+export * from "./schemas/connection";
 export * from "./schemas/document";
 export * from "./schemas/invitation";
 export * from "./schemas/media";

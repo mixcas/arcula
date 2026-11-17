@@ -11,6 +11,7 @@ import {
 } from "@mantine/core";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { isOAuthResume, loginReturnPath } from "@/auth/oauthResume";
 import { returnPathFrom, returnStateFor } from "@/utils/returnPath";
 import { resetRequestStateFor } from "@/utils/resetRequest";
 
@@ -23,13 +24,19 @@ const LoginPage: React.FC = () => {
   const { login, currentUser } = useAuth();
 
   // Where a successful sign-in lands: the page that bounced the visitor here
-  // (ProtectedRoute puts it in router state), or the manage dashboard when
-  // they arrived from a public page's plain <Link>, which carries no state.
+  // (ProtectedRoute puts it in router state), the consent screen when this
+  // page is an OAuth authorize hand-off, or the manage dashboard when they
+  // arrived from a public page's plain <Link>, which carries no state.
   const from = returnPathFrom(location.state);
+  const destination = loginReturnPath(location.search, from);
   // The same return path rides the cross-link: a visitor who lands here from
   // an invitation and decides to create an account must come back to it, not
-  // lose the link on the way through sign-up.
-  const crossLinkState = from ? returnStateFor(from) : undefined;
+  // lose the link on the way through sign-up. An OAuth hand-off carries its
+  // signed query the same way, so a new account still lands on /consent.
+  const crossLinkState =
+    from || isOAuthResume(location.search)
+      ? returnStateFor(destination)
+      : undefined;
 
   // Leave on the session, not on the sign-in call. The client's session atom
   // refetches only after its own signal fires (a tick after the successful
@@ -41,7 +48,7 @@ const LoginPage: React.FC = () => {
   // guard actually reads, whatever the ordering. It also means an already
   // signed-in visitor never sees the form.
   if (currentUser) {
-    return <Navigate to={from ?? "/manage"} replace />;
+    return <Navigate to={destination} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

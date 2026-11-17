@@ -2,16 +2,18 @@
 // Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
-// link + cache headers), sign-up (and that its cookie is `Secure`), /me,
+// link + cache headers), the agent surface's discovery documents and its 401
+// challenge, sign-up (and that its cookie is `Secure`), the session token
+// refused as an API bearer, /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
 // real 12 MP photo through presign → direct PUT → process → save (the
 // presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
 // target), a visitor read, and a reset request (the Resend call path). The
 // catalogue cap is covered by the API integration suite, not here: reaching it
 // would mean ten creates per run. One account is created per run under
-// verify-<ts>@example.test; nothing is printed that is a credential — and the
-// presigned upload URL is a bearer token, so it is never printed either. Exit
-// code 0 = every step passed.
+// verify-<ts>@example.test; nothing is printed that is a credential — the
+// session token, and the presigned upload URL (a bearer token), are never
+// printed either. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { STAGED_PUT_SIGNED_HEADERS } from "@arcula/shared";
@@ -78,6 +80,40 @@ const post = (path: string, body: unknown, authed = false) =>
   );
 }
 
+// 2b. The agent surface's public half: the two discovery documents an MCP
+//     client reads before it can connect, and the challenge that sends it
+//     there. None writes and none needs a token, so the first deploy can ask
+//     them; a SPA fallback would answer all three with HTML or a 404.
+{
+  const res = await get("/.well-known/oauth-protected-resource");
+  const body = (await res.json().catch(() => ({}))) as { resource?: string };
+  step(
+    "MCP protected-resource metadata",
+    res.status === 200 &&
+      res.headers.get("content-type")?.includes("application/json") === true &&
+      (body.resource ?? "").endsWith("/api/mcp"),
+    body.resource,
+  );
+
+  const as = await get("/.well-known/oauth-authorization-server/api/auth");
+  const asBody = (await as.json().catch(() => ({}))) as { issuer?: unknown };
+  step(
+    "MCP authorization-server metadata",
+    as.status === 200 &&
+      as.headers.get("content-type")?.includes("application/json") === true &&
+      typeof asBody.issuer === "string",
+    typeof asBody.issuer === "string" ? asBody.issuer : "",
+  );
+
+  const challenge = await post("/api/mcp", {});
+  const authenticate = challenge.headers.get("www-authenticate") ?? "";
+  step(
+    "MCP endpoint challenges with resource_metadata",
+    challenge.status === 401 && authenticate.includes("resource_metadata="),
+    `status ${challenge.status}`,
+  );
+}
+
 // 3. Sign-up → session cookie.
 {
   const res = await post("/api/auth/sign-up/email", {
@@ -92,6 +128,7 @@ const post = (path: string, body: unknown, authed = false) =>
   sessionCookie =
     cookies.find((c) => c.startsWith("__Secure-better-auth.session_token=")) ??
     null;
+  const body = (await res.json().catch(() => ({}))) as { token?: string };
   step(
     "sign-up",
     res.status === 200 && sessionCookie !== null,
@@ -102,6 +139,37 @@ const post = (path: string, body: unknown, authed = false) =>
     "session cookie is Secure",
     sessionCookie !== null && /;\s*Secure\b/i.test(sessionCookie),
   );
+
+  // 3b. The session token is not a second credential in a deployment. A deploy
+  //     mounts no bearer plugin (env.ts → bearerAuthAllowed, ADR-0014), so the
+  //     token the sign-up just minted is a cookie session and nothing else:
+  //     presenting it as `Authorization: Bearer` must not resolve a session.
+  //     This is the deployed side of the rule the pure predicate carries, and
+  //     the only place it can be asked. A local stack still admits the bearer
+  //     form — that is the development affordance this replaced the deploy
+  //     verifier's reliance on, not a defect — but this script is aimed at a
+  //     deployment, as its `__Secure-` cookie assertion above already requires.
+  //     The token is never printed and never sent anywhere but this request.
+  if (typeof body.token === "string") {
+    const bearer = await fetch(`${base}/api/v1/me`, {
+      headers: { authorization: `Bearer ${body.token}` },
+    });
+    step(
+      "the session token is refused as an API bearer",
+      bearer.status === 401,
+      `status ${bearer.status}`,
+    );
+  } else {
+    // This step is the deployed proof of the rule, so a sign-up whose body no
+    // longer carries the token must fail it rather than skip it: a check that
+    // did not run is never a pass (as the CORS preflight above says in its own
+    // way).
+    step(
+      "the session token is refused as an API bearer",
+      false,
+      "sign-up did not return a session token, so the bearer refusal could not be checked",
+    );
+  }
 }
 
 // 4. The duplicate sign-up answers the native 422, over the gateway.
@@ -339,7 +407,18 @@ if (catalogueId) {
     res.status === 200 && typeof body.name === "string",
   );
   const works = await get(`/api/v1/catalogues/${catalogueId}/artworks`);
-  step("visitor reads the catalogue's works", works.status === 200);
+  const page = (await works.json().catch(() => ({}))) as {
+    artworks?: unknown[];
+    total?: number;
+  };
+  step(
+    "visitor reads the catalogue's works",
+    // The list answers its page envelope, and the work saved above is in it.
+    works.status === 200 &&
+      Array.isArray(page.artworks) &&
+      page.artworks.length === 1 &&
+      page.total === 1,
+  );
   const deep = await get(`/catalogue/${catalogueId}`);
   step(
     "the public route serves the shell",

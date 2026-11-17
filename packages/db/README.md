@@ -5,8 +5,9 @@ sharing tables from
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md), the
 two password tables from
 [ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
-the write limiter's counter and the eight tables the agent surface's OAuth
-provider and JWT plugin write.
+the write limiter's counter from
+[ADR-0014](../../docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md)
+and the eight tables that ADR's OAuth provider and JWT plugin write.
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
 — with `user` extended by the four typed custom columns (`firstName`,
@@ -14,7 +15,8 @@ Four **Better Auth core tables** — `user`, `session`, `account`, `verification
 **agent-access tables** — `jwks`, `oauthClient`, `oauthResource`,
 `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`,
 `oauthClientAssertion` — hand-authored against `getAuthTables()` because
-`@better-auth/cli` is deprecated with no 1.7.x release. Ten **domain
+`@better-auth/cli` is deprecated with no 1.7.x release; a test in `apps/api`
+asserts every model and field the plugin declares exists here. Ten **domain
 tables**: `collections`, `collection_collaborators`,
 `collection_invitations`, `collection_access_grants`,
 `collection_unlock_attempts`, `account_write_windows`, `artworks`,
@@ -24,10 +26,10 @@ question and writes them through the invitation, removal, leaving and transfer
 routes. The two password tables and `collections.passwordHash` are read and
 written by the password routes — and `collection_unlock_attempts` by the unlock
 route alone, which is the throttle's whole surface. `account_write_windows` is
-the agent surface's write-limiter counter, to be claimed by the limiter that
-ships next: a rolling 20-write / 20-second window and a fixed hourly import
-window. The table lands alone, ahead of the limiter that reads it, per the rule
-that a schema change is deployed before the code that reads it.
+the MCP write limiter's counter, claimed by `agentLimiter.ts`: a rolling
+20-write / 20-second window and a fixed hourly import window. The table shipped
+alone, ahead of the limiter that reads it, per the rule that a schema change is
+deployed before the code that reads it.
 
 The Drizzle entity is **`catalogues`** and every sharing table is exported under
 its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,

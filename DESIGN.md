@@ -51,10 +51,13 @@ into a float. The schema below is that bet made concrete.
 A Bun workspaces monorepo. In production one Lambda serves both the API and the
 built SPA behind one HTTP API, so the app is same-origin and there is no CORS.
 Postgres holds the rows, S3 holds the media, and **every** read — row or byte —
-goes through the API so one authorization layer covers both.
+goes through the API so one authorization layer covers both. An agent is a
+second client, not a second deploy: its MCP endpoint is a route on that same
+Lambda, on the same origin, and every tool calls the module a route calls.
 
 ```
 browser → API Gateway (custom domain) → Lambda (Hono) → Postgres / S3
+agent   → API Gateway (custom domain) → Lambda (Hono) → the same modules
 ```
 
 - `apps/web` — React 19 + Vite + Mantine v9.
@@ -76,7 +79,9 @@ alternatives are in
 
 ## The data model
 
-Thirteen tables in Postgres with sharing and password protection, defined in
+Twenty-two tables in Postgres: the domain model with sharing, password
+protection and the write limiter's counter, plus the eight tables the agent
+access surface's OAuth provider and JWT plugin write. All are defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 **The entity is a Catalogue; the physical table is `collections`.** The Drizzle
@@ -116,10 +121,46 @@ belong to Better Auth; nothing in the domain tables mirrors them.
 `verification` exists even though email verification is off, so turning it on is
 a config flip rather than a schema change.
 
+### Agent access (`jwks` and the `oauth*` tables)
+
+Eight tables the JWT and OAuth provider plugins write, hand-authored because
+`@better-auth/cli` is deprecated with no 1.7.x release: `jwks` (the signing key
+pair the session JWT plugin mints) and the provider's `oauthClient`,
+`oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
+`oauthConsent` and `oauthClientAssertion`. The adapter addresses each table by
+its exported key and each column by its property name, so the names are the
+plugin's, exactly — including `oauthClient.requirePKCE`.
+`apps/api/tests/adapter.test.ts` asserts every model and field
+`getAuthTables()` returns exists here, which is the generator a missing release
+would otherwise provide.
+
+A **Connection** is the account's approval of one MCP client: the
+`oauthConsent` row the guard reads on every call. One row per (account, client)
+is the design, but the plugin finds then creates and declares no unique index,
+so two approvals racing can leave a duplicate; the account surface collapses
+them to the newest and Revoke deletes every row for the pair. The same read is
+why Revoke is immediate although an access token is a JWT that lives for its
+full hour: the row is gone, so the next call answers `401` and the client
+reconnects. A Connection's tokens are the `oauthRefreshToken` family — each
+rotation revokes the old row and inserts the next with the same
+`authorizationCodeId` — and Revoke stamps every live row for the pair revoked.
+The account surface lists consent rows, never refresh tokens. With `jwt()` in
+play, `oauthAccessToken` stays empty: access tokens are JWTs, not rows.
+
+The limitation is said plainly: the token's claims carry the account's `sub`
+and the client's `client_id`, and nothing identifies an installation, so two
+installs of the same client share one Connection — one row, one "last acted",
+one Revoke. Different clients are separate rows. Per-install listing and
+revocation would need an install identity the protocol does not supply here, so
+it is not implemented.
+
+`0013_agent_access` is additive and landed alone, ahead of the MCP code, per
+[A schema change ships alone](AGENTS.md#migrations-are-forward-only).
+
 ### `collections`
 
 `id`, `userId`, `mediaNamespaceId`, `name`, `kind` (default `collection`),
-`artworkFields` (jsonb), `description?`, `skin?`, `skinOptions` (jsonb),
+`artworkFields?` (jsonb), `description?`, `skin?`, `skinOptions` (jsonb),
 `isPublic` (default `true`), `passwordHash?`, `deletedAt?`, `createdAt`,
 `updatedAt`.
 
@@ -197,6 +238,21 @@ key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
 catalogue's throttle cannot lock visitors out of another's through a shared
 address. The window length is the route's policy, not the schema's
 (`unlockThrottle.ts`), and the unlock route is the only writer and reader.
+
+### `account_write_windows`
+
+`(userId, bucket, windowStart)` as the primary key, plus `count` defaulting to
+zero — the write limiter's counter for the agent surface. `bucket` is `write`
+(the per-second bucket every write spends) or `import` (the hourly cap an import
+spends in addition), which is what lets one table serve both windows: one row
+per account, bucket and window, and a claim is one `INSERT … ON CONFLICT` that
+adds to `count`. Keyed by the account, never the address, because a hosted
+agent's calls all arrive from one cloud. The window lengths are the surface's
+policy, not the schema's: `agentLimiter.ts` floors `windowStart`, spends a
+write in the current whole second (a rolling 20-write / 20-second window) or an
+import in the current UTC hour (5 an hour), and prunes the rows that can no
+longer count. `0012_account_write_windows` is additive and landed alone, ahead
+of the limiter that reads it.
 
 ### `collection_collaborators` and `collection_invitations`
 
@@ -481,8 +537,9 @@ Lambda entry; no forwarding header is trusted
 
 ## The API
 
-All under `/api/v1`, in the app's error envelope; `/api/auth/*` is Better Auth's
-own handler. The full route table is in `apps/api/README.md`. The shape of a
+The resource API is under `/api/v1`, in the app's error envelope; `/api/auth/*`
+is Better Auth's own handler, and `/api/mcp` is the agent endpoint (below). The
+full route table is in `apps/api/README.md`. The shape of a
 `GET` response is fixed by `apps/api/src/serialize.ts`, which emits the wire
 types in `packages/shared/src/types.ts` (including the `{ seconds, nanoseconds }`
 timestamp and the media-proxy `url` fields).
@@ -580,26 +637,50 @@ forwarding header is never trusted, because it is client-supplied. The identity
 is honest rather than complete: an address is shared behind a proxy and cheap to
 multiply, so this raises the cost of guessing without being a proof.
 
-The catalogue artwork list takes an optional member-only `q`. A present query
-is a member condition ahead of the visitor verdict — a missing catalogue is
-`404`, no session `401`, and a signed-in non-member (an Access grant holder
-included) `403` — and a query over 200 characters or 10 terms is `400
-validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
-stripped, lowercased), splits the query on punctuation and requires every term
-to appear somewhere in the joined text of the ten declared fields (title,
-artist name, serie, medium, editions, date of creation, acquisition date, place
-of origin, provenance, notes); terms may match different fields, and a query
-that normalizes to no terms matches nothing. Title and Artist Name always
-contribute; the other eight contribute only while the Catalogue records them, so
-a field it turned off is not found even when the stored row still holds its
-text. The acquisition date is searched in both its stored `YYYY-MM-DD` and its
-displayed `MMMM D, YYYY` form. Deleted works are never candidates and a member's
-drafts are. The filter runs in the API over the rows the list already reads,
-after the visibility verdict, and resolves the enabled set from the Catalogue row
-that read already loaded, so only matching works load their photos and documents;
-there is no SQL pushdown, no extension and no migration, and the list read
+The catalogue artwork list answers one read in two layers. Its free text is an
+optional member-only `q`: a present query is a member condition ahead of the
+visitor verdict — a missing catalogue is `404`, no session `401`, and a signed-in
+non-member (an Access grant holder included) `403` — and a query over 200
+characters or 10 terms is `400 validation` attributed to `q`. Matching
+normalizes both sides (NFD, diacritics stripped, lowercased), splits the query
+on punctuation and requires every term to appear somewhere in the joined text of
+the ten declared fields (title, artist name, serie, medium, editions, date of
+creation, acquisition date, place of origin, provenance, notes); terms may match
+different fields, and a query that normalizes to no terms matches nothing. Title
+and Artist Name always contribute; the other eight contribute only while the
+Catalogue records them, so a field it turned off is not found even when the
+stored row still holds its text. The acquisition date is searched in both its
+stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. An absent, empty or
+whitespace-only `q` leaves the search unchanged.
+
+Its structured half — the contract an agent's search builds on — filters on the
+same ten text fields plus `status` and `availability`. A repeated parameter
+means OR within that field and different fields AND, so either artist with an
+oil medium is one request; at most 20 values in a field and 8 fields are
+allowed. A text value is normalized and matched within its own field only
+(`medium=oil` finds "Oil on canvas"; a work's note never answers a title
+filter), while an enumerated value is compared exactly and one outside its list
+is `400 validation`, never ignored. Filters and facets read the same enabled set
+the free text does: a field the Catalogue does not record matches no filter and
+yields no facet entries. `q` ANDs with the filters. `sort` is `updated` (the
+default, newest first), `title`, `artistName` or `dateOfCreation`, compared
+normalized, each ending on `id`, so the order is total and a paged read can
+neither skip nor repeat a row. An absent `limit` is every match — which is what
+the web reads — a present one is capped at 100, and `offset` without `limit` is
+`400 validation`. The answer is the page envelope `{ artworks, total, limit,
+offset }`: `total` counts the matches before paging and `limit` is `null` when
+the caller named none. `facets` names one or more filterable fields and adds
+`facets: { <field>: [{ value, count }] }`, counted over the filtered set rather
+than the page, ordered by count descending then value and capped at 500 per
+field; an unknown field or facet is `400 validation` naming it.
+
+Deleted works are never candidates and a member's drafts are; a visitor filters
+published works only, exactly the verdict the unfiltered read gives. Both halves
+run in the API over the rows the list already reads, after the visibility
+verdict, so only answering works load their photos and documents; there is no
+SQL pushdown, no index, no extension and no migration, and the list read
 remains the single seam to replace if catalogue sizes demand it. No matches is
-`200 []`, and an absent, empty or whitespace-only `q` leaves the list unchanged.
+`200` with an empty `artworks` and `total: 0`.
 
 The artwork form's Artist Name suggestions are the caller's own vocabulary, not
 a catalogue's: `GET /api/v1/artist-names` takes no catalogue id and no
@@ -620,6 +701,256 @@ extension is involved — the grouping is over exact spellings and the collapse
 is pure, behind a module with no Hono type, so a future curated index can
 replace its source without changing the wire.
 
+## Agent access (MCP)
+
+Arcula hosts an MCP server on the existing origin and the existing Lambda:
+`POST /api/mcp`, Streamable HTTP, protocol revision 2026-07-28, stateless — a
+fresh server per request, one JSON result, nothing held between calls. It is not
+a second API; every tool calls the module a route calls, under the same
+membership verdicts. `@modelcontextprotocol/server` (v2 of the SDK) serves it
+with `legacy: "reject"` and `responseMode: "json"` — API Gateway cannot stream,
+so a tool either answers once or fails. The endpoint mounts in the Hono app as
+an `all` route, because the SDK answers a GET or DELETE with its own `405`; the
+path is under `/api`, which the SPA already refuses, and `/.well-known/*` is the
+second refusal — OAuth discovery must answer metadata or `404`, never
+`index.html`. The app routes the well-known namespace to `auth.handler` and
+`/api/mcp` to the guard.
+
+The **resource** — the token audience — is `${apiOrigin}/api/mcp` per
+environment, derived once in `env.ts` from `AUTH_BASE_URL` (the deployment's
+`PUBLIC_URL`); the plugin's resource, the guard's audience and the challenge's
+pointer all read that one value. In dev and production each deployment mints its
+own; nothing is shared between them.
+
+### Authorization
+
+`@better-auth/mcp` 1.7.7 is the OAuth 2.1 provider configured for MCP, with
+`@better-auth/cimd` for client identity and `jwt()` for the access tokens. The
+provider publishes RFC 9728 protected-resource metadata and RFC 8414
+authorization-server metadata from an `onRequest` hook that only runs for
+requests the auth handler sees. PKCE (S256) is on, dynamic client registration
+is off, and client identity is a **Client ID Metadata Document**: the client's
+id is an HTTPS URL it hosts, and the plugin fetches and validates that document.
+Every token is bound to the resource audience and refreshed. An unauthenticated
+`POST /api/mcp` answers `401` with
+`WWW-Authenticate: Bearer resource_metadata="…"` before the transport reads the
+body.
+
+The session JWT's own mint is closed (`/api/auth/token` is a `404`), so a
+session JWT cannot be issued as an access token. The session token is also not
+an API bearer in a deployment: `bearer()` is mounted only outside production
+(`sessionBearerEnabled` is `NODE_ENV !== "production"`). Local development and
+the suites keep it, where their helpers sign in with it; a deploy does not, and
+`deploy-verify` signs in with cookies and asserts that a deploy refuses the
+token as an `Authorization` bearer.
+
+The consent screen is the app's, not the plugin's. The provider redirects to
+`/consent` with the whole authorization query re-signed (`sig` and the names in
+`ba_param` are the signature's envelope), and the SPA cannot verify a signature,
+so the page asks `GET /api/v1/connections/request`. That route rebuilds the
+signed subset, verifies it against the auth instance's secret, and answers the
+client's public metadata, the signed redirect host and the exact
+`oauth_query` to post back. The page renders the client's name beside the
+redirect host — both are client-chosen, so the host is the fact to compare —
+and only `https:` links, then posts `{ accept, oauth_query }` to
+`/api/auth/oauth2/consent` and follows the URL the provider answers. An
+unauthenticated authorize redirects to `/login` with the same query as its
+querystring, and `loginReturnPath` resumes at `/consent` with it intact after
+sign-in.
+
+The tool layer receives a **verified subject** and never a token:
+`requireMcpAuth` verifies signature, issuer, audience and expiry and hands the
+guard its claims; the guard proves the Connection (below) and passes
+`authInfo.extra.sub` to a per-request server. `dispatcher.ts` has no MCP type in
+its signature: it parses the arguments through the tool's Zod schema, calls the
+same module a route calls, and throws the app's `ApiError`, which the transport
+answers as an MCP error result whose text is `code: message`.
+
+### The Connection
+
+A Connection is the account's approval of one MCP client — the `oauthConsent`
+row the guard reads on every call. It is one per (account, client) in the
+design, but the plugin finds then creates and declares no unique index, so a
+race can leave a duplicate; the account surface collapses them to the newest and
+Revoke deletes every row for the pair. The profile lists each Connection with
+the client that made it, when it connected and when it last acted, and Revoke
+ends it alone. The endpoint it hands the person comes from the API's own
+environment (`mcpResource`), not from `window.location`, because in dev the SPA
+and the API are different ports.
+
+The guard's read is what makes Revoke immediate even though an access token is a
+JWT that lives for its full hour: the consent row is gone, so the next call
+answers `401` with the same RFC 9728 challenge and the client reconnects. The
+same read touches `updatedAt` at most once a minute
+(`CONNECTION_TOUCH_INTERVAL_MS`), which is where "last acted" comes from and why
+a busy agent is not one write per call. Revoke deletes the consent rows and
+stamps every live refresh token for the pair revoked; the browser session is a
+different credential and is never touched.
+
+The limitation is real and stated: the token's claims carry the account's `sub`
+and the client's `client_id`, and nothing identifies an installation. Two
+installs of the same client therefore share one Connection — one row, one "last
+acted", one Revoke — while different clients are separate rows. Per-install
+listing and revocation would need an install identity the protocol does not
+supply here, so it is not implemented.
+
+### The nine tools
+
+The names are the contract; the descriptions are prompt text and are reviewed
+like UI copy. Every write asks the member verdict (the owner and every
+Collaborator may write, exactly as in the app), and every read calls the module
+its route calls, so there is one authorization verdict and one place where "a
+visitor sees published works only" is true.
+
+| Tool               | Arguments                                                          | Answers                                                        |
+| ------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `list_catalogues`  | —                                                                  | the caller's owned and shared Catalogues, with their role      |
+| `get_catalogue`    | `catalogueId`                                                      | one Catalogue: Kind, visibility, role, works counted by status |
+| `create_catalogue` | `name`, `kind`, `description?`, `isPublic?`                        | the new Catalogue                                              |
+| `update_catalogue` | `catalogueId`, `name?`, `description?`, `isPublic?`                | the Catalogue as written                                       |
+| `search_artworks`  | `catalogueId`, `filters?`, `sort?`, `limit?`, `offset?`, `facets?` | a page of work summaries, the match count and any facets       |
+| `get_artwork`      | `catalogueId`, `artworkId`                                         | one work, the full record with photos, documents and Variants  |
+| `create_artwork`   | `catalogueId`, the Add form's fields                               | the new work                                                   |
+| `update_artwork`   | `catalogueId`, `artworkId`, the fields to change                   | the work as written                                            |
+| `import_artworks`  | `catalogueId`, `rows[]`, `status?` (default `draft`)               | `{ inserted, rejected }`                                       |
+
+`kind` is **required** on `create_catalogue`: a default is a coin flip the agent
+cannot see, and the Kind is fixed at creation — `update_catalogue` has no such
+argument, and a body naming one changes only the fields the tool owns. The
+descriptions carry the three rules the schemas cannot:
+
+- **Kind is fixed at creation.** A Portfolio's name is the artist's name and its
+  description their bio; an Inventory's are the gallery's.
+- **A Catalogue records a chosen set of Artwork fields.** `create_artwork` and
+  `update_artwork` name only fields the Catalogue records; one it has turned off
+  is refused with `field-disabled`. Availability is one of those fields — on by
+  default for a Portfolio or an Inventory, off for a Collection — and the
+  registry behind the choice (`@arcula/shared`) is the one the forms, the CSV
+  import, the PDF and the tools all resolve.
+- **The free tier owns ten Catalogues**, and a `limit-reached` refusal is
+  terminal: it is relayed to the person, never retried.
+
+What is deliberately absent: no media tool (an agent can carry a decision but
+not a file), no delete, no ownership transfer, no invitation and no password.
+The agent reads the PDF or PowerPoint itself and sends rows; Arcula never sees
+the file.
+
+### The search contract
+
+`search_artworks` is not a second search: it runs the structured list read the
+API section describes, through `artworkRead.ts` and the shared
+`packages/shared/src/artworkSearch.ts`, so the filters, caps, normalized text,
+exact enums, order, page envelope and facets are one contract.
+
+- **Filters** are the same ten text fields plus `status` and `availability`. A
+  repeated value means OR within its field and different fields AND; at most 20
+  values per field and 8 fields per request.
+- **Text matches normalized** (NFD, diacritics stripped, lowercased) within its
+  own field; an enumerated value is compared exactly, and one outside its list
+  is `validation`, never ignored.
+- **`q` still works and ANDs with the filters**, but it is the route's
+  member-only condition; the tool does not expose it, so an agent's question is
+  always structured.
+- **`sort`** is `updated` (the default, newest first), `title`, `artistName` or
+  `dateOfCreation`, each with `id` as the tiebreak, so offset paging can neither
+  skip nor repeat a row.
+- **The answer is `{ artworks, total, limit, offset, facets? }`**, where `total`
+  is the match count before paging. `facets` names filterable fields and counts
+  their distinct values over the **filtered** set — not the page — ordered by
+  count descending then value and capped at 500 per field; a text facet's value
+  is normalized, so it can be sent back as a filter.
+- **A member sees drafts; a visitor sees published works of a public Catalogue
+  only; a Deleted work is never a candidate.** The filtering runs in the API
+  over the rows the read already loaded, after the visibility verdict: no SQL
+  pushdown, no index, no migration. `get_artwork` refuses a deleted row the
+  same way, even to a member: the app's Deleted view is not exposed to an
+  agent.
+
+One thing is the tool's own: an agent pays for every row it receives, so
+`search_artworks` always names a page — **50 rows when the caller names no
+limit** — while a caller-named limit is still capped at 100, and an offset
+stands alone because the tool supplied the limit. The route keeps the web's
+behaviour: absent `limit` means every match, present is at most 100, and
+`offset` without `limit` is `validation`.
+
+### The import rule
+
+`import_artworks` calls the same core as the CSV route. The payload is the
+import's plus `status?: "published" | "draft"`, defaulting at the route to
+`IMPORTED_WORK_STATUS` (`published`): a person's CSV import sends nothing and is
+unchanged, exactly as before. The agent's tool defaults to `draft`, so a
+hallucinated artist or a misread caption is a row the member deletes rather
+than a page the public reads; the member publishes when satisfied, and the tool
+may name `published` explicitly when the person asks for it.
+
+The status the payload names wins over any status a row carries. Each row is
+parsed against the shared `artworkSchema`; a failing row lands in `rejected`
+with its position in the posted array and the fields that failed, while a row's
+own failure never withholds its neighbours. The accepted rows commit in one
+transaction. The tool's own schema caps a call at **200 rows** and a larger
+request is a validation error naming the cap; the route has no cap, because its
+review step has already shown the person the batch. The route's path is still
+`/import/csv`.
+
+### Errors
+
+Every tool failure is an MCP error result whose text is `code: message`, so the
+agent can relay it verbatim. The codes this surface can answer:
+
+| Code                | Meaning for the agent                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `validation`        | terminal — fix the arguments                                                                              |
+| `forbidden`         | terminal — this account may not do this here                                                              |
+| `not-found`         | terminal — no such Catalogue or work                                                                      |
+| `password-required` | a Protected public Catalogue's challenge; the agent cannot satisfy it, so tell the person to open the app |
+| `limit-reached`     | terminal — the tier's allowance is spent; tell the person                                                 |
+| `rate-limited`      | retryable after the window                                                                                |
+| `internal`          | retryable once; then tell the person                                                                      |
+
+`unauthorized` is the endpoint's own answer rather than a tool's: the `401`
+challenge before the transport runs, or a revoked Connection's `401`. `conflict`
+is in the envelope, but no tool path raises it in this release.
+
+`password-required` is the one refusal with no agent-side fix. `get_catalogue`
+asks the readable verdict, and an account that is not a member holds no Access
+grant cookie, so the tool relays "This catalogue is protected" and the person
+must open the catalogue in the app. The list read maps the same protected
+catalogue to `forbidden`, because its verdict is the visitor rule without a
+grant.
+
+### The write limiter
+
+Writes are metered per account, keyed by the token's verified subject and never
+by address: a hosted agent's calls arrive from one cloud address range, so an
+address bucket would be one bucket for every account in the product. Reads are
+unmetered.
+
+- **20 writes in a rolling 20-second window** — capacity 20, refilled one per
+  second, so 60 a minute sustained. The rows are `account_write_windows`, one
+  per account, bucket and whole second, and the claim sums the rows inside the
+  window, so the window really rolls.
+- **5 imports per UTC hour**, in addition to the write the import already
+  spends. The import bucket is one fixed hourly row, floored from the UTC hour.
+- The dispatcher claims the write **after the arguments validate and before the
+  tool touches a row**, so a refused call writes nothing. `import_artworks`
+  claims the hourly import on top.
+- Exhaustion is `429 rate-limited`, whose message names the allowance and the
+  window (`20 writes in 20 seconds`, `5 imports in an hour`) and whose details
+  carry `allowance` and `windowSeconds`. There is no `Retry-After` header, the
+  product's one precedent (`too-many-attempts`) being the same.
+
+### Schema and release
+
+`0012_account_write_windows` and `0013_agent_access` (the eight OAuth/JWKS
+tables) are both additive and landed alone, ahead of the code that reads them,
+per [A schema change ships alone](AGENTS.md#migrations-are-forward-only). No
+release has shipped either separately: a single dev→main release carrying a
+migration together with the code that reads it would deploy the Lambda before
+it migrates, which is exactly what the rule forbids, so the release that
+carries the migrations must still precede the MCP code's. The twenty-two tables
+above are the result: the limiter's counter, and the eight agent tables the
+provider and JWT plugin write, hand-authored against `getAuthTables()`.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
@@ -627,10 +958,13 @@ replace its source without changing the wire.
 - **Public** — `/` (product page), `/login`, `/signup`,
   `/reset-password` (the request) and `/reset-password/:token` (the form the
   mailed link lands on), `/invite/:token` (the invitation landing page, which
-  shows the catalogue and invited email before sign-in), and the skin-rendered
+  shows the catalogue and invited email before sign-in), `/consent` (the
+  Connection approval screen, which sends a signed-out visitor back to `/login`
+  with the signed query), and the skin-rendered
   `/catalogue/:catalogueId` and `/catalogue/:catalogueId/artwork/:artworkId`.
 - **Protected** — everything under `/manage`: the dashboard, a catalogue and its
-  settings, artwork add/edit, the CSV import, and the account profile.
+  settings, artwork add/edit, the CSV import, and the account profile, whose
+  agent-access card carries the endpoint and the Connected apps list.
 
 `src/services/` is the client layer (`api.ts` is the transport the domain
 services share); `src/auth/` is the Better Auth React client; `src/skins/` is the
@@ -831,12 +1165,13 @@ larger feature ideas are in [README's Roadmap](README.md#roadmap).
   catalogue owner, so the record does not say who added or edited a work.
 - **Accepting or declining an ownership transfer.** A transfer is immediate and
   sends a notice; reversing it is another transfer.
-- **Rate limiting.** The unlock route is throttled per address and catalogue (a
-  fixed ten-minute window in Postgres), but neither the invitation create route
-  nor the password-reset mail is: both still go out at server speed. And the
-  unlock throttle's identity is an address, which is shared behind a proxy and
-  cheap to multiply, so it raises the cost of guessing rather than proving
-  anything.
+- **Rate limiting beyond the two that exist.** Agent writes are metered per
+  account (the rolling write window and the hourly import cap), and the unlock
+  route is throttled per address and catalogue (a fixed ten-minute window in
+  Postgres), but neither the invitation create route nor the password-reset
+  mail is: both still go out at server speed. And the unlock throttle's identity
+  is an address, which is shared behind a proxy and cheap to multiply, so it
+  raises the cost of guessing rather than proving anything.
 - **A collaborator cap.** A catalogue may invite any number of collaborators.
 - **Account deletion**, and what it means for a catalogue's owner or a
   collaborator.

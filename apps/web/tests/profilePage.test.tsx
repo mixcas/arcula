@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
@@ -9,9 +15,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProfilePage from "@/components/manage/ProfilePage";
 import { authClient } from "@/auth/client";
+import { connectionService } from "@/services/connectionService";
 import { meService } from "@/services/meService";
 import { changePasswordSchema, profileNameSchema } from "@/schemas/user";
-import type { SessionUserRead } from "@arcula/shared";
+import { relativeTime } from "@/utils/relativeTime";
+import type {
+  ConnectionRead,
+  ConnectionsRead,
+  SessionUserRead,
+} from "@arcula/shared";
 
 /**
  * The profile page: which keys the name save sends (absent-leave
@@ -36,6 +48,18 @@ vi.mock("@/services/meService", () => ({
 vi.mock("@/auth/client", () => ({
   authClient: {
     changePassword: vi.fn(),
+  },
+}));
+
+/**
+ * The agent-access card's seam: the Connected-apps list and Revoke. Both are
+ * pinned API-side by `connections.api.test.ts`; here only the page's reading
+ * of them is asserted.
+ */
+vi.mock("@/services/connectionService", () => ({
+  connectionService: {
+    list: vi.fn(),
+    revoke: vi.fn(),
   },
 }));
 
@@ -93,6 +117,38 @@ Object.defineProperty(window, "matchMedia", {
 const updateProfile = vi.mocked(meService.updateProfile);
 /* eslint-enable @typescript-eslint/unbound-method */
 const changePassword = vi.mocked(authClient.changePassword);
+/* eslint-disable @typescript-eslint/unbound-method */
+const listConnections = vi.mocked(connectionService.list);
+const revokeConnection = vi.mocked(connectionService.revoke);
+/* eslint-enable @typescript-eslint/unbound-method */
+
+/** The endpoint a deployment's API answers — a different origin from the
+ *  jsdom page on purpose: the card must render what the service returned, not
+ *  `window.location.origin`. */
+const ENDPOINT = "http://localhost:8102/api/mcp";
+
+const connectionOf = (id: string, clientName: string): ConnectionRead => ({
+  id,
+  clientId: `client-${id}`,
+  clientName,
+  connectedAt: {
+    seconds: Math.floor(Date.parse("2026-11-01T09:00:00Z") / 1000),
+    nanoseconds: 0,
+  },
+  lastActedAt: {
+    seconds: Math.floor(Date.parse("2026-11-02T09:00:00Z") / 1000),
+    nanoseconds: 0,
+  },
+});
+
+const connectionsOf = (connections: ConnectionRead[]): ConnectionsRead => ({
+  endpoint: ENDPOINT,
+  connections,
+});
+
+/** jsdom has no clipboard; the card's copy path needs one. Defined per test
+ *  and removed after, so no other file inherits it. */
+const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
 
 /** The server's answer for a saved profile: the row with the new names. */
 const savedMe = (
@@ -115,12 +171,19 @@ beforeEach(() => {
   authState.me = meOf;
   updateProfile.mockResolvedValue(savedMe());
   changePassword.mockResolvedValue({ data: { user: { id: "u1" } } });
+  listConnections.mockResolvedValue(connectionsOf([]));
+  revokeConnection.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: clipboard,
+  });
 });
 
 afterEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   cleanup();
   vi.clearAllMocks();
+  delete (navigator as { clipboard?: unknown }).clipboard;
 });
 
 describe("the profile page — the name save", () => {
@@ -242,6 +305,68 @@ describe("the profile page — the password change", () => {
       await screen.findByText(/passwords do not match/i),
     ).toBeInTheDocument();
     expect(changePassword).not.toHaveBeenCalled();
+  });
+});
+
+describe("the profile page — agent access", () => {
+  it("shows the endpoint the API named and copies it", async () => {
+    listConnections.mockResolvedValue(connectionsOf([]));
+    renderPage();
+
+    expect(await screen.findByText(ENDPOINT)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
+
+    await waitFor(() =>
+      expect(clipboard.writeText).toHaveBeenCalledWith(ENDPOINT),
+    );
+    expect(await screen.findByText("Copied")).toBeInTheDocument();
+  });
+
+  it("lists each connection and revokes only the one clicked", async () => {
+    const claude = connectionOf("c1", "Claude Code");
+    const cursor = connectionOf("c2", "Cursor");
+    listConnections
+      .mockResolvedValueOnce(connectionsOf([claude, cursor]))
+      // The server's answer after Revoke: one row left, and it is the one the
+      // page had to re-read rather than the one it kept in memory.
+      .mockResolvedValueOnce(
+        connectionsOf([{ ...cursor, clientName: "Cursor (refreshed)" }]),
+      );
+    renderPage();
+
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getByText("Cursor")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
+
+    await waitFor(() => expect(revokeConnection).toHaveBeenCalledWith("c1"));
+    await waitFor(() =>
+      expect(screen.queryByText("Claude Code")).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText("Cursor (refreshed)")).toBeInTheDocument();
+  });
+
+  it("shows when each connection connected and when it last acted", async () => {
+    const claude = connectionOf("c1", "Claude Code");
+    listConnections.mockResolvedValue(connectionsOf([claude]));
+    // Frozen so the card's two `relativeTime` calls and the expectation's
+    // read the same "now": the test pins the wiring, not the ladder.
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(Date.parse("2026-11-05T09:00:00.000Z"));
+    try {
+      renderPage();
+
+      const line = await screen.findByText(/^Connected .+ · Last acted .+$/);
+      expect(line).toHaveTextContent(
+        `Connected ${relativeTime(claude.connectedAt)}`,
+      );
+      expect(line).toHaveTextContent(
+        `Last acted ${relativeTime(claude.lastActedAt)}`,
+      );
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

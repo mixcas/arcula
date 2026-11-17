@@ -55,10 +55,19 @@ import {
   artworkPhotos as artworkPhotosTable,
 } from "@arcula/db";
 import {
+  MAX_SEARCH_QUERY_LENGTH,
+  MAX_SEARCH_TERMS,
+  artworkFacets,
+  compareArtworksForList,
+  matchesArtworkFilters,
   matchesArtworkSearch,
+  parseArtworkSearchQuery,
   resolveArtworkFields,
-  type ArtworkRead,
   searchQueryOverflow,
+  type ArtworkFacets,
+  type ArtworkRead,
+  type ArtworkSearchProblem,
+  type ArtworkSearchQueryParse,
   type SearchQueryOverflow,
 } from "@arcula/shared";
 import { audienceOf, canSeeArtwork, canSeeCatalogue, isMember } from "./access";
@@ -77,23 +86,36 @@ export type ArtworkReadResult =
   | { readonly status: "not-found" };
 
 /**
- * What a list read answers: every visible work in order, or the one refusal
- * the list can make. A missing Catalogue is `not-found`; a Private
- * Catalogue the viewer does not own is `forbidden`. `unauthorized` is the
- * search's own refusal: the member-only live list asked for by a caller with
- * no session. `invalid-search` is a present query past the shared caps —
- * checked after the access questions, so a missing catalogue, an anonymous
- * caller or a non-member is refused for that reason rather than for their
- * query.
+ * What a list read answers: a page of visible works plus the facts that
+ * describe it, or the one refusal the list can make. A missing Catalogue is
+ * `not-found`; a Private Catalogue the viewer does not own is `forbidden`.
+ * `unauthorized` is the search's own refusal: the member-only live list asked
+ * for by a caller with no session. `invalid-search` is a query that cannot be
+ * answered — the free text past its caps, or a structured query naming an
+ * unknown field, a bad enumerated value, an offset without a limit, or too
+ * many values — checked after the access questions, so a missing catalogue,
+ * an anonymous caller or a non-member is refused for that reason rather than
+ * for their query.
+ *
+ * `total` is the number of matches before paging; `limit` is null when the
+ * request asked for none, which is every match; `facets` is present only when
+ * the request named fields. Both are counted over the filtered set.
  */
 export type ArtworkListResult =
-  | { readonly status: "ok"; readonly artworks: ArtworkRead[] }
+  | {
+      readonly status: "ok";
+      readonly artworks: ArtworkRead[];
+      readonly total: number;
+      readonly limit: number | null;
+      readonly offset: number;
+      readonly facets?: ArtworkFacets;
+    }
   | { readonly status: "forbidden" }
   | { readonly status: "unauthorized" }
   | { readonly status: "not-found" }
   | {
       readonly status: "invalid-search";
-      readonly overflow: SearchQueryOverflow;
+      readonly problem: ArtworkSearchProblem;
     };
 
 type ArtworkChildren = Pick<ArtworkJoined, "photos" | "documents" | "variants">;
@@ -235,8 +257,9 @@ type ArtworkListMode = "live" | "deleted";
  * that survived the verdict, so a search can never widen what the viewer may
  * see; only the surviving works load their children.
  *
- * The rows are ordered by creation time (live) or deletion time, newest first
- * (deleted), and then id, so repeated reads agree. Children arrive from the
+ * The live rows take the structured query's order — `updated` by default,
+ * newest first, always ending on id — and its page; the Deleted list keeps
+ * deletion time, newest first, and answers every row. Children arrive from the
  * same three batched queries as the single read, and the verdict still runs
  * over each loaded row, so each list fails closed if its filter and the rule
  * ever disagree.
@@ -247,6 +270,7 @@ async function readArtworkListInMode(
   mode: ArtworkListMode,
   hasValidGrant = false,
   search: string | null = null,
+  structured: ArtworkSearchQueryParse = parseArtworkSearchQuery({}),
 ): Promise<ArtworkListResult> {
   const catalogue = await loadCatalogue(catalogueId);
   if (!catalogue) return { status: "not-found" };
@@ -267,11 +291,18 @@ async function readArtworkListInMode(
 
   // The caps are the query's own validity, so they are answered after the
   // access questions: who may ask comes before what they asked. No rows load
-  // for a query that cannot be searched.
+  // for a query that cannot be searched. The free text answers first, then
+  // the structured query — both are the caller's own arguments.
   if (search !== null) {
     const overflow = searchQueryOverflow(search);
-    if (overflow !== null) return { status: "invalid-search", overflow };
+    if (overflow !== null) {
+      return { status: "invalid-search", problem: overflowProblem(overflow) };
+    }
   }
+  if (structured.status === "invalid") {
+    return { status: "invalid-search", problem: structured.problem };
+  }
+  const query = structured.query;
 
   const rows = await db
     .select()
@@ -304,24 +335,36 @@ async function readArtworkListInMode(
     canSeeArtwork(member, catalogue, row, hasValidGrant),
   );
   // The search runs after the verdict: it narrows what the viewer may see and
-  // can never add to it. The Catalogue's own fields decide the haystack, so a
-  // field it does not record is not found. A committed query with no terms
-  // matches nothing.
-  let works = visible;
-  if (search !== null) {
-    const searchable = resolveArtworkFields(
-      catalogue.kind,
-      catalogue.artworkFields,
-    ).enabled;
-    works = visible.filter((row) =>
-      matchesArtworkSearch(row, search, searchable),
-    );
-  }
-  const artworkIds = works.map((work) => work.id);
+  // can never add to it. The Catalogue's own fields decide the haystack and
+  // the filters: a field it does not record contributes no text and cannot
+  // match, so a search never finds what the form and the PDF do not show. A
+  // committed query with no terms matches nothing, and the structured filters
+  // AND with it. `total` and the facets are counted over the filtered set,
+  // before a page is cut.
+  const enabled = resolveArtworkFields(
+    catalogue.kind,
+    catalogue.artworkFields,
+  ).enabled;
+  const works = visible.filter(
+    (row) =>
+      (search === null || matchesArtworkSearch(row, search, enabled)) &&
+      matchesArtworkFilters(row, query.filters, enabled),
+  );
+  // The structured order and page are the live list's: the Deleted view keeps
+  // its own deletion-time order and answers every row, so it takes neither.
+  const ordered =
+    mode === "live"
+      ? [...works].sort((a, b) => compareArtworksForList(a, b, query.sort))
+      : works;
+  const page =
+    mode === "live" && query.limit !== null
+      ? ordered.slice(query.offset, query.offset + query.limit)
+      : ordered.slice(mode === "live" ? query.offset : 0);
+  const artworkIds = page.map((work) => work.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   return {
     status: "ok",
-    artworks: works.map((work) =>
+    artworks: page.map((work) =>
       serializeArtwork(
         {
           artwork: work,
@@ -331,18 +374,38 @@ async function readArtworkListInMode(
         audienceOf(member),
       ),
     ),
+    total: works.length,
+    limit: query.limit,
+    offset: query.offset,
+    ...(query.facets.length === 0
+      ? {}
+      : { facets: artworkFacets(works, query.facets, enabled) }),
+  };
+}
+
+/** The free-text search's cap, as the problem the route answers with. */
+function overflowProblem(overflow: SearchQueryOverflow): ArtworkSearchProblem {
+  return {
+    field: "q",
+    message:
+      overflow === "too-long"
+        ? `Search is limited to ${MAX_SEARCH_QUERY_LENGTH} characters`
+        : `Search is limited to ${MAX_SEARCH_TERMS} words`,
   };
 }
 
 /**
  * The live list: a member's every live work, a visitor's published ones.
- * A present `search` is member-only and filters the result.
+ * A present `search` is member-only and ANDs with the structured query; the
+ * structured filters, order, page and facets are the caller's own request and
+ * are answered within the same verdict.
  */
 export function readArtworkList(
   catalogueId: string,
   viewer: string | null,
   hasValidGrant = false,
   search: string | null = null,
+  structured: ArtworkSearchQueryParse = parseArtworkSearchQuery({}),
 ): Promise<ArtworkListResult> {
   return readArtworkListInMode(
     catalogueId,
@@ -350,6 +413,7 @@ export function readArtworkList(
     "live",
     hasValidGrant,
     search,
+    structured,
   );
 }
 

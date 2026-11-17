@@ -1,6 +1,8 @@
-// Session resolution for /api/v1/*: the same session rides a
-// cookie (web) or an Authorization: Bearer header (the future mobile
-// client) — better-auth's bearer plugin makes both land in one call.
+// Session resolution for /api/v1/*: the caller's session rides a cookie, which
+// is the only form a deployment accepts. Outside production (local development
+// and the suites) Better Auth's bearer plugin also answers an
+// `Authorization: Bearer` header with the same session; a deployment mounts no
+// such plugin (env.ts → bearerAuthAllowed, ADR-0014).
 
 import type { Context, MiddlewareHandler } from "hono";
 import { auth } from "./auth";

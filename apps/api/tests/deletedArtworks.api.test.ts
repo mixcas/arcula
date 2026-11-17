@@ -18,7 +18,7 @@ import {
 } from "@arcula/db";
 import { artworkReadSchema } from "@arcula/shared";
 import { closeDb, db } from "../src/db";
-import { err, freshUser, json, req, uuid } from "./helpers/api";
+import { err, freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 
 let owner: { cookies: string; userId: string };
 let stranger: { cookies: string; userId: string };
@@ -55,11 +55,20 @@ async function createWork(
   return String((await json<Record<string, unknown>>(res)).id);
 }
 
-async function stampDeleted(artworkId: string, iso: string): Promise<void> {
-  const at = new Date(iso);
+/**
+ * Stamp a deletion and an edit time that are deliberately out of step: the
+ * Deleted view's order is the deletion time, and the list's default live order
+ * is the edit time. A view that sorted on `updatedAt` would answer these three
+ * in exactly the reverse.
+ */
+async function stampDeleted(
+  artworkId: string,
+  deletedIso: string,
+  updatedIso = deletedIso,
+): Promise<void> {
   await db
     .update(artworksTable)
-    .set({ deletedAt: at, updatedAt: at })
+    .set({ deletedAt: new Date(deletedIso), updatedAt: new Date(updatedIso) })
     .where(eq(artworksTable.id, artworkId));
 }
 
@@ -161,9 +170,21 @@ beforeAll(async () => {
     contentType: "application/pdf",
   });
 
-  await stampDeleted(newestId, "2026-01-03T10:00:00.000Z");
-  await stampDeleted(middleId, "2026-01-02T10:00:00.000Z");
-  await stampDeleted(oldestDraftId, "2026-01-01T10:00:00.000Z");
+  await stampDeleted(
+    newestId,
+    "2026-01-03T10:00:00.000Z",
+    "2026-01-01T10:00:00.000Z",
+  );
+  await stampDeleted(
+    middleId,
+    "2026-01-02T10:00:00.000Z",
+    "2026-01-02T10:00:00.000Z",
+  );
+  await stampDeleted(
+    oldestDraftId,
+    "2026-01-01T10:00:00.000Z",
+    "2026-01-03T10:00:00.000Z",
+  );
 });
 
 afterAll(async () => {
@@ -424,9 +445,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
       `/api/v1/catalogues/${catalogueId}/artworks`,
     );
     expect(publicList.status).toBe(200);
-    const publicIds = (await json<{ id: string }[]>(publicList)).map(
-      (row) => row.id,
-    );
+    const publicIds = (await listedArtworks(publicList)).map((row) => row.id);
     expect(publicIds).toContain(newestId);
     expect(publicIds).toContain(liveId);
 
@@ -460,9 +479,7 @@ describe("POST /catalogues/{cid}/artworks/{aid}/restore", () => {
       "GET",
       `/api/v1/catalogues/${catalogueId}/artworks`,
     );
-    const publicIds = (await json<{ id: string }[]>(publicList)).map(
-      (row) => row.id,
-    );
+    const publicIds = (await listedArtworks(publicList)).map((row) => row.id);
     expect(publicIds).not.toContain(oldestDraftId);
   });
 });

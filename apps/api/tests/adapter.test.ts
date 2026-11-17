@@ -10,17 +10,80 @@
 // local compose DB.
 
 import { getTableColumns } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 import { schema, user } from "@arcula/db";
 import { CATALOGUE_LIMITS } from "@arcula/shared";
+import { getAuthTables } from "better-auth/db";
 import { describe, expect, it } from "vitest";
 
 // auth.ts builds the betterAuth instance at import, which needs a secret;
 // point it at syntactic values and import dynamically so they are set first.
 process.env.AUTH_SECRET = "test-secret-32-chars-minimum-xxxxxx";
 process.env.DATABASE_URL ??= "postgres://arcula:arcula@localhost:5432/arcula";
-const { userAdditionalFields } = await import("../src/auth");
+process.env.AUTH_BASE_URL ??= "http://localhost:8000";
+process.env.CLIENT_ORIGIN ??= "http://localhost:3000";
+const { auth, userAdditionalFields } = await import("../src/auth");
 
 const userColumns = getTableColumns(user);
+
+// The plugin models are hand-authored because @better-auth/cli is deprecated
+// with no 1.7.x release. `getAuthTables()` is the generator this repository
+// does not have: it runs with no database and returns exactly the models and
+// fields the adapter will address. A model it cannot find fails the first
+// request with `The model "…" was not found in the schema object`, so this is
+// the same class of opaque failure the custom-user-column test above kills.
+const authTables = getAuthTables(auth.options);
+
+// The schema object keyed the way the adapter addresses it: model name → table.
+const tables: Record<string, PgTable> = schema;
+
+// The adapter compares types loosely but the driver does not: a `string[]`
+// written into a scalar `text` column corrupts silently, and a `date` written
+// into `text` reads back as an unusable string. One mapping, asserted per
+// field.
+const DRIZZLE_TYPE: Record<string, string> = {
+  string: "string",
+  number: "number",
+  boolean: "boolean",
+  date: "date",
+  json: "json",
+  "string[]": "array",
+};
+
+describe("every model Better Auth writes exists in the Drizzle schema", () => {
+  it("names a table for each of the plugin models", () => {
+    for (const model of Object.keys(authTables)) {
+      expect(
+        Object.keys(schema),
+        `the adapter has no table named \`${model}\` — every request fails`,
+      ).toContain(model);
+    }
+  });
+
+  it("has every declared field as a column, with the declared type", () => {
+    for (const [model, table] of Object.entries(authTables)) {
+      const columns = getTableColumns(tables[String(model)]);
+      for (const [key, field] of Object.entries(table.fields)) {
+        const name = field.fieldName || key;
+        const column = columns[name];
+        expect(column, `${model}.${name} is missing`).toBeDefined();
+        const fieldType = field.type as unknown as string;
+        const expected = DRIZZLE_TYPE[fieldType];
+        expect(expected, `unknown Better Auth type ${fieldType}`).toBeDefined();
+        expect(column.dataType, `${model}.${name} type`).toBe(expected);
+      }
+    }
+  });
+
+  it("carries the two plugin models the MCP surface reads by name", () => {
+    // The guard reads `oauthConsent`, and the Connection record is a family of
+    // `oauthRefreshToken` rows. Naming them here is the one place a rename of
+    // either plugin model fails before a request does.
+    expect(Object.keys(authTables)).toEqual(
+      expect.arrayContaining(["oauthConsent", "oauthRefreshToken"]),
+    );
+  });
+});
 
 describe("the adapter declaration and the schema agree", () => {
   it("every additionalFields key is a column of the user table", () => {

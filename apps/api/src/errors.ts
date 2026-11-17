@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | "password-required"
   | "invalid-password"
   | "too-many-attempts"
+  | "rate-limited"
   | "not-found"
   | "conflict"
   | "limit-reached"
@@ -41,6 +42,10 @@ const STATUS_BY_CODE: Record<ApiErrorCode, ApiErrorStatus> = {
   // window's failures on this catalogue. The window, never the countdown —
   // see the unlock route.
   "too-many-attempts": 429,
+  // The agent surface's per-account allowance: a write past the window is
+  // refused here, and the sentence names the allowance and the window. No
+  // `Retry-After`, like `too-many-attempts` above.
+  "rate-limited": 429,
   "not-found": 404,
   conflict: 409,
   "limit-reached": 409,
