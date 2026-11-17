@@ -252,8 +252,11 @@ export const oauthClientResource = pgTable(
 
 // One authorization's refresh-token family: the code mints the first row, and
 // each rotation marks the old one revoked and inserts a new one with the same
-// `authorizationCodeId`. That id is a Connection's identity — several live
-// rows per (user, client) are normal, one per client install that connected.
+// `authorizationCodeId`. That id identifies one authorization family, not a
+// Connection: the Connection the product lists is the `oauthConsent` row, one
+// per (account, client). Several live families per (user, client) are normal —
+// one per client install that connected — and they all collapse into the one
+// consent row.
 export const oauthRefreshToken = pgTable(
   "oauthRefreshToken",
   {

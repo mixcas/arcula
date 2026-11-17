@@ -98,8 +98,10 @@ needs a compensating migration written by hand.
 
 Hand edits to a generated migration are deliberately few, and there are exactly
 three: a data backfill, the add-nullable → backfill → set-not-null sequence, and
-a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them and
-`0006_enable_rls` carries the third.
+a grant revoke drizzle-kit cannot model; `packages/db/README.md` lists them, and
+`0006_enable_rls` carries the third's first instance while
+`0011_account_write_windows` and `0012_agent_access` repeat it for the tables
+that followed.
 
 **A schema change ships alone.** `scripts/deploy.sh` deploys the Lambda before
 it migrates, so a release carrying both a new table and the code that reads it
@@ -275,8 +277,10 @@ reviewing a diff.
   runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 20-step end-to-end
-  pass (health, SPA, sign-up, the `Secure` session cookie, the session token
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 23-step end-to-end
+  pass (health, SPA, the agent surface's protected-resource and
+  authorization-server discovery documents and its `401` challenge, sign-up,
+  the `Secure` session cookie, the session token
   refused as an API bearer, a real 12 MP photo through presign → direct PUT →
   process → save with the bucket's CORS preflight probed against the
   deployment, a visitor read, and the reset-mail path).

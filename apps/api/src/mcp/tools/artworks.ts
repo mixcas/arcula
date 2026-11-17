@@ -198,15 +198,17 @@ export const artworkTools = [
     name: "get_artwork",
     description:
       "Read one work in full: every recorded field plus its photos, documents " +
-      "and Variants. A draft, a deleted work and a work in a private Catalogue " +
-      "answer `not-found` to an account that is not a member, exactly as the " +
-      "app refuses them; a member reads every work of the Catalogue. Use " +
-      "search_artworks to find a work's id.",
+      "and Variants. A draft and a work in a private Catalogue answer " +
+      "`not-found` to an account that is not a member, exactly as the app " +
+      "refuses them; a member reads every live work, and a deleted work " +
+      "answers `not-found` to everyone. Use search_artworks to find a work's id.",
     inputSchema: getArtworkInput,
     call: async ({ catalogueId, artworkId }, userId) => {
       const read = await readArtwork(catalogueId, artworkId, userId, false);
-      // One uniform not-found: which refusal it was would be a disclosure.
-      if (read.status !== "ok") {
+      // One uniform not-found: which refusal it was would be a disclosure. The
+      // app's Deleted view is a member read of a deleted row, but an agent's
+      // answer never carries one, so a deleted stamp is the same not-found.
+      if (read.status !== "ok" || read.artwork.deletedAt != null) {
         throw new ApiError("not-found", "The artwork does not exist");
       }
       return read.artwork;

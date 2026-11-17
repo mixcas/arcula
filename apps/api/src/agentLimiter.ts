@@ -27,7 +27,7 @@ const HOUR_MS = 60 * 60 * SECOND_MS;
 export const AGENT_WRITE_CAPACITY = 20;
 
 /** The rolling window's length, in seconds. */
-export const AGENT_WRITE_WINDOW_SECONDS = 20;
+const AGENT_WRITE_WINDOW_SECONDS = 20;
 
 /** Imports allowed per account per hour. */
 export const AGENT_IMPORT_CAPACITY = 5;

@@ -102,7 +102,7 @@ const AgentAccessCard: React.FC = () => {
       <Text fw="600" mb="md">
         Connect an agent
       </Text>
-      <Text size="sm" c="dim" mb="md">
+      <Text size="sm" c="dimmed" mb="md">
         An agent you connect acts as you on your Catalogues and Artworks, with
         your own permissions. Disconnect it below at any time.
       </Text>
@@ -142,7 +142,7 @@ const AgentAccessCard: React.FC = () => {
           )}
 
           {connections.connections.length === 0 ? (
-            <Text size="sm" c="dim">
+            <Text size="sm" c="dimmed">
               No apps are connected yet.
             </Text>
           ) : (
@@ -156,7 +156,7 @@ const AgentAccessCard: React.FC = () => {
                 >
                   <div>
                     <Text fw={500}>{connection.clientName}</Text>
-                    <Text size="sm" c="dim">
+                    <Text size="sm" c="dimmed">
                       Connected {relativeTime(connection.connectedAt)} · Last
                       acted {relativeTime(connection.lastActedAt)}
                     </Text>

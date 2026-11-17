@@ -18,6 +18,7 @@ import { authClient } from "@/auth/client";
 import { connectionService } from "@/services/connectionService";
 import { meService } from "@/services/meService";
 import { changePasswordSchema, profileNameSchema } from "@/schemas/user";
+import { relativeTime } from "@/utils/relativeTime";
 import type {
   ConnectionRead,
   ConnectionsRead,
@@ -343,6 +344,29 @@ describe("the profile page — agent access", () => {
       expect(screen.queryByText("Claude Code")).not.toBeInTheDocument(),
     );
     expect(await screen.findByText("Cursor (refreshed)")).toBeInTheDocument();
+  });
+
+  it("shows when each connection connected and when it last acted", async () => {
+    const claude = connectionOf("c1", "Claude Code");
+    listConnections.mockResolvedValue(connectionsOf([claude]));
+    // Frozen so the card's two `relativeTime` calls and the expectation's
+    // read the same "now": the test pins the wiring, not the ladder.
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(Date.parse("2026-11-05T09:00:00.000Z"));
+    try {
+      renderPage();
+
+      const line = await screen.findByText(/^Connected .+ · Last acted .+$/);
+      expect(line).toHaveTextContent(
+        `Connected ${relativeTime(claude.connectedAt)}`,
+      );
+      expect(line).toHaveTextContent(
+        `Last acted ${relativeTime(claude.lastActedAt)}`,
+      );
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

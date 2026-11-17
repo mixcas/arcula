@@ -13,7 +13,11 @@
 // Seeding here — once, in the main process, before workers fork — means every
 // worker's `findOne` finds the row and the insert never runs. The same insert
 // is what the plugin itself would do; doing it earlier is the whole change.
-// Production's own cold starts are unaffected by this file.
+//
+// This file is the suite's mitigation only. Production has no such step: a
+// deploy's cold starts rely on the plugin's own find-then-create, where the
+// same unwrapped error can lose the race and reject the auth context. That is
+// an upgrade risk, not a guarantee — re-check it whenever the provider moves.
 
 export default async function setup(): Promise<void> {
   const { oauthResource } = await import("@arcula/db");

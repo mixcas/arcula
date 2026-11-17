@@ -150,7 +150,7 @@ one Revoke. Different clients are separate rows. Per-install listing and
 revocation would need an install identity the protocol does not supply here, so
 it is not implemented.
 
-`0012_agent_access` is additive and shipped alone, ahead of the MCP code, per
+`0012_agent_access` is additive and landed alone, ahead of the MCP code, per
 [A schema change ships alone](AGENTS.md#migrations-are-forward-only).
 
 ### `collections`
@@ -229,7 +229,7 @@ agent's calls all arrive from one cloud. The window lengths are the surface's
 policy, not the schema's: `agentLimiter.ts` floors `windowStart`, spends a
 write in the current whole second (a rolling 20-write / 20-second window) or an
 import in the current UTC hour (5 an hour), and prunes the rows that can no
-longer count. `0011_account_write_windows` is additive and shipped alone, ahead
+longer count. `0011_account_write_windows` is additive and landed alone, ahead
 of the limiter that reads it.
 
 ### `collection_collaborators` and `collection_invitations`
@@ -783,7 +783,9 @@ descriptions carry the three rules the schemas cannot:
   description their bio; an Inventory's are the gallery's.
 - **A Collection carries no Availability.** `create_artwork` and
   `update_artwork` accept it on any Kind, as the API does; on a Collection it is
-  recorded and never shown.
+  recorded and never shown. The stored value still rides the full record
+  `get_artwork` answers — what the app never does is display it, so "never
+  shown" is about the interface, not the row.
 - **The free tier owns ten Catalogues**, and a `limit-reached` refusal is
   terminal: it is relayed to the person, never retried.
 
@@ -819,7 +821,9 @@ exact enums, order, page envelope and facets are one contract.
 - **A member sees drafts; a visitor sees published works of a public Catalogue
   only; a Deleted work is never a candidate.** The filtering runs in the API
   over the rows the read already loaded, after the visibility verdict: no SQL
-  pushdown, no index, no migration.
+  pushdown, no index, no migration. `get_artwork` refuses a deleted row the
+  same way, even to a member: the app's Deleted view is not exposed to an
+  agent.
 
 One thing is the tool's own: an agent pays for every row it receives, so
 `search_artworks` always names a page — **50 rows when the caller names no
@@ -856,7 +860,7 @@ agent can relay it verbatim. The codes this surface can answer:
 | ------------------- | --------------------------------------------------------------------------------------------------------- |
 | `validation`        | terminal — fix the arguments                                                                              |
 | `forbidden`         | terminal — this account may not do this here                                                              |
-| `not-found`         | terminal — no such Catalogue, work or membership                                                          |
+| `not-found`         | terminal — no such Catalogue or work                                                                      |
 | `password-required` | a Protected public Catalogue's challenge; the agent cannot satisfy it, so tell the person to open the app |
 | `limit-reached`     | terminal — the tier's allowance is spent; tell the person                                                 |
 | `rate-limited`      | retryable after the window                                                                                |
@@ -897,11 +901,14 @@ unmetered.
 ### Schema and release
 
 `0011_account_write_windows` and `0012_agent_access` (the eight OAuth/JWKS
-tables) are both additive and shipped alone, ahead of the code that reads them,
-per [A schema change ships alone](AGENTS.md#migrations-are-forward-only). The
-twenty-two tables above are the result: the limiter's counter, and the eight
-agent tables the provider and JWT plugin write, hand-authored against
-`getAuthTables()`.
+tables) are both additive and landed alone, ahead of the code that reads them,
+per [A schema change ships alone](AGENTS.md#migrations-are-forward-only). No
+release has shipped either separately: a single dev→main release carrying a
+migration together with the code that reads it would deploy the Lambda before
+it migrates, which is exactly what the rule forbids, so the release that
+carries the migrations must still precede the MCP code's. The twenty-two tables
+above are the result: the limiter's counter, and the eight agent tables the
+provider and JWT plugin write, hand-authored against `getAuthTables()`.
 
 ## The frontend
 
