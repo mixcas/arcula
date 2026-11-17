@@ -583,23 +583,47 @@ forwarding header is never trusted, because it is client-supplied. The identity
 is honest rather than complete: an address is shared behind a proxy and cheap to
 multiply, so this raises the cost of guessing without being a proof.
 
-The catalogue artwork list takes an optional member-only `q`. A present query
-is a member condition ahead of the visitor verdict — a missing catalogue is
-`404`, no session `401`, and a signed-in non-member (an Access grant holder
-included) `403` — and a query over 200 characters or 10 terms is `400
-validation` attributed to `q`. Matching normalizes both sides (NFD, diacritics
-stripped, lowercased), splits the query on punctuation and requires every term
-to appear somewhere in the joined text of the ten declared fields (title,
-artist name, serie, medium, editions, date of creation, acquisition date, place
-of origin, provenance, notes); terms may match different fields, and a query
-that normalizes to no terms matches nothing. The acquisition date is searched in
-both its stored `YYYY-MM-DD` and its displayed `MMMM D, YYYY` form. Deleted
-works are never candidates and a member's drafts are. The filter runs in the API
-over the rows the list already reads, after the visibility verdict, so only
-matching works load their photos and documents; there is no SQL pushdown, no
-extension and no migration, and the list read remains the single seam to
-replace if catalogue sizes demand it. No matches is `200 []`, and an absent,
-empty or whitespace-only `q` leaves the list unchanged.
+The catalogue artwork list answers one read in two layers. Its free text is an
+optional member-only `q`: a present query is a member condition ahead of the
+visitor verdict — a missing catalogue is `404`, no session `401`, and a signed-in
+non-member (an Access grant holder included) `403` — and a query over 200
+characters or 10 terms is `400 validation` attributed to `q`. Matching
+normalizes both sides (NFD, diacritics stripped, lowercased), splits the query
+on punctuation and requires every term to appear somewhere in the joined text of
+the ten declared fields (title, artist name, serie, medium, editions, date of
+creation, acquisition date, place of origin, provenance, notes); terms may match
+different fields, and a query that normalizes to no terms matches nothing. The
+acquisition date is searched in both its stored `YYYY-MM-DD` and its displayed
+`MMMM D, YYYY` form. An absent, empty or whitespace-only `q` leaves the search
+unchanged.
+
+Its structured half — the contract an agent's search builds on — filters on the
+same ten text fields plus `status` and `availability`. A repeated parameter
+means OR within that field and different fields AND, so either artist with an
+oil medium is one request; at most 20 values in a field and 8 fields are
+allowed. A text value is normalized and matched within its own field only
+(`medium=oil` finds "Oil on canvas"; a work's note never answers a title
+filter), while an enumerated value is compared exactly and one outside its list
+is `400 validation`, never ignored. `q` ANDs with the filters. `sort` is
+`updated` (the default, newest first), `title`, `artistName` or
+`dateOfCreation`, compared normalized, each ending on `id`, so the order is
+total and a paged read can neither skip nor repeat a row. An absent `limit` is
+every match — which is what the web reads — a present one is capped at 100, and
+`offset` without `limit` is `400 validation`. The answer is the page envelope
+`{ artworks, total, limit, offset }`: `total` counts the matches before paging
+and `limit` is `null` when the caller named none. `facets` names one or more
+filterable fields and adds `facets: { <field>: [{ value, count }] }`, counted
+over the filtered set rather than the page, ordered by count descending then
+value and capped at 500 per field; an unknown field or facet is `400
+validation` naming it.
+
+Deleted works are never candidates and a member's drafts are; a visitor filters
+published works only, exactly the verdict the unfiltered read gives. Both halves
+run in the API over the rows the list already reads, after the visibility
+verdict, so only answering works load their photos and documents; there is no
+SQL pushdown, no index, no extension and no migration, and the list read
+remains the single seam to replace if catalogue sizes demand it. No matches is
+`200` with an empty `artworks` and `total: 0`.
 
 The artwork form's Artist Name suggestions are the caller's own vocabulary, not
 a catalogue's: `GET /api/v1/artist-names` takes no catalogue id and no

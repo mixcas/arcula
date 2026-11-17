@@ -34,12 +34,11 @@ import {
 import {
   MAX_ARTWORK_DOCUMENTS,
   MAX_ARTWORK_PHOTOS,
-  MAX_SEARCH_QUERY_LENGTH,
-  MAX_SEARCH_TERMS,
   UPDATABLE_TEXT_FIELDS,
   artworkCreateSchema,
   artworkUpdateSchema,
   isBlankSearchQuery,
+  parseArtworkSearchQuery,
   type ArtworkCreatePayload,
   type ArtworkRead,
   type ArtworkUpdatePayload,
@@ -117,23 +116,35 @@ artworkRoutes.get("/catalogues/:catalogueId/artworks/:artworkId", async (c) => {
 // GET list — member: every live work; non-member: the published ones; a
 // private catalogue, or a protected one the visitor holds no grant for: 403
 // (never 404 — the client maps the refusal to "private"). An optional `q` is
-// the member-only Catalogue search. Its questions are answered in order:
-// a missing catalogue is 404, no session is 401, a signed-in non-member —
-// grant holder included — is 403, and only then is a query past the shared
-// caps a validation error attributed to `q`. Absent, empty or whitespace-only
-// leaves the list exactly as it was.
+// the member-only Catalogue search; the structured query (filters, sort,
+// limit/offset, facets) is answered within the same verdict for any caller.
+// Its questions are answered in order: a missing catalogue is 404, no session
+// is 401, a signed-in non-member — grant holder included — is 403, and only
+// then is an unanswerable query a 400 validation error attributed to the
+// parameter that carries the problem. Absent, empty or whitespace-only `q`
+// leaves the search exactly as it was.
+//
+// The answer is a page envelope — `{ artworks, total, limit, offset }`, plus
+// `facets` when asked for — so a caller can page and can tell a page from a
+// whole result. The web reads `artworks`, which is what keeps its render
+// unchanged.
 artworkRoutes.get("/catalogues/:catalogueId/artworks", async (c) => {
   const session = await resolveSession(c);
   const catalogueId = param(c, "catalogueId");
   const rawQuery = c.req.query("q");
   const search =
     rawQuery !== undefined && !isBlankSearchQuery(rawQuery) ? rawQuery : null;
+  // The parse is pure and touches nothing; the read still answers the access
+  // questions before it consults the result, so a stranger's malformed query
+  // is a refusal, not a validation error.
+  const structured = parseArtworkSearchQuery(c.req.queries());
   const hasValidGrant = await grantHeld(c, catalogueId);
   const read = await readArtworkList(
     catalogueId,
     session?.user.id ?? null,
     hasValidGrant,
     search,
+    structured,
   );
   if (read.status === "not-found") {
     throw new ApiError("not-found", "The catalogue does not exist");
@@ -144,16 +155,20 @@ artworkRoutes.get("/catalogues/:catalogueId/artworks", async (c) => {
   if (read.status === "forbidden") {
     throw new ApiError("forbidden", "You do not have access to this catalogue");
   }
-  // The access questions came first; the query's own caps answer only for a
-  // caller who may search at all.
+  // The access questions came first; the query's own validity answers only
+  // for a caller who may read at all.
   if (read.status === "invalid-search") {
-    const message =
-      read.overflow === "too-long"
-        ? `Search is limited to ${MAX_SEARCH_QUERY_LENGTH} characters`
-        : `Search is limited to ${MAX_SEARCH_TERMS} words`;
-    throw new ApiError("validation", message, { fields: { q: message } });
+    throw new ApiError("validation", read.problem.message, {
+      fields: { [read.problem.field]: read.problem.message },
+    });
   }
-  return c.json(read.artworks);
+  return c.json({
+    artworks: read.artworks,
+    total: read.total,
+    limit: read.limit,
+    offset: read.offset,
+    ...(read.facets === undefined ? {} : { facets: read.facets }),
+  });
 });
 
 // POST — create the row and promote the staged entries, one transaction.

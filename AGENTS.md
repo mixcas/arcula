@@ -233,11 +233,11 @@ reviewing a diff.
   runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 19-step end-to-end
-  pass (health, SPA, sign-up, the `Secure` session cookie, a real 12 MP photo
-  through presign → direct PUT → process → save with the bucket's CORS
-  preflight probed against the deployment, a visitor read, and the reset-mail
-  path).
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 20-step end-to-end
+  pass (health, SPA, sign-up, the `Secure` session cookie, the session token
+  refused as an API bearer, a real 12 MP photo through presign → direct PUT →
+  process → save with the bucket's CORS preflight probed against the
+  deployment, a visitor read, and the reset-mail path).
   The catalogue cap is covered by the API integration suite instead, since
   reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
   either one by hand. It creates a throwaway `verify-<ts>@example.test` account

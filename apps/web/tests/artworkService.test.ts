@@ -112,8 +112,16 @@ describe("the catalogue list's search query", () => {
     updatedAt: { seconds: 1, nanoseconds: 0 },
   };
 
+  /** The page envelope the live list answers. */
+  const pageOf = (artworks: unknown[], total = artworks.length) => ({
+    artworks,
+    total,
+    limit: null,
+    offset: 0,
+  });
+
   it("appends q only when the query holds something", async () => {
-    const calls = stubFetch(ok([wireArtwork]));
+    const calls = stubFetch(ok(pageOf([wireArtwork])));
 
     await artworkService.getCatalogueArtworks("c1");
     await artworkService.getCatalogueArtworks("c1", "");
@@ -131,8 +139,20 @@ describe("the catalogue list's search query", () => {
     ]);
   });
 
+  it("reads the works out of the page envelope", async () => {
+    // The route answers `{ artworks, total, limit, offset }`; the page the app
+    // renders is `artworks`, and the paging facts it never asked for are not
+    // its business. A service that handed the envelope on would fail here.
+    stubFetch(ok(pageOf([wireArtwork], 7)));
+
+    const rows = await artworkService.getCatalogueArtworks("c1");
+
+    expect(rows.map((row) => row.id)).toEqual(["a1"]);
+    expect(rows[0]).not.toHaveProperty("artworks");
+  });
+
   it("encodes the query rather than pasting it into the URL", async () => {
-    const calls = stubFetch(ok([]));
+    const calls = stubFetch(ok(pageOf([])));
 
     await artworkService.getCatalogueArtworks("c1", "a&b");
 

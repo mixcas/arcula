@@ -124,6 +124,16 @@ const post = (path: string, body: unknown, authed = false) =>
       bearer.status === 401,
       `status ${bearer.status}`,
     );
+  } else {
+    // This step is the deployed proof of the rule, so a sign-up whose body no
+    // longer carries the token must fail it rather than skip it: a check that
+    // did not run is never a pass (as the CORS preflight above says in its own
+    // way).
+    step(
+      "the session token is refused as an API bearer",
+      false,
+      "sign-up did not return a session token, so the bearer refusal could not be checked",
+    );
   }
 }
 
@@ -362,7 +372,18 @@ if (catalogueId) {
     res.status === 200 && typeof body.name === "string",
   );
   const works = await get(`/api/v1/catalogues/${catalogueId}/artworks`);
-  step("visitor reads the catalogue's works", works.status === 200);
+  const page = (await works.json().catch(() => ({}))) as {
+    artworks?: unknown[];
+    total?: number;
+  };
+  step(
+    "visitor reads the catalogue's works",
+    // The list answers its page envelope, and the work saved above is in it.
+    works.status === 200 &&
+      Array.isArray(page.artworks) &&
+      page.artworks.length === 1 &&
+      page.total === 1,
+  );
   const deep = await get(`/catalogue/${catalogueId}`);
   step(
     "the public route serves the shell",

@@ -8,6 +8,7 @@
 // union of what they were doing, which is what makes it one helper.
 
 import { expect } from "vitest";
+import type { ArtworkPage, ArtworkRead } from "@arcula/shared";
 import { app } from "../../src/app";
 
 export const API = "http://localhost:8000";
@@ -53,6 +54,16 @@ export async function req(
 
 export async function json<T = unknown>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+/**
+ * The works of the live artwork list's answer. That route answers a page
+ * envelope — `{ artworks, total, limit, offset }` — so a suite that only
+ * cares which works came back asks here, and one that cares about the page
+ * facts reads them with `json<ArtworkPage>`.
+ */
+export async function listedArtworks(res: Response): Promise<ArtworkRead[]> {
+  return (await json<ArtworkPage>(res)).artworks;
 }
 
 /** The error envelope: the code, the failed fields and the structured

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ArtworkFacetEntry } from "../artworkSearch";
 import type { Artwork, Catalogue } from "../types";
 import { artworkAvailabilitySchema, artworkStatusSchema } from "./artwork";
 import { catalogueKindSchema } from "./catalogue";
@@ -162,6 +163,43 @@ export const catalogueReadSchema = z.object({
 });
 
 export type ArtworkRead = z.infer<typeof artworkReadSchema>;
+
+/** One value and how many works carry it, as a facet answers it. */
+const artworkFacetEntrySchema = z.object({
+  value: z.string(),
+  count: z.number(),
+});
+
+// The wire entry and the pure shape the API counts are one shape; a field
+// added to one and not the other fails the build.
+type FacetWireIsFacet =
+  z.infer<typeof artworkFacetEntrySchema> extends ArtworkFacetEntry
+    ? ArtworkFacetEntry extends z.infer<typeof artworkFacetEntrySchema>
+      ? true
+      : never
+    : never;
+const facetWireIsFacet: FacetWireIsFacet = true;
+void facetWireIsFacet;
+
+/**
+ * GET /catalogues/{cid}/artworks: a page of work documents and the facts that
+ * describe the page.
+ *
+ * `total` is the number of matches before paging; `limit` is `null` when the
+ * request named none, which means every match came back; `offset` is what the
+ * request asked for (zero when it asked nothing). `facets` is present only
+ * when the request named fields, one ordered list per field, counted over the
+ * filtered set rather than the page.
+ */
+export const artworkPageSchema = z.object({
+  artworks: z.array(artworkReadSchema),
+  total: z.number(),
+  limit: z.number().nullable(),
+  offset: z.number(),
+  facets: z.record(z.string(), z.array(artworkFacetEntrySchema)).optional(),
+});
+
+export type ArtworkPage = z.infer<typeof artworkPageSchema>;
 
 export type CatalogueRead = z.infer<typeof catalogueReadSchema>;
 

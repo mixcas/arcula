@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ArtworkRead } from "@arcula/shared";
 import { closeDb } from "../src/db";
-import { freshUser, json, req, uuid } from "./helpers/api";
+import { freshUser, json, listedArtworks, req, uuid } from "./helpers/api";
 import { makeCatalogue } from "./helpers/fixtures";
 
 let owner: Awaited<ReturnType<typeof freshUser>>;
@@ -201,7 +201,7 @@ describe("a visitor and a work's market state", () => {
 
     const list = await listArtworks(portfolio);
     expect(list.status).toBe(200);
-    const rows = await json<ArtworkRead[]>(list);
+    const rows = await listedArtworks(list);
     const row = rows.find((entry) => entry.id === aid);
     expect(row).toBeDefined();
     expect(row).not.toHaveProperty("availability");
@@ -209,7 +209,7 @@ describe("a visitor and a work's market state", () => {
     // The member read still carries it, and the row still stores it.
     const memberRead = await getArtwork(portfolio, aid, owner.cookies);
     expect((await json<ArtworkRead>(memberRead)).availability).toBe("sold");
-    const memberRows = await json<ArtworkRead[]>(
+    const memberRows = await listedArtworks(
       await listArtworks(portfolio, owner.cookies),
     );
     expect(memberRows.find((entry) => entry.id === aid)?.availability).toBe(

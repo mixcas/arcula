@@ -12,6 +12,7 @@
  */
 
 import {
+  artworkPageSchema,
   artworkReadSchema,
   artworkSearchSuffix,
   type Artwork,
@@ -30,6 +31,11 @@ export const artworkService = {
    * a member-only condition on the same read, so the URL carries `q` only when
    * there is something to search for. The public views and the PDF call this
    * with no query at all.
+   *
+   * The read answers a page envelope; the app renders the page whole, so it
+   * takes `artworks` and ignores the paging facts it did not ask for. An
+   * absent `limit` is what makes that page every match — the web's behaviour
+   * is the contract's default, not a special case here.
    */
   async getCatalogueArtworks(
     catalogueId: string,
@@ -37,8 +43,8 @@ export const artworkService = {
   ): Promise<Artwork[]> {
     const trimmed = query.trim();
     const suffix = artworkSearchSuffix(trimmed);
-    const rows = await apiRequest<unknown[]>(`${base(catalogueId)}${suffix}`);
-    return rows.map((row) => artworkReadSchema.parse(row));
+    const page = await apiRequest<unknown>(`${base(catalogueId)}${suffix}`);
+    return artworkPageSchema.parse(page).artworks;
   },
 
   /**
