@@ -29,6 +29,12 @@ name, never a subpath:
 - `limits.ts` — `CATALOGUE_LIMITS` and `catalogueLimitForTier`, the per-tier
   catalogue quota the API enforces on create. The quota counts owned
   catalogues only; a collaboration does not consume it.
+- `pdfFallback.ts` — the Catalogue PDF fallback face's character rule:
+  `pdfFallbackCharacters`, every distinct code point above U+007F in the drawn
+  texts, ascending, and `pdfFallbackChunks`, that string split by code point at
+  `MAX_PDF_FALLBACK_CODE_POINTS`. The web app sends the chunks and the API
+  subsets the face from one, so the two sides cannot disagree about what the
+  fallback must cover.
 - `email.ts` — `normalizeEmail`, the one trim-and-lowercase an address gets on
   both sides of every comparison.
 - `invitationTime.ts` — the invitation clock: `INVITATION_TTL_MS` (seven
