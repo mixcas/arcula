@@ -48,6 +48,12 @@ name, never a subpath:
   coexist ([ADR-0007](../../docs/adr/0007-ids-are-ten-base62-characters.md)).
 - `artworkPhotos.ts` — the photo-`order` invariant (`sortPhotos`,
   `reindexPhotos`) and the `photoUrl`/`photoSrcSet` ladder.
+- `artworkSearch.ts` — the ten-field Catalogue search predicate and its caps,
+  the query suffix helper, and `normalizeSearchText`, the collapse Artist Name
+  suggestions also use.
+- `stagedUpload.ts` — the headers a staged presigned PUT signs: the list the
+  media bucket's CORS rule must allow, read by path from `infra/cdk`'s test
+  because that package is not a workspace member.
 - `slug.ts` — `catalogueSlug`/`artworkSlug`, the `{urlizedName}-{id}` route
   params ⇄ bare ids.
 

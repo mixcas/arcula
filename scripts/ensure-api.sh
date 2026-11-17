@@ -47,9 +47,9 @@ if sh -c "$API_PROBE" 2>/dev/null; then
   if [ "$ANSWERED" != "$ROOT" ]; then
     echo "api: :$PORT is served by ${ANSWERED:-an API that does not name a checkout}" >&2
     echo "     — not this checkout ($ROOT). A suite must not test another branch's code." >&2
-    echo "     Stop that API (Ctrl-C in the checkout running \`bun run dev\`, or" >&2
-    echo "     \`sh scripts/stack-down.sh api\` there), or run this checkout's on its own" >&2
-    echo "     port — PORT, AUTH_BASE_URL and CORS_ORIGINS move together." >&2
+    echo "     Stop it with \`sh scripts/stack-down.sh api\` from any checkout (it finds" >&2
+    echo "     the server on :$PORT), or run this checkout's on its own port — PORT," >&2
+    echo "     AUTH_BASE_URL and CORS_ORIGINS move together." >&2
     exit 1
   fi
   echo "api: already up ($PORT, this checkout)"
