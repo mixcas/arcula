@@ -51,6 +51,7 @@ const getCatalogue = async (
 interface WorkValues {
   title: string;
   artistName: string;
+  serie?: string;
   medium?: string;
   dateOfCreation?: string;
   status?: "draft" | "published";
@@ -72,6 +73,7 @@ async function insertWork(
     catalogueId,
     title: values.title,
     artistName: values.artistName,
+    serie: values.serie ?? null,
     medium: values.medium ?? null,
     dateOfCreation: values.dateOfCreation ?? null,
     status: values.status ?? "published",
@@ -477,6 +479,72 @@ describe("get_artwork", () => {
       code: "not-found",
       message: "The artwork does not exist",
     });
+  });
+
+  it("omits every record field the Catalogue has switched off", async () => {
+    // The row keeps the values it had before the member changed their mind;
+    // the agent's answer must follow the settings, as the forms do. A field
+    // that is off is absent, not null, so a reader cannot mistake it for a
+    // cleared value.
+    const catalogueId = await makeCatalogue(owner.userId, {
+      name: "Fields Off",
+      kind: "collection",
+      isPublic: true,
+    });
+    const artworkId = await insertWork(catalogueId, owner.userId, {
+      title: "Hidden Fields",
+      artistName: "Roxana Alvarado",
+      serie: "Espacios",
+      medium: "Acrylic on wood",
+      dateOfCreation: "2021",
+    });
+    await db
+      .update(cataloguesTable)
+      .set({
+        artworkFields: {
+          serie: false,
+          medium: false,
+          dateOfCreation: false,
+        },
+      })
+      .where(eq(cataloguesTable.id, catalogueId));
+
+    const record = await getArtwork(owner.userId, catalogueId, artworkId);
+    expect(record).toMatchObject({
+      id: artworkId,
+      title: "Hidden Fields",
+      artistName: "Roxana Alvarado",
+      status: "published",
+    });
+    expect(record).not.toHaveProperty("serie");
+    expect(record).not.toHaveProperty("medium");
+    expect(record).not.toHaveProperty("dateOfCreation");
+    expect(record).not.toHaveProperty("availability");
+
+    const page = (await dispatchTool({
+      userId: owner.userId,
+      name: "search_artworks",
+      args: { catalogueId },
+    })) as {
+      artworks: Record<string, unknown>[];
+    };
+    expect(page.artworks[0]).toMatchObject({
+      id: artworkId,
+      title: "Hidden Fields",
+      artistName: "Roxana Alvarado",
+      status: "published",
+    });
+    expect(page.artworks[0]).not.toHaveProperty("medium");
+    expect(page.artworks[0]).not.toHaveProperty("dateOfCreation");
+    expect(page.artworks[0]).not.toHaveProperty("availability");
+
+    // Hidden, not cleared: the stored row still holds what the member once
+    // recorded, so switching the field back on brings it back.
+    const [row] = await db
+      .select({ serie: artworksTable.serie })
+      .from(artworksTable)
+      .where(eq(artworksTable.id, artworkId));
+    expect(row?.serie).toBe("Espacios");
   });
 
   it("answers not-found for a missing work or one in another Catalogue", async () => {

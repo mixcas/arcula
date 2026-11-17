@@ -26,14 +26,18 @@
 
 import { z } from "zod";
 import {
+  ARTWORK_FIELD_KEYS,
   artworkCreateSchema,
   artworkUpdateSchema,
   parseArtworkSearchQuery,
+  resolveArtworkFields,
+  type ArtworkFieldStates,
   type ArtworkRead,
   type ArtworkSearchProblem,
 } from "@arcula/shared";
 import { readArtwork, readArtworkList } from "../../artworkRead";
 import { createArtworkFor, updateArtworkFor } from "../../artworkWrite";
+import { loadCatalogue } from "../../authorize";
 import { ApiError } from "../../errors";
 import { defineTool } from "../tool";
 
@@ -87,26 +91,61 @@ const invalidSearch = (problem: ArtworkSearchProblem): ApiError =>
   });
 
 /**
+ * What the Catalogue records, resolved from the row the read already loaded.
+ * A missing Catalogue answers `null`; the caller has already refused the read
+ * in that case, so this only guards against a deletion between the two reads.
+ */
+async function enabledFieldsOf(
+  catalogueId: string,
+): Promise<ArtworkFieldStates | null> {
+  const catalogue = await loadCatalogue(catalogueId);
+  return catalogue
+    ? resolveArtworkFields(catalogue.kind, catalogue.artworkFields).enabled
+    : null;
+}
+
+/**
+ * The record an agent may see: a field the Catalogue does not record is
+ * absent, never `null`. The row may still hold a value from before the field
+ * was switched off — the app's forms hide it, and the agent surface hides it
+ * too, so a search and a read agree with the settings.
+ */
+function recordedFields(
+  artwork: ArtworkRead,
+  enabled: ArtworkFieldStates,
+): Record<string, unknown> {
+  const view: Record<string, unknown> = { ...artwork };
+  for (const field of ARTWORK_FIELD_KEYS) {
+    if (!enabled[field]) delete view[field];
+  }
+  return view;
+}
+
+/**
  * One work as a search row names it: identity, status, the market state, the
- * medium and the two dates — never photos, documents or variants.
+ * medium and the two dates — never photos, documents or variants. The three
+ * record fields a summary carries are filtered by the Catalogue's settings, so
+ * a disabled field never reaches the agent in a page either.
  *
  * The absent keys follow the wire document's rules rather than inventing
  * values: `availability` is the member's fact (a visitor's work has no key at
  * all) and a blank text field is absent, so a summary reads like the document
  * it summarizes.
  */
-const workSummary = (work: ArtworkRead) => ({
+const workSummary = (work: ArtworkRead, enabled: ArtworkFieldStates) => ({
   id: work.id,
   title: work.title,
   artistName: work.artistName,
   status: work.status,
-  ...(work.availability === undefined
-    ? {}
-    : { availability: work.availability }),
-  ...(work.medium === undefined ? {} : { medium: work.medium }),
-  ...(work.dateOfCreation === undefined
-    ? {}
-    : { dateOfCreation: work.dateOfCreation }),
+  ...(enabled.availability && work.availability !== undefined
+    ? { availability: work.availability }
+    : {}),
+  ...(enabled.medium && work.medium !== undefined
+    ? { medium: work.medium }
+    : {}),
+  ...(enabled.dateOfCreation && work.dateOfCreation !== undefined
+    ? { dateOfCreation: work.dateOfCreation }
+    : {}),
   updatedAt: work.updatedAt,
 });
 
@@ -184,11 +223,15 @@ export const artworkTools = [
       if (read.status === "invalid-search") {
         throw invalidSearch(read.problem);
       }
+      const enabled = await enabledFieldsOf(args.catalogueId);
+      if (enabled === null) {
+        throw new ApiError("not-found", "The catalogue does not exist");
+      }
       return {
         total: read.total,
         limit: read.limit,
         offset: read.offset,
-        artworks: read.artworks.map(workSummary),
+        artworks: read.artworks.map((work) => workSummary(work, enabled)),
         ...(read.facets === undefined ? {} : { facets: read.facets }),
       };
     },
@@ -211,7 +254,11 @@ export const artworkTools = [
       if (read.status !== "ok" || read.artwork.deletedAt != null) {
         throw new ApiError("not-found", "The artwork does not exist");
       }
-      return read.artwork;
+      const enabled = await enabledFieldsOf(catalogueId);
+      if (enabled === null) {
+        throw new ApiError("not-found", "The artwork does not exist");
+      }
+      return recordedFields(read.artwork, enabled);
     },
   }),
 
@@ -234,8 +281,14 @@ export const artworkTools = [
       "here.",
     inputSchema: createArtworkInput,
     write: true,
-    call: async ({ catalogueId, ...fields }, userId) =>
-      createArtworkFor(userId, catalogueId, fields),
+    call: async ({ catalogueId, ...fields }, userId) => {
+      const created = await createArtworkFor(userId, catalogueId, fields);
+      const enabled = await enabledFieldsOf(catalogueId);
+      if (enabled === null) {
+        throw new ApiError("not-found", "The catalogue does not exist");
+      }
+      return recordedFields(created, enabled);
+    },
   }),
 
   defineTool({
@@ -254,7 +307,18 @@ export const artworkTools = [
       "Use search_artworks to find an Artwork's id.",
     inputSchema: updateArtworkInput,
     write: true,
-    call: async ({ catalogueId, artworkId, ...fields }, userId) =>
-      updateArtworkFor(userId, catalogueId, artworkId, fields),
+    call: async ({ catalogueId, artworkId, ...fields }, userId) => {
+      const written = await updateArtworkFor(
+        userId,
+        catalogueId,
+        artworkId,
+        fields,
+      );
+      const enabled = await enabledFieldsOf(catalogueId);
+      if (enabled === null) {
+        throw new ApiError("not-found", "The artwork does not exist");
+      }
+      return recordedFields(written, enabled);
+    },
   }),
 ];
