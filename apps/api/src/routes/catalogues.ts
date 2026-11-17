@@ -38,7 +38,6 @@ import {
   user as userTable,
 } from "@arcula/db";
 import {
-  ARTWORK_FIELD_KEYS,
   UPDATABLE_TEXT_FIELDS,
   artworkBulkSelectionSchema,
   artworkImportSchema,
@@ -47,6 +46,7 @@ import {
   catalogueUpdateSchema,
   catalogueLimitForTier,
   artworkSchema,
+  disabledArtworkFieldsIn,
   IMPORTED_WORK_STATUS,
   normaliseArtworkFields,
   resolveArtworkFields,
@@ -544,10 +544,10 @@ catalogueRoutes.post(
         row !== null && typeof row === "object"
           ? { ...(row as Record<string, unknown>) }
           : {};
-      for (const field of ARTWORK_FIELD_KEYS) {
-        if (!enabled[field]) {
-          delete fields[field];
-        }
+      // The same predicate the save routes refuse with, answered by deleting:
+      // a row still lands with every field this catalogue does record.
+      for (const field of disabledArtworkFieldsIn(enabled, fields)) {
+        delete fields[field];
       }
       const parsed = artworkSchema.safeParse({
         ...fields,
