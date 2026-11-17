@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   cataloguePdfFileName,
   cataloguePdfTexts,
-  fallbackCharacters,
-  fallbackChunks,
   fitInsideBox,
   IMAGE_UNAVAILABLE,
   PHOTO_PRINT_BOX,
@@ -13,7 +11,11 @@ import {
   printedSize,
   shouldWarnForLargeExport,
 } from "@/components/pdf/cataloguePdfPreflight";
-import type { Artwork, ArtworkPhoto } from "@arcula/shared";
+import {
+  pdfFallbackCharacters,
+  type Artwork,
+  type ArtworkPhoto,
+} from "@arcula/shared";
 
 const photo = (id: string, name = `${id}.jpg`): ArtworkPhoto => ({
   id,
@@ -160,61 +162,6 @@ describe("placeInPhotoBox", () => {
   });
 });
 
-describe("fallbackCharacters", () => {
-  it("returns an empty string for ASCII-only text, DEL included", () => {
-    expect(fallbackCharacters(["Cafe 123", "plain", "\u007f"])).toBe("");
-  });
-
-  it("keeps distinct non-ASCII code points, sorted", () => {
-    expect(fallbackCharacters(["aéé中中"])).toBe("é中");
-  });
-
-  it("returns the non-ASCII subset of a mixed string", () => {
-    expect(fallbackCharacters(["Café 123 日本"])).toBe("é日本");
-  });
-
-  it("combines several strings", () => {
-    expect(fallbackCharacters(["é", "abc", "中"])).toBe("é中");
-  });
-
-  it("handles an astral code point as one character", () => {
-    const characters = fallbackCharacters(["a😀b😀"]);
-
-    expect(characters).toBe("😀");
-    expect(Array.from(characters)).toHaveLength(1);
-  });
-});
-
-describe("fallbackChunks", () => {
-  it("splits the empty string into no chunks", () => {
-    expect(fallbackChunks("")).toEqual([]);
-  });
-
-  it("keeps one chunk for one character", () => {
-    expect(fallbackChunks("é")).toEqual(["é"]);
-  });
-
-  it("keeps one chunk at the 512-character boundary", () => {
-    const chunks = fallbackChunks("é".repeat(512));
-
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toBe("é".repeat(512));
-  });
-
-  it("splits two chunks past 512 characters", () => {
-    expect(fallbackChunks("é".repeat(513))).toEqual(["é".repeat(512), "é"]);
-  });
-
-  it("splits by code point, not by UTF-16 unit", () => {
-    const chunks = fallbackChunks("😀".repeat(513));
-
-    expect(chunks).toHaveLength(2);
-    expect(chunks[0]).toBe("😀".repeat(512));
-    expect(chunks[1]).toBe("😀");
-    expect(Array.from(chunks[0])).toHaveLength(512);
-  });
-});
-
 describe("cataloguePdfTexts", () => {
   it("collects the catalogue name, titles, metadata values and placeholder", () => {
     const texts = cataloguePdfTexts("Flores Solares", [
@@ -323,7 +270,7 @@ describe("cataloguePdfTexts", () => {
       artwork({ title: "Été 日本", artistName: "Ana" }),
     ]);
 
-    expect(fallbackCharacters(texts)).toBe("Éé收日本藏");
+    expect(pdfFallbackCharacters(texts)).toBe("Éé收日本藏");
   });
 
   it("does not feed a non-ASCII photo filename to the fallback set", () => {
@@ -335,7 +282,7 @@ describe("cataloguePdfTexts", () => {
       }),
     ]);
 
-    expect(fallbackCharacters(texts)).not.toContain("写");
+    expect(pdfFallbackCharacters(texts)).not.toContain("写");
   });
 });
 

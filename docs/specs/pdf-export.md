@@ -514,13 +514,14 @@ Production shape (this replaces the prototype's call to Google Fonts):
   symbol range; color emoji and scripts it lacks remain a documented `.notdef`
   limitation.
 - Add `GET /api/v1/pdf/font-fallback?text=<characters>` to the API. It is public
-  (a Visitor needs it too), takes the distinct **non-ASCII** characters, and
-  answers a TrueType subset (`font/ttf`) of the bundled face. It never fetches
-  a remote font. The subsetting is harfbuzz's (`subset-font`), which writes a
-  complete font — see **The subsetter** below.
-- Cap the request at **512 distinct code points**. The client requests the
-  document's set in chunks of 512 and stacks the resulting families, so a
-  pathological collection still covers every character it can.
+  (a Visitor needs it too), normalises the request through the shared
+  `pdfFallbackCharacters`, and answers a TrueType subset (`font/ttf`) of the
+  bundled face. It never fetches a remote font. The subsetting is harfbuzz's
+  (`subset-font`), which writes a complete font — see **The subsetter** below.
+- Cap the request at **512 distinct code points**, the shared
+  `MAX_PDF_FALLBACK_CODE_POINTS`. The client requests the document's set in
+  chunks of that size and stacks the resulting families, so a pathological
+  collection still covers every character it can.
 - Cache the subset in memory, keyed by the sorted character string, 32 entries
   and a 24-hour TTL per warm Lambda; send
   `Cache-Control: public, max-age=86400`.
@@ -536,10 +537,16 @@ path relative to a source module would otherwise break in production.
 
 Client side:
 
-- `collectionPdfTexts` collects every string the document draws — the Collection name,
+- `cataloguePdfTexts` collects every string the document draws — the Collection name,
   every Title, every metadata value, and the fixed placeholder copy. It does
   **not** include the photo filename (which is not printed).
-- Keep the distinct non-ASCII code points, sorted.
+- The character rule lives once, in `packages/shared/src/pdfFallback.ts`:
+  `pdfFallbackCharacters` returns the distinct non-ASCII code points in
+  ascending code-point order, and `pdfFallbackChunks` splits them at the shared
+  cap. The export sends those chunks and the API normalises each request
+  through the same function, so the two sides cannot disagree about what the
+  fallback must cover. The cap is the shared
+  `MAX_PDF_FALLBACK_CODE_POINTS`, and is not the rule.
 - Fetch each chunk, convert the response to a data URL, and register it as
   `Arcula Fallback 1`, `2`, … in chunk order, with the same source for 400 and 700.
 - Render the document with
@@ -772,7 +779,7 @@ Two surfaces, and each one offers the actions exactly once.
   restarting the export, drops whatever the previous run reported — its
   progress or its file — with it.
 - **Download** is an `<a download={filename} href={blobUrl}>`; the blob URL is
-  same-origin. The filename is `collectionPdfFileName(name)` — **Download**
+  same-origin. The filename is `cataloguePdfFileName(name)` — **Download**
   carries the exported file's own name.
 - **Open PDF** calls
   `window.open(blobUrl, "_blank", "noopener,noreferrer")`. This is the Safari
@@ -990,11 +997,13 @@ five-per-grid, draft included). That is the acceptance bar.
   box, preserves aspect ratio when it is larger, rounds to at least 1 px, and
   uses the 2100 × 2417 target at 300 dpi — the number `xxlarge`'s 3000 px exists
   to reach. Mutating the `min(1, …)` must fail the no-enlarge test.
-- `fallbackCharacters` keeps distinct non-ASCII code points only, sorted;
+- `pdfFallbackCharacters` keeps distinct non-ASCII code points only, sorted;
   ASCII-only text returns an empty string; a mixed string returns the non-ASCII
-  subset. `fallbackChunks` splits on code points, not UTF-16 units: 0 → no
-  chunks, 1 and 512 → one, 513 → two.
-- `collectionPdfTexts` includes the Collection name, every Title, every
+  subset. `pdfFallbackChunks` splits on code points, not UTF-16 units: 0 → no
+  chunks, 1 and 512 → one, 513 → two. Both are the shared module's
+  (`packages/shared/src/pdfFallback.ts`), which the web export and the API both
+  read.
+- `cataloguePdfTexts` includes the Collection name, every Title, every
   metadata value and the placeholder copy, and excludes the photo filename. A
   non-ASCII title reaches the fallback set.
 - `shouldWarnForLargeExport` is true at 30 photo pages and false at 29; true at

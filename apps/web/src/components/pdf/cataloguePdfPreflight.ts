@@ -2,17 +2,13 @@
  * The Catalogue PDF's preflight facts.
  *
  * Everything here is a pure decision made before rendering: how a photo fits
- * the 300 dpi print box, which non-ASCII characters the fallback font must
- * cover and how those are chunked for the API, the complete set of strings the
- * document draws, the large-export warning, and the download filename. See
- * `docs/specs/pdf-export.md`.
+ * the 300 dpi print box, the complete set of strings the document draws, the
+ * large-export warning, and the download filename. Which characters the
+ * fallback font must cover is the shared rule's (`pdfFallbackCharacters`,
+ * `pdfFallbackChunks`), not this module's. See `docs/specs/pdf-export.md`.
  */
 
-import {
-  MAX_PDF_FALLBACK_CODE_POINTS,
-  urlizeName,
-  type Artwork,
-} from "@arcula/shared";
+import { urlizeName, type Artwork } from "@arcula/shared";
 
 import {
   buildCataloguePdfPlan,
@@ -110,42 +106,6 @@ export const placeInPhotoBox = (printed: PointSize): PhotoPlacement => {
     width,
     height,
   };
-};
-
-/** The API accepts at most this many distinct code points per subset. */
-const FALLBACK_CHUNK_SIZE = MAX_PDF_FALLBACK_CODE_POINTS;
-
-/**
- * The distinct non-ASCII code points in the drawn text, ascending.
- *
- * Iterating with `for…of` walks code points, so an astral character is one
- * entry rather than two surrogate halves.
- */
-export const fallbackCharacters = (texts: string[]): string => {
-  const codePoints = new Set<number>();
-  for (const text of texts) {
-    for (const character of text) {
-      const codePoint = character.codePointAt(0);
-      // 0x7f (DEL) is ASCII too; the brand face owns every ASCII code point.
-      if (codePoint !== undefined && codePoint > 0x7f) {
-        codePoints.add(codePoint);
-      }
-    }
-  }
-  return [...codePoints]
-    .sort((a, b) => a - b)
-    .map((codePoint) => String.fromCodePoint(codePoint))
-    .join("");
-};
-
-/** Split a character string by code point into chunks of at most 512. */
-export const fallbackChunks = (characters: string): string[] => {
-  const codePoints = Array.from(characters);
-  const chunks: string[] = [];
-  for (let index = 0; index < codePoints.length; index += FALLBACK_CHUNK_SIZE) {
-    chunks.push(codePoints.slice(index, index + FALLBACK_CHUNK_SIZE).join(""));
-  }
-  return chunks;
 };
 
 /** The copy a failed photo page draws instead of the image. */
