@@ -145,7 +145,9 @@ carries a written reason in the config and is not added silently.
   proxied request, so a bare `vitest run` cannot test another branch either. The
   way out is to stop that API or to give this checkout its own port — `PORT`,
   `AUTH_BASE_URL` and `CORS_ORIGINS` move together, so it is a recipe rather
-  than a flag.
+  than a flag. `sh scripts/stack-down.sh api` stops the server by port when the
+  checkout that started it is gone: a removed worktree leaves its API listening
+  with no pid file of its own.
 - **A worktree borrows the main checkout's stack.** `.env` is gitignored and
   the compose project is named after the main checkout, so
   `scripts/local-env.sh` hands every caller the main checkout's `.env`, and
@@ -156,7 +158,10 @@ carries a written reason in the config and is not added silently.
   main checkout's `.stack/`. Two consequences: `stack-down.sh` run from a
   worktree stops that shared stack, and one database holds one schema — a
   branch carrying a migration owns the local DB while it is under test, so a
-  sibling worktree must not assume the schema it expected.
+  sibling worktree must not assume the schema it expected. A fresh worktree
+  also has no `node_modules`: `sh scripts/worktree-new.sh <branch>` creates one
+  beside the main checkout and runs both installs (the workspace's, then
+  `infra/cdk`'s), which is what `bun run check` needs.
 - **SeaweedFS must advertise an address that still exists.**
   `scripts/stack-up.sh` pins it to loopback, so a DHCP change cannot break a
   stack that script started; a `weed server` started before the pin, or by hand,
