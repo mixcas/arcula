@@ -8,10 +8,15 @@
 // depends on: `limit-reached` is relayed to the person, `validation` is fixed,
 // `forbidden` ends the attempt.
 //
+// A write spends the account's allowance here, after the arguments validate
+// and before the tool touches a row: a refused call writes nothing, and a read
+// never pays. The limiter is keyed by the verified subject and nothing else.
+//
 // A later ticket adds a tool group by writing `tools/<group>.ts` and listing it
 // in `registry.ts`; nothing in the transport changes.
 
 import type { z } from "zod";
+import { claimAgentWrite } from "../agentLimiter";
 import { ApiError } from "../errors";
 import { tools } from "./registry";
 
@@ -48,6 +53,10 @@ export async function dispatchTool(request: {
       "The arguments are not valid",
       fieldsOf(parsed.error),
     );
+  }
+  // After the schema, before the write: a refused call leaves no row behind.
+  if (tool.write === true) {
+    await claimAgentWrite(request.userId);
   }
   return tool.call(parsed.data, request.userId);
 }

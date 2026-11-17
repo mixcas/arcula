@@ -18,6 +18,9 @@ export interface ToolDefinition<S extends z.ZodObject = z.ZodObject> {
    *  the retired `collection`, and it carries the rules a schema cannot. */
   description: string;
   inputSchema: S;
+  /** Whether the call writes. A write spends the account's allowance before
+   *  it runs; a read is never metered. */
+  write?: boolean;
   call: (args: z.output<S>, userId: string) => Promise<unknown>;
 }
 

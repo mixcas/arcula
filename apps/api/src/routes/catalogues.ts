@@ -42,7 +42,6 @@ import {
   catalogueCreateSchema,
   catalogueUnlockSchema,
   catalogueUpdateSchema,
-  catalogueLimitForTier,
   artworkSchema,
   IMPORTED_WORK_STATUS,
   type ArtworkBulkSelectionPayload,
@@ -70,7 +69,8 @@ import {
   mintGrantToken,
 } from "../catalogueGrants";
 import { listReadableCatalogues } from "../catalogueList";
-import { hashPassword, verifyPassword } from "../cataloguePassword";
+import { createCatalogue, writeCatalogue } from "../catalogueWrite";
+import { verifyPassword } from "../cataloguePassword";
 import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
@@ -164,57 +164,15 @@ catalogueRoutes.get("/catalogues", async (c) => {
 
 // POST /catalogues — the body validates first, then the cap is checked
 // before the row is written: the count is over the caller's own catalogues,
-// the limit is read off the caller's tier.
+// the limit is read off the caller's tier. The write itself is
+// `createCatalogue`, shared with the agent surface's tool.
 catalogueRoutes.post("/catalogues", requireSession, async (c) => {
   const user = c.get("user");
   const payload: CatalogueCreatePayload = await parseBody(
     c,
     catalogueCreateSchema,
   );
-
-  const limit = catalogueLimitForTier(user.tier);
-  const owned = await db
-    .select({ id: cataloguesTable.id })
-    .from(cataloguesTable)
-    .where(
-      and(
-        eq(cataloguesTable.userId, user.id),
-        // A deleted catalogue frees its slot the moment it is stamped.
-        isNull(cataloguesTable.deletedAt),
-      ),
-    );
-  if (owned.length >= limit) {
-    throw new ApiError(
-      "limit-reached",
-      `Your plan allows at most ${limit} catalogue${limit === 1 ? "" : "s"}`,
-    );
-  }
-
-  const id = mintId();
-  const now = new Date();
-  await db.insert(cataloguesTable).values({
-    id,
-    userId: user.id,
-    // Fixed at creation: the second segment of every final media key, so a
-    // later transfer of the catalogue moves no object. A fresh opaque id,
-    // not the owner's — the owner may change, the namespace may not.
-    mediaNamespaceId: mintId(),
-    name: payload.name,
-    kind: payload.kind,
-    description: payload.description ?? null,
-    isPublic: payload.isPublic,
-    createdAt: now,
-    updatedAt: now,
-  });
-  // The insert just committed; read-back failure is a server bug.
-  const row = await loadCatalogue(id);
-  if (!row) {
-    throw new ApiError(
-      "internal",
-      "The created catalogue could not be read back",
-    );
-  }
-  return c.json(serializeCatalogue(row, { audience: "member" }), 201);
+  return c.json(await createCatalogue(user.id, payload), 201);
 });
 
 // GET one — a member always; a visitor when the catalogue is public. The
@@ -233,73 +191,17 @@ catalogueRoutes.get("/catalogues/:catalogueId", async (c) => {
 // only what changed" payload safe. A body that names nothing writes nothing:
 // no column moves, and `updatedAt` is left alone, so "updated" continues to
 // mean something was.
+//
+// The write is `writeCatalogue`, shared with the agent surface's tool; the
+// membership check stays first here so a non-member's malformed body is the
+// refusal, not a 400.
 catalogueRoutes.patch("/catalogues/:catalogueId", requireSession, async (c) => {
   const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
   const payload: CatalogueUpdatePayload = await parseBody(
     c,
     catalogueUpdateSchema,
   );
-
-  // A password present means a write: a string sets (or overwrites) it,
-  // `null` removes it. Hashing happens before the transaction — it touches
-  // no row — and the update plus the grant revocation share one, so a
-  // change can never leave a reader holding a grant to the old password.
-  // An absent key leaves the column alone, which is why making a catalogue
-  // private and public again returns it to Protected.
-  const passwordHash =
-    payload.password === undefined
-      ? undefined
-      : payload.password === null
-        ? null
-        : await hashPassword(payload.password);
-
-  // Build the update only from the keys the body carried: an absent key
-  // leaves its column alone, and a body that names nothing is a successful
-  // no-op that moves no column and no timestamp.
-  const set: Partial<typeof cataloguesTable.$inferInsert> = {};
-  if (payload.name !== undefined) {
-    set.name = payload.name;
-  }
-  if (payload.isPublic !== undefined) {
-    set.isPublic = payload.isPublic;
-  }
-  if (payload.description !== undefined) {
-    set.description = payload.description ?? null;
-  }
-  if (payload.skin !== undefined) {
-    set.skin = payload.skin ?? null;
-  }
-  if (payload.skinOptions !== undefined) {
-    set.skinOptions = payload.skinOptions ?? null;
-  }
-  if (passwordHash !== undefined) {
-    set.passwordHash = passwordHash;
-  }
-  if (Object.keys(set).length > 0) {
-    set.updatedAt = new Date();
-    await safeTx(async (tx) => {
-      await tx
-        .update(cataloguesTable)
-        .set(set)
-        .where(eq(cataloguesTable.id, catalogue.id));
-      if (passwordHash !== undefined) {
-        // Revocation, in the same transaction: setting and changing are one
-        // operation, and removing has nothing left to admit.
-        await tx
-          .delete(grantsTable)
-          .where(eq(grantsTable.catalogueId, catalogue.id));
-      }
-    });
-  }
-
-  const row = await loadCatalogue(catalogue.id);
-  if (!row) {
-    throw new ApiError(
-      "internal",
-      "The saved catalogue could not be read back",
-    );
-  }
-  return c.json(serializeCatalogue(row, { audience: "member" }));
+  return c.json(await writeCatalogue(catalogue, payload));
 });
 
 // DELETE — owner-only. One transaction stamps `deletedAt`/`updatedAt`,
