@@ -127,7 +127,7 @@ console.log("spa + binary: ok");
 
 // 4. Sharp, the headline: a real 12 MP source through the exact pipeline
 //    the process route runs. Measured separately for decode+orient and
-//    the five encodes.
+//    the six encodes.
 const sharp = (await import("sharp")).default;
 const W = 4000;
 const H = 3000;
@@ -156,7 +156,11 @@ t = Date.now();
 const variants = await generateVariants(oriented);
 const variantsMs = Date.now() - t;
 
-if (variants.length !== 5) fail(`expected 5 variants, got ${variants.length}`);
+// The recipe's own count (apps/api/src/media/variants.ts): six since
+// `xxlarge` joined for the Catalogue PDF and the fullscreen slideshow. A
+// literal, not an import — the smoke's job is to notice when the recipe and
+// the package disagree, so it must not read its expectation from the recipe.
+if (variants.length !== 6) fail(`expected 6 variants, got ${variants.length}`);
 for (const v of variants) {
   if (v.contentType !== "image/webp" || v.buffer.length === 0) {
     fail(`variant ${v.key} is not a non-empty WebP`);
@@ -166,7 +170,7 @@ for (const v of variants) {
   );
 }
 console.log(
-  `sharp: orient ${orientMs}ms + 5 encodes ${variantsMs}ms = ${orientMs + variantsMs}ms per photo`,
+  `sharp: orient ${orientMs}ms + ${variants.length} encodes ${variantsMs}ms = ${orientMs + variantsMs}ms per photo`,
 );
 
 console.log(`SMOKE OK (total ${Date.now() - started}ms)`);
