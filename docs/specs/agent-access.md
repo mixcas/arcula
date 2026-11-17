@@ -1,8 +1,12 @@
 # Agent access
 
-**Status: implementation-ready.** This is the contract for Arcula's agent
-surface: a hosted MCP server that lets a person drive their Catalogues and
-Artworks from an agent. The decision and its rejected alternatives are
+**Status: implemented.** This is the plan that shipped; `DESIGN.md` → "Agent
+access (MCP)" is the as-built record. Known deltas: the CSV route is
+`/import/csv`; the tool's `status` defaults to `draft` but accepts
+`published` when the person asks; the suite is broader than the three seams
+named under [Tests](#tests); and the Artwork fields registry (ADR-0013) later
+made Availability a per-Catalogue choice, superseding the old Collection rule.
+The decision and its rejected alternatives are
 [ADR-0014](../adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md); this
 document is the build.
 
@@ -54,8 +58,12 @@ calls, under the same membership verdicts.
   Connected apps list repeats later.
 - The tool layer receives a **verified** subject. It never parses a token.
 
-Exact well-known paths are the plugin's to publish; confirm them against the
-installed version before mounting, and make the SPA exception match.
+The plugin's models are eight tables — `jwks` and the seven OAuth-provider
+tables — hand-authored in `packages/db`; `0013_agent_access` ships them before
+the code that reads them. Exact well-known paths are the plugin's to publish;
+confirm them against the installed version before mounting, and make the SPA
+exception match. The guard reads the `oauthConsent` row on every call, so
+revoking a Connection is immediate even though access tokens are JWTs.
 
 ## The tool inventory
 
@@ -145,15 +153,15 @@ to replace if a Catalogue's size ever demands it.
 
 ### `import_artworks`
 
-`POST /api/v1/catalogues/:catalogueId/import` — the CSV route, one optional
+`POST /api/v1/catalogues/:catalogueId/import/csv` — the CSV route, one optional
 field wider.
 
 - The payload is `artworkImportSchema` plus `status?: "published" | "draft"`,
   defaulting to `IMPORTED_WORK_STATUS` (`published`) at the route.
   `IMPORTED_WORK_STATUS` stops being "the status every imported work lands with"
   and becomes the default; its doc comment says so.
-- The MCP tool always sends `draft`. A person's CSV import sends nothing and is
-  unchanged.
+- The MCP tool sends `draft` unless the caller explicitly names `published`. A
+  person's CSV import sends nothing and is unchanged.
 - Validation is the existing per-row contract: each row is parsed against
   `artworkSchema`, a failing row lands in `rejected` with its index and its
   failed fields, and the accepted rows are written in one transaction.
@@ -171,11 +179,17 @@ message, so the agent can relay it verbatim:
 | `validation`    | terminal — fix the arguments                              |
 | `unauthorized`  | terminal — the connection is gone; re-connect             |
 | `forbidden`     | terminal — this account may not do this here              |
-| `not-found`     | terminal — no such Catalogue, work or membership          |
+| `not-found`     | terminal — no such Catalogue or work                      |
 | `conflict`      | terminal — the state does not allow it                    |
 | `limit-reached` | terminal — the tier's allowance is spent; tell the person |
 | `rate-limited`  | retryable after the window                                |
 | `internal`      | retryable once; then tell the person                      |
+
+`unauthorized` is the endpoint's `401` (the challenge, or a revoked
+Connection), not a tool result; `conflict` is in the envelope but no tool
+raises it in this release. A protected public Catalogue adds
+`password-required` (the app's challenge, which an agent cannot satisfy), and a
+save naming a field the Catalogue has switched off adds `field-disabled`.
 
 ## Rate limiting
 
@@ -186,9 +200,11 @@ A per-account token bucket on **writes only**; reads are unmetered.
   be one bucket for every user in the product.
 - `AGENT_WRITE_CAPACITY = 20`, refilled at one per second — 60 writes a minute
   sustained. Imports are writes and additionally capped at **5 an hour**.
-- Both are fixed windows in a new table on the `catalogueUnlockAttempts` pattern
-  (`(userId, windowStart)` with a count, written by one atomic upsert), because
-  the Lambda holds no state between requests. **The migration ships alone**
+- Both live in one table on the `catalogueUnlockAttempts` pattern
+  (`(userId, bucket, windowStart)` with a count, written by one atomic upsert),
+  because the Lambda holds no state between requests: writes are per-second rows
+  summed over a rolling twenty-second window, and imports are one fixed hourly
+  row. **The migrations ship alone**
   ([AGENTS.md](../../AGENTS.md) → _A schema change ships alone_).
 - Exhausted answers `429 rate-limited` with a message naming the allowance and
   the window, and no `Retry-After` header — the product's one precedent
@@ -212,7 +228,9 @@ path move to the session path or are deleted.
 
 ## Tests
 
-Three, and nothing else — `docs/testing.md`'s criterion is the filter.
+Three seams, and `docs/testing.md`'s criterion is the filter. The tickets also
+add the search contract's API suite and the import-status cases; the SDK
+transport and Better Auth's token issuance stay untested.
 
 1. **The challenge.** An unauthenticated `POST /api/mcp` answers `401` with a
    `resource_metadata` parameter. Ours to break by mounting the handler wrong.

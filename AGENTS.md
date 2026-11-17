@@ -214,7 +214,9 @@ reads are not.
 
 The as-built detail — the endpoint, the Connection model and its one-install
 limitation, the tool surface, the search contract, the import status rule and
-the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. The
+the limiter's numbers — is in **`DESIGN.md` → "Agent access (MCP)"**. Client
+setup, including OpenCode's 2026-07-28 protocol pin, is in
+[`docs/connecting-a-client.md`](docs/connecting-a-client.md). The
 implementation contract is
 [`docs/specs/agent-access.md`](docs/specs/agent-access.md), and the decision
 with its rejected alternatives is
@@ -255,10 +257,12 @@ reviewing a diff.
   Prefer subpath imports (`import debounce from "lodash/debounce"`) for smaller
   bundles.
 - Config comes from the repo-root `.env`; `VITE_*` vars are web-only and are
-  inlined at build time. The repo-root file is the local fallback: a deploy
-  reads `infra/cdk/.env.<env>` instead (the untracked `.env` there is
-  production's fallback, and dev deliberately has none — falling back would put
-  production's database URL into a dev deploy). Never commit real secrets; see
+  inlined at build time. A worktree made by `scripts/worktree-new.sh` gets its
+  own gitignored `.env` with a per-branch port; otherwise the repo-root file is
+  the local fallback. A deploy reads `infra/cdk/.env.<env>` instead (the
+  untracked `.env` there is production's fallback, and dev deliberately has none
+  — falling back would put production's database URL into a dev deploy). Never
+  commit real secrets; see
   **Two rules that are load-bearing** above.
 
 ## Validation
@@ -277,19 +281,15 @@ reviewing a diff.
   runs a single file.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
-  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the 23-step end-to-end
-  pass (health, SPA, the agent surface's protected-resource and
-  authorization-server discovery documents and its `401` challenge, sign-up,
-  the `Secure` session cookie, the session token
-  refused as an API bearer, a real 12 MP photo through presign → direct PUT →
-  process → save with the bucket's CORS preflight probed against the
-  deployment, a visitor read, and the reset-mail path).
-  The catalogue cap is covered by the API integration suite instead, since
-  reaching it would mean ten creates per run. It takes the URL, not an environment, so it runs against
-  either one by hand. It creates a throwaway `verify-<ts>@example.test` account
-  per run, so treat it as a write against the environment. A deploy whose host
-  does not resolve yet prints the DNS records and exits successfully instead of
-  verifying — that is the first dev deploy's shape, not a failure.
+  `cd apps/api && bun scripts/deploy-verify.ts <url>` — the end-to-end pass
+  against the deployed URL; the script's header lists its current steps, so
+  this guide does not repeat them. The catalogue cap is covered by the API
+  integration suite instead, since reaching it would mean ten creates per run.
+  It takes the URL, not an environment, so it runs against either one by hand.
+  It creates a throwaway `verify-<ts>@example.test` account per run, so treat
+  it as a write against the environment. A deploy whose host does not resolve
+  yet prints the DNS records and exits successfully instead of verifying —
+  that is the first dev deploy's shape, not a failure.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and

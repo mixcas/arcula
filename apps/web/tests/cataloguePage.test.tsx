@@ -231,7 +231,15 @@ describe("a catalogue's nav bar", () => {
     await user.click(
       screen.getByRole("button", { name: /catalogue actions/i }),
     );
-    await user.click(await screen.findByRole("menuitem", { name }));
+    // Mantine renders the menu into a portal. Under a loaded suite the first
+    // frame can land before the item exists, so wait for it (with room for a
+    // slow frame) instead of racing the default one-second lookup.
+    const item = await screen.findByRole(
+      "menuitem",
+      { name },
+      { timeout: 3000 },
+    );
+    await user.click(item);
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(
