@@ -88,10 +88,20 @@ mv "$STAGE/lambda-smoke-entry.js" "$STAGE/smoke.js"
 #    environment, so the switch is the environment's: prod's bundle
 #    enables it, dev's is built with it off and never initialises the
 #    recorder. Vite inlines the VITE_-prefixed value at build time.
+#
+#    Source maps are the mirror image: everywhere except production. They
+#    are what makes dev's bundle readable in DevTools, and publishing them
+#    on arcula.art would publish the source — so prod is the one exception,
+#    and dev says so explicitly rather than inheriting the default. Not
+#    VITE_-prefixed for the opposite reason to the line above: a VITE_
+#    value is inlined into the bundle, and this is a build instruction, not
+#    client configuration.
 if [ "$ENV" = prod ]; then
   export VITE_LOGROCKET_ENABLED=true
+  export ARCULA_SOURCE_MAPS=off
 else
   export VITE_LOGROCKET_ENABLED=false
+  export ARCULA_SOURCE_MAPS=on
 fi
 echo "==> building web"
 bun run build
