@@ -5,5 +5,10 @@
 import type { AnyToolDefinition } from "./tool";
 import { artworkTools } from "./tools/artworks";
 import { catalogueTools } from "./tools/catalogues";
+import { importTools } from "./tools/import";
 
-export const tools: AnyToolDefinition[] = [...catalogueTools, ...artworkTools];
+export const tools: AnyToolDefinition[] = [
+  ...catalogueTools,
+  ...artworkTools,
+  ...importTools,
+];

@@ -24,9 +24,10 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
  * validates each row against this same `artworkSchema`, so an imported work
  * lands byte-identical to one created by hand.
  *
- * `status` is not a mappable column either, and is pinned to `published`: an
- * import is the owner adding works to a catalogue, not a way to declare one a
- * draft. A work can be turned into a draft afterwards, by id.
+ * `status` is not a mappable column: it is the batch's, not a row's, and the
+ * review step's default is `IMPORTED_WORK_STATUS` (`published`). A caller that
+ * names a status — the agent surface's import always sends `draft` — overrides
+ * any status a row carries; a member's CSV import sends none and is unchanged.
  */
 
 // ---------------------------------------------------------------------------
@@ -34,9 +35,11 @@ import { artworkSchema, type ArtworkFormValues } from "./artwork";
 // ---------------------------------------------------------------------------
 
 /**
- * The status every imported work lands with. An import adds works to a
- * catalogue; it does not declare any of them drafts. One constant, because
- * the review's per-row check and the route's write must agree.
+ * The status an import lands its works with when the caller names none:
+ * `published`. It is the DEFAULT, not the only answer — a payload may name
+ * `draft` and then the payload wins, and the agent surface's `import_artworks`
+ * always sends `draft`. One constant, because the review's per-row check and
+ * the route's write must agree.
  */
 export const IMPORTED_WORK_STATUS: ArtworkStatus = "published";
 

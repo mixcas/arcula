@@ -36,13 +36,11 @@ import {
   catalogues as cataloguesTable,
 } from "@arcula/db";
 import {
-  UPDATABLE_TEXT_FIELDS,
   artworkBulkSelectionSchema,
   artworkImportSchema,
   catalogueCreateSchema,
   catalogueUnlockSchema,
   catalogueUpdateSchema,
-  artworkSchema,
   IMPORTED_WORK_STATUS,
   type ArtworkBulkSelectionPayload,
   type ArtworkImportPayload,
@@ -52,6 +50,7 @@ import {
 } from "@arcula/shared";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
+import { importArtworks } from "../artworkImport";
 import { readDeletedArtworkList } from "../artworkRead";
 import {
   loadCatalogue,
@@ -75,7 +74,6 @@ import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
 import { param, parseBody, safeTx } from "../http";
-import { mintId } from "../ids";
 import { parseMediaKey, stagedCataloguePrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
@@ -362,76 +360,36 @@ catalogueRoutes.post("/catalogues/:catalogueId/unlock", async (c) => {
   return c.json({ unlocked: true }, 201);
 });
 
-// POST …/import/csv — one row per validated artwork. Each row is checked
-// against the shared `artworkSchema` the Add/Edit forms use: a failing row
-// lands in `rejected` (its index plus the failed fields) and the accepted
-// rows are written in one transaction. The ids are minted here — the
-// client's review step has no say in them, and the shared schema is the
-// only place a row's validity is decided.
+// POST …/import/csv — the CSV import's bulk write. The per-row contract lives
+// in `artworkImport.ts`, which the agent surface's `import_artworks` tool
+// calls too: each row is checked against the shared `artworkSchema` the
+// Add/Edit forms use, a failing row lands in `rejected` (its index plus the
+// failed fields), and the accepted rows are written in one transaction.
+//
+// The batch's status is the payload's, and absent leaves it at
+// `IMPORTED_WORK_STATUS`: a person's CSV import has always landed published,
+// and an agent's names `draft`. Membership is asked before the body, so a
+// non-member's malformed payload is a refusal rather than a 400; the import
+// core asks the same verdict for the tool, which has no Context.
 catalogueRoutes.post(
   "/catalogues/:catalogueId/import/csv",
   requireSession,
   async (c) => {
-    const catalogue = await requireMemberCatalogue(c, param(c, "catalogueId"));
+    const catalogueId = param(c, "catalogueId");
+    await requireMemberCatalogue(c, catalogueId);
     const payload: ArtworkImportPayload = await parseBody(
       c,
       artworkImportSchema,
     );
 
-    const now = new Date();
-    const rejected: { row: number; errors: Record<string, string> }[] = [];
-    const accepted: (typeof artworksTable.$inferInsert)[] = [];
-    payload.rows.forEach((row, index) => {
-      // The import's own status wins over anything a row says: every
-      // imported work is published (see IMPORTED_WORK_STATUS). A row that is
-      // not an object fails the schema as a missing title.
-      const fields =
-        row !== null && typeof row === "object"
-          ? (row as Record<string, unknown>)
-          : {};
-      const parsed = artworkSchema.safeParse({
-        ...fields,
-        status: IMPORTED_WORK_STATUS,
-      });
-      if (!parsed.success) {
-        const errors: Record<string, string> = {};
-        for (const issue of parsed.error.issues) {
-          errors[issue.path.join(".")] = issue.message;
-        }
-        rejected.push({ row: index, errors });
-        return;
-      }
-      const values = parsed.data;
-      const inserted: typeof artworksTable.$inferInsert = {
-        id: mintId(),
-        // The mirror of the catalogue's owner: an import adds the
-        // catalogue's works, whoever ran it (ADR-0004).
-        userId: catalogue.userId,
-        catalogueId: catalogue.id,
-        title: values.title,
-        artistName: values.artistName,
-        status: values.status,
-        // Always written, as null: the list filters on it, and a missing
-        // field is not a null (the write-path doctrine).
-        deletedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      for (const field of UPDATABLE_TEXT_FIELDS) {
-        inserted[field] = values[field] ?? null;
-      }
-      accepted.push(inserted);
-    });
-
-    if (accepted.length > 0) {
-      await safeTx(async (tx) => {
-        for (const row of accepted) {
-          await tx.insert(artworksTable).values(row);
-        }
-      });
-    }
-
-    return c.json({ inserted: accepted.length, rejected });
+    return c.json(
+      await importArtworks(
+        c.get("user").id,
+        catalogueId,
+        payload.rows,
+        payload.status ?? IMPORTED_WORK_STATUS,
+      ),
+    );
   },
 );
 

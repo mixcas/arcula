@@ -9,8 +9,8 @@
 // `AGENT_WRITE_CAPACITY` over `AGENT_WRITE_WINDOW_SECONDS` — capacity 20
 // refilled at one per second, expressed as the rolling sum of whole-second
 // rows, which is the shape `accountWriteWindows` stores. An import additionally
-// spends one token from a fixed hourly window; its claim ships now and
-// `import_artworks` spends it when that tool lands.
+// spends one token from a fixed hourly window; `import_artworks` spends it on
+// top of the write the dispatcher has already claimed.
 //
 // The module owns policy and the claim; the description of each tool is where
 // the agent is told what a refusal means.
@@ -150,8 +150,8 @@ export async function claimAgentWrite(
  * Spend one import for this account, or refuse: five per account per UTC
  * hour, on top of the write the import also costs.
  *
- * Not wired to a tool yet — `import_artworks` spends it when that tool lands —
- * but it ships now so the hourly window has one definition.
+ * `import_artworks` is the one caller: the dispatcher has already spent the
+ * write before the tool runs, and the tool claims this before it writes a row.
  */
 export async function claimAgentImport(
   userId: string,

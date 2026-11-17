@@ -570,6 +570,40 @@ describe("POST /catalogues/{cid}/import/csv", () => {
     ]);
   });
 
+  it("lands the batch as drafts when the payload names a status", async () => {
+    // Its own catalogue, so the published fixtures above stay untouched.
+    const created = await req("POST", "/api/v1/catalogues", {
+      cookies: owner.cookies,
+      body: JSON.stringify({ name: "Draft Imports", isPublic: true }),
+    });
+    expect(created.status).toBe(201);
+    const wallId = String((await json<Record<string, unknown>>(created)).id);
+
+    const res = await req("POST", `/api/v1/catalogues/${wallId}/import/csv`, {
+      cookies: owner.cookies,
+      body: JSON.stringify({
+        status: "draft",
+        rows: [{ title: "Unverified", artistName: "C. Cas" }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ inserted: 1, rejected: [] });
+
+    // A member reads the draft; a visitor is not shown it at all.
+    const memberList = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${wallId}/artworks`, {
+        cookies: owner.cookies,
+      }),
+    );
+    expect(memberList.map((w) => [w.title, w.status])).toEqual([
+      ["Unverified", "draft"],
+    ]);
+    const visitorList = await listedArtworks(
+      await req("GET", `/api/v1/catalogues/${wallId}/artworks`),
+    );
+    expect(visitorList).toEqual([]);
+  });
+
   it("403s a non-owner, 401s an anonymous call, 400s a non-array rows", async () => {
     const foreign = await req(
       "POST",
