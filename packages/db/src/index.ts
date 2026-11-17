@@ -1,8 +1,9 @@
-// The Drizzle schema: thirteen tables. Four Better Auth core tables (extended
-// with the typed `user` columns), five domain tables, the two sharing tables
+// The Drizzle schema: fourteen tables. Four Better Auth core tables (extended
+// with the typed `user` columns), six domain tables, the two sharing tables
 // (`collection_collaborators`, `collection_invitations`) and the two a
 // protected catalogue needs (`collection_access_grants`,
-// `collection_unlock_attempts`).
+// `collection_unlock_attempts`), plus the write limiter's counter
+// (`account_write_windows`).
 //
 // The Catalogue entity is exported as `catalogues`; its physical table stays
 // `collections` (ADR-0010). Physical names — tables, columns, indexes,
@@ -263,6 +264,41 @@ export const catalogueUnlockAttempts = pgTable(
   ],
 ).enableRLS();
 
+// The write limiter's counter: one row per account, bucket and window.
+// `count` is how many writes the window has spent, and a window lapses once
+// its start is older than the window length — policy the MCP surface owns, not
+// the schema, exactly as `collection_unlock_attempts` leaves its own window
+// length to the unlock route.
+//
+// The `bucket` discriminator is what lets one table serve both of the
+// limiter's fixed windows: `write`, the per-second bucket every write spends,
+// and `import`, the hourly cap an import spends in addition. The two differ
+// only in that value and in how the route floors `windowStart`; a claim is one
+// `INSERT … ON CONFLICT` on the primary key (`setWhere` past the ceiling
+// returns no row, which is the refusal), so the key is exactly the triple and
+// nothing else is indexed. Keyed by the account, never by the address: a
+// hosted agent's calls all arrive from one cloud, so an address bucket would
+// be one bucket for every account in the product.
+export const accountWriteWindows = pgTable(
+  "account_write_windows",
+  {
+    userId: text("userId").notNull(),
+    bucket: text("bucket").notNull(),
+    // The window's start, floored from the write's own time by the route that
+    // spends it, so a row names the window it belongs to without a second
+    // clock column.
+    windowStart: timestamp("windowStart", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.bucket, table.windowStart] }),
+    check(
+      "account_write_windows_bucket_check",
+      sql`"bucket" in ('write', 'import')`,
+    ),
+  ],
+).enableRLS();
+
 // `photos`/`documents` are tables, not array columns. Money stays text —
 // the string that was typed, no float drift.
 export const artworks = pgTable(
@@ -398,6 +434,7 @@ export const schema = {
   catalogueInvitations,
   catalogueAccessGrants,
   catalogueUnlockAttempts,
+  accountWriteWindows,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,

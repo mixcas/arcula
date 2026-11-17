@@ -78,6 +78,13 @@
       "when": 1794813313918,
       "tag": "0010_artwork_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794942392485,
+      "tag": "0011_account_write_windows",
+      "breakpoints": true
     }
   ]
 }

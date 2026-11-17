@@ -21,7 +21,6 @@ export const uuid = () => crypto.randomUUID().replace(/-/g, "");
 
 export interface ReqOpts {
   cookies?: string;
-  bearer?: string;
   /** A serialised JSON body, or any value to be serialised. */
   body?: unknown;
   /** Extra headers; an explicit Content-Type wins over the default. */
@@ -39,7 +38,6 @@ export async function req(
 ): Promise<Response> {
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.cookies) headers.Cookie = opts.cookies;
-  if (opts.bearer) headers.Authorization = `Bearer ${opts.bearer}`;
   if (opts.origin !== false) headers.Origin = ORIGIN;
   if (opts.body !== undefined && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
@@ -111,15 +109,14 @@ export function sessionCookies(res: Response): string {
  */
 export async function signUp(
   label: string,
-): Promise<{ email: string; cookies: string; token?: string }> {
+): Promise<{ email: string; cookies: string }> {
   const slug = label.toLowerCase();
   const email = `${slug}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
   const res = await req("POST", "/api/auth/sign-up/email", {
     body: { email, password: `${slug}-pass-12345`, name: `${label} Test` },
   });
   expect(res.status).toBe(200);
-  const body = await json<{ token?: string }>(res);
-  return { email, cookies: sessionCookies(res), token: body.token };
+  return { email, cookies: sessionCookies(res) };
 }
 
 /** Sign up, then read /api/v1/me: the session owner a route test needs. */

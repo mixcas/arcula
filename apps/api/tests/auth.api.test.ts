@@ -167,8 +167,6 @@ describe("sign-out", () => {
     const up = await req("POST", "/api/auth/sign-up/email", {
       body: { email, password: "test-pass-12345", name: "Test User" },
     });
-    const token = (await json(up))?.token;
-    expect(typeof token).toBe("string");
     const cookies = sessionCookies(up);
 
     const out = await req("POST", "/api/auth/sign-out", { cookies });
@@ -181,8 +179,9 @@ describe("sign-out", () => {
       "the session cookies are cleared",
     ).toContain("better-auth.session_token");
 
-    // The token itself is dead server-side, not just the cookie.
-    const after = await req("GET", "/api/auth/get-session", { bearer: token });
+    // The session is dead server-side, not just cleared in the browser: the
+    // cookie that resolved a moment ago now resolves nothing.
+    const after = await req("GET", "/api/auth/get-session", { cookies });
     expect(after.status).toBe(200);
     expect(await json(after)).toBeNull();
   }, 15000);
@@ -211,29 +210,16 @@ describe("sign-out", () => {
   });
 });
 
-describe("bearer resolution (the mobile path)", () => {
-  it("resolves the session from Authorization: Bearer and answers null for unknown or missing credentials", async () => {
-    const email = unique();
-    const up = await req("POST", "/api/auth/sign-up/email", {
-      body: { email, password: "test-pass-12345", name: "Test User" },
-    });
-    const token = (await json(up))?.token;
-    expect(typeof token).toBe("string");
-
-    const ok = await req("GET", "/api/auth/get-session", { bearer: token });
-    expect(ok.status).toBe(200);
-    const body = await json(ok);
-    // The native get-session shape: { session, user } — user at the top
-    // level, with the custom fields.
-    expect(body?.user?.email).toBe(email);
-    expect(body?.session?.userId).toBeDefined();
-
-    const garbage = await req("GET", "/api/auth/get-session", {
-      bearer: "not-a-real-token",
-    });
-    expect(await json(garbage)).toBeNull();
-
-    const none = await req("GET", "/api/auth/get-session", {});
-    expect(await json(none)).toBeNull();
-  }, 15000);
+describe("the bearer credential", () => {
+  // The rule itself is the pure predicate (tests/authMode.test.ts). This is
+  // the wiring: the instance really mounts Better Auth's plugin where the rule
+  // allows it, which is what keeps local development and this suite
+  // authenticating as they did before the gate. The deployed side — no plugin,
+  // so a session token is refused — is asserted end to end by
+  // scripts/deploy-verify.ts, the only place a deployment can be asked.
+  it("mounts Better Auth's bearer plugin where the environment allows it", async () => {
+    const { auth } = await import("../src/auth");
+    const ids = (auth.options.plugins ?? []).map((plugin) => plugin.id);
+    expect(ids).toContain("bearer");
+  });
 });

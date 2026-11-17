@@ -14,7 +14,7 @@ import { betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins";
 import { schema } from "@arcula/db";
 import { db } from "./db";
-import { corsOrigins, useSecureCookies } from "./env";
+import { corsOrigins, sessionBearerEnabled, useSecureCookies } from "./env";
 import { passwordResetMail, verificationMail } from "./email/compose";
 import { clientUrl } from "./email/links";
 import { emailProvider } from "./email/provider";
@@ -86,5 +86,8 @@ export const auth = betterAuth({
     // grant's cookie follows the same rule, from the same place (env.ts).
     useSecureCookies,
   },
-  plugins: [bearer()],
+  // A session token is a cookie, and only a cookie, in a deployment: the
+  // bearer form is the undeclared second credential that ADR-0013 closes.
+  // Local development and the suites keep it (env.ts → bearerAuthAllowed).
+  plugins: sessionBearerEnabled ? [bearer()] : [],
 });
