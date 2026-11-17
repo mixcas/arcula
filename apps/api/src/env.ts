@@ -57,3 +57,26 @@ export const noindexFlag = process.env.NOINDEX;
 // production is https, where a `Secure` cookie is the safe default; local dev
 // is plain http, where a browser rejects it.
 export const useSecureCookies = process.env.NODE_ENV === "production";
+
+// Whether a session token is accepted in an `Authorization: Bearer` header —
+// the bearer plugin's gate. It is a second, undeclared way to act as an
+// account: nothing in the app shows it, and only signing out of the website
+// revokes it. A deployment does not have it; the named replacement is the
+// Connection surface (ADR-0013), so the undeclared one closes.
+//
+// The rule is `NODE_ENV`, stated rather than inferred. It is the fact the
+// deploy already owns — the stack sets it (infra/cdk/src/arcula-stack.ts) and
+// the bundle inlines it (scripts/build-lambda.sh), which is what the Secure
+// cookie rule above rides on — and it says "this process is a deployment"
+// instead of guessing from a URL: a laptop pointed at a remote AUTH_BASE_URL,
+// or an environment whose PUBLIC_URL happens to look production-shaped, is
+// still a laptop, and comparing origins would silently decide that for us.
+// Only the literal `production` closes the gate; everything else (development,
+// test, unset) keeps the credential the local scripts and suites authenticate
+// with today. Pure so the rule has a test of its own, not just a deployed end
+// to end pass.
+export const bearerAuthAllowed = (nodeEnv: string | undefined): boolean =>
+  nodeEnv !== "production";
+
+// The parsed rule, the one auth.ts mounts the plugin from.
+export const sessionBearerEnabled = bearerAuthAllowed(process.env.NODE_ENV);
