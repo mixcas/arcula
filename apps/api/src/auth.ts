@@ -11,10 +11,19 @@
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
-import { bearer } from "better-auth/plugins";
+import { bearer, jwt } from "better-auth/plugins";
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
+import { mcp } from "@better-auth/mcp";
 import { schema } from "@arcula/db";
 import { db } from "./db";
-import { corsOrigins, sessionBearerEnabled, useSecureCookies } from "./env";
+import {
+  clientOrigin,
+  corsOrigins,
+  mcpResource,
+  sessionBearerEnabled,
+  useSecureCookies,
+} from "./env";
 import { passwordResetMail, verificationMail } from "./email/compose";
 import { clientUrl } from "./email/links";
 import { emailProvider } from "./email/provider";
@@ -86,8 +95,35 @@ export const auth = betterAuth({
     // grant's cookie follows the same rule, from the same place (env.ts).
     useSecureCookies,
   },
-  // A session token is a cookie, and only a cookie, in a deployment: the
-  // bearer form is the undeclared second credential that ADR-0013 closes.
-  // Local development and the suites keep it (env.ts → bearerAuthAllowed).
-  plugins: sessionBearerEnabled ? [bearer()] : [],
+  // The session JWT's own mint is closed: session JWTs and OAuth access tokens
+  // share a signing key, so a resource server checking only `iss`/`aud` could
+  // accept a session JWT as an access token. With the path disabled,
+  // `/api/auth/token` is a 404, and `disableSettingJwtHeader` keeps the
+  // `set-auth-jwt` header off every session response.
+  disabledPaths: ["/token"],
+  plugins: [
+    jwt({ disableSettingJwtHeader: true }),
+    // The OAuth 2.1 authorization server for the MCP surface. `mcp()` *is* the
+    // provider — never also register `oauthProvider()`. The resource is the
+    // token audience and the RFC 9728 identifier. The pages are absolute so a
+    // local redirect lands on Vite's origin rather than the API's; in
+    // production both origins are the same host.
+    mcp({
+      loginPage: `${clientOrigin}/login`,
+      consentPage: `${clientOrigin}/consent`,
+      resource: mcpResource,
+    }),
+    // Client identity is a Client ID Metadata Document — the client's id is an
+    // HTTPS URL it hosts, and the plugin fetches and validates that document.
+    // It is not optional: without it the AS metadata omits `"none"`, and every
+    // public MCP client refuses to proceed.
+    cimd({
+      fetchClientMetadataResource,
+      metadataProfile: "mcp-2026-07-28",
+    }),
+    // A session token is a cookie, and only a cookie, in a deployment: the
+    // bearer form is the undeclared second credential that ADR-0013 closes.
+    // Local development and the suites keep it (env.ts → bearerAuthAllowed).
+    ...(sessionBearerEnabled ? [bearer()] : []),
+  ],
 });

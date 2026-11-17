@@ -72,8 +72,9 @@ alternatives are in
 
 ## The data model
 
-Fourteen tables in Postgres with sharing, password protection and the write
-limiter's counter, defined in
+Twenty-two tables in Postgres: the domain model with sharing, password
+protection and the write limiter's counter, plus the eight tables the agent
+access surface's OAuth provider and JWT plugin write. All are defined in
 `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 **The entity is a Catalogue; the physical table is `collections`.** The Drizzle
@@ -112,6 +113,31 @@ belong to Better Auth; nothing in the domain tables mirrors them.
 
 `verification` exists even though email verification is off, so turning it on is
 a config flip rather than a schema change.
+
+### Agent access (`jwks` and the `oauth*` tables)
+
+Eight tables the JWT and OAuth provider plugins write, hand-authored because
+`@better-auth/cli` is deprecated with no 1.7.x release: `jwks` (the signing key
+pair the session JWT plugin mints) and the provider's `oauthClient`,
+`oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
+`oauthConsent` and `oauthClientAssertion`. The adapter addresses each table by
+its exported key and each column by its property name, so the names are the
+plugin's, exactly — including `oauthClient.requirePKCE`.
+`apps/api/tests/adapter.test.ts` asserts every model and field
+`getAuthTables()` returns exists here, which is the generator a missing release
+would otherwise provide.
+
+A **Connection** is one authorization's refresh-token family: the code mints a
+row, each rotation revokes it and inserts the next with the same
+`authorizationCodeId`, and that id is what the account surface lists and
+revokes. `oauthConsent` is one row per (account, client) — the plugin upserts it
+and declares no unique index — and the MCP guard reads it on every call, so
+deleting it closes an already-issued access token's path immediately even
+though the JWT itself lives for an hour. With `jwt()` in play,
+`oauthAccessToken` stays empty: access tokens are JWTs, not rows.
+
+`0012_agent_access` is additive and ships alone, ahead of the MCP code, per
+[A schema change ships alone](AGENTS.md#migrations-are-forward-only).
 
 ### `collections`
 
@@ -618,6 +644,56 @@ extension is involved — the grouping is over exact spellings and the collapse
 is pure, behind a module with no Hono type, so a future curated index can
 replace its source without changing the wire.
 
+## Agent access (MCP)
+
+Arcula hosts an MCP server on the existing origin and the existing Lambda:
+`POST /api/mcp`, Streamable HTTP, stateless — a fresh server per request, one
+JSON result, nothing held between calls. It is not a second API; every tool
+calls the module a route calls, under the same membership verdicts.
+`@modelcontextprotocol/server` (v2 of the SDK, protocol revision 2026-07-28)
+serves it with `legacy: "reject"` and `responseMode: "json"` — API Gateway
+cannot stream, so a tool either answers once or fails.
+
+Authorization is `@better-auth/mcp` (the OAuth 2.1 provider configured for MCP)
+plus `@better-auth/cimd` (client identity as a Client ID Metadata Document) at
+the Better Auth core's version line, with `jwt()` for the access tokens. The
+provider publishes RFC 9728 protected-resource metadata and RFC 8414
+authorization-server metadata; those documents are answered from an `onRequest`
+hook that only runs for requests the auth handler sees, so the app mounts
+`/.well-known/*` to `auth.handler` and the SPA refuses the namespace first. An
+unauthenticated `POST /api/mcp` answers `401` with
+`WWW-Authenticate: Bearer resource_metadata="…"` before the transport reads the
+body.
+
+The **resource** — the token audience — is the API origin's `/api/mcp`,
+derived once in `env.ts` from `AUTH_BASE_URL` (the deployment's `PUBLIC_URL`);
+the plugin's resource, the guard's audience and the challenge's pointer all read
+that one value.
+
+The consent screen is the app's. The provider redirects to `/consent` with the
+whole authorization query re-signed (`sig` covers the names in `ba_param`), and
+the SPA asks `GET /api/v1/connections/request` to verify it server-side and load
+the client's public metadata. The page renders the client name beside the signed
+redirect host (both are client-chosen, so the host is the fact to compare) and
+only `https:` links, then posts `{ accept, oauth_query }` to
+`/api/auth/oauth2/consent` and follows the URL the provider answers. An
+unauthenticated authorize redirects to `/login` with the same query as its
+querystring, and a successful sign-in resumes at `/consent` with it intact.
+
+The tool layer receives a **verified subject** and never a token:
+`requireMcpAuth` verifies the JWT and hands the guard its claims; the guard
+reads the `oauthConsent` row for `(userId, clientId)` and answers a reconnecting
+`401` when it is gone — which is what makes Revoke immediate although a JWT
+lives for its full hour — then passes `authInfo.extra.sub` to a per-request
+server. `dispatcher.ts` has no MCP type in its signature: it parses the
+arguments through the tool's Zod schema, calls the same module a route calls,
+and throws the app's `ApiError`, which the transport answers as an MCP error
+result whose text is `code: message`. The registry holds one file per tool
+group; `list_catalogues` is the first, reading the signed-in catalogue scope
+through `catalogueList.ts` (the same module `GET /catalogues` serves).
+`authorize.ts` exposes user-id-taking cores (`memberCatalogueFor`,
+`memberArtworkFor`, `readableCatalogueFor`) for the tools that follow.
+
 ## The frontend
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
@@ -625,7 +701,9 @@ replace its source without changing the wire.
 - **Public** — `/` (product page), `/login`, `/signup`,
   `/reset-password` (the request) and `/reset-password/:token` (the form the
   mailed link lands on), `/invite/:token` (the invitation landing page, which
-  shows the catalogue and invited email before sign-in), and the skin-rendered
+  shows the catalogue and invited email before sign-in), `/consent` (the
+  Connection approval screen, which sends a signed-out visitor back to `/login`
+  with the signed query), and the skin-rendered
   `/catalogue/:catalogueId` and `/catalogue/:catalogueId/artwork/:artworkId`.
 - **Protected** — everything under `/manage`: the dashboard, a catalogue and its
   settings, artwork add/edit, the CSV import, and the account profile.

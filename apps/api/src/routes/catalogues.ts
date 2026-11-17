@@ -31,11 +31,9 @@ import {
   artworkPhotos as artworkPhotosTable,
   artworks as artworksTable,
   catalogueAccessGrants as grantsTable,
-  catalogueCollaborators as catalogueCollaboratorsTable,
   catalogueInvitations as catalogueInvitationsTable,
   catalogueUnlockAttempts as unlockAttemptsTable,
   catalogues as cataloguesTable,
-  user as userTable,
 } from "@arcula/db";
 import {
   UPDATABLE_TEXT_FIELDS,
@@ -71,8 +69,8 @@ import {
   hashGrantToken,
   mintGrantToken,
 } from "../catalogueGrants";
+import { listReadableCatalogues } from "../catalogueList";
 import { hashPassword, verifyPassword } from "../cataloguePassword";
-import { collaboratorJoin, readableCataloguesWhere } from "../catalogueScope";
 import { db } from "../db";
 import { useSecureCookies } from "../env";
 import { ApiError } from "../errors";
@@ -81,7 +79,7 @@ import { mintId } from "../ids";
 import { parseMediaKey, stagedCataloguePrefix } from "../media/keys";
 import { deleteObject, listObjects } from "../storage";
 import { requireSession, resolveSession } from "../session";
-import { displayName, serializeCatalogue } from "../serialize";
+import { serializeCatalogue } from "../serialize";
 import {
   UNLOCK_MAX_FAILURES,
   UNLOCK_WINDOW_MINUTES,
@@ -161,38 +159,7 @@ catalogueRoutes.get("/catalogues", async (c) => {
   }
 
   const userId = session.user.id;
-  // One query, so the two halves share one collation and a stray membership
-  // row for the owner cannot list the catalogue twice: the owner column
-  // decides the role, and the join only says "shared with this account".
-  const rows = await db
-    .select({
-      catalogue: cataloguesTable,
-      ownerName: userTable.name,
-      ownerEmail: userTable.email,
-    })
-    .from(cataloguesTable)
-    .innerJoin(userTable, eq(userTable.id, cataloguesTable.userId))
-    .leftJoin(catalogueCollaboratorsTable, collaboratorJoin(userId))
-    .where(readableCataloguesWhere(userId))
-    .orderBy(asc(cataloguesTable.name));
-
-  return c.json(
-    rows.map(({ catalogue, ownerName, ownerEmail }) => {
-      if (catalogue.userId === userId) {
-        return serializeCatalogue(catalogue, {
-          role: "owner",
-          audience: "member",
-        });
-      }
-      // The glossary's "the owner's display name, falling back to email": an
-      // account with no usable name is named by its address.
-      return serializeCatalogue(catalogue, {
-        role: "collaborator",
-        ownerName: displayName(ownerName, ownerEmail),
-        audience: "member",
-      });
-    }),
-  );
+  return c.json(await listReadableCatalogues(userId));
 });
 
 // POST /catalogues — the body validates first, then the cap is checked

@@ -16,20 +16,35 @@ media pipeline, and — in production — serving the built SPA.
   (`www` → configured origin) 308 redirect, CORS for the dev origin,
   `GET /api/health`, and the mounts (`/api/auth` → Better Auth; `/api/v1` →
   the resource routes; then the SPA).
-- `src/spa.ts` — serves the built SPA for every non-`/api` path (deep links
-  included): `index.html` is never cached, hashed assets are immutable, and a
-  missing dist tree leaves the middleware inert (Vite is the SPA in dev).
+- `src/spa.ts` — serves the built SPA for every non-`/api`, non-`/.well-known`
+  path (deep links included): `index.html` is never cached, hashed assets are
+  immutable, and a missing dist tree leaves the middleware inert (Vite is the
+  SPA in dev).
+- `src/mcp/` — the agent surface: `guard.ts` verifies the access token and the
+  Connection's consent row, `server.ts` is the per-request MCP transport,
+  `dispatcher.ts` runs a tool by name with a verified subject, `tool.ts`
+  declares one, and `registry.ts` lists the tool groups under `tools/`.
 
 ## Routes
 
 `/api/auth/*` is Better Auth's own handler — its response shape is the one
 `@better-auth/react` consumes, so it is not wrapped in the app envelope.
 
+`/.well-known/*` is OAuth discovery, routed to the auth handler (the plugins
+answer it from an `onRequest` hook). An unmatched path is a 404, never the SPA
+shell.
+
+`/api/mcp` is the MCP endpoint: Streamable HTTP, stateless, one JSON answer per
+request. An unauthenticated call answers `401` with the RFC 9728
+`resource_metadata` challenge; a call whose Connection was revoked answers `401`
+too, before the transport reads the body.
+
 `/api/v1/*` is the resource API, all under the error envelope:
 
 | Method                     | Path                                                                |
 | -------------------------- | ------------------------------------------------------------------- |
 | `GET` / `PATCH`            | `/me`                                                               |
+| `GET`                      | `/connections/request` — the verified OAuth consent query           |
 | `GET`                      | `/media?key=` — the object proxy (re-checks visibility per request) |
 | `GET` / `POST`             | `/catalogues`                                                       |
 | `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId`                                          |
@@ -51,6 +66,29 @@ A save is one Postgres transaction: the field write, the per-entry S3 copy
 S3 copies cannot roll back with the rows, so a failed save may leave final
 objects with no row — the accepted residual the staging lifecycle and the sweep
 route exist to clean up.
+
+## Agent access
+
+The MCP endpoint is one stateless transport per request. `guard.ts` wraps it
+with `requireMcpAuth` (JWT verification against `/api/auth/jwks`, audience
+`${AUTH_BASE_URL origin}/api/mcp`) and then reads the `oauthConsent` row for the
+token's `(sub, client_id)`: absent means the Connection was revoked and the
+answer is a `401` JSON-RPC error carrying the same `resource_metadata`
+challenge, so a client reconnects. That read is also where "last acted" comes
+from — `oauthConsent.updatedAt` is touched at most once a minute.
+
+A tool is a `defineTool` declaration in `src/mcp/tools/`, listed in
+`registry.ts`. Its `call` receives the Zod-parsed arguments and the verified
+user id, and throws the app's `ApiError`; `server.ts` answers it as an MCP error
+result whose text is `code: message`. No tool sees the access token, and no
+tool takes a Hono `Context` — the user-id-taking cores in `authorize.ts`
+(`memberCatalogueFor`, `memberArtworkFor`, `readableCatalogueFor`) are how a
+write asks the app's own authorization question.
+
+The consent screen is app-owned; `GET /api/v1/connections/request` verifies the
+signed authorize query the provider redirected with (`verifyOAuthQueryParams`
+against the auth instance's secret) and answers the client's public metadata,
+the signed redirect host and the exact `oauth_query` to post back.
 
 ## Sharing
 

@@ -6,10 +6,12 @@
  * Path logic, in order:
  *  1. /api (and everything under it) is never the SPA's — the guard below
  *     keeps that true even if a future route refactor reorders the mounts.
- *  2. A file that exists in the dist tree is served, containment-checked:
+ *  2. /.well-known (and everything under it) is OAuth discovery, never the
+ *     SPA's: it must answer metadata or a 404, not HTML.
+ *  3. A file that exists in the dist tree is served, containment-checked:
  *     the resolved path must stay inside the dist root, so a traversal
  *     path is a 404, never a read and never the app shell.
- *  3. Anything else is a client route (/catalogue/x, /manage/profile, a
+ *  4. Anything else is a client route (/catalogue/x, /manage/profile, a
  *     pasted /reset-password/<token>): serve index.html and let the
  *     router decide. A mistyped URL gets the shell too — the in-app
  *     404 is the SPA's to show, not this layer's.
@@ -72,11 +74,26 @@ function cacheControl(path: string): string {
   return "public, max-age=3600";
 }
 
+/**
+ * The paths the SPA must never answer.
+ *
+ * `/api` is the API's own namespace, and `/.well-known` is OAuth discovery's:
+ * both must reach the mounts above this middleware, or 404 — never the app
+ * shell, which a client would parse as a document and a browser would render
+ * as a page. One predicate so the rule reads as one rule.
+ */
+export const isReservedPath = (path: string): boolean =>
+  path === "/api" ||
+  path.startsWith("/api/") ||
+  path === "/.well-known" ||
+  path.startsWith("/.well-known/");
+
 export const spaMiddleware = async (c: Context, next: Next) => {
   const path = c.req.path;
 
-  // The API is never the SPA, regardless of mount order above.
-  if (path === "/api" || path.startsWith("/api/")) {
+  // The API and OAuth discovery are never the SPA, regardless of mount order
+  // above. The mounts answer them; a path neither claims is Hono's 404.
+  if (isReservedPath(path)) {
     await next();
     return;
   }
