@@ -2,8 +2,9 @@
 // Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
-// link + cache headers), sign-up (and that its cookie is `Secure`), the
-// session token refused as an API bearer, /me,
+// link + cache headers), the agent surface's discovery documents and its 401
+// challenge, sign-up (and that its cookie is `Secure`), the session token
+// refused as an API bearer, /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
 // real 12 MP photo through presign → direct PUT → process → save (the
 // presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
@@ -76,6 +77,40 @@ const post = (path: string, body: unknown, authed = false) =>
   step(
     "client route serves the shell",
     deep.status === 200 && deepHtml.includes("<!doctype html"),
+  );
+}
+
+// 2b. The agent surface's public half: the two discovery documents an MCP
+//     client reads before it can connect, and the challenge that sends it
+//     there. None writes and none needs a token, so the first deploy can ask
+//     them; a SPA fallback would answer all three with HTML or a 404.
+{
+  const res = await get("/.well-known/oauth-protected-resource");
+  const body = (await res.json().catch(() => ({}))) as { resource?: string };
+  step(
+    "MCP protected-resource metadata",
+    res.status === 200 &&
+      res.headers.get("content-type")?.includes("application/json") === true &&
+      (body.resource ?? "").endsWith("/api/mcp"),
+    body.resource,
+  );
+
+  const as = await get("/.well-known/oauth-authorization-server/api/auth");
+  const asBody = (await as.json().catch(() => ({}))) as { issuer?: unknown };
+  step(
+    "MCP authorization-server metadata",
+    as.status === 200 &&
+      as.headers.get("content-type")?.includes("application/json") === true &&
+      typeof asBody.issuer === "string",
+    typeof asBody.issuer === "string" ? asBody.issuer : "",
+  );
+
+  const challenge = await post("/api/mcp", {});
+  const authenticate = challenge.headers.get("www-authenticate") ?? "";
+  step(
+    "MCP endpoint challenges with resource_metadata",
+    challenge.status === 401 && authenticate.includes("resource_metadata="),
+    `status ${challenge.status}`,
   );
 }
 
