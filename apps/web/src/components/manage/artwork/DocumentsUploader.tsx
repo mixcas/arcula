@@ -12,9 +12,9 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import {
+  IconFilePlus,
   IconFileText,
   IconFileTypePdf,
-  IconPhoto,
   IconTrash,
 } from "@tabler/icons-react";
 import ImagePreviewModal from "./ImagePreviewModal";
@@ -83,7 +83,7 @@ const DocumentsUploader: React.FC<DocumentsUploaderProps> = ({
             </>
           ),
           noun: "file",
-          icon: <IconPhoto size={16} />,
+          glyph: <IconFilePlus size={36} stroke={1.5} />,
         }}
       />
 

@@ -26,7 +26,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { IconPhoto } from "@tabler/icons-react";
+import { IconPhotoPlus } from "@tabler/icons-react";
 import ImagePreviewModal from "./ImagePreviewModal";
 import StagedDropzone from "./StagedDropzone";
 import type { PhotoEntry, UseArtworkPhotos } from "@/hooks/useArtworkPhotos";
@@ -112,7 +112,7 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
             </>
           ),
           noun: "image",
-          icon: <IconPhoto size={16} />,
+          glyph: <IconPhotoPlus size={36} stroke={1.5} />,
         }}
       />
 

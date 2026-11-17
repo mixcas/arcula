@@ -1,17 +1,21 @@
 /**
- * The fixed Save/Cancel bar both artwork forms end in.
+ * The fixed Back/Save bar both artwork forms end in.
  *
  * The two forms are 350 and 455 lines of fields, and on a laptop the last of
  * them — `currentValue` — is below the fold. A form whose Save button is only
  * reachable by scrolling to the bottom of it is a form people stop trusting, so
  * the actions are pinned.
  *
+ * The back control is a link to the catalogue the form was opened from, at the
+ * left of the bar, so leaving is one obvious press that names its destination
+ * rather than a generic "Cancel"; Save stays at the right.
+ *
  * ## Why this is not `AppShell.Footer`
  *
  * `ManageLayout` is an `AppShell` shared by every `/manage` route, so a footer
- * there would put Save and Cancel on the catalogue page, the settings page and
- * the import too. A bar the two forms choose to render is one line in each
- * file and cannot appear anywhere it has no meaning.
+ * there would put Save and the back control on the catalogue page, the settings
+ * page and the import too. A bar the two forms choose to render is one line in
+ * each file and cannot appear anywhere it has no meaning.
  *
  * ## Why `BAR_HEIGHT` is exported
  *
@@ -26,8 +30,9 @@
  * squeezing them into a 60px strip would truncate the message that matters.
  */
 import React from "react";
-import { Box, Button, Group } from "@mantine/core";
+import { Box, Button, Group, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
+import { IconArrowBackUp } from "@tabler/icons-react";
 
 /**
  * Height of the bar, and the bottom padding each form adds to clear it.
@@ -59,15 +64,25 @@ interface FormActionsBarProps {
    * work that is still deleted. Omitted (the Add page's case) means enabled.
    */
   submitDisabled?: boolean;
-  /** Where Cancel goes. A link, not a handler, so it is a real destination. */
-  cancelTo: string;
+  /**
+   * Where the back control goes. A link, not a handler, so it is a real
+   * destination.
+   */
+  backTo: string;
+  /**
+   * The back control's label — "Back to <catalogue name>". Truncated rather
+   * than wrapped: the bar is a fixed 60px strip and a long catalogue name must
+   * not overflow it.
+   */
+  backLabel: string;
 }
 
 const FormActionsBar: React.FC<FormActionsBarProps> = ({
   submitLabel,
   submitting,
   submitDisabled = false,
-  cancelTo,
+  backTo,
+  backLabel,
 }) => (
   <Box
     pos="fixed"
@@ -84,12 +99,23 @@ const FormActionsBar: React.FC<FormActionsBarProps> = ({
       borderTop: "1px solid var(--mantine-color-default-border)",
     }}
   >
-    <Group h="100%" justify="flex-end">
+    <Group h="100%" justify="space-between" wrap="nowrap">
+      {/* The width cap is on the button, not the group: Save keeps its natural
+          width on a narrow viewport while a long catalogue name is the part
+          that gives. */}
+      <Button
+        component={Link}
+        to={backTo}
+        variant="subtle"
+        leftSection={<IconArrowBackUp size={18} />}
+        maw="50%"
+      >
+        <Text truncate title={backLabel}>
+          {backLabel}
+        </Text>
+      </Button>
       <Button type="submit" loading={submitting} disabled={submitDisabled}>
         {submitLabel}
-      </Button>
-      <Button component={Link} to={cancelTo} variant="outline">
-        Cancel
       </Button>
     </Group>
   </Box>

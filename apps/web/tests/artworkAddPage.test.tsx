@@ -122,6 +122,7 @@ Object.defineProperty(window, "matchMedia", {
 const CATALOGUE_ID = "AAAAAAAAAAAAAAAAAAAA";
 const ARTWORK_ID = "BBBBBBBBBBBBBBBBBBBB";
 const CATALOGUE_PARAM = `flores-solares-${CATALOGUE_ID}`;
+const CATALOGUE_NAME = "Flores Solares";
 
 /** The server's answer for a created work. */
 const created = (overrides: Partial<Artwork> = {}): Artwork => ({
@@ -143,7 +144,7 @@ const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 
 const catalogue = (kind: CatalogueKind): Catalogue => ({
   id: CATALOGUE_ID,
-  name: "Flores Solares",
+  name: CATALOGUE_NAME,
   kind,
   userId: "owner-1",
   isPublic: true,
@@ -243,11 +244,11 @@ describe("the Add page — the single write", () => {
     commits.documents = [{ entryId: "d1", name: "report.pdf" }];
     const user = userEvent.setup();
     renderPage();
-    // No search was active, so Cancel is the catalogue's plain address.
-    expect(await screen.findByRole("link", { name: "Cancel" })).toHaveAttribute(
-      "href",
-      `/manage/catalogue/${CATALOGUE_PARAM}`,
-    );
+    // No search was active, so the back control is the catalogue's plain
+    // address.
+    expect(
+      await screen.findByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
+    ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}`);
     await save(user);
 
     await waitFor(() => expect(landedAt()).toBe(editPath()));
@@ -280,19 +281,19 @@ describe("the Add page — the single write", () => {
     expect(createArtwork.mock.calls[0][1].medium).toBe("Oil on canvas");
   });
 
-  it("carries the active search through Cancel and the new work's page", async () => {
+  it("carries the active search through the back control and the new work's page", async () => {
     const user = userEvent.setup();
     renderPage("?q=picasso");
 
-    // Cancel returns to the search the user left, not to the whole catalogue.
-    expect(await screen.findByRole("link", { name: "Cancel" })).toHaveAttribute(
-      "href",
-      `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`,
-    );
+    // The back control returns to the search the user left, not to the whole
+    // catalogue.
+    expect(
+      await screen.findByRole("link", { name: `Back to ${CATALOGUE_NAME}` }),
+    ).toHaveAttribute("href", `/manage/catalogue/${CATALOGUE_PARAM}?q=picasso`);
 
     await save(user);
 
-    // The new work's Edit page carries it too, so its own Cancel still
+    // The new work's Edit page carries it too, so its own back control still
     // returns to that search.
     await waitFor(() => expect(landedAt()).toBe(`${editPath()}?q=picasso`));
   });

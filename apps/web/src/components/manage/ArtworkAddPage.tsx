@@ -47,8 +47,8 @@ const ArtworkAddPage: React.FC = () => {
   const catalogueId = parseId(param ?? "");
   const navigate = useNavigate();
   // Add is reached from a search result set; the query travels with the page
-  // so Cancel returns to it and the new work's Edit page keeps it. Built from
-  // `q` alone — no other parameter belongs on either destination.
+  // so the back control returns to it and the new work's Edit page keeps it.
+  // Built from `q` alone — no other parameter belongs on either destination.
   const [searchParams] = useSearchParams();
   const search = (searchParams.get("q") ?? "").trim();
   const searchSuffix = artworkSearchSuffix(search);
@@ -219,7 +219,8 @@ const ArtworkAddPage: React.FC = () => {
         <FormActionsBar
           submitLabel="Save Artwork"
           submitting={form.submitting}
-          cancelTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
+          backTo={`/manage/catalogue/${param ?? ""}${searchSuffix}`}
+          backLabel={`Back to ${catalogue?.name ?? "catalogue"}`}
         />
       </form>
     </>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text, Button, Group, Card, Loader, Badge } from "@mantine/core";
 import { Link } from "react-router-dom";
+import { IconStackPlus } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 import { catalogueService } from "@/services/catalogueService";
 import { catalogueLimitForTier, catalogueSlug } from "@arcula/shared";
@@ -87,7 +88,11 @@ const ManagePage: React.FC = () => {
             // button at the cap would still navigate to a form the server
             // refuses. A real disabled control cannot, and it is the one
             // that reads as "not offered".
-            <Button variant="outline" disabled>
+            <Button
+              variant="outline"
+              disabled
+              leftSection={<IconStackPlus size={18} />}
+            >
               New catalogue
             </Button>
           ) : (
@@ -95,6 +100,7 @@ const ManagePage: React.FC = () => {
               component={Link}
               to="/manage/catalogue/new"
               variant="outline"
+              leftSection={<IconStackPlus size={18} />}
             >
               New catalogue
             </Button>
