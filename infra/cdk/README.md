@@ -56,9 +56,12 @@ The cost, measured 17 November 2026 on Bun 1.4.4 at the real Lambda entry
 | SPA maps (raw)              | —            | 11,163,372 B |
 | Package (`arcula-api*.zip`) | 18,132,799 B | 23,545,066 B |
 
-Dev's bundle is production's plus the appended reference (+81 B). Its map names
-934 sources with their full text embedded, 66 of them from this repo and the
-rest third-party. The packaged growth is +5,412,267 B ≈ +5.16 MiB, +29.8%;
+Dev's bundle is production's plus Bun's own `//# debugId` line and the appended
+reference, +81 B in total. Its map names 934 sources with their full text
+embedded — 87 from this repo (66 under `apps/api`, 21 in `packages/shared` and
+`packages/db`) and the rest third-party; its byte count also carries the build
+path once per source, so it shifts with the checkout's directory name. The
+packaged growth is +5,412,267 B ≈ +5.16 MiB, +29.8%;
 inside the zip the maps deflate to 5,429,883 B (the bundle's map 2,710,670 B,
 the SPA's two 1,563,981 B and 1,155,232 B). The cost lands on dev's package
 alone; production's artifact is unchanged.
