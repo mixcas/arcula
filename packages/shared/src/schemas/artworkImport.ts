@@ -111,7 +111,7 @@ export const ARTWORK_IMPORT_FIELDS: readonly ImportFieldMetadata[] = [
   { key: "condition", label: "Condition", required: false, kind: "text" },
   {
     key: "currentValue",
-    label: "Current Value",
+    label: "Current price",
     required: false,
     kind: "text",
   },

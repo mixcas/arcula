@@ -196,7 +196,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
 
       <TextInput
         key={form.key("currentValue")}
-        label="Current Value"
+        label="Current price"
         placeholder="Value in currency"
         mb="md"
         {...form.getInputProps("currentValue")}
