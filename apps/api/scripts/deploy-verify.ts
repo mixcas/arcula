@@ -2,8 +2,9 @@
 // Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
-// link + cache headers, and the source-map rule: dev's entry script references
-// a map the host actually serves and parses, production's carries none), the
+// link + cache headers, and the source-map rule: a map-emitting host — dev or
+// a local checkout — serves an entry script referencing a map the host
+// actually serves and parses, production's carries none), the
 // agent surface's discovery documents and its 401 challenge, sign-up (and that
 // its cookie is `Secure`), the session token refused as an API bearer, /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
@@ -53,22 +54,36 @@ const post = (path: string, body: unknown, authed = false) =>
     body: JSON.stringify(body),
   });
 
-// 1. Health. The body also says which environment this is, so the source-map
+// 1. Health. The body also says which shape this host is, so the source-map
 //    rule below can be the one the host applies: dev reports its deployed
-//    commit, production reports neither a commit nor a checkout, and a local
-//    API reports a checkout. The tool still takes only a base URL — the host
+//    commit, a local API reports its checkout, and production reports
+//    neither. Both map-emitting shapes are held to the map rule; production
+//    is the one exception. The tool still takes only a base URL — the host
 //    names the environment, not an argument and not a local variable.
-let devHost: boolean;
+let mapHost: boolean;
+let hostShape: string;
 {
   const res = await get("/api/health");
-  const body = (await res.json()) as { status?: string; commit?: string };
-  devHost = typeof body.commit === "string" && body.commit !== "";
+  const body = (await res.json()) as {
+    status?: string;
+    commit?: string;
+    checkout?: string;
+  };
+  const commit = typeof body.commit === "string" ? body.commit : "";
+  const checkout = typeof body.checkout === "string" ? body.checkout : "";
+  mapHost = commit !== "" || checkout !== "";
+  hostShape = commit
+    ? `dev host (commit ${commit.slice(0, 7)})`
+    : checkout
+      ? `local host (checkout ${checkout})`
+      : "production host (no commit or checkout)";
   step("health", res.status === 200 && body.status === "ok");
 }
 
 // 2. The SPA: shell, cache header, and a client-route deep link, plus the
-//    source-map rule the host itself answers for: dev serves the entry
-//    script with a reference and the map it names, production serves neither.
+//    source-map rule the host itself answers for: a map-emitting host (dev or
+//    local) serves the entry script with a reference and the map it names,
+//    production serves neither.
 {
   const res = await get("/");
   const html = await res.text();
@@ -104,13 +119,15 @@ let devHost: boolean;
   const mapReference =
     entryText.match(/sourceMappingURL=([^\s'"*]+)/)?.[1] ?? "";
 
-  if (devHost) {
+  if (mapHost) {
     step(
       "spa entry script references its source map",
       entry?.status === 200 && mapReference !== "",
-      entryUrl
-        ? `${entryUrl.pathname} → ${mapReference || "no reference"}`
-        : "the shell names no entry module",
+      `${hostShape}: ${
+        entryUrl
+          ? `${entryUrl.pathname} → ${mapReference || "no reference"}`
+          : "the shell names no entry module"
+      }`,
     );
     const mapUrl =
       mapReference && entryUrl ? new URL(mapReference, entryUrl) : null;
@@ -129,7 +146,7 @@ let devHost: boolean;
         mapType.includes("application/json") &&
         map?.version === 3 &&
         sources > 0,
-      `${mapUrl?.pathname ?? "no map"} — status ${
+      `${hostShape}: ${mapUrl?.pathname ?? "no map"} — status ${
         mapRes?.status ?? 0
       }, type ${mapType || "—"}, ${sources} source(s)`,
     );
@@ -137,9 +154,11 @@ let devHost: boolean;
     step(
       "spa entry script carries no source-map reference",
       entry?.status === 200 && mapReference === "",
-      mapReference
-        ? `${entryUrl?.pathname ?? "the entry script"} references ${mapReference}`
-        : `${entryUrl?.pathname ?? "no entry module"} is clean`,
+      `${hostShape}: ${
+        mapReference
+          ? `${entryUrl?.pathname ?? "the entry script"} references ${mapReference}`
+          : `${entryUrl?.pathname ?? "no entry module"} is clean`
+      }`,
     );
   }
 }
