@@ -136,6 +136,14 @@ carries a written reason in the config and is not added silently.
   `scripts/ensure-api.sh`, which leaves an API of this checkout already
   listening on `PORT` alone, refuses one from another checkout, and otherwise
   starts this checkout's and polls `/api/health`.
+- **The API suite seeds the provider's `oauthResource` row before workers
+  fork.** `@better-auth/oauth-provider` inserts that row at auth-context init
+  with a find-then-create whose duplicate-key catch reads the error message for
+  `unique|duplicate`; Drizzle wraps the violation as `Failed query: …` with the
+  constraint error in `cause`, so the race is not caught. Parallel workers on a
+  fresh database then reject the auth context instead of sharing the one row,
+  which is why `apps/api/tests/globalSetup.ts` inserts it once in the main
+  process, before any worker starts.
 - **The API on a port names its checkout.** A dev server started from the main
   checkout keeps answering after a worktree begins, so the API carries
   `ARCULA_CHECKOUT` (put there by `ensure-api.sh` and by `apps/api`'s `dev`) and

@@ -162,4 +162,5 @@ sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
 `src/index.ts` and regenerate; the hand-added statements are the data backfill,
 appended with a comment saying what it reads, the
 add-nullable → backfill → set-not-null sequence above, and the guarded grant
-revoke in `0006_enable_rls`.
+revoke in `0006_enable_rls`, repeated by `0011_account_write_windows` and
+`0012_agent_access` for the tables that followed.
