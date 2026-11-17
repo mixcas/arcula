@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   artworks as artworksTable,
   catalogueCollaborators as collaboratorsTable,
+  catalogues as cataloguesTable,
 } from "@arcula/db";
 import { MINTED_ID_RE, type ArtworkRead } from "@arcula/shared";
 import { eq } from "drizzle-orm";
@@ -210,6 +211,34 @@ describe("update_artwork", () => {
       expect(description, name).toMatch(/Collection/);
       expect(description, name).toMatch(/field-disabled/);
     }
+  });
+
+  it("omits a field the Catalogue has since switched off", async () => {
+    // The write itself is refused for a disabled field, but a value recorded
+    // while the field was on must not reappear in the answer after it is
+    // switched off. The row keeps it; the agent's view does not.
+    const catalogueId = await makeCatalogue(owner.userId, {
+      name: "Fields Turned Off",
+      kind: "collection",
+    });
+    const created = await create(owner.userId, {
+      catalogueId,
+      title: "Kept Value",
+      artistName: "Roxana Alvarado",
+      serie: "Espacios",
+    });
+    await db
+      .update(cataloguesTable)
+      .set({ artworkFields: { serie: false } })
+      .where(eq(cataloguesTable.id, catalogueId));
+
+    const written = await update(owner.userId, {
+      catalogueId,
+      artworkId: created.id,
+      medium: "Acrylic on wood",
+    });
+    expect(written.medium).toBe("Acrylic on wood");
+    expect(written).not.toHaveProperty("serie");
   });
 
   it("refuses a missing or hidden Artwork as not-found", async () => {
