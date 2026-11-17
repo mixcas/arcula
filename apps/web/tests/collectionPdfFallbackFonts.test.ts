@@ -1,9 +1,50 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadFallbackFamilies } from "@/components/pdf/fallbackFonts";
 
+const FALLBACK_PATH = "/api/v1/pdf/font-fallback";
+
+/** The chunk a request carried, read back out of its URL. */
+const requestedText = (url: string): string => {
+  const [path, query = ""] = url.split("?");
+  expect(path).toBe(FALLBACK_PATH);
+  expect(query.startsWith("text=")).toBe(true);
+  return decodeURIComponent(query.slice("text=".length));
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("loadFallbackFamilies chunks", () => {
+  it("sends the mixed-script chunks in order and registers one family each", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(["font"])),
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // é sorts first (U+00E9); the 513 distinct Han characters start at U+4E00,
+    // so é plus 511 of them fill chunk one and the last two ride chunk two.
+    const han = Array.from({ length: 513 }, (_, index) =>
+      String.fromCodePoint(0x4e00 + index),
+    ).join("");
+
+    vi.resetModules();
+    const { loadFallbackFamilies } =
+      await import("@/components/pdf/fallbackFonts");
+
+    const families = await loadFallbackFamilies(["é" + han]);
+
+    expect(
+      fetchMock.mock.calls.map(([url]) => requestedText(String(url))),
+    ).toEqual(["é" + han.slice(0, 511), han.slice(511)]);
+    expect(families).toEqual(["Arcula Fallback 1", "Arcula Fallback 2"]);
+  });
 });
 
 describe("loadFallbackFamilies cancellation", () => {

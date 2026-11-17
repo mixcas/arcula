@@ -536,7 +536,7 @@ path relative to a source module would otherwise break in production.
 
 Client side:
 
-- `collectionPdfTexts` collects every string the document draws — the Collection name,
+- `cataloguePdfTexts` collects every string the document draws — the Collection name,
   every Title, every metadata value, and the fixed placeholder copy. It does
   **not** include the photo filename (which is not printed).
 - Keep the distinct non-ASCII code points, sorted.
@@ -772,7 +772,7 @@ Two surfaces, and each one offers the actions exactly once.
   restarting the export, drops whatever the previous run reported — its
   progress or its file — with it.
 - **Download** is an `<a download={filename} href={blobUrl}>`; the blob URL is
-  same-origin. The filename is `collectionPdfFileName(name)` — **Download**
+  same-origin. The filename is `cataloguePdfFileName(name)` — **Download**
   carries the exported file's own name.
 - **Open PDF** calls
   `window.open(blobUrl, "_blank", "noopener,noreferrer")`. This is the Safari
@@ -990,11 +990,11 @@ five-per-grid, draft included). That is the acceptance bar.
   box, preserves aspect ratio when it is larger, rounds to at least 1 px, and
   uses the 2100 × 2417 target at 300 dpi — the number `xxlarge`'s 3000 px exists
   to reach. Mutating the `min(1, …)` must fail the no-enlarge test.
-- `fallbackCharacters` keeps distinct non-ASCII code points only, sorted;
+- `pdfFallbackCharacters` keeps distinct non-ASCII code points only, sorted;
   ASCII-only text returns an empty string; a mixed string returns the non-ASCII
-  subset. `fallbackChunks` splits on code points, not UTF-16 units: 0 → no
+  subset. `pdfFallbackChunks` splits on code points, not UTF-16 units: 0 → no
   chunks, 1 and 512 → one, 513 → two.
-- `collectionPdfTexts` includes the Collection name, every Title, every
+- `cataloguePdfTexts` includes the Collection name, every Title, every
   metadata value and the placeholder copy, and excludes the photo filename. A
   non-ASCII title reaches the fallback set.
 - `shouldWarnForLargeExport` is true at 30 photo pages and false at 29; true at

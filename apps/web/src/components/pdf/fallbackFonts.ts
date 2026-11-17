@@ -15,7 +15,8 @@
 
 import { Font } from "@react-pdf/renderer";
 
-import { fallbackCharacters, fallbackChunks } from "./cataloguePdfPreflight";
+import { pdfFallbackCharacters, pdfFallbackChunks } from "@arcula/shared";
+
 import { throwIfAborted } from "./photoPipeline";
 
 const FALLBACK_ENDPOINT = "/api/v1/pdf/font-fallback";
@@ -60,7 +61,7 @@ export async function loadFallbackFamilies(
   texts: string[],
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const chunks = fallbackChunks(fallbackCharacters(texts));
+  const chunks = pdfFallbackChunks(pdfFallbackCharacters(texts));
   const families: string[] = [];
 
   for (const chunk of chunks) {
