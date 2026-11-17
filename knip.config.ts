@@ -21,7 +21,14 @@ const config: KnipConfig = {
   exclude: ["types", "enumMembers"],
   workspaces: {
     ".": {
-      entry: ["scripts/*.{js,mjs,ts}", "!scripts/lambda-smoke.mjs"],
+      // `scripts/tests` holds the repository tooling's own suite, run by
+      // `bun run test:scripts` (`vitest run --root scripts`). A test file is
+      // an entry, not a dead module: nothing imports it, the runner does.
+      entry: [
+        "scripts/*.{js,mjs,ts}",
+        "scripts/tests/**/*.ts",
+        "!scripts/lambda-smoke.mjs",
+      ],
       project: ["scripts/**/*.{js,mjs,ts}", "!scripts/lambda-smoke.mjs"],
     },
     "apps/api": {
