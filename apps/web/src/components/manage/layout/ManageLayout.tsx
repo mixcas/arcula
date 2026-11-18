@@ -1,16 +1,7 @@
 import React from "react";
-import { AppShell, Container, ContainerProps } from "@mantine/core";
+import { ContainerProps } from "@mantine/core";
+import AppShellLayout from "@/components/layout/AppShellLayout";
 import ManageNavBar from "./ManageNavBar";
-
-/**
- * The authenticated shell's header height, in pixels.
- *
- * Exported because it is not the layout's private business: whatever renders
- * in the header sits in it, and a body that fills the window under it — the
- * Catalogue PDF viewer's preview — sizes against the same number rather than
- * writing 60 a second time.
- */
-export const MANAGE_HEADER_HEIGHT = 60;
 
 interface ManageLayoutProps {
   children: React.ReactNode;
@@ -24,18 +15,25 @@ interface ManageLayoutProps {
   header?: React.ReactNode;
 }
 
+/**
+ * The authenticated shell.
+ *
+ * Every frame rule — the header height, the main offset, the content
+ * container — belongs to `AppShellLayout`; this is the thin instantiation
+ * that gives it the manage header when a page does not bring its own.
+ */
 const ManageLayout: React.FC<ManageLayoutProps> = ({
   children,
   containerProps,
   header,
 }) => {
   return (
-    <AppShell header={{ height: MANAGE_HEADER_HEIGHT }} padding="md">
-      <AppShell.Header>{header ?? <ManageNavBar />}</AppShell.Header>
-      <AppShell.Main>
-        <Container {...containerProps}>{children}</Container>
-      </AppShell.Main>
-    </AppShell>
+    <AppShellLayout
+      header={header ?? <ManageNavBar />}
+      containerProps={containerProps}
+    >
+      {children}
+    </AppShellLayout>
   );
 };
 
