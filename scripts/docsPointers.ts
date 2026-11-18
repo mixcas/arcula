@@ -59,16 +59,24 @@ export interface DeadPointer {
 
 /**
  * The navigation surface, as an explicit decision rather than a directory
- * sweep, so a new always-loaded document is either added here or deliberately
- * left out. `.agents/skills/**` is deliberately excluded: it is vendored,
- * upstream content pinned by `skills-lock.json`, and a pointer into it is not
- * ours to repair.
+ * sweep, so a document a reader is told to follow is either added here or
+ * deliberately left out. The root `AGENTS.md` is always loaded; `README.md` is
+ * the contributor reference, and `DESIGN.md`, `GLOSSARY.md`, `docs/**` and the
+ * four package instruction files are read where they apply.
+ * `.agents/skills/**` is deliberately excluded: it is vendored, upstream
+ * content pinned by `skills-lock.json`, and a pointer into it is not ours to
+ * repair.
  */
 export const DOCS_SURFACE = [
   "AGENTS.md",
+  "README.md",
   "DESIGN.md",
   "GLOSSARY.md",
   "docs/**/*.md",
+  "apps/api/AGENTS.md",
+  "apps/web/AGENTS.md",
+  "packages/db/AGENTS.md",
+  "infra/cdk/AGENTS.md",
 ] as const;
 
 /**
