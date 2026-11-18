@@ -1,9 +1,26 @@
 /**
  * The gate's half of the documentation check: read the navigation surface from
  * disk, hand the resolver an `exists` probe, print one line per dead pointer
- * and exit non-zero; then check the shared package's surface list the same way.
- * All the decisions live in `docsPointers.ts` and `moduleInventory.ts`; this
- * file is only the filesystem seam.
+ * and exit non-zero; check the shared package's surface list the same way; then
+ * hold every instruction file to its word ceiling. All the decisions live in
+ * `docsPointers.ts`, `moduleInventory.ts` and `instructionBudget.ts`; this file
+ * is only the filesystem seam.
+ *
+ * The instruction ceilings, and why they are these numbers:
+ *
+ * - The root `AGENTS.md` gets 800 words. It is the one file loaded on every
+ *   request, so it must stay a pointer file — identity, the invariants an agent
+ *   must not break, the test bar, and where to look. The draft sits near 580,
+ *   so 800 leaves room for roughly a third more before the gate objects, and
+ *   that room is for a rule that genuinely belongs on every task.
+ * - Each package `AGENTS.md` gets 400 words. A package file is disclosed only
+ *   when an agent reads that package, so its cost is conditional; but it is a
+ *   delta beside the package README and the architecture map, not a second
+ *   manual. If it grows past 400 it is restating what its neighbours own.
+ *
+ * Because the ceilings live in the gate, raising one is an explicit edit with a
+ * reviewer, not a silent paragraph. A document exactly at its ceiling passes:
+ * the limit is the last allowed word, not the first forbidden one.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -13,6 +30,7 @@ import {
   findDeadPointers,
   type SurfaceDocument,
 } from "./docsPointers";
+import { findOverBudgetDocuments } from "./instructionBudget";
 import { findUnindexedModules } from "./moduleInventory";
 
 /** The repository root, derived from this file rather than the caller's cwd. */
@@ -112,4 +130,40 @@ if (unindexed.length > 0) {
 
 console.log(
   `shared surface: ${sharedModules.length} modules named in both indexes`,
+);
+
+/**
+ * The instruction files the gate holds to a ceiling, and the ceilings. The
+ * reason for the two numbers is in this file's header.
+ */
+const INSTRUCTION_CEILINGS = [
+  { path: "AGENTS.md", limit: 800 },
+  { path: "apps/api/AGENTS.md", limit: 400 },
+  { path: "apps/web/AGENTS.md", limit: 400 },
+  { path: "packages/db/AGENTS.md", limit: 400 },
+  { path: "infra/cdk/AGENTS.md", limit: 400 },
+] as const;
+
+const instructionDocuments = INSTRUCTION_CEILINGS.map(({ path, limit }) => ({
+  path,
+  limit,
+  text: readFileSync(join(repositoryRoot, path), "utf8"),
+}));
+
+const overBudget = findOverBudgetDocuments(instructionDocuments);
+
+if (overBudget.length > 0) {
+  for (const document of overBudget) {
+    console.error(
+      `${document.file}: ${document.words} words, ceiling ${document.limit}`,
+    );
+  }
+  console.error(
+    `\n${overBudget.length} instruction document${overBudget.length === 1 ? "" : "s"} over its word ceiling`,
+  );
+  process.exit(1);
+}
+
+console.log(
+  `instruction budgets: ${instructionDocuments.length} documents within their ceilings`,
 );
