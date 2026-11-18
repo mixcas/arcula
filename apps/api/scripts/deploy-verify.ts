@@ -168,13 +168,21 @@ let hostShape: string;
 //     there. None writes and none needs a token, so the first deploy can ask
 //     them; a SPA fallback would answer all three with HTML or a 404.
 {
+  // The audience and issuer must be *this* deployment, not merely shaped right:
+  // the two-step deploy's first pass carries a localhost placeholder, and a
+  // wrong AUTH_BASE_URL would otherwise ship discovery documents that point a
+  // client at nothing.
+  const expectedResource = `${base}/api/mcp`;
+  const expectedIssuer = `${base}/api/auth`;
+  const expectedMetadata = `${base}/.well-known/oauth-protected-resource/api/mcp`;
+
   const res = await get("/.well-known/oauth-protected-resource");
   const body = (await res.json().catch(() => ({}))) as { resource?: string };
   step(
     "MCP protected-resource metadata",
     res.status === 200 &&
       res.headers.get("content-type")?.includes("application/json") === true &&
-      (body.resource ?? "").endsWith("/api/mcp"),
+      body.resource === expectedResource,
     body.resource,
   );
 
@@ -184,7 +192,7 @@ let hostShape: string;
     "MCP authorization-server metadata",
     as.status === 200 &&
       as.headers.get("content-type")?.includes("application/json") === true &&
-      typeof asBody.issuer === "string",
+      asBody.issuer === expectedIssuer,
     typeof asBody.issuer === "string" ? asBody.issuer : "",
   );
 
@@ -192,7 +200,8 @@ let hostShape: string;
   const authenticate = challenge.headers.get("www-authenticate") ?? "";
   step(
     "MCP endpoint challenges with resource_metadata",
-    challenge.status === 401 && authenticate.includes("resource_metadata="),
+    challenge.status === 401 &&
+      authenticate.includes(`resource_metadata="${expectedMetadata}"`),
     `status ${challenge.status}`,
   );
 }
