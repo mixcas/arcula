@@ -3,6 +3,7 @@ import { Box } from "@mantine/core";
 import { LANDING_METADATA } from "./content";
 import HeroSection from "./HeroSection";
 import { LANDING_PALETTE } from "./palette";
+import RecordSection from "./RecordSection";
 
 /**
  * The public home page: what Arcula is, who it is for, and how to start.
@@ -27,6 +28,7 @@ const LandingPage: React.FC = () => (
     <meta property="og:type" content={LANDING_METADATA.type} />
 
     <HeroSection />
+    <RecordSection />
 
     {/*
       The page's sections, in reading order. Each later ticket adds its own
