@@ -79,10 +79,12 @@ formatters.
 of a dependency the package does not declare, a duplicate export, and an export
 nothing references at all.
 
-`check:docs` reports a pointer into the navigation surface — `AGENTS.md`,
-`DESIGN.md`, `GLOSSARY.md` and the docs tree — that resolves to nothing, naming
-the file and the line. Its pointers are markdown links and inline-code spans
-anchored by a leading `/`, `./` or `../` or by a known top-level directory.
+`check:docs` reports a pointer into the navigation surface — the root
+`AGENTS.md`, `README.md`, `DESIGN.md`, `GLOSSARY.md`, the docs tree, and the four
+package instruction files (`apps/api`, `apps/web`, `packages/db` and
+`infra/cdk`) — that resolves to nothing, naming the file and the line. Its
+pointers are markdown links and inline-code spans anchored by a leading `/`,
+`./` or `../` or by a known top-level directory.
 
 Both leave a gap, and both gaps are deliberate. `knip` does not report a symbol
 exported only for its own test, because test usage counts as usage, nor a dead

@@ -320,8 +320,8 @@ SEED_NAME=Owner
 SEED_PASSWORD=changeme123
 ```
 
-Never commit real secrets. `infra/cdk/.env` (which holds the production
-`DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
+Never commit real secrets. The `.env` in `infra/cdk/` (which holds the
+production `DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
 
 ### Run it
 
@@ -452,7 +452,7 @@ The two deploy scripts are thin wrappers over one shared sequence
 (`scripts/deploy.sh`): build the environment's CDK app, deploy, resolve the
 URL, apply the migration, seed the owner account, re-deploy with the real
 public URL, and run `deploy-verify` — a full end-to-end pass against the live
-site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
+site. Values come from `infra/cdk/.env.<env>` (the `.env` in `infra/cdk/` is
 production's fallback), which is gitignored; see `infra/cdk/README.md` for the
 stack's context values, its outputs and the first-run order.
 
