@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, SimpleGrid, Text } from "@mantine/core";
 import { LANDING_ANCHORS, LANDING_FEATURES } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -37,12 +37,8 @@ const FeaturesSection: React.FC = () => (
       mt={{ base: "xl", md: 40 }}
     >
       {LANDING_FEATURES.items.map((item) => (
-        <Box
-          key={item.name}
-          py="lg"
-          style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
-        >
-          <Text component="h3" fz="lg" fw={600} lh={1.25} m={0}>
+        <Box key={item.name} py="lg" style={{ borderTop: LANDING_RULE }}>
+          <Text component="h3" ff="text" fz="lg" fw={600} lh={1.25} m={0}>
             {item.name}
           </Text>
           <Text size="md" lh={1.45} mt="xs" maw={520}>

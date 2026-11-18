@@ -179,7 +179,7 @@ export const LANDING_CATALOGUES: LandingCataloguesContent = {
   label: "02 — The catalogues",
   heading: "One home, three ways to hold a body of work.",
   kinds: [
-    { name: "Portfolio", audience: "For an artist's body of work." },
+    { name: "Portfolio", audience: "For an artist’s body of work." },
     { name: "Collection", audience: "For what a collector owns." },
     { name: "Inventory", audience: "For what a gallery represents for sale." },
   ],
@@ -217,7 +217,7 @@ export const LANDING_GETTING_STARTED: LandingGettingStartedContent = {
     {
       name: "Record the work",
       detail:
-        "Add the details you keep, attach the photos and documents, and leave out what you don't track.",
+        "Add the details you keep, attach the photos and documents, and leave out what you don’t track.",
     },
     {
       name: "Decide who sees it",
@@ -370,7 +370,7 @@ export const LANDING_QUESTIONS: LandingQuestionsContent = {
     {
       question: "What happens when I delete a work?",
       answer:
-        "It moves to the catalogue's Deleted view, where you can restore it. Its photos and documents are kept.",
+        "It moves to the catalogue’s Deleted view, where you can restore it. Its photos and documents are kept.",
     },
   ],
 };

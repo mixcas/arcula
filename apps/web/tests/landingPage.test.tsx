@@ -14,11 +14,13 @@ import App from "@/App";
  *
  * The one behaviour worth pinning is where the page's primary actions lead,
  * because they are its conversion path and they change with the session. The
- * hero and the closing action both offer the same door, so the signed-out
- * assertion asks that `/signup` is present rather than counting the entries.
- * Links are found by `href`, never by their visible text: the copy is free to
- * change, the destination is not. Layout, colour and the copy itself are a
- * reviewer's job — jsdom cannot see them.
+ * page has two conversion doors — the hero's and the closing action's — and a
+ * presence check cannot tell a broken door from a working one, since either
+ * alone would satisfy it. So each session state counts its doors exactly: two
+ * `/signup` links and no `/manage` for a visitor, two `/manage` links and no
+ * `/signup` for an account holder. Links are found by `href`, never by their
+ * visible text: the copy is free to change, the destination is not. Layout,
+ * colour and the copy itself are a reviewer's job — jsdom cannot see them.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -94,10 +96,11 @@ afterEach(() => {
 });
 
 describe("the landing page's primary action", () => {
-  it("offers a signed-out visitor the way to create a catalogue", () => {
+  it("offers a signed-out visitor the way to create a catalogue at both doors", () => {
     renderLanding();
 
-    expect(mainLinks("/signup").length).toBeGreaterThan(0);
+    expect(mainLinks("/signup")).toHaveLength(2);
+    expect(mainLinks("/manage")).toHaveLength(0);
   });
 
   it("sends a signed-in account holder to their catalogues, not to sign-up", () => {
@@ -111,7 +114,7 @@ describe("the landing page's primary action", () => {
     };
     renderLanding();
 
-    expect(mainLinks("/manage").length).toBeGreaterThan(0);
+    expect(mainLinks("/manage")).toHaveLength(2);
     expect(mainLinks("/signup")).toHaveLength(0);
   });
 });
