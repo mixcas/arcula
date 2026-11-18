@@ -108,6 +108,82 @@ export const LANDING_EXAMPLE_RECORD: LandingExampleRecord = {
     "An example record. Dates stay as written; what you paid and what it may be worth stay separate.",
 };
 
+/** One of the three catalogue kinds, and the audience it speaks to. */
+export interface LandingCatalogueKind {
+  name: string;
+  /** The one line that tells a visitor whether the kind is for them. */
+  audience: string;
+}
+
+export interface LandingCataloguesContent {
+  /** The small numbered label above the heading. */
+  label: string;
+  heading: string;
+  kinds: LandingCatalogueKind[];
+  /** The line that closes the section: the kinds are not a role choice. */
+  closing: string;
+}
+
+/**
+ * The three kinds a catalogue can be.
+ *
+ * They are one product, not three tiers: the section's job is to let an
+ * artist, a collector and a gallery each recognise themselves, and then to
+ * say that one account can hold all three. The order is the order the kinds
+ * were specified in, and the names are the product's own.
+ */
+export const LANDING_CATALOGUES: LandingCataloguesContent = {
+  label: "02 — The catalogues",
+  heading: "One home, three ways to hold a body of work.",
+  kinds: [
+    { name: "Portfolio", audience: "For an artist's body of work." },
+    { name: "Collection", audience: "For what a collector owns." },
+    { name: "Inventory", audience: "For what a gallery represents for sale." },
+  ],
+  closing: "One account can hold all three.",
+};
+
+/** One move between an empty account and a catalogue with a decision on it. */
+export interface LandingGettingStartedStep {
+  name: string;
+  detail: string;
+}
+
+export interface LandingGettingStartedContent {
+  label: string;
+  heading: string;
+  steps: LandingGettingStartedStep[];
+}
+
+/**
+ * The three moves from a work to a record.
+ *
+ * The section stops at the catalogue's own decisions: it deliberately does not
+ * explain the mechanics of filling in a name or a biography. Each step names
+ * what the person decides, not which control they click.
+ */
+export const LANDING_GETTING_STARTED: LandingGettingStartedContent = {
+  label: "03 — Getting started",
+  heading: "From a work to a record, in three moves.",
+  steps: [
+    {
+      name: "Choose the kind",
+      detail:
+        "Portfolio, Collection or Inventory. It sets the language and the fields the catalogue starts from.",
+    },
+    {
+      name: "Record the work",
+      detail:
+        "Add the details you keep, attach the photos and documents, and leave out what you don't track.",
+    },
+    {
+      name: "Decide who sees it",
+      detail:
+        "Publish a page, generate a catalogue PDF, invite collaborators, or keep it private.",
+    },
+  ],
+};
+
 /**
  * The page's head metadata.
  *

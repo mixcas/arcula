@@ -1,6 +1,8 @@
 import React from "react";
 import { Box } from "@mantine/core";
+import CataloguesSection from "./CataloguesSection";
 import { LANDING_METADATA } from "./content";
+import GettingStartedSection from "./GettingStartedSection";
 import HeroSection from "./HeroSection";
 import { LANDING_PALETTE } from "./palette";
 
@@ -46,6 +48,9 @@ const LandingPage: React.FC = () => (
       and if it is a link target add its id to `LANDING_ANCHORS` so the link and
       the section read the same constant.
     */}
+
+    <CataloguesSection />
+    <GettingStartedSection />
   </Box>
 );
 
