@@ -100,6 +100,14 @@ one, and `enumMembers`, which are read through their enum — and it keeps
 analysed inside the staged Lambda package it is copied into. A suppression
 carries a written reason in the config and is not added silently.
 
+`check:docs` also holds every instruction file to a word ceiling: the root
+`AGENTS.md` gets 800 words and each package file — `apps/api`, `apps/web`,
+`packages/db` and `infra/cdk` — gets 400. The ceiling is inclusive, so a
+document at exactly its limit passes; an over-limit document is reported by
+file and count and fails the check. The measure is in
+[`scripts/instructionBudget.ts`](../scripts/instructionBudget.ts) and the file
+list with its ceilings is in [`scripts/checkDocs.ts`](../scripts/checkDocs.ts).
+
 ## Test mechanics
 
 - **Component tests need an explicit `afterEach(cleanup)`.** Test files run per
