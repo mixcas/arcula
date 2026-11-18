@@ -317,3 +317,120 @@ export const LANDING_AGENT_BAND: LandingAgentBandContent = {
   statement:
     "Integrate with your favourite AI agents and let them manage your catalogues.",
 };
+
+/** One question the page answers, and the answer it settles on. */
+export interface LandingQuestion {
+  question: string;
+  answer: string;
+}
+
+export interface LandingQuestionsContent {
+  /** `05 — Questions`: the agent band is unnumbered, so the count has no gap. */
+  label: string;
+  heading: string;
+  items: LandingQuestion[];
+}
+
+/**
+ * The six questions a visitor actually asks before trying the product.
+ *
+ * The set is closed on purpose — audience, price, import, export, visibility
+ * and deletion — and every answer is the product's current truth. The export
+ * answer admits what is not built, because the page's argument is honesty and
+ * the rest of it is only worth reading if this answer is.
+ */
+export const LANDING_QUESTIONS: LandingQuestionsContent = {
+  label: "05 — Questions",
+  heading: "A few honest answers.",
+  items: [
+    {
+      question: "Who is Arcula for?",
+      answer:
+        "Independent collectors, artists and galleries: people who own, make or sell art and want a proper record of it. It is not built for institutional museum cataloguing.",
+    },
+    {
+      question: "Is Arcula free?",
+      answer: "Yes — Arcula is 100% free… for now.",
+    },
+    {
+      question: "Can I import my spreadsheet?",
+      answer:
+        "Yes. Import a CSV, map its columns to the fields your catalogue records, review the rows, and bring in a body of work at once.",
+    },
+    {
+      question: "Can I export my data?",
+      answer:
+        "You can generate a catalogue PDF today. A portable CSV/JSON export is on the roadmap; it is not built yet.",
+    },
+    {
+      question: "Who can see my catalogue?",
+      answer:
+        "A catalogue can be Public, Private, or Protected by a password. Visitors see published works only; drafts, deleted works and documents stay private.",
+    },
+    {
+      question: "What happens when I delete a work?",
+      answer:
+        "It moves to the catalogue's Deleted view, where you can restore it. Its photos and documents are kept.",
+    },
+  ],
+};
+
+export interface LandingFinalActionContent {
+  heading: string;
+  body: string;
+  /**
+   * The closing action follows the session exactly as the hero's does. The
+   * login door is signed-out only: an account holder has nothing to log in to,
+   * and the section carries no sign-up link once there is a session.
+   */
+  actions: {
+    signedOut: { primary: LandingAction; secondary: LandingAction };
+    signedIn: { primary: LandingAction };
+  };
+}
+
+/**
+ * The page's last ask: one catalogue, not a tour of the product.
+ *
+ * It repeats the hero's primary action deliberately — the page is long, and a
+ * reader who has scrolled this far should not have to scroll back up to start.
+ */
+export const LANDING_FINAL_ACTION: LandingFinalActionContent = {
+  heading: "Start with one catalogue.",
+  body: "Add a work, record what you know, and decide who sees it.",
+  actions: {
+    signedOut: {
+      primary: { label: "Create your first catalogue", href: "/signup" },
+      secondary: { label: "Log in", href: "/login" },
+    },
+    signedIn: {
+      primary: { label: "Open your catalogues", href: "/manage" },
+    },
+  },
+};
+
+export interface LandingFooterContent {
+  name: string;
+  tagline: string;
+  /** The only place the source is offered; there is no open-source section. */
+  github: LandingAction;
+  login: LandingAction;
+  contact: LandingAction;
+  copyright: string;
+}
+
+/**
+ * The footer: where the product is, how to reach it, and the way back in.
+ *
+ * It belongs to the landing page, not to the public layout, so the auth pages
+ * keep their own chrome. GitHub is the page's only outbound link and opens in
+ * a new tab; the address is a `mailto:` so a question needs no form.
+ */
+export const LANDING_FOOTER: LandingFooterContent = {
+  name: "Arcula",
+  tagline: "Catalogue management for people who own, make and sell the work.",
+  github: { label: "GitHub", href: "https://github.com/mixcas/arcula" },
+  login: { label: "Log in", href: "/login" },
+  contact: { label: "hello@arcula.art", href: "mailto:hello@arcula.art" },
+  copyright: "© 2026 Arcula.",
+};
