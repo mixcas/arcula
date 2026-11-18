@@ -434,7 +434,14 @@ dropped and rebuilt from the branch.
 `dev` is the integration branch and the repository's default. Changes land
 there first, and a release is a pull request from `dev` into `main`. Merging is
 deploying: CI deploys whichever environment's branch moved, through the same
-scripts you can run yourself. The scripts, not a bare `cdk deploy`:
+scripts you can run yourself, and either deploy workflow can also be dispatched
+by hand to repeat or finish a deploy without a new commit. Dev cancels a run a
+newer push has superseded, so the disposable environment lands on the newest
+commit; production never cancels and never overlaps, so two migrations cannot
+interleave against the production database. Only dev's `/api/health` reports
+the deployed commit; production's does not.
+
+The scripts, not a bare `cdk deploy`:
 
 ```bash
 sh scripts/build-lambda.sh prod   # or: dev — each writes its own artifact
@@ -448,6 +455,9 @@ public URL, and run `deploy-verify` — a full end-to-end pass against the live
 site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
 production's fallback), which is gitignored; see `infra/cdk/README.md` for the
 stack's context values, its outputs and the first-run order.
+
+The build's source-map rule, and what each environment ships, is in
+[Source maps and the dev artifact](infra/cdk/README.md#source-maps-and-the-dev-artifact).
 
 `scripts/provision-cert.mjs <host>` provisions a host's TLS certificate and
 prints the DNS records to publish, `scripts/provision-oidc.mjs` provisions the
