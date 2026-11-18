@@ -6,6 +6,14 @@ import { returnStateFor } from "@/utils/returnPath";
 import AccountMenu from "./AccountMenu";
 import HeaderBar from "./HeaderBar";
 
+interface PublicNavBarProps {
+  /**
+   * The bar's surface, passed through from `PublicLayout`. Defaults to the
+   * app's grey; the home route asks for the landing page's paper.
+   */
+  background?: string;
+}
+
 /**
  * The anonymous header: the shared bar with its wordmark leading home, and
  * either the account menu or the two doors into authentication.
@@ -20,7 +28,7 @@ import HeaderBar from "./HeaderBar";
  * that puts itself in router state, so a visitor who uses the header instead
  * of the invitation card's own doors does not lose the link they were sent.
  */
-const PublicNavBar: React.FC = () => {
+const PublicNavBar: React.FC<PublicNavBarProps> = ({ background }) => {
   const { currentUser } = useAuth();
   const { pathname } = useLocation();
 
@@ -32,6 +40,7 @@ const PublicNavBar: React.FC = () => {
     return (
       <HeaderBar
         homePath="/"
+        background={background}
         right={
           <Group gap="xs">
             {pathname !== "/login" ? (
@@ -55,7 +64,13 @@ const PublicNavBar: React.FC = () => {
     );
   }
 
-  return <HeaderBar homePath="/" right={<AccountMenu withManage />} />;
+  return (
+    <HeaderBar
+      homePath="/"
+      background={background}
+      right={<AccountMenu withManage />}
+    />
+  );
 };
 
 export default PublicNavBar;
