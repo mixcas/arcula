@@ -1,7 +1,9 @@
 import React from "react";
 import { Box } from "@mantine/core";
+import AgentBand from "./AgentBand";
 import CataloguesSection from "./CataloguesSection";
 import { LANDING_METADATA } from "./content";
+import FeaturesSection from "./FeaturesSection";
 import GettingStartedSection from "./GettingStartedSection";
 import HeroSection from "./HeroSection";
 import { LANDING_PALETTE } from "./palette";
@@ -32,6 +34,12 @@ const LandingPage: React.FC = () => (
     <HeroSection />
     <RecordSection />
 
+    <CataloguesSection />
+    <GettingStartedSection />
+
+    <FeaturesSection />
+    <AgentBand />
+
     {/*
       The page's sections, in reading order. Each later ticket adds its own
       section at this point and nowhere else, as
@@ -50,9 +58,6 @@ const LandingPage: React.FC = () => (
       and if it is a link target add its id to `LANDING_ANCHORS` so the link and
       the section read the same constant.
     */}
-
-    <CataloguesSection />
-    <GettingStartedSection />
   </Box>
 );
 
