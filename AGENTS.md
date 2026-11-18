@@ -28,8 +28,7 @@ can resolve `aws-cdk-lib`.
 - `dev` is the default and integration branch: cut every feature branch from
   it, PR into it, squash-merge. A release is a PR from `dev` into `main`, merged
   as a merge commit, never squashed; a hotfix branches from `main` and is
-  back-merged. **Merging is deploying**: CI deploys the environment whose branch
-  moved.
+  back-merged.
 - **The check is an obligation.** `bun run check` passes before and after any
   change, and before a PR.
 - **Never commit a secret.** Per-environment values live in
