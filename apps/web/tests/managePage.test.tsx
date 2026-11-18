@@ -243,6 +243,39 @@ describe("the dashboard's cap reflection", () => {
   });
 });
 
+describe("the empty dashboard", () => {
+  it("offers the first catalogue as a live link, beside the header's own button", async () => {
+    renderPage([]);
+
+    const cta = await screen.findByRole("link", {
+      name: /create your first catalogue/i,
+    });
+    expect(cta).toHaveAttribute("href", "/manage/catalogue/new");
+    // Two controls, two names: a screen reader can tell the empty state's
+    // call to action from the header's "New catalogue".
+    expect(newCatalogueLink()).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(cta);
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/manage/catalogue/new",
+      ),
+    );
+  });
+
+  it("drops the call to action once a catalogue exists", async () => {
+    renderPage([catalogue]);
+
+    await waitFor(() =>
+      expect(screen.getByText("Flores Solares")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("link", { name: /create your first catalogue/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("a shared row on the dashboard", () => {
   it("names the role and the owner on the shared row, and the owner alone", async () => {
     renderPage([catalogue, sharedCatalogue]);
