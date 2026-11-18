@@ -1,6 +1,8 @@
 import React from "react";
 import { Box } from "@mantine/core";
 import { LANDING_METADATA } from "./content";
+import AgentBand from "./AgentBand";
+import FeaturesSection from "./FeaturesSection";
 import HeroSection from "./HeroSection";
 import { LANDING_PALETTE } from "./palette";
 import RecordSection from "./RecordSection";
@@ -29,6 +31,9 @@ const LandingPage: React.FC = () => (
 
     <HeroSection />
     <RecordSection />
+
+    <FeaturesSection />
+    <AgentBand />
 
     {/*
       The page's sections, in reading order. Each later ticket adds its own

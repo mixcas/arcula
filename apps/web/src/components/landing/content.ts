@@ -165,3 +165,79 @@ export const LANDING_METADATA = {
   url: "https://arcula.art/",
   type: "website",
 } as const;
+
+/** One capability: the way it is named, and the sentence that explains it. */
+export interface LandingFeature {
+  name: string;
+  body: string;
+}
+
+export interface LandingFeaturesContent {
+  /** `04 — What it does`: the number keeps the page's sections countable. */
+  label: string;
+  heading: string;
+  /** The anti-CRM sentence: what the product does not try to be. */
+  lede: string;
+  items: LandingFeature[];
+}
+
+/**
+ * What the product actually does, in six capabilities.
+ *
+ * The lede says what Arcula is not, because the market's alternatives are a
+ * CRM, a website builder and an accounting system; naming them costs one
+ * sentence and stops the visitor guessing. The items are concrete so the page
+ * never has to claim a feature the product does not have.
+ */
+export const LANDING_FEATURES: LandingFeaturesContent = {
+  label: "04 — What it does",
+  heading: "Built around the record, not around a sales pipeline.",
+  lede: "Arcula does the work of a catalogue. It is not a CRM, a website builder or an accounting system.",
+  items: [
+    {
+      name: "A public page",
+      body: "A full-bleed page, one work at a time, with its own address. No site to build, no theme to maintain.",
+    },
+    {
+      name: "A catalogue PDF",
+      body: "A document generated in the browser from the works you’ve published. Nothing is stored twice.",
+    },
+    {
+      name: "Access on your terms",
+      body: "Public, Private, or Protected by a password. Visitors see published works; drafts, deleted works and documents never appear.",
+    },
+    {
+      name: "Collaboration",
+      body: "Invite collaborators by email, edit alongside them, and transfer ownership when the catalogue changes hands. The work stays where it is.",
+    },
+    {
+      name: "Catalogue search",
+      body: "Search the fields a catalogue records, filter by values, and keep the query in the address so it can be linked.",
+    },
+    {
+      name: "CSV import",
+      body: "Map a CSV’s columns to the fields your catalogue records, review the rows, then import a body of work.",
+    },
+  ],
+};
+
+export interface LandingAgentBandContent {
+  /**
+   * The band's heading and its only content. A capability statement, not an
+   * integration guide: no endpoint, no tool list, no protocol.
+   */
+  statement: string;
+}
+
+/**
+ * The agent band: one sentence, unnumbered.
+ *
+ * It is deliberately not a section in the same sense as the others — the page
+ * has to stay readable, and the protocol detail lives in the client setup
+ * guide. The band exists so a visitor learns the option exists, and stops
+ * there.
+ */
+export const LANDING_AGENT_BAND: LandingAgentBandContent = {
+  statement:
+    "Integrate with your favourite AI agents and let them manage your catalogues.",
+};
