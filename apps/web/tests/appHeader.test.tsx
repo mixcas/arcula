@@ -9,35 +9,47 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUserRead } from "@arcula/shared";
 
 import ManageNavBar from "@/components/manage/layout/ManageNavBar";
+import PublicNavBar from "@/components/layout/PublicNavBar";
 import AccountMenu from "@/components/layout/AccountMenu";
 
 /**
- * The header's account control, characterized at the seam both shells share:
- * the bar rendered under `MantineProvider` + `MemoryRouter` with the auth hook
- * stubbed, exactly as `managePage.test.tsx` and `invitationPage.test.tsx` do.
+ * The app's two headers, characterized at the seam both shells share: the bar
+ * rendered under `MantineProvider` + `MemoryRouter` with the auth hook stubbed,
+ * exactly as `managePage.test.tsx` and `invitationPage.test.tsx` do.
  *
- * This ticket changes no behaviour; these tests exist so the extraction into a
- * shared bar and a shared menu is a refactor a reviewer can trust. They pin
- * where the wordmark leads, which name the menu trigger announces, which items
- * the menu offers, and that the manage header does not offer a second way to
- * the page it is already on.
+ * The manage cases pin where the wordmark leads, which name the menu trigger
+ * announces, which items the menu offers, and that the manage header does not
+ * offer a second way to the page it is already on. The public cases pin the
+ * same shape on the anonymous side of the app: the auth doors a signed-out
+ * visitor gets, the account menu a signed-in one gets, and the page the header
+ * refuses to link to because the visitor is already there.
  */
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+interface Session {
+  uid: string;
+  email: string;
+  emailVerified: boolean;
+  displayName: string;
+}
+
+const signedIn: Session = {
+  uid: "u1",
+  email: "owner@example.test",
+  emailVerified: false,
+  displayName: "Owner",
+};
+
 const authState = vi.hoisted(() => ({
   me: null as SessionUserRead | null,
+  currentUser: null as Session | null,
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
-    currentUser: {
-      uid: "u1",
-      email: "owner@example.test",
-      emailVerified: false,
-      displayName: "Owner",
-    },
+    currentUser: authState.currentUser,
     me: authState.me,
     login: vi.fn(),
     logout: vi.fn(),
@@ -77,10 +89,10 @@ const profile: SessionUserRead = {
   updatedAt: "2026-10-01T00:00:00.000Z",
 };
 
-const renderInApp = (element: React.ReactElement) =>
+const renderInApp = (element: React.ReactElement, path = "/manage") =>
   render(
     <MantineProvider>
-      <MemoryRouter initialEntries={["/manage"]}>{element}</MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>{element}</MemoryRouter>
     </MantineProvider>,
   );
 
@@ -110,6 +122,7 @@ const menuItems = async () => {
 
 beforeEach(() => {
   authState.me = profile;
+  authState.currentUser = signedIn;
 });
 
 afterEach(() => {
@@ -155,6 +168,78 @@ describe("the manage header", () => {
     // The wordmark already reaches the dashboard; an item to the current
     // page would be a dead control.
     expect(menu.has("Manage")).toBe(false);
+  });
+});
+
+describe("the public header signed out", () => {
+  it("leads the wordmark home and offers both auth doors", () => {
+    authState.currentUser = null;
+    renderInApp(<PublicNavBar />, "/");
+
+    expect(screen.getByRole("link", { name: "Arcula" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute(
+      "href",
+      "/signup",
+    );
+    // No session, so no account control.
+    expect(
+      screen.queryByRole("button", { name: /account menu/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("the public header signed in", () => {
+  it("shows the account menu with Manage, and no auth doors", async () => {
+    renderInApp(<PublicNavBar />, "/");
+    await openAccountMenu("Sofía Lara — account menu");
+    const menu = await menuItems();
+
+    expect(menu.href("Profile")).toBe("/manage/profile");
+    expect(menu.href("Manage")).toBe("/manage");
+    expect(menu.has("Logout")).toBe(true);
+    expect(
+      screen.queryByRole("link", { name: "Log in" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Sign up" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("the public header's auth doors", () => {
+  beforeEach(() => {
+    authState.currentUser = null;
+  });
+
+  it("omits Log in on the page it would lead to", () => {
+    renderInApp(<PublicNavBar />, "/login");
+
+    expect(
+      screen.queryByRole("link", { name: "Log in" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute(
+      "href",
+      "/signup",
+    );
+  });
+
+  it("omits Sign up on the page it would lead to", () => {
+    renderInApp(<PublicNavBar />, "/signup");
+
+    expect(
+      screen.queryByRole("link", { name: "Sign up" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
   });
 });
 

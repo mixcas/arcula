@@ -18,6 +18,7 @@ import NewCataloguePage from "./components/manage/catalogue/NewCataloguePage";
 import DeletedArtworksPage from "./components/manage/catalogue/DeletedArtworksPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
+import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -33,23 +34,30 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<ProductPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignUpPage />} />
-        {/* The OAuth consent screen. Not wrapped in ProtectedRoute: the page
-            itself sends a signed-out visitor to /login with the signed query,
-            which is where the provider put it in the first place. */}
-        <Route path="/consent" element={<ConsentPage />} />
-        {/* Password reset is two routes: the bare path asks for the address
-            (the door on sign-in), and the token path is the form the mail's
-            link lands on. An absent/expired token is the server's 400, not a
-            route miss. */}
-        <Route path="/reset-password" element={<ResetRequestPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-        {/* The mail's invitation link. The token is the path segment the
-            preview, accept and decline calls all carry. */}
-        <Route path="/invite/:token" element={<InvitationPage />} />
+        {/* Public Routes — one pathless group, so every public page carries
+            the app header and the content frame from PublicLayout and no page
+            opts in individually. */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<ProductPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+          {/* The OAuth consent screen. Not wrapped in ProtectedRoute: the page
+              itself sends a signed-out visitor to /login with the signed query,
+              which is where the provider put it in the first place. */}
+          <Route path="/consent" element={<ConsentPage />} />
+          {/* Password reset is two routes: the bare path asks for the address
+              (the door on sign-in), and the token path is the form the mail's
+              link lands on. An absent/expired token is the server's 400, not a
+              route miss. */}
+          <Route path="/reset-password" element={<ResetRequestPage />} />
+          <Route
+            path="/reset-password/:token"
+            element={<ResetPasswordPage />}
+          />
+          {/* The mail's invitation link. The token is the path segment the
+              preview, accept and decline calls all carry. */}
+          <Route path="/invite/:token" element={<InvitationPage />} />
+        </Route>
 
         {/* Protected Routes */}
         <Route

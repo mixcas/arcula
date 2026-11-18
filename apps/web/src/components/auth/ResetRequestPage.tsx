@@ -1,13 +1,5 @@
 import React, { useState } from "react";
-import {
-  Alert,
-  Button,
-  Container,
-  Group,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Group, Text, TextInput, Title } from "@mantine/core";
 import { Link, useLocation } from "react-router-dom";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
@@ -63,7 +55,7 @@ const ResetRequestPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Title order={2}>Reset your password</Title>
 
       {error && (
@@ -99,7 +91,7 @@ const ResetRequestPage: React.FC = () => {
       <Text mt="xl">
         <Link to="/login">Back to sign in</Link>
       </Text>
-    </Container>
+    </>
   );
 };
 
