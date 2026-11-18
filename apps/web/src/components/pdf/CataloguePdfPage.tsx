@@ -40,9 +40,8 @@ import { parseId, type Artwork, type Catalogue } from "@arcula/shared";
 
 import CatalogueLockScreen from "@/components/catalogue/CatalogueLockScreen";
 import PublicStateMessage from "@/components/catalogue/PublicStateMessage";
-import ManageLayout, {
-  MANAGE_HEADER_HEIGHT,
-} from "@/components/manage/layout/ManageLayout";
+import ManageLayout from "@/components/manage/layout/ManageLayout";
+import { APP_HEADER_HEIGHT } from "@/components/layout/HeaderBar";
 import CataloguePdfBar from "./CataloguePdfBar";
 import PdfFileActions from "./PdfFileActions";
 import { pdfBarView, pdfFileSummary, type PdfBarRun } from "./pdfBarView";
@@ -143,7 +142,7 @@ const PREVIEW_MIN_HEIGHT = 360;
 /**
  * The preview's height: the window less the fixed bar and the body's own
  * padding, so the page itself does not scroll and the document scrolls inside
- * its frame. Both numbers come from the shell — `MANAGE_HEADER_HEIGHT` and the
+ * its frame. Both numbers come from the shell — `APP_HEADER_HEIGHT` and the
  * `AppShell`'s own padding variable — so no second 60 is written here.
  *
  * It is applied through `style`, never the `h` prop: Mantine parses style-prop
@@ -153,7 +152,7 @@ const PREVIEW_MIN_HEIGHT = 360;
  * — the strip this page used to show. A `style` value is passed through as
  * written.
  */
-const PREVIEW_HEIGHT = `max(${PREVIEW_MIN_HEIGHT}px, calc(100dvh - ${MANAGE_HEADER_HEIGHT}px - 2 * var(--app-shell-padding)))`;
+const PREVIEW_HEIGHT = `max(${PREVIEW_MIN_HEIGHT}px, calc(100dvh - ${APP_HEADER_HEIGHT}px - 2 * var(--app-shell-padding)))`;
 
 const CataloguePdfPage: React.FC = () => {
   const { catalogueId: param } = useParams<{ catalogueId: string }>();

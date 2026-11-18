@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Container,
   TextInput,
   PasswordInput,
   Button,
@@ -103,7 +102,7 @@ const SignUpPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Text size="h2">Create your account</Text>
 
       {error && (
@@ -171,7 +170,7 @@ const SignUpPage: React.FC = () => {
           Login
         </Link>
       </Text>
-    </Container>
+    </>
   );
 };
 
