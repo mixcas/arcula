@@ -20,7 +20,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
-  Container,
   Group,
   Loader,
   Paper,
@@ -182,7 +181,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
   };
 
   return (
-    <Container size="sm" py="xl">
+    <>
       {state.status === "loading" && (
         <Group justify="center" py="xl">
           <Loader role="status" aria-label="Loading invitation" />
@@ -332,7 +331,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
           </Stack>
         </Paper>
       )}
-    </Container>
+    </>
   );
 };
 

@@ -966,6 +966,11 @@ provider and JWT plugin write, hand-authored against `getAuthTables()`.
   settings, artwork add/edit, the CSV import, and the account profile, whose
   agent-access card carries the endpoint and the Connected apps list.
 
+App chrome has one header shape — the same bar, wordmark on the left and a
+session-following right side — rendered by the shared layout modules, while a
+skin-rendered Catalogue and the PDF viewer keep their own chrome because the
+presentation belongs to the Catalogue.
+
 `src/services/` is the client layer (`api.ts` is the transport the domain
 services share); `src/auth/` is the Better Auth React client; `src/skins/` is the
 public-view system. A skin renders a public catalogue through `SkinHost`, which

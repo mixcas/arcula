@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Container,
   PasswordInput,
   Button,
   Text,
@@ -88,7 +87,7 @@ const ResetPasswordPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Text size="h2">Set a new password</Text>
 
       {failure && (
@@ -135,7 +134,7 @@ const ResetPasswordPage: React.FC = () => {
           </Group>
         </form>
       )}
-    </Container>
+    </>
   );
 };
 

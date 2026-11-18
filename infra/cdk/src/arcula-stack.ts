@@ -154,13 +154,17 @@ export class ArculaStack extends cdk.Stack {
         // The SPA the Lambda serves (spa.ts).
         WEB_DIST: "/var/task/web/dist",
         // Dev-only, and absent from production on purpose: the commit makes
-        // /api/health answer "is my change live?" in one request, and the
-        // flag keeps the dev environment out of search indexes. Neither is
-        // set on production, whose responses stay exactly as they are.
+        // /api/health answer "is my change live?" in one request, the flag
+        // keeps the dev environment out of search indexes, and the mapping
+        // flag makes Node read the dev bundle's external map so a CloudWatch
+        // trace names the TypeScript file and line. None is set on
+        // production, whose responses and runtime configuration stay exactly
+        // as they are (and whose bundle ships no map to read).
         ...(config.devOnly
           ? {
               DEPLOYED_COMMIT: contextValue("DEPLOYED_COMMIT", ""),
               NOINDEX: "true",
+              NODE_OPTIONS: "--enable-source-maps",
             }
           : {}),
       },

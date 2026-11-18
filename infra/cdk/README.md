@@ -11,7 +11,7 @@ Both environments share one AWS account and one bootstrap; see
 the isolation that buys and does not.
 
 Only what must differ by environment does: the stack's name and description,
-the API's display name, the Lambda artifact, and — on dev only — two function
+the API's display name, the Lambda artifact, and — on dev only — three function
 environment variables. Construct ids and logical ids never vary, so the dev
 stack's existence does not change production's template.
 
@@ -35,6 +35,37 @@ stack's existence does not change production's template.
   Gateway answers `403` before the Lambda runs. The apex keeps its original
   logical ids so a redeploy is an in-place update rather than a recreate.
 
+## Source maps and the dev artifact
+
+Source maps are part of the build, and `scripts/build-lambda.sh <env>` decides
+from its environment argument: dev's package carries the Lambda bundle's
+external map and the served SPA's maps, production's carries no map file and no
+`sourceMappingURL` reference. The absence is deliberate — a map on `arcula.art`
+would publish the source — and the build's pre-zip gate refuses either mistake,
+so it is a property of the artifact rather than a habit. Dev serving its maps is
+accepted: the host is public and noindexed, and this is the price of debugging
+it as a browser sees it.
+
+The cost, measured 17 November 2026 on Bun 1.4.4 at the real Lambda entry
+(these supersede the earlier estimate of roughly 25 MB → 35 MB):
+
+| Artifact                    | Production   | Dev          |
+| --------------------------- | ------------ | ------------ |
+| `index.js` (bundle)         | 6,637,886 B  | 6,637,967 B  |
+| `index.js.map`              | —            | 12,783,833 B |
+| SPA maps (raw)              | —            | 11,163,372 B |
+| Package (`arcula-api*.zip`) | 18,132,799 B | 23,545,066 B |
+
+Dev's bundle is production's plus Bun's own `//# debugId` line and the appended
+reference, +81 B in total. Its map names 934 sources with their full text
+embedded — 87 from this repo (66 under `apps/api`, 21 in `packages/shared` and
+`packages/db`) and the rest third-party; its byte count also carries the build
+path once per source, so it shifts with the checkout's directory name. The
+packaged growth is +5,412,267 B ≈ +5.16 MiB, +29.8%;
+inside the zip the maps deflate to 5,429,883 B (the bundle's map 2,710,670 B,
+the SPA's two 1,563,981 B and 1,155,232 B). The cost lands on dev's package
+alone; production's artifact is unchanged.
+
 ## Context values
 
 Nothing secret is committed; the deploy passes `-c KEY=value`:
@@ -53,9 +84,16 @@ Nothing secret is committed; the deploy passes `-c KEY=value`:
 
 `ENV` is required: an absent or unknown value fails synthesis rather than
 defaulting, so a stack is never built without knowing which environment it is.
-The two dev-only function variables — `DEPLOYED_COMMIT` and `NOINDEX` — are
-wired only when `ENV=dev`; production's function environment never carries
-them.
+Three function environment variables are wired only when `ENV=dev`, and
+production's function environment never carries them, on purpose:
+
+- **`DEPLOYED_COMMIT`** — the commit `/api/health` reports, so a deploy answers
+  "is my change live?" in one request.
+- **`NOINDEX`** — `true` in dev: `/robots.txt` disallows everything and every
+  SPA response carries `X-Robots-Tag: noindex`.
+- **`NODE_OPTIONS`** — `--enable-source-maps`, so Node resolves the dev bundle's
+  external map and a CloudWatch trace names the TypeScript file and line. It is
+  set only where a map ships; production's bundle has none to read.
 
 At synth, absent secrets fall back to placeholders, so `cdk synth` stays green
 with no AWS account and no secrets. `scripts/deploy.sh` enforces their presence

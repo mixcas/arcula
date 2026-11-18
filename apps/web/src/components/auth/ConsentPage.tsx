@@ -17,7 +17,6 @@ import {
   Anchor,
   Button,
   Card,
-  Container,
   Group,
   List,
   Loader,
@@ -95,7 +94,7 @@ const ConsentPage: React.FC = () => {
   };
 
   return (
-    <Container size="sm" py="xl">
+    <>
       {error && (
         <Alert color="red" mb="md">
           {error}
@@ -203,7 +202,7 @@ const ConsentPage: React.FC = () => {
           </Group>
         </Card>
       )}
-    </Container>
+    </>
   );
 };
 
