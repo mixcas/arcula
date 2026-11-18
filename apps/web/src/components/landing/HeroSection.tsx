@@ -17,7 +17,7 @@ import {
   LANDING_HERO,
   type LandingExampleRecord,
 } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -41,8 +41,9 @@ const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
     aria-label={record.label}
     shadow="none"
     radius={0}
+    bg={LANDING_PALETTE.paper}
     p={{ base: "lg", md: "xl" }}
-    style={{ border: `1px solid ${LANDING_PALETTE.rule}` }}
+    style={{ border: LANDING_RULE }}
   >
     <Text
       size="xs"
@@ -53,7 +54,7 @@ const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
     >
       {record.label}
     </Text>
-    <Text ff="heading" fz={{ base: "lg", sm: "xl" }} lh={1.2} mt="sm">
+    <Text ff="text" fz={{ base: "lg", sm: "xl" }} lh={1.2} mt="sm">
       {record.title}
     </Text>
     <Text size="sm" c={LANDING_PALETTE.muted} mt="3xs">
@@ -66,11 +67,7 @@ const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
           key={field.label}
           component="div"
           py="xs"
-          style={
-            index === 0
-              ? undefined
-              : { borderTop: `1px solid ${LANDING_PALETTE.rule}` }
-          }
+          style={index === 0 ? undefined : { borderTop: LANDING_RULE }}
         >
           <Text component="dt" size="xs" c={LANDING_PALETTE.muted}>
             {field.label}

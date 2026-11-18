@@ -17,3 +17,11 @@ export const LANDING_PALETTE = {
   /** The hairline that separates sections and record fields. */
   rule: "rgba(43, 41, 39, 0.18)",
 } as const;
+
+/**
+ * The one hairline the page draws with: a section divider, the record's field
+ * separators and the rule above a column or a list item are all this weight
+ * and colour. Kept beside the palette so the value is written once, and a
+ * tuning of `rule` still reaches every border the page draws.
+ */
+export const LANDING_RULE = `1px solid ${LANDING_PALETTE.rule}`;

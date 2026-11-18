@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, SimpleGrid, Text, Title } from "@mantine/core";
 import { LANDING_CATALOGUES, type LandingCatalogueKind } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -13,11 +13,8 @@ import LandingSection, { LandingSectionHeading } from "./Section";
  * separate things to buy, which is the opposite of the section's point.
  */
 const CatalogueKind: React.FC<LandingCatalogueKind> = ({ name, audience }) => (
-  <Box
-    pt={{ base: "md", md: "lg" }}
-    style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
-  >
-    <Title order={3} fz={{ base: "xl", md: "2xl" }}>
+  <Box pt={{ base: "md", md: "lg" }} style={{ borderTop: LANDING_RULE }}>
+    <Title order={3} ff="text" fz={{ base: "xl", md: "2xl" }}>
       {name}
     </Title>
     <Text size="md" c={LANDING_PALETTE.muted} lh={1.45} mt="2xs">

@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "@mantine/core";
 import { LANDING_QUESTIONS } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -32,7 +32,7 @@ const QuestionsSection: React.FC = () => (
           key={item.question}
           component="div"
           py={{ base: "md", md: "lg" }}
-          style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
+          style={{ borderTop: LANDING_RULE }}
         >
           <Text component="dt" fz={{ base: "md", md: "lg" }} fw={600} lh={1.3}>
             {item.question}

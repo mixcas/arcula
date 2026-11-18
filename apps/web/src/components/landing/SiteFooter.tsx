@@ -2,7 +2,7 @@ import React from "react";
 import { Anchor, Box, Container, Group, Stack, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { LANDING_FOOTER } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 
 /**
  * The landing page's footer: the product's name and line, then the three ways
@@ -23,10 +23,7 @@ const SiteFooter: React.FC = () => (
     py={{ base: "xl", md: 48 }}
   >
     <Container size="xl" px={{ base: "md", md: "xl" }}>
-      <Box
-        pt={{ base: "lg", md: "xl" }}
-        style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
-      >
+      <Box pt={{ base: "lg", md: "xl" }} style={{ borderTop: LANDING_RULE }}>
         <Group justify="space-between" align="flex-start" gap="lg">
           <Stack gap="2xs">
             <Text ff="heading" fz="lg">

@@ -4,7 +4,7 @@ import {
   LANDING_GETTING_STARTED,
   type LandingGettingStartedStep,
 } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -19,11 +19,11 @@ const Step: React.FC<{ step: LandingGettingStartedStep }> = ({ step }) => (
   <Box
     component="li"
     py={{ base: "lg", md: "xl" }}
-    style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
+    style={{ borderTop: LANDING_RULE }}
   >
     <Grid gap={{ base: "2xs", md: "xl" }} align="flex-start">
       <Grid.Col span={{ base: 12, md: 4 }}>
-        <Title order={3} fz={{ base: "xl", md: "2xl" }}>
+        <Title order={3} ff="text" fz={{ base: "xl", md: "2xl" }}>
           {step.name}
         </Title>
       </Grid.Col>

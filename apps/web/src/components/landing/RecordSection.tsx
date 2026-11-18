@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, SimpleGrid, Text, Title } from "@mantine/core";
 import { LANDING_RECORD } from "./content";
-import { LANDING_PALETTE } from "./palette";
+import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
@@ -36,12 +36,8 @@ const RecordSection: React.FC = () => (
       mt={{ base: "xl", md: 48 }}
     >
       {LANDING_RECORD.groups.map((group) => (
-        <Box
-          key={group.title}
-          pt="md"
-          style={{ borderTop: `1px solid ${LANDING_PALETTE.rule}` }}
-        >
-          <Title order={3} fz={{ base: "lg", md: "xl" }} lh={1.25}>
+        <Box key={group.title} pt="md" style={{ borderTop: LANDING_RULE }}>
+          <Title order={3} ff="text" fz={{ base: "lg", md: "xl" }} lh={1.25}>
             {group.title}
           </Title>
           <Text c={LANDING_PALETTE.muted} lh={1.5} mt="xs">
