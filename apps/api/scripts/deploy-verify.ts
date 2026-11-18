@@ -2,9 +2,11 @@
 // Usage: cd apps/api && bun scripts/deploy-verify.ts <base-url>
 //
 // It is the end-to-end pass, executable: health, the SPA (shell + deep
-// link + cache headers), the agent surface's discovery documents and its 401
-// challenge, sign-up (and that its cookie is `Secure`), the session token
-// refused as an API bearer, /me,
+// link + cache headers, and the source-map rule: a map-emitting host — dev or
+// a local checkout — serves an entry script referencing a map the host
+// actually serves and parses, production's carries none), the
+// agent surface's discovery documents and its 401 challenge, sign-up (and that
+// its cookie is `Secure`), the session token refused as an API bearer, /me,
 // the duplicate sign-up (the 422 over the gateway), create-catalogue, a
 // real 12 MP photo through presign → direct PUT → process → save (the
 // presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
@@ -52,14 +54,36 @@ const post = (path: string, body: unknown, authed = false) =>
     body: JSON.stringify(body),
   });
 
-// 1. Health.
+// 1. Health. The body also says which shape this host is, so the source-map
+//    rule below can be the one the host applies: dev reports its deployed
+//    commit, a local API reports its checkout, and production reports
+//    neither. Both map-emitting shapes are held to the map rule; production
+//    is the one exception. The tool still takes only a base URL — the host
+//    names the environment, not an argument and not a local variable.
+let mapHost: boolean;
+let hostShape: string;
 {
   const res = await get("/api/health");
-  const body = (await res.json()) as { status?: string };
+  const body = (await res.json()) as {
+    status?: string;
+    commit?: string;
+    checkout?: string;
+  };
+  const commit = typeof body.commit === "string" ? body.commit : "";
+  const checkout = typeof body.checkout === "string" ? body.checkout : "";
+  mapHost = commit !== "" || checkout !== "";
+  hostShape = commit
+    ? `dev host (commit ${commit.slice(0, 7)})`
+    : checkout
+      ? `local host (checkout ${checkout})`
+      : "production host (no commit or checkout)";
   step("health", res.status === 200 && body.status === "ok");
 }
 
-// 2. The SPA: shell, cache header, and a client-route deep link.
+// 2. The SPA: shell, cache header, and a client-route deep link, plus the
+//    source-map rule the host itself answers for: a map-emitting host (dev or
+//    local) serves the entry script with a reference and the map it names,
+//    production serves neither.
 {
   const res = await get("/");
   const html = await res.text();
@@ -78,6 +102,65 @@ const post = (path: string, body: unknown, authed = false) =>
     "client route serves the shell",
     deep.status === 200 && deepHtml.includes("<!doctype html"),
   );
+
+  // The shell names one entry module; the rule is about what that file says
+  // and, on dev, what the map beside it is. The reference is read the way a
+  // devtools client reads it, and nothing here throws on a miss: a step that
+  // could not run is a failure with its reason, never a pass.
+  const entryTag = [...html.matchAll(/<script\b[^>]*>/gi)]
+    .map((match) => match[0])
+    .find(
+      (tag) => /\btype=["']module["']/i.test(tag) && /\bsrc=["']/i.test(tag),
+    );
+  const entryPath = entryTag?.match(/\bsrc=["']([^"']+)["']/i)?.[1] ?? "";
+  const entryUrl = entryPath ? new URL(entryPath, res.url) : null;
+  const entry = entryUrl ? await fetch(entryUrl).catch(() => null) : null;
+  const entryText = entry ? await entry.text() : "";
+  const mapReference =
+    entryText.match(/sourceMappingURL=([^\s'"*]+)/)?.[1] ?? "";
+
+  if (mapHost) {
+    step(
+      "spa entry script references its source map",
+      entry?.status === 200 && mapReference !== "",
+      `${hostShape}: ${
+        entryUrl
+          ? `${entryUrl.pathname} → ${mapReference || "no reference"}`
+          : "the shell names no entry module"
+      }`,
+    );
+    const mapUrl =
+      mapReference && entryUrl ? new URL(mapReference, entryUrl) : null;
+    const mapRes = mapUrl ? await fetch(mapUrl).catch(() => null) : null;
+    const mapType = mapRes?.headers.get("content-type") ?? "";
+    // A missing or non-JSON answer is a failed step, not a thrown script: the
+    // parse is read into a shape and the shape is asserted below.
+    const map = (mapRes ? await mapRes.json().catch(() => null) : null) as {
+      version?: unknown;
+      sources?: unknown;
+    } | null;
+    const sources = Array.isArray(map?.sources) ? map.sources.length : 0;
+    step(
+      "the source map is served and parses",
+      mapRes?.status === 200 &&
+        mapType.includes("application/json") &&
+        map?.version === 3 &&
+        sources > 0,
+      `${hostShape}: ${mapUrl?.pathname ?? "no map"} — status ${
+        mapRes?.status ?? 0
+      }, type ${mapType || "—"}, ${sources} source(s)`,
+    );
+  } else {
+    step(
+      "spa entry script carries no source-map reference",
+      entry?.status === 200 && mapReference === "",
+      `${hostShape}: ${
+        mapReference
+          ? `${entryUrl?.pathname ?? "the entry script"} references ${mapReference}`
+          : `${entryUrl?.pathname ?? "no entry module"} is clean`
+      }`,
+    );
+  }
 }
 
 // 2b. The agent surface's public half: the two discovery documents an MCP

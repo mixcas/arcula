@@ -148,6 +148,28 @@ stand-in, native on `:9000`) and Mailpit (native SMTP on `:1025`, UI `:8025`).
 worktree borrows the main checkout's `.env` and compose project, so the suites
 run there against the same services (the mechanics are in `docs/testing.md`).
 
+### Source maps
+
+**Every build carries source maps except a production deploy**, and the
+exception is enforced rather than trusted. `vite build` emits linked maps — a
+`.map` beside the bundle, named by a `sourceMappingURL` reference — unless
+`ARCULA_SOURCE_MAPS=off`; the variable is deliberately not `VITE_`-prefixed,
+because Vite inlines those into the client bundle and this is a build
+instruction, not client configuration. `sh scripts/build-lambda.sh <env>`
+derives it from the environment argument it already validates: dev builds the
+Lambda bundle with an external map, appends the reference Bun omits, and the
+stack gives the dev function `NODE_OPTIONS=--enable-source-maps`; production
+builds neither.
+
+Before anything is zipped, the build gates the staged tree in both directions —
+production must hold no map file and no reference in the bundle or the served
+SPA, dev must hold the bundle's map and reference and the SPA's maps — and
+`apps/api/scripts/deploy-verify.ts` re-proves the property against the deployed
+host. Production's map-free artifact is therefore **deliberate: do not "fix"
+it**, and dev's source exposure is accepted: `dev.arcula.art` is public and
+noindexed, and serving its maps is the price of debugging it as a browser sees
+it. `arcula.art` publishes nothing about its source.
+
 ## Where things live
 
 Five packages, one product: the SPA (`apps/web`), the API (`apps/api`), the
@@ -282,14 +304,15 @@ reviewing a diff.
 - **Deploy**: `sh scripts/deploy-prod.sh` (production) or
   `sh scripts/deploy-dev.sh` (dev). Both end by running
   `cd apps/api && bun scripts/deploy-verify.ts <url>` — the end-to-end pass
-  against the deployed URL; the script's header lists its current steps, so
-  this guide does not repeat them. The catalogue cap is covered by the API
-  integration suite instead, since reaching it would mean ten creates per run.
-  It takes the URL, not an environment, so it runs against either one by hand.
-  It creates a throwaway `verify-<ts>@example.test` account per run, so treat
-  it as a write against the environment. A deploy whose host does not resolve
-  yet prints the DNS records and exits successfully instead of verifying —
-  that is the first dev deploy's shape, not a failure.
+  against the deployed URL; the script's header lists its current steps,
+  including the source-map rule, so this guide does not repeat them. The
+  catalogue cap is covered by the API integration suite instead, since
+  reaching it would mean ten creates per run. It takes the URL, not an
+  environment, so it runs against either one by hand. It creates a throwaway
+  `verify-<ts>@example.test` account per run, so treat it as a write against
+  the environment. A deploy whose host does not resolve yet prints the DNS
+  records and exits successfully instead of verifying — that is the first dev
+  deploy's shape, not a failure.
 - Custom-domain changes: the apex and `www` are distinct `DomainName` resources
   with distinct regional endpoints; the stack emits both
   (`ApiRegionalDomainName`, `ApiRegionalDomainNameForwww`) and

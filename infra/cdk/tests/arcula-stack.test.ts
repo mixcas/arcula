@@ -94,12 +94,17 @@ describe("the dev-only function environment", () => {
     );
     expect(variables.DEPLOYED_COMMIT).toBe(commit);
     expect(variables.NOINDEX).toBe("true");
+    // The mapping flag makes a dev CloudWatch trace name the source file
+    // and line. Node does not map frames unless told to, so the dev
+    // function is the only one that may carry it.
+    expect(variables.NODE_OPTIONS).toBe("--enable-source-maps");
   });
 
   it("is absent from the production stack", () => {
     const variables = functionVariables(stackFor("prod"));
     expect(variables).not.toHaveProperty("DEPLOYED_COMMIT");
     expect(variables).not.toHaveProperty("NOINDEX");
+    expect(variables).not.toHaveProperty("NODE_OPTIONS");
   });
 });
 
