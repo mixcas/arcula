@@ -400,17 +400,17 @@ subset only (`sh scripts/stack-up.sh s3 mailpit`):
 
 All from the repo root:
 
-| Command                                                     | Description                                                              |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)             |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                    |
-| `bun run build`                                             | Build the web app                                                        |
-| `bun run preview`                                           | Preview the production web build                                         |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**    |
-| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                            |
-| `bun run format` / `format:check`                           | Prettier                                                                 |
-| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                             |
+| Command                                                     | Description                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)                                                 |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                                        |
+| `bun run build`                                             | Build the web app                                                                                            |
+| `bun run preview`                                           | Preview the production web build                                                                             |
+| `bun run check`                                             | Typecheck every package and `scripts` + ESLint + Prettier + `check:docs` + `knip` — **the gate before a PR** |
+| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                                                                |
+| `bun run format` / `format:check`                           | Prettier                                                                                                     |
+| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk`, `test:scripts`                     |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                                                 |
 
 `bun run test:api` and `bun run test:web` need the local stack; `test:web` also
 starts an API automatically.
@@ -583,10 +583,12 @@ own catalogue, that is a bug worth reporting.
 3. Commit your changes
 4. Push and open a pull request **against `dev`**
 
-Before opening a PR, `bun run check` must pass. It runs `tsc`, ESLint with
-type-aware rules, and Prettier, so a type error, a lint warning, or a formatting
-diff will each fail it. CI runs the same command, so green locally means green
-in the pipeline.
+Before opening a PR, `bun run check` must pass. It runs `tsc` over every package
+and `scripts`, ESLint with type-aware rules, Prettier, the documentation-pointer
+check (`check:docs`) and the dead-code check (`knip`), so a type error, a lint
+warning, a formatting diff, a broken documentation pointer or an unused export
+will each fail it. CI runs the same command, so green locally means green in
+the pipeline.
 
 A change reaches production only by release: a pull request from `dev` into
 `main`, merged by the maintainer. The working rules — branch model, the two
