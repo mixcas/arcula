@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Center, Loader } from "@mantine/core";
-import ProductPage from "./components/ProductPage";
+import LandingPage from "./components/landing/LandingPage";
 import LoginPage from "./components/auth/LoginPage";
 import ConsentPage from "./components/auth/ConsentPage";
 import SignUpPage from "./components/auth/SignUpPage";
@@ -22,6 +22,7 @@ import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { LANDING_PALETTE } from "./components/landing/palette";
 import { AuthProvider } from "./auth/AuthProvider";
 
 // The PDF renderer is a large separate chunk: only this route may import it,
@@ -30,11 +31,6 @@ const CataloguePdfPage = React.lazy(
   () => import("./components/pdf/CataloguePdfPage"),
 );
 
-// The home header wears the landing page's paper, not the app's grey: `/` is
-// the product's public face and its sections are composed on that surface. The
-// auth pages keep the grey their forms were designed against.
-const HOME_HEADER_BACKGROUND = "#F5F2ED";
-
 const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -42,17 +38,21 @@ const App: React.FC = () => {
         {/* The home route is the one full-bleed public page: its sections own
             their gutters and reach the window's edge, so the frame contributes
             neither a max width nor padding. It is still a PublicLayout child,
-            which is what keeps the header from being the page's to remember. */}
+            which is what keeps the header from being the page's to remember.
+            The header wears the landing page's paper, not the app's grey: `/`
+            is the product's public face and its sections are composed on that
+            surface. The auth pages keep the grey their forms were designed
+            against. */}
         <Route
           element={
             <PublicLayout
               containerProps={{ fluid: true, px: 0 }}
               padding={0}
-              headerBackground={HOME_HEADER_BACKGROUND}
+              headerBackground={LANDING_PALETTE.paper}
             />
           }
         >
-          <Route path="/" element={<ProductPage />} />
+          <Route path="/" element={<LandingPage />} />
         </Route>
 
         {/* The auth pages keep the narrow column: a form wants a measure, and
