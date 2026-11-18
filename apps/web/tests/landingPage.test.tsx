@@ -12,8 +12,10 @@ import App from "@/App";
  * The landing page at the route seam: the app rendered at `/` with the real
  * router, provider and page, and only the session answered.
  *
- * The one behaviour worth pinning is where the hero's primary action leads,
- * because it is the page's conversion path and it changes with the session.
+ * The one behaviour worth pinning is where the page's primary actions lead,
+ * because they are its conversion path and they change with the session. The
+ * hero and the closing action both offer the same door, so the signed-out
+ * assertion asks that `/signup` is present rather than counting the entries.
  * Links are found by `href`, never by their visible text: the copy is free to
  * change, the destination is not. Layout, colour and the copy itself are a
  * reviewer's job — jsdom cannot see them.
@@ -95,7 +97,7 @@ describe("the landing page's primary action", () => {
   it("offers a signed-out visitor the way to create a catalogue", () => {
     renderLanding();
 
-    expect(mainLinks("/signup")).toHaveLength(1);
+    expect(mainLinks("/signup").length).toBeGreaterThan(0);
   });
 
   it("sends a signed-in account holder to their catalogues, not to sign-up", () => {
@@ -109,7 +111,7 @@ describe("the landing page's primary action", () => {
     };
     renderLanding();
 
-    expect(mainLinks("/manage")).toHaveLength(1);
+    expect(mainLinks("/manage").length).toBeGreaterThan(0);
     expect(mainLinks("/signup")).toHaveLength(0);
   });
 });
