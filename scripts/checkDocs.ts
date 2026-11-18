@@ -10,9 +10,9 @@
  *
  * - The root `AGENTS.md` gets 800 words. It is the one file loaded on every
  *   request, so it must stay a pointer file — identity, the invariants an agent
- *   must not break, the test bar, and where to look. The draft sits near 580,
- *   so 800 leaves room for roughly a third more before the gate objects, and
- *   that room is for a rule that genuinely belongs on every task.
+ *   must not break, the test bar, and where to look. It sits well under the
+ *   ceiling today (about 630 words), and the headroom is for a rule that
+ *   genuinely belongs on every task.
  * - Each package `AGENTS.md` gets 400 words. A package file is disclosed only
  *   when an agent reads that package, so its cost is conditional; but it is a
  *   delta beside the package README and the architecture map, not a second
@@ -143,6 +143,24 @@ const INSTRUCTION_CEILINGS = [
   { path: "packages/db/AGENTS.md", limit: 400 },
   { path: "infra/cdk/AGENTS.md", limit: 400 },
 ] as const;
+
+const absentInstructions = INSTRUCTION_CEILINGS.filter(
+  ({ path }) => !exists(path),
+);
+
+// A renamed or deleted instruction file would otherwise surface as an ENOENT
+// stack trace, which reads like a crashed gate rather than a stale list.
+if (absentInstructions.length > 0) {
+  for (const { path } of absentInstructions) {
+    console.error(
+      `instruction budgets: ${path} is listed with a ceiling but does not exist`,
+    );
+  }
+  console.error(
+    `\n${absentInstructions.length} expected instruction file${absentInstructions.length === 1 ? "" : "s"} missing from the tree`,
+  );
+  process.exit(1);
+}
 
 const instructionDocuments = INSTRUCTION_CEILINGS.map(({ path, limit }) => ({
   path,

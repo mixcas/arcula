@@ -22,9 +22,9 @@
  *    `packages/`, `scripts/`, `infra/`, `docs/`, `.github/`, `.agents/`). A
  *    bare name or a directory shorthand (`routes/`, `media/`,
  *    `schemas/artwork.ts`, `src/App.tsx`) is skipped: it has no anchor, so the
- *    gate cannot tell a rename from shorthand, and AGENTS.md's "Where things
- *    live" map deliberately writes those bullets under a heading that names
- *    their base.
+ *    gate cannot tell a rename from shorthand, and AGENTS.md's "Where to look"
+ *    map deliberately writes those bullets under a heading that names their
+ *    base.
  * 3. A markdown link is always a pointer — the author wrote the link — so the
  *    anchor rule above does not apply to it. Only the URL, anchor, fence and
  *    placeholder skips do.
