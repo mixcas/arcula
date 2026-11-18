@@ -108,6 +108,49 @@ export const LANDING_EXAMPLE_RECORD: LandingExampleRecord = {
     "An example record. Dates stay as written; what you paid and what it may be worth stay separate.",
 };
 
+/** One of the three things a catalogue holds at once, kept distinct. */
+export interface LandingRecordGroup {
+  /** The group's sub-heading, e.g. `The work`. */
+  title: string;
+  body: string;
+}
+
+export interface LandingRecordContent {
+  /** The small numbered label above the heading. */
+  label: string;
+  heading: string;
+  lede: string;
+  groups: LandingRecordGroup[];
+}
+
+/**
+ * The record: why a catalogue is not a spreadsheet, in three groups.
+ *
+ * The groups are the section's argument — the work, the story and the market
+ * are three different kinds of fact, and the product keeps them apart. They
+ * are data rather than markup so their order and wording are changed here,
+ * with no component to untangle.
+ */
+export const LANDING_RECORD: LandingRecordContent = {
+  label: "01 — The record",
+  heading: "Art is not tidy data.",
+  lede: "A spreadsheet gives every work one row and every fact one cell. A catalogue has to hold three things at once — and keep them distinct.",
+  groups: [
+    {
+      title: "The work",
+      body: "Photographs, medium, dimensions, edition, condition. What the work is, what it is made of, and what state it is in.",
+    },
+    {
+      title: "The story",
+      body: "Provenance, acquisition date, place of origin, notes, documents. The chain of hands and paper behind the work.",
+    },
+    {
+      title: "The market",
+      body: "What you paid, what you believe it is worth now, and whether it is available. Three different facts, never one column called “value”.",
+    },
+  ],
+};
+
 /**
  * The page's head metadata.
  *
