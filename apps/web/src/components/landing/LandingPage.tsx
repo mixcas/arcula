@@ -1,8 +1,10 @@
 import React from "react";
 import { Box } from "@mantine/core";
-import { LANDING_METADATA } from "./content";
 import AgentBand from "./AgentBand";
+import CataloguesSection from "./CataloguesSection";
+import { LANDING_METADATA } from "./content";
 import FeaturesSection from "./FeaturesSection";
+import GettingStartedSection from "./GettingStartedSection";
 import HeroSection from "./HeroSection";
 import { LANDING_PALETTE } from "./palette";
 import RecordSection from "./RecordSection";
@@ -31,6 +33,9 @@ const LandingPage: React.FC = () => (
 
     <HeroSection />
     <RecordSection />
+
+    <CataloguesSection />
+    <GettingStartedSection />
 
     <FeaturesSection />
     <AgentBand />
