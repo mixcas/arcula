@@ -530,6 +530,52 @@ describe("ArtworksList", () => {
     expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 
+  it.each([
+    ["Grid", () => undefined],
+    ["Table", () => startInTable()],
+  ])(
+    "offers both ways to the first work on an empty catalogue in the %s",
+    (_view, start) => {
+      start();
+      renderList({ artworks: [] });
+
+      expect(
+        screen.getByText("No artworks in this catalogue yet."),
+      ).toBeTruthy();
+      // The empty catalogue is where a collector decides to add a work or
+      // import a batch, so both destinations are live links — built from the
+      // address's catalogue segment, exactly like the header's Add Artwork.
+      expect(
+        screen.getByRole("link", { name: /add your first artwork/i }),
+      ).toHaveAttribute(
+        "href",
+        "/manage/catalogue/my-catalogue-catalogue1/artwork/add",
+      );
+      expect(
+        screen.getByRole("link", { name: /import from csv/i }),
+      ).toHaveAttribute(
+        "href",
+        "/manage/catalogue/my-catalogue-catalogue1/import/csv",
+      );
+    },
+  );
+
+  it.each<[string, Partial<ListProps>]>([
+    ["before the first read answers", { listSettled: false }],
+    ["while a search is running", { searchQuery: "picasso", fetching: true }],
+    [
+      "under a completed search that matched nothing",
+      { searchQuery: "picasso" },
+    ],
+  ])("does not offer the first-work actions %s", (_state, props) => {
+    renderList({ artworks: [], ...props });
+
+    expect(
+      screen.queryByRole("link", { name: /add your first artwork/i }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: /import from csv/i })).toBeNull();
+  });
+
   it("shows a searching state rather than a completed answer on the first search", () => {
     renderList({ artworks: [], searchQuery: "picasso", fetching: true });
 

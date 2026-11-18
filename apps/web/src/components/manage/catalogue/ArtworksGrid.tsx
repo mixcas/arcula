@@ -36,8 +36,8 @@ interface ArtworksGridProps {
   onConfirmDeleteArtwork: (artwork: Artwork) => void;
   /** A list read is in flight. The previous cards stay on screen, dimmed. */
   fetching?: boolean;
-  /** What to say when this page has no cards, in whichever state that is. */
-  emptyLabel: React.ReactNode;
+  /** What to show when this page has no cards, in whichever state that is. */
+  emptyState: React.ReactNode;
   page: number;
   onPageChange: (page: number) => void;
   totalRecords: number;
@@ -151,7 +151,7 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
   showAvailability,
   onConfirmDeleteArtwork,
   fetching = false,
-  emptyLabel,
+  emptyState,
   page,
   onPageChange,
   totalRecords,
@@ -203,7 +203,7 @@ const ArtworksGrid: React.FC<ArtworksGridProps> = ({
             textAlign: "center",
           }}
         >
-          {emptyLabel}
+          {emptyState}
         </div>
         {/* No pager: one page has nothing to move between. */}
         <Box
