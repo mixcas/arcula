@@ -1,13 +1,15 @@
 # @arcula/db
 
-The Drizzle schema for the Arcula backend: twenty-two tables, including the two
+The Drizzle schema for the Arcula backend: twenty-six tables, including the two
 sharing tables from
 [ADR-0004](../../docs/adr/0004-collections-are-shared-by-membership.md), the
 two password tables from
 [ADR-0005](../../docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
 the write limiter's counter from
-[ADR-0014](../../docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md)
-and the eight tables that ADR's OAuth provider and JWT plugin write.
+[ADR-0014](../../docs/adr/0014-agents-reach-arcula-through-a-hosted-mcp-server.md),
+the eight tables that ADR's OAuth provider and JWT plugin write, and the four
+Selection tables from
+[ADR-0015](../../docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md).
 
 Four **Better Auth core tables** — `user`, `session`, `account`, `verification`
 — with `user` extended by the four typed custom columns (`firstName`,
@@ -16,20 +18,29 @@ Four **Better Auth core tables** — `user`, `session`, `account`, `verification
 `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`, `oauthConsent`,
 `oauthClientAssertion` — hand-authored against `getAuthTables()` because
 `@better-auth/cli` is deprecated with no 1.7.x release; a test in `apps/api`
-asserts every model and field the plugin declares exists here. Ten **domain
-tables**: `collections`, `collection_collaborators`,
+asserts every model and field the plugin declares exists here. Fourteen
+**domain tables**: `collections`, `collection_collaborators`,
 `collection_invitations`, `collection_access_grants`,
-`collection_unlock_attempts`, `account_write_windows`, `artworks`,
-`artwork_photos`, `artwork_photo_variants`, `artwork_documents`. The sharing
-tables are in the schema, and the feature code reads them on every access
-question and writes them through the invitation, removal, leaving and transfer
-routes. The two password tables and `collections.passwordHash` are read and
+`collection_unlock_attempts`, `account_write_windows`, `selections`,
+`selection_works`, `selection_access_grants`, `selection_unlock_attempts`,
+`artworks`, `artwork_photos`, `artwork_photo_variants`, `artwork_documents`. The
+sharing tables are in the schema, and the feature code reads them on every
+access question and writes them through the invitation, removal, leaving and
+transfer routes. The two password tables and `collections.passwordHash` are read and
 written by the password routes — and `collection_unlock_attempts` by the unlock
 route alone, which is the throttle's whole surface. `account_write_windows` is
 the MCP write limiter's counter, claimed by `agentLimiter.ts`: a rolling
 20-write / 20-second window and a fixed hourly import window. The table shipped
 alone, ahead of the limiter that reads it, per the rule that a schema change is
 deployed before the code that reads it.
+
+The four Selection tables are in the schema and **nothing reads them yet**:
+`0014_selections` shipped alone, ahead of the feature code, on that same rule.
+`selections` is the entity (source Catalogue, name, optional description,
+visibility defaulting to private, optional password hash, deletion stamp,
+timestamps); `selection_works` is its ordered membership; the grant and unlock
+tables are its own pair rather than a polymorphic subject on the Catalogue's
+(ADR-0015).
 
 The Drizzle entity is **`catalogues`** and every sharing table is exported under
 its Catalogue name (`catalogueCollaborators`, `catalogueInvitations`,
@@ -83,8 +94,11 @@ exist`. `0012_account_write_windows` repeats that append for the one table that
   lock down the tables it can see. `0013_agent_access` repeats it for the eight
   agent-access tables, which also ship after `0006`; its generated half is the
   eight `CREATE TABLE`s, the foreign keys, the unique constraints and the
-  indexes. `0009_catalogue_kind` and
-  `0010_artwork_availability` are the other
+  indexes. `0014_selections` repeats it once more for the four Selection tables
+  — the entity, its ordered membership, its grants and its unlock counter — a
+  purely additive release whose generated half is the four `CREATE TABLE`s, the
+  primary keys, the unique grant hash and the two indexes. `0009_catalogue_kind`
+  and `0010_artwork_availability` are the other
   contrast: both are pure `generate` output. `kind` is `NOT NULL` with a constant
   default, so the existing rows are already right and no backfill is owed;
   `availability` is nullable, so a work without a market state is the normal
@@ -94,8 +108,10 @@ exist`. `0012_account_write_windows` repeats that append for the one table that
   the CHECKs, the indexes behind the artwork lists, the collaborator `userId`
   index and the partial unique pending-invitation index, the
   nullable → backfill → `NOT NULL` order, timestamptz, the defaults, the write
-  limiter's `(userId, bucket, windowStart)` key, and the
-  lock-down: RLS on all twenty-two tables plus the guarded revoke and the
+  limiter's `(userId, bucket, windowStart)` key, the Selection membership key,
+  the unique grant hash and the unlock counter's
+  `(ip, selectionId, windowStart)` key, and the
+  lock-down: RLS on all twenty-six tables plus the guarded revoke and the
   absence of `FORCE ROW LEVEL SECURITY`).
 
 Decisions the schema encodes: timestamptz everywhere a timestamp is stored;
@@ -126,7 +142,21 @@ claim and no second table is needed for the import cap. Two buckets —
 `write` (the per-second bucket every write spends) and `import` (the hourly
 cap an import spends as well) — differ only in the value and in how the route
 floors `windowStart`; the window lengths are policy, not schema, exactly as the
-unlock throttle's are.
+unlock throttle's are. `selections.isPublic` defaults to **false** — publishing
+is deliberate, and it is the only default that cannot expose a work by
+accident — and the table carries no `skin` or `skinOptions`, because a Selection
+renders in its source Catalogue's. `selection_works` is keyed by
+`(selectionId, artworkId)`: adding the same work twice is the primary key's
+refusal, not a duplicate, and the row survives a work deleted in its Catalogue
+so a restore rejoins the Selection. `position` is 0-based, rewritten to `0..n-1`
+on every write, and deliberately not unique — reordering would need a deferrable
+constraint, so reads break a duplicate tie by `artworkId`. `selections.catalogueId`
+stores the source Catalogue under the physical name `"collectionId"`, as every
+`catalogueId` property does. `selections.passwordHash`, `selection_access_grants`
+and `selection_unlock_attempts` mirror the Catalogue's three: a one-way hash,
+a unique grant hash with the Selection indexed for one-statement revocation, and
+an `(ip, selectionId, windowStart)` counter so one Selection's throttle cannot
+lock a visitor out of another's.
 
 Every table enables RLS with zero policies, and `0006_enable_rls` revokes the
 PostgREST roles' grants on what exists and on the defaults for what comes next;
@@ -165,5 +195,5 @@ sourcing the root `.env` if `migrate`/`studio` need `DATABASE_URL`). Change
 `src/index.ts` and regenerate; the hand-added statements are the data backfill,
 appended with a comment saying what it reads, the
 add-nullable → backfill → set-not-null sequence above, and the guarded grant
-revoke in `0006_enable_rls`, repeated by `0012_account_write_windows` and
-`0013_agent_access` for the tables that followed.
+revoke in `0006_enable_rls`, repeated by `0012_account_write_windows`,
+`0013_agent_access` and `0014_selections` for the tables that followed.

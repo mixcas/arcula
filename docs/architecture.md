@@ -215,14 +215,17 @@ columns it skipped.
 **`packages/db/src/index.ts`** — the Drizzle tables (`user`, `session`,
 `account`, `verification`, `catalogues`, `catalogueCollaborators`,
 `catalogueInvitations`, `catalogueAccessGrants`, `catalogueUnlockAttempts`,
-`accountWriteWindows`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
+`accountWriteWindows`, `selections`, `selectionWorks`, `selectionAccessGrants`,
+`selectionUnlockAttempts`, `artworks`, `artworkPhotos`, `artworkPhotoVariants`,
 `artworkDocuments`, plus the eight agent-access tables `jwks`, `oauthClient`,
 `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
 `oauthConsent`, `oauthClientAssertion`) and the `schema` object the adapter
-consumes. The Drizzle entity is `catalogues` and the
-relation property is `catalogueId`, but the physical Postgres tables keep their
-`collections` / `collection_*` names and the physical column stays
-`"collectionId"` — a storage rename is a non-additive migration (ADR-0010). The
+consumes. The four Selection tables are in the schema and nothing reads them
+yet: `0014_selections` shipped alone, ahead of the feature code. The Drizzle
+entity is `catalogues` and the relation property is `catalogueId`, but the
+physical Postgres tables keep their `collections` / `collection_*` names and the
+physical column stays `"collectionId"` — a storage rename is a non-additive
+migration (ADR-0010). The
 two sharing tables are in the schema
 and `catalogueCollaborators` is read on every
 access question; the invitation routes write `catalogueInvitations`, while the
