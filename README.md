@@ -524,8 +524,9 @@ the same path at 80% scale on an opaque `#2B2927` ground in `#F5F2ED`.
 
 ## Roadmap
 
-The three larger product features below are ideas, not commitments; none is
-built. The smaller items follow, roughly in order of how much they matter.
+The three larger product features below are not built. Selections has a decision
+and a contract; the others are ideas, not commitments. The smaller items follow,
+roughly in order of how much they matter.
 
 ### Quick look
 
@@ -535,19 +536,23 @@ A reading and navigation aid, not a second editor.
 
 ### Selections
 
-A **Selection** is a curated subset of a Catalogue's artworks, published on its
-own address with its own audience. It would reuse the Catalogue's model —
-Public or Private, an optional password, collaborators — and have its own PDF.
-It selects from the Catalogue rather than copying or owning the works.
+**Decided, not built.** The decision is
+[ADR-0015](docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md) and
+the contract is [the Selections spec](docs/specs/selections.md).
+
+A **Selection** is a curated, ordered subset of one Catalogue's works, published
+on its own address with its own audience: Public, Private or Protected,
+independently of the Catalogue's own. It references works rather than owning
+them, and it has its own PDF.
 
 - A collector shortlisting works for a gallery considering an exhibition,
   shared as a password-protected link or a PDF.
 - A collector or gallerist taking five works to an art fair, with a public page
   carrying those works' information.
 
-Giving a Selection its own public address would make it the first public surface
-besides a Catalogue, so its access model needs its own decision before
-implementation.
+A Selection is a second public surface beside a Catalogue, and the access model
+that answers for it — own visibility, own password, no members of its own — is
+the ADR's decision.
 
 ### Artwork location
 
