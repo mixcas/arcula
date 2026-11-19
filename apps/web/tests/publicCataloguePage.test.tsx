@@ -301,10 +301,12 @@ describe("PublicCataloguePage — a protected catalogue", () => {
     expect(getCatalogueArtworks).not.toHaveBeenCalled();
   });
 
-  it("says the window is spent, in the server's words, and stays on the lock screen", async () => {
+  it("keeps a spent window on the lock screen and does not re-read", async () => {
     getCatalogue.mockRejectedValue(passwordRequired());
     // The screen cannot word this one itself: the window is the server's
-    // policy, and it states the window without counting down.
+    // policy, and it states the window without counting down. What this page
+    // owns is that the refusal is reported rather than swallowed, and that it
+    // is not treated as an unlock.
     unlockCatalogue.mockRejectedValue(
       new ApiRequestError(
         429,

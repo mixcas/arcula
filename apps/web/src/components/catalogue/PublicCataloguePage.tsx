@@ -2,11 +2,12 @@ import React, { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Container, Text } from "@mantine/core";
 
-import CatalogueLockScreen from "./CatalogueLockScreen";
+import LockScreen from "@/components/LockScreen";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicCatalogue } from "./usePublicCatalogue";
 import { artworkSlug, catalogueSlug, parseId } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
 
 /**
  * The public view of a whole catalogue.
@@ -52,12 +53,16 @@ const PublicCataloguePage: React.FC = () => {
 
   if (state.status === "locked") {
     // App chrome, and the same load on success: the catalogue read is still
-    // the first thing requested, and the artwork list follows it.
+    // the first thing requested, and the artwork list follows it. The attempt
+    // is this page's — the screen itself calls nothing.
     return (
-      <CatalogueLockScreen
-        catalogueId={catalogueId}
-        catalogueName={state.catalogueName}
-        onUnlocked={reload}
+      <LockScreen
+        noun="catalogue"
+        name={state.catalogueName}
+        onUnlock={async (password) => {
+          await catalogueService.unlockCatalogue(catalogueId, password);
+          reload();
+        }}
       />
     );
   }
