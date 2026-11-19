@@ -1,10 +1,11 @@
-// The Drizzle schema: twenty-two tables. Four Better Auth core tables
+// The Drizzle schema: twenty-six tables. Four Better Auth core tables
 // (extended with the typed `user` columns), the eight the JWT and OAuth
-// provider plugins write (the agent-access tables), six domain tables, the two
-// sharing tables (`collection_collaborators`, `collection_invitations`) and the
-// two a protected catalogue needs (`collection_access_grants`,
-// `collection_unlock_attempts`), plus the write limiter's counter
-// (`account_write_windows`).
+// provider plugins write (the agent-access tables), the two sharing tables
+// (`collection_collaborators`, `collection_invitations`), the two a protected
+// catalogue needs (`collection_access_grants`, `collection_unlock_attempts`),
+// the write limiter's counter (`account_write_windows`), the four a Selection
+// needs (`selections`, `selection_works`, `selection_access_grants`,
+// `selection_unlock_attempts`), and the catalogue-and-artwork domain tables.
 //
 // The Catalogue entity is exported as `catalogues`; its physical table stays
 // `collections` (ADR-0010). Physical names — tables, columns, indexes,
@@ -567,6 +568,88 @@ export const accountWriteWindows = pgTable(
   ],
 ).enableRLS();
 
+// A Selection: a curated, ordered subset of one Catalogue's works, with an
+// address and an audience of its own (ADR-0015). It is a second gate, not a
+// narrower window: its visibility is its own, so a Private Inventory can have a
+// public Selection. It stores no skin, no skin options and no media namespace —
+// it renders in the source Catalogue's skin and owns no bytes.
+export const selections = pgTable("selections", {
+  id: text("id").primaryKey(),
+  // The source Catalogue. The physical name stays `collectionId`, as on every
+  // other `catalogueId` property in this file (ADR-0010).
+  catalogueId: text("collectionId").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Private unless the curator publishes: the only default that cannot
+  // expose a work by accident.
+  isPublic: boolean("isPublic").notNull().default(false),
+  // As `collections.passwordHash`: a one-way hash with no read-back and no
+  // default, because a Selection without a password is the normal state.
+  passwordHash: text("passwordHash"),
+  // NULL = live.
+  deletedAt: timestamp("deletedAt", { withTimezone: true }),
+  createdAt: timestamptz("createdAt"),
+  updatedAt: timestamptz("updatedAt"),
+}).enableRLS();
+
+// The ordered membership: one row per Selection and work. The row is kept when
+// the work is deleted in its Catalogue, so a restore rejoins the Selection
+// without re-curating it. `position` is 0-based and rewritten to 0..n-1 on
+// every write; it is deliberately not unique, because reordering would need a
+// deferrable constraint, and reads break a duplicate tie by artworkId.
+export const selectionWorks = pgTable(
+  "selection_works",
+  {
+    selectionId: text("selectionId").notNull(),
+    artworkId: text("artworkId").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.selectionId, table.artworkId] }),
+    // Reverse lookups: the Selections that show one work. The media scope asks
+    // this question of a single artwork.
+    index("selection_works_artwork_id_idx").on(table.artworkId),
+  ],
+).enableRLS();
+
+// A Selection's Access grant: the access machinery is its own pair of tables
+// rather than a second nullable subject on the Catalogue's, which would need a
+// check that exactly one column is set and a rewrite of a load-bearing table
+// (ADR-0005, ADR-0015). The row keeps the token's hash, never the token, and
+// the index below is what makes "a password write revokes every grant" one
+// statement.
+export const selectionAccessGrants = pgTable(
+  "selection_access_grants",
+  {
+    selectionId: text("selectionId").notNull(),
+    tokenHash: text("tokenHash").notNull().unique(),
+    createdAt: timestamptz("createdAt"),
+    // When the grant stops being usable. The 12-hour TTL is policy, owned by
+    // the unlock route; the schema only carries the clock.
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index("selection_access_grants_selection_id_idx").on(table.selectionId),
+  ],
+).enableRLS();
+
+// The Selection's unlock throttle: one row per address, Selection and window,
+// keyed exactly as the Catalogue's counter is. Keying on the Selection keeps one
+// Selection's failures from locking visitors out of another's through a shared
+// address (ADR-0005).
+export const selectionUnlockAttempts = pgTable(
+  "selection_unlock_attempts",
+  {
+    ip: text("ip").notNull(),
+    selectionId: text("selectionId").notNull(),
+    windowStart: timestamp("windowStart", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ip, table.selectionId, table.windowStart] }),
+  ],
+).enableRLS();
+
 // `photos`/`documents` are tables, not array columns. Money stays text —
 // the string that was typed, no float drift.
 export const artworks = pgTable(
@@ -711,6 +794,10 @@ export const schema = {
   catalogueAccessGrants,
   catalogueUnlockAttempts,
   accountWriteWindows,
+  selections,
+  selectionWorks,
+  selectionAccessGrants,
+  selectionUnlockAttempts,
   artworks,
   artworkPhotos,
   artworkPhotoVariants,
