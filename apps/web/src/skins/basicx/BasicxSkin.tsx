@@ -1,5 +1,5 @@
 /**
- * Basicx: one implementation, two entry points.
+ * Basicx: one implementation, three entry points.
  *
  * A full-bleed slideshow: one `100dvh` section per artwork, each showing that
  * work's photos, with a fixed nav and a fixed footer pinned over the whole
@@ -8,11 +8,17 @@
  * constant — in `theme.ts` and `BasicxChrome.tsx` — so revising it is a diff
  * against those constants.
  *
- * `Home` and `Artwork` are the same component. They differ only in how many
- * sections there are: the shell hands the artwork view a one-element array, so
- * "the whole catalogue" and "this one work" are the same code path rather than
- * two that have to be kept in step. That is what makes a skin able to show
- * *more* on the artwork view later without the homepage drifting.
+ * `Home`, `Artwork` and `Selection` are the same component. They differ only
+ * in how many sections there are and which chrome links exist: the shell hands
+ * the artwork view a one-element array, and the selection view the works in
+ * the curator's order. "The whole catalogue", "this one work" and "this
+ * shortlist" are therefore the same code path rather than separate ones that
+ * have to be kept in step. That is what makes a skin able to show *more* on
+ * the artwork view later without the other two drifting.
+ *
+ * The subject is what the skin presents. On a Selection it is the Selection's
+ * own name and description with the source Catalogue's name as a credit; the
+ * skin is never handed a catalogue to read, and never a path to link it by.
  *
  * ## The stage is its own scroller
  *
@@ -55,14 +61,15 @@ const DESKTOP_QUERY = "(min-width: 36em)";
  */
 const DESCRIPTION_FADE_MS = 400;
 
-const BasicxSkin: React.FC<SkinProps> = ({
-  catalogue,
-  artworks,
-  view,
-  options,
-  cataloguePath,
-  artworkPath,
-}) => {
+const BasicxSkin: React.FC<SkinProps> = (props) => {
+  const { subject, artworks, view, options, artworkPath } = props;
+  // The two catalogue views carry their address; a selection carries its own
+  // and no catalogue path at all, so the branch is what keeps the credit
+  // unlinked rather than an optional URL the skin could still follow.
+  const documentPath =
+    props.view === "selection" ? props.selectionPath : props.cataloguePath;
+  const creditLine =
+    view === "selection" ? (subject.catalogueName?.trim() ?? "") : "";
   const { transitionSeconds } = basicxOptions(options);
   const stage = useRef<HTMLDivElement>(null);
   const desktop = useMediaQuery(DESKTOP_QUERY, true);
@@ -117,11 +124,12 @@ const BasicxSkin: React.FC<SkinProps> = ({
   // shown again" rule is a plain derived value rather than a latch. A latch
   // would have to be written from within a render, which the react-hooks rules
   // correctly refuse. The artwork view never shows it at all: it is the
-  // introduction to the catalogue, and a visitor on one artwork has already
-  // stepped past the introduction, so the view gate sits here.
-  const descriptionText = catalogue.description?.trim() ?? "";
+  // introduction to the document, and a visitor on one artwork has already
+  // stepped past the introduction, so the view gate sits here. A Selection's
+  // description is its own, and it is the introduction to that shortlist.
+  const descriptionText = subject.description?.trim() ?? "";
   const descriptionVisible =
-    view === "home" &&
+    (view === "home" || view === "selection") &&
     descriptionText.length > 0 &&
     !descriptionDismissed({
       artworkIndex: farthestIndex,
@@ -131,8 +139,9 @@ const BasicxSkin: React.FC<SkinProps> = ({
   return (
     <Box pos="relative" mih="100dvh">
       <BasicxChrome
-        catalogueTitle={catalogue.name}
-        cataloguePath={cataloguePath}
+        title={subject.name}
+        documentPath={documentPath}
+        creditLine={creditLine}
         view={view}
         artwork={footerArtwork}
         description={descriptionText}

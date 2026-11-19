@@ -239,6 +239,11 @@ describe("PublicArtworkPage — the reachable states", () => {
       "href",
       `/catalogue/flores-solares-${CATALOGUE_ID}`,
     );
+    // The nav's title is the subject's name; the page is what puts the
+    // Catalogue's name there now that the skin no longer reads the document.
+    expect(
+      screen.getByRole("link", { name: "Flores Solares" }),
+    ).toHaveAttribute("href", `/catalogue/flores-solares-${CATALOGUE_ID}`);
   });
 
   it("never requests the catalogue's whole list", async () => {

@@ -211,12 +211,25 @@ client
 `components/landing/` is the landing page at `/` — its sections are bands
 composed by `LandingPage.tsx`, with every sentence in `content.ts` and the four
 brand values in `palette.ts`; `components/manage` and `components/catalogue`;
-`skins/` is the public-view system. A Catalogue's Selections live in
-`components/manage/catalogue/SelectionsPage.tsx` (the name-ordered list, the
-empty state and the create modal) and `SelectionPage.tsx` (the settings block
-and the delete confirmation); both canonicalise their address from
-`selectionSlug` and call `services/selectionService.ts`, which parses every read
-through the shared schema and folds a missing Selection to `null`.
+`skins/` is the public-view system. `types.ts` is the contract between the
+shell and a skin: `SkinProps` is a union on `view` — `home`, `artwork`,
+`selection` — carrying a `subject` (the presented document's name and optional
+description, and on a Selection the source Catalogue's `catalogueName` as an
+unlinked credit) plus the props that view has. `registry.ts` resolves a
+Catalogue's stored skin and options; `basicx/` is the one skin. **Adding a
+skin** is a folder plus one entry in the registry: implement all three views
+and register them in `SkinDefinition`; read the `subject`, never a
+`Catalogue` document; build every URL from the `artworkPath`/`selectionPath`
+the shell passed in, because a `selection` has no `cataloguePath`; keep the
+works in the order given (for a Selection, the curator's position order);
+narrow `options` once through the skin's own function; use no portaled Mantine
+component; set `pointerEvents: "auto"` on any link inside a fixed bar; and
+test it with plain objects plus the carousel mock. A Catalogue's Selections
+live in `components/manage/catalogue/SelectionsPage.tsx` (the name-ordered
+list, the empty state and the create modal) and `SelectionPage.tsx` (the
+settings block and the delete confirmation); both canonicalise their address
+from `selectionSlug` and call `services/selectionService.ts`, which parses
+every read through the shared schema and folds a missing Selection to `null`.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather
