@@ -16,7 +16,7 @@ interface MapColumnsStepProps {
   onMappingChange: (mapping: ColumnMapping) => void;
   /**
    * The record fields this catalogue records, resolved from its Kind and its
-   * stored deviations. Title and Artist Name are always offered; every other
+   * stored deviations. Title and Artist name are always offered; every other
    * field appears as a target only when its key is enabled, so a column for a
    * field the catalogue cannot hold stays unmapped.
    */
@@ -73,7 +73,7 @@ const MapColumnsStep: React.FC<MapColumnsStepProps> = ({
           </Text>{" "}
           and{" "}
           <Text component="span" fw={600} inherit>
-            Artist Name
+            Artist name
           </Text>{" "}
           are required.
         </Text>

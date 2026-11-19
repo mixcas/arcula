@@ -135,7 +135,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         setActionError("You already have access to this catalogue.");
         return;
       }
-      setActionError("Could not accept the invitation. Please try again.");
+      setActionError("Could not accept the invitation. Try again.");
     } finally {
       setBusy(null);
     }
@@ -148,7 +148,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
     try {
       const declined = await invitationService.declineInvitation(token);
       if (declined.status !== "declined") {
-        setActionError("Could not decline the invitation. Please try again.");
+        setActionError("Could not decline the invitation. Try again.");
         return;
       }
       setState({ status: "declined", preview });
@@ -157,7 +157,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         setState({ status: "not-found" });
         return;
       }
-      setActionError("Could not decline the invitation. Please try again.");
+      setActionError("Could not decline the invitation. Try again.");
     } finally {
       setBusy(null);
     }
@@ -169,12 +169,12 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
     try {
       const result = await authClient.signOut();
       if (toAuthError(result, "Could not sign out")) {
-        setActionError("Could not switch accounts. Please try again.");
+        setActionError("Could not switch accounts. Try again.");
         return;
       }
       void navigate("/login", { state: returnState, replace: true });
     } catch {
-      setActionError("Could not switch accounts. Please try again.");
+      setActionError("Could not switch accounts. Try again.");
     } finally {
       setBusy(null);
     }
@@ -205,7 +205,7 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
         <Paper withBorder p="xl" data-testid="invitation-failed">
           <Title order={2}>The invitation could not be loaded</Title>
           <Text mt="md" c="dim">
-            Something went wrong. Please try again.
+            Something went wrong. Try again.
           </Text>
           <Button mt="xl" variant="outline" onClick={retry}>
             Try again
@@ -271,11 +271,11 @@ const InvitationView: React.FC<{ token: string }> = ({ token }) => {
             ) : audience === "signed-out" ? (
               <>
                 <Text>
-                  Sign in or create an account with {invitedEmail} to answer it.
+                  Log in or create an account with {invitedEmail} to answer it.
                 </Text>
                 <Group>
                   <Button component={Link} to="/login" state={returnState}>
-                    Sign in
+                    Log in
                   </Button>
                   <Button
                     component={Link}

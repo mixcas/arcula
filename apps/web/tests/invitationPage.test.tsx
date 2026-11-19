@@ -255,7 +255,7 @@ describe("the invite page's signed-out preview", () => {
     expect(acceptButton()).not.toBeInTheDocument();
     expect(declineButton()).not.toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute(
       "href",
       "/login",
     );
@@ -264,12 +264,12 @@ describe("the invite page's signed-out preview", () => {
     ).toHaveAttribute("href", "/signup");
   });
 
-  it("sends a visitor to sign in and carries the invite path back", async () => {
+  it("sends a visitor to log in and carries the invite path back", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText(preview.catalogue.name);
 
-    await user.click(screen.getByRole("link", { name: "Sign in" }));
+    await user.click(screen.getByRole("link", { name: "Log in" }));
 
     await waitFor(() => expect(location().textContent).toBe("/login"));
     expect(location()).toHaveAttribute("data-from", INVITE_PATH);

@@ -96,7 +96,7 @@ const ArtworkAddPage: React.FC = () => {
         setCatalogue(fetched);
       } catch (err) {
         console.error("Error fetching catalogue:", err);
-        setLoadError("Failed to load the catalogue. Please try again.");
+        setLoadError("Could not load the catalogue. Try again.");
       } finally {
         setLoading(false);
       }
@@ -233,7 +233,7 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
             trackEvent("artwork_created", { catalogue_id: catalogueId });
             notifications.show({
               title: "Artwork created",
-              message: `"${created.title}" was added to this catalogue.`,
+              message: `“${created.title}” was added to this catalogue.`,
             });
             void navigate(
               `/manage/catalogue/${catalogueParam}/artwork/${artworkSlug(
@@ -251,7 +251,7 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
                 err.status === 409 &&
                 err.code === "limit-reached"
                 ? err.message
-                : "Failed to create artwork. Please try again.",
+                : "Could not create the artwork. Try again.",
             );
           }
         })}
@@ -276,7 +276,7 @@ const ArtworkAddForm: React.FC<ArtworkAddFormProps> = ({
           did when the buttons were an inline Group.
         */}
         <FormActionsBar
-          submitLabel="Save Artwork"
+          submitLabel="Save artwork"
           submitting={form.submitting}
           backTo={`/manage/catalogue/${catalogueParam}${searchSuffix}`}
           backLabel={`Back to ${catalogue.name}`}

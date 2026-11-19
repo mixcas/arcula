@@ -223,7 +223,7 @@ export interface LandingGettingStartedContent {
 }
 
 /**
- * The three moves from a work to a record.
+ * The three moves from an artwork to a record.
  *
  * The section stops at the catalogue's own decisions: it deliberately does not
  * explain the mechanics of filling in a name or a biography. Each step names
@@ -231,7 +231,7 @@ export interface LandingGettingStartedContent {
  */
 export const LANDING_GETTING_STARTED: LandingGettingStartedContent = {
   label: "03 — Getting started",
-  heading: "From a work to a record, in three moves.",
+  heading: "From an artwork to a record, in three moves.",
   steps: [
     {
       name: "Choose the kind",
@@ -350,8 +350,7 @@ export interface LandingAgentBandContent {
  * there.
  */
 export const LANDING_AGENT_BAND: LandingAgentBandContent = {
-  statement:
-    "Integrate with your favourite AI agents and let them manage your catalogues.",
+  statement: "Connect an AI agent and it can work on the record as you do.",
   marks: [
     { label: "Claude", src: "/images/Claude_AI_symbol.svg" },
     { label: "ChatGPT", src: "/images/ChatGPT-Logo.svg" },

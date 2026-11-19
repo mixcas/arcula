@@ -46,8 +46,8 @@ const DELETE_MODAL_ID = "delete-artworks";
 const SORT_OPTIONS = [
   { value: "title-asc", label: "Title A-Z" },
   { value: "title-desc", label: "Title Z-A" },
-  { value: "artist-asc", label: "Artist Name A-Z" },
-  { value: "artist-desc", label: "Artist Name Z-A" },
+  { value: "artist-asc", label: "Artist name A-Z" },
+  { value: "artist-desc", label: "Artist name Z-A" },
 ] as const;
 
 interface ArtworksListProps {
@@ -335,7 +335,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           {/* The import already has a home in Settings → Data; the empty
               catalogue is the moment it saves the most typing, so both ways
               to the first work sit together. Neither label repeats the
-              header's "Add Artwork" or the settings page's "Import". */}
+              header's "Add artwork" or the settings page's "Import". */}
           <Button
             component={Link}
             variant="default"

@@ -78,7 +78,7 @@ describe("newArtworkForm", () => {
     });
   });
 
-  it("leaves an Inventory's Artist Name empty, with its market state", () => {
+  it("leaves an Inventory's Artist name empty, with its market state", () => {
     // An Inventory sells work it represents, so the state is still there;
     // only the artist is unknown.
     expect(

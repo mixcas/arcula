@@ -83,7 +83,7 @@ describe("signing in from /login", () => {
 
     await user.type(await screen.findByLabelText(/^Email/), email);
     await user.type(screen.getByLabelText(/^Password/), password);
-    await user.click(screen.getByRole("button", { name: "Login" }));
+    await user.click(screen.getByRole("button", { name: "Log in" }));
 
     // The session atom's refetch and the redirect both land asynchronously.
     // Wait past them and prove the dashboard, not the form, is what remains:
@@ -91,7 +91,7 @@ describe("signing in from /login", () => {
     // /login, and the dashboard's own heading never appears.
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(
-      await screen.findByText("My Catalogues", undefined, { timeout: 10000 }),
+      await screen.findByText("My catalogues", undefined, { timeout: 10000 }),
     ).toBeInTheDocument();
 
     // The manage shell renders the signed-in account in its navbar. Once the
@@ -101,7 +101,7 @@ describe("signing in from /login", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(account).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Login" }),
+      screen.queryByRole("button", { name: "Log in" }),
     ).not.toBeInTheDocument();
   }, 30000);
 });

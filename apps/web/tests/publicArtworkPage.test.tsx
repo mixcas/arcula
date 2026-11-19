@@ -221,7 +221,7 @@ describe("PublicArtworkPage — the reachable states", () => {
     // artwork is not available" for a failure that is not a 404 is a claim the
     // app cannot support, and it costs the visitor a retry that would have
     // worked.
-    expect(await screen.findByText(/Failed to load/)).toBeVisible();
+    expect(await screen.findByText(/Could not load/)).toBeVisible();
   });
 
   it("offers a way back to the index, which the homepage does not", async () => {

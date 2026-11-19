@@ -13,8 +13,8 @@ interface AccountMenuProps {
 }
 
 /**
- * The signed-in account control: the avatar and name that open Profile,
- * optionally Manage, and Logout.
+ * The signed-in account control: the avatar and name that open Account,
+ * optionally Manage, and Log out.
  *
  * It lives outside either header because both sides of sign-in show the same
  * account, and the label's fallback chain is load-bearing: a change here must
@@ -68,14 +68,14 @@ const AccountMenu: React.FC<AccountMenuProps> = ({ withManage = false }) => {
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Item component={Link} to="/manage/profile">
-          Profile
+          Account
         </Menu.Item>
         {withManage ? (
           <Menu.Item component={Link} to="/manage">
             Manage
           </Menu.Item>
         ) : null}
-        <Menu.Item onClick={handleLogout}>Logout</Menu.Item>
+        <Menu.Item onClick={handleLogout}>Log out</Menu.Item>
       </Menu.Dropdown>
     </Menu>
   );

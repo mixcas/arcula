@@ -180,7 +180,7 @@ describe("PublicCataloguePage — the reachable states", () => {
   it("reports a transport failure as an error", async () => {
     getCatalogue.mockRejectedValue(new TypeError("fetch failed"));
     renderPage();
-    expect(await screen.findByText(/Failed to load/)).toBeVisible();
+    expect(await screen.findByText(/Could not load/)).toBeVisible();
   });
 
   it("says so plainly when the catalogue has no artworks", async () => {

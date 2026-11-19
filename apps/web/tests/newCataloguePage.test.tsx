@@ -91,7 +91,7 @@ const renderPage = () =>
   );
 
 const createButton = () =>
-  screen.getByRole("button", { name: "Create Catalogue" });
+  screen.getByRole("button", { name: "Create catalogue" });
 
 afterEach(() => {
   cleanup();
@@ -112,7 +112,7 @@ describe("the kind picker", () => {
       screen.getByRole("radio", { name: "Gallery Inventory" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: "Art Collector Collection" }),
+      screen.getByRole("radio", { name: "Art collector Collection" }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("radio")).toHaveLength(3);
 
@@ -155,7 +155,7 @@ describe("the kind picker", () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("radio", { name: "Art Collector Collection" }),
+      screen.getByRole("radio", { name: "Art collector Collection" }),
     );
     expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
     expect(

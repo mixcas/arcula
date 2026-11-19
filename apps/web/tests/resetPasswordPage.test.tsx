@@ -96,7 +96,7 @@ describe("the reset-password page", () => {
       expect(screen.getByText(/password updated/i)).toBeInTheDocument(),
     );
     // The sign-in hand-off is a real link, and the form is gone.
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute(
       "href",
       "/login",
     );
