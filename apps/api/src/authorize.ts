@@ -34,6 +34,7 @@ import {
   catalogueAccessGrants as grantsTable,
   catalogueCollaborators as catalogueCollaboratorsTable,
   catalogues as cataloguesTable,
+  selectionAccessGrants as selectionGrantsTable,
   selections as selectionsTable,
 } from "@arcula/db";
 import {
@@ -53,6 +54,8 @@ import {
 } from "./catalogueGrants";
 import { db } from "./db";
 import { ApiError } from "./errors";
+import { canSeeSelection, selectionRefusal } from "./selectionAccess";
+import { selectionGrantCookieName } from "./selectionGrants";
 import { resolveSession } from "./session";
 
 export type CatalogueRow = typeof cataloguesTable.$inferSelect;
@@ -344,8 +347,9 @@ export async function requireMemberArtwork(
  * is not a Selection any more.
  *
  * The Catalogue's own deletion is not this loader's question on the member
- * routes — the membership check below loads a live parent first — but the
- * public loader in the next slice will join a live Catalogue as well.
+ * routes — the membership check below loads a live parent first. The public
+ * address uses `loadSelectionWithCatalogue` instead, which joins a live
+ * Catalogue and so carries the deletion rule for a visitor.
  */
 export const loadSelection = async (
   catalogueId: string,
@@ -415,3 +419,123 @@ export async function requireMemberSelection(
 ): Promise<{ catalogue: CatalogueRow; selection: SelectionRow }> {
   return memberSelectionFor(c.get("user").id, catalogueId, selectionId);
 }
+
+/**
+ * A Selection and its source Catalogue, both live, or `null`.
+ *
+ * The join is the whole deletion rule for the public address. Deleting the
+ * source Catalogue stamps the Catalogue and nothing else — the Selection rows
+ * are deliberately left unstamped so an operator's restore brings the addresses
+ * back — so the only thing that can make a Selection's address 404 is this
+ * `catalogues.deletedAt IS NULL` predicate. A stamped Selection is absent for
+ * the same reason a stamped Catalogue is: it is not a document any more.
+ */
+export const loadSelectionWithCatalogue = async (
+  selectionId: string,
+): Promise<{ selection: SelectionRow; catalogue: CatalogueRow } | null> => {
+  const row = (
+    await db
+      .select({
+        selection: selectionsTable,
+        catalogue: cataloguesTable,
+      })
+      .from(selectionsTable)
+      .innerJoin(
+        cataloguesTable,
+        eq(selectionsTable.catalogueId, cataloguesTable.id),
+      )
+      .where(
+        and(
+          eq(selectionsTable.id, selectionId),
+          isNull(selectionsTable.deletedAt),
+          isNull(cataloguesTable.deletedAt),
+        ),
+      )
+  )[0];
+  return row ?? null;
+};
+
+/**
+ * The public read check: the Selection and its Catalogue are live, and the
+ * caller is a member of the source Catalogue or a visitor the Selection admits.
+ *
+ * A failed verdict that is not a password challenge is answered as the same
+ * `not-found` a deleted Selection gets. A Private Selection therefore never
+ * confirms that it exists — its name, its description and its address all stay
+ * as absent as a stamped row's — which is the ticket's acceptance criterion.
+ * A Protected one is the exception: it is public, so its existence is already
+ * what the reader followed, and the lock screen needs a challenge it can answer.
+ *
+ * `grantHeld` is asked only when the viewer is not a member: a member bypasses
+ * the challenge, so loading the cookie's grant would be a query nobody reads.
+ * The catalogue's visibility is never consulted here; `canSeeSelection` owns
+ * that decision and documents why the catalogue argument is inert.
+ */
+export async function readableSelectionFor(
+  viewer: string | null,
+  selectionId: string,
+  grantHeld: () => Promise<boolean> = () => Promise.resolve(false),
+): Promise<{
+  selection: SelectionRow;
+  catalogue: CatalogueRow;
+  catalogueName: string;
+  audience: CatalogueAudience;
+}> {
+  const pair = await loadSelectionWithCatalogue(selectionId);
+  if (!pair) {
+    throw new ApiError("not-found", "The selection does not exist");
+  }
+  const membership = await loadMembership(
+    pair.catalogue.id,
+    pair.catalogue,
+    viewer,
+  );
+  const hasValidGrant = isMember(membership) ? false : await grantHeld();
+  if (
+    !canSeeSelection(membership, pair.catalogue, pair.selection, hasValidGrant)
+  ) {
+    const refusal = selectionRefusal(pair.selection);
+    if (refusal.code !== "password-required") {
+      throw new ApiError("not-found", "The selection does not exist");
+    }
+    throw refusal;
+  }
+  return {
+    selection: pair.selection,
+    catalogue: pair.catalogue,
+    catalogueName: pair.catalogue.name,
+    audience: audienceOf(membership),
+  };
+}
+
+/**
+ * Whether this request holds a usable grant for THIS Selection.
+ *
+ * The cookie's name is the scope: only `arcula_selection_grant_{selectionId}`
+ * is read, so a grant minted for another Selection — or for a Catalogue — is
+ * never consulted. The row is looked up by the Selection id and the token's
+ * hash, so a token replayed under the wrong name finds nothing either, and
+ * expiry is the same pure question everywhere (`isGrantUsable`).
+ *
+ * A request with no such cookie costs no query — which is every member's and
+ * every visitor's ordinary read.
+ */
+export const selectionGrantHeld = async (
+  c: Context,
+  selectionId: string,
+): Promise<boolean> => {
+  const token = getCookie(c, selectionGrantCookieName(selectionId));
+  if (!token) return false;
+  const row = (
+    await db
+      .select({ expiresAt: selectionGrantsTable.expiresAt })
+      .from(selectionGrantsTable)
+      .where(
+        and(
+          eq(selectionGrantsTable.selectionId, selectionId),
+          eq(selectionGrantsTable.tokenHash, hashGrantToken(token)),
+        ),
+      )
+  )[0];
+  return row !== undefined && isGrantUsable(row);
+};

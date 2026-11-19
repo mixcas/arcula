@@ -162,7 +162,7 @@ const BasicxSkin: React.FC<SkinProps> = (props) => {
         component="main"
         h="100dvh"
         tabIndex={0}
-        aria-label="Catalogue"
+        aria-label={view === "selection" ? "Selection" : "Catalogue"}
         style={{
           overflowY: "auto",
           overflowX: "hidden",

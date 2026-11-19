@@ -10,8 +10,10 @@ import { describe, expect, it } from "vitest";
 import {
   selectionCreateSchema,
   selectionPageSchema,
+  selectionPublicReadSchema,
   selectionReadSchema,
   selectionSlug,
+  selectionUnlockSchema,
   selectionUpdateSchema,
 } from "../src";
 
@@ -92,10 +94,51 @@ describe("selectionUpdateSchema — PATCH /catalogues/{cid}/selections/{sid}", (
     );
   });
 
-  it("refuses an unknown key", () => {
-    expect(selectionUpdateSchema.safeParse({ isPublic: true }).success).toBe(
+  it("sets visibility and a password, and clears the password with null", () => {
+    expect(
+      selectionUpdateSchema.parse({
+        isPublic: true,
+        password: "open-sesame",
+      }),
+    ).toEqual({ isPublic: true, password: "open-sesame" });
+    expect(selectionUpdateSchema.parse({ password: null })).toEqual({
+      password: null,
+    });
+  });
+
+  it("refuses a password too short to be one", () => {
+    expect(selectionUpdateSchema.safeParse({ password: "short" }).success).toBe(
       false,
     );
+  });
+
+  it("refuses an unknown key", () => {
+    expect(
+      selectionUpdateSchema.safeParse({ artworkIds: ["aB3d9Kx2Qp"] }).success,
+    ).toBe(false);
+  });
+});
+
+describe("selectionUnlockSchema — POST /selections/{sid}/unlock", () => {
+  it("accepts any non-empty guess, however short", () => {
+    // The password's length rule belongs to setting it, not to guessing it: a
+    // guess that cannot be right is a wrong password, not a malformed request.
+    expect(selectionUnlockSchema.parse({ password: "x" })).toEqual({
+      password: "x",
+    });
+  });
+
+  it("refuses an empty password", () => {
+    expect(selectionUnlockSchema.safeParse({ password: "" }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses an unknown key", () => {
+    expect(
+      selectionUnlockSchema.safeParse({ password: "x", catalogueId: "cat1" })
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -125,6 +168,64 @@ describe("selectionPageSchema — the member list", () => {
     expect(selectionPageSchema.safeParse({ selections: [read] }).success).toBe(
       false,
     );
+  });
+});
+
+describe("selectionPublicReadSchema — GET /selections/{sid}", () => {
+  const publicRead = {
+    selection: {
+      id: "aB3d9Kx2Qp",
+      name: "Fair 2026",
+      description: "Twelve works for the fair.",
+      isPublic: true,
+    },
+    catalogueName: "Flores Solares",
+    skin: "basicx",
+    skinOptions: { transitionSeconds: 0.5, showCaptions: true },
+  };
+
+  it("parses the public document and the source presentation", () => {
+    expect(selectionPublicReadSchema.parse(publicRead)).toEqual(publicRead);
+  });
+
+  it("carries the source Catalogue's name but not its id", () => {
+    const parsed = selectionPublicReadSchema.parse(publicRead);
+    expect(parsed.catalogueName).toBe("Flores Solares");
+    expect(parsed).not.toHaveProperty("catalogueId");
+    expect(parsed.selection).not.toHaveProperty("catalogueId");
+  });
+
+  it("refuses a selection document carrying the source Catalogue's id", () => {
+    expect(
+      selectionPublicReadSchema.safeParse({
+        ...publicRead,
+        selection: { ...publicRead.selection, catalogueId: "cat1" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses a selection document carrying the password's state or hash", () => {
+    expect(
+      selectionPublicReadSchema.safeParse({
+        ...publicRead,
+        selection: { ...publicRead.selection, isPasswordProtected: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      selectionPublicReadSchema.safeParse({
+        ...publicRead,
+        selection: { ...publicRead.selection, passwordHash: "scrypt$secret" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("has no source address to leak", () => {
+    expect(
+      selectionPublicReadSchema.safeParse({
+        ...publicRead,
+        cataloguePath: "/catalogue/flores-solares-cat1",
+      }).success,
+    ).toBe(false);
   });
 });
 

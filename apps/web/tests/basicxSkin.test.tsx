@@ -607,6 +607,14 @@ describe("Basicx — photographs", () => {
 });
 
 describe("Basicx — the selection view", () => {
+  it("labels its stage as a Selection, not a Catalogue", () => {
+    // The stage's accessible name is the region's purpose. A Selection is not
+    // a Catalogue, and naming it one is a screen-reader user's only way to tell
+    // which document they are in.
+    renderSelection();
+    expect(screen.getByRole("main")).toHaveAttribute("aria-label", "Selection");
+  });
+
   it("names the selection, credits its catalogue and keeps the works' order", () => {
     // Two works in the order the Selection stores, not alphabetical: position
     // is the content, so a skin that sorted them would destroy the feature.

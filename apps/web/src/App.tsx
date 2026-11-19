@@ -23,6 +23,7 @@ import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
+import PublicSelectionPage from "./components/catalogue/PublicSelectionPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { LANDING_PALETTE } from "./components/landing/palette";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -210,6 +211,13 @@ const App: React.FC = () => {
         <Route
           path="/catalogue/:catalogueId/artwork/:artworkId"
           element={<PublicArtworkPage />}
+        />
+        {/* A Selection's own address: public chrome, no ProtectedRoute. The
+            page decides access through the ordinary read, so a visitor lands on
+            the lock screen or the not-found state rather than /login. */}
+        <Route
+          path="/selection/:selectionId"
+          element={<PublicSelectionPage />}
         />
         {/* The Catalogue PDF viewer. Public chrome: the route itself decides
             access through the ordinary reads, never a ProtectedRoute. */}
