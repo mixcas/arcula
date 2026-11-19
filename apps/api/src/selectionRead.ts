@@ -14,17 +14,22 @@ import {
   selectionWorks as selectionWorksTable,
   selections as selectionsTable,
 } from "@arcula/db";
-import type { SelectionPageRow, SelectionRead } from "@arcula/shared";
-import type { SelectionRow } from "./authorize";
+import type {
+  SelectionPageRow,
+  SelectionPublicRead,
+  SelectionRead,
+} from "@arcula/shared";
+import type { CatalogueRow, SelectionRow } from "./authorize";
 import { db } from "./db";
-import { wireTimestamp } from "./serialize";
+import { ApiError } from "./errors";
+import { isSkinOptions, wireTimestamp } from "./serialize";
 
 /**
  * The exact member wire document.
  *
  * Blank text is an absent key, never `null`. `isPasswordProtected` is derived
  * from the hash's presence — the hash itself never leaves the server — and is
- * a member fact only; the public read in the next slice does not carry it.
+ * a member fact only; `readPublicSelection` below deliberately omits it.
  */
 export function readSelection(row: SelectionRow): SelectionRead {
   const out: SelectionRead = {
@@ -37,6 +42,48 @@ export function readSelection(row: SelectionRow): SelectionRead {
     isPasswordProtected: row.passwordHash !== null,
   };
   if (row.description !== null) out.description = row.description;
+  return out;
+}
+
+/**
+ * The exact public wire document: the Selection, its source Catalogue's name,
+ * and the presentation it inherits.
+ *
+ * The document is deliberately smaller than the member read. There is no
+ * `catalogueId`, no slug and no address of the source Catalogue: its page is a
+ * different gate, often a private one, and a link to it would send a visitor to
+ * a lock screen or a 404. The name is a credit, not a route.
+ *
+ * `skin` and `skinOptions` are the Catalogue's stored values, passed raw. The
+ * web resolves them through the same registry it uses for a Catalogue, so the
+ * API never has to know what a skin declares — and a Selection renders in the
+ * Catalogue's presentation without a schema of its own.
+ */
+export function readPublicSelection(
+  selection: SelectionRow,
+  catalogue: CatalogueRow,
+): SelectionPublicRead {
+  const document: SelectionPublicRead["selection"] = {
+    id: selection.id,
+    name: selection.name,
+    isPublic: selection.isPublic,
+  };
+  if (selection.description !== null) {
+    document.description = selection.description;
+  }
+  const out: SelectionPublicRead = {
+    selection: document,
+    catalogueName: catalogue.name,
+  };
+  if (catalogue.skin !== null) {
+    out.skin = catalogue.skin;
+  }
+  if (catalogue.skinOptions !== null) {
+    if (!isSkinOptions(catalogue.skinOptions)) {
+      throw new ApiError("internal", "Malformed catalogue skin options");
+    }
+    out.skinOptions = catalogue.skinOptions;
+  }
   return out;
 }
 

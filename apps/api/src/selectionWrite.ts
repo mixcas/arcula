@@ -23,6 +23,7 @@ import {
   memberSelectionFor,
   type SelectionRow,
 } from "./authorize";
+import { hashPassword } from "./cataloguePassword";
 import { db } from "./db";
 import { ApiError } from "./errors";
 import { safeTx } from "./http";
@@ -71,11 +72,23 @@ export async function createSelection(
  * names nothing writes nothing — no column moves and `updatedAt` is left
  * alone, so "updated" continues to mean something was. The name is required
  * and trimmed by the request schema, so an empty one never reaches here.
+ *
+ * A password present means a write: a string sets or overwrites it, `null`
+ * removes it, and either revokes every grant the Selection has issued in the
+ * same transaction, so a reader can never keep access to the old password. The
+ * hash is computed before the transaction because it touches no row.
  */
 export async function writeSelection(
   selection: SelectionRow,
   payload: SelectionUpdatePayload,
 ): Promise<SelectionRead> {
+  const passwordHash =
+    payload.password === undefined
+      ? undefined
+      : payload.password === null
+        ? null
+        : await hashPassword(payload.password);
+
   const set: Partial<typeof selectionsTable.$inferInsert> = {};
   if (payload.name !== undefined) {
     set.name = payload.name;
@@ -83,12 +96,25 @@ export async function writeSelection(
   if (payload.description !== undefined) {
     set.description = payload.description ?? null;
   }
+  if (payload.isPublic !== undefined) {
+    set.isPublic = payload.isPublic;
+  }
+  if (passwordHash !== undefined) {
+    set.passwordHash = passwordHash;
+  }
   if (Object.keys(set).length > 0) {
     set.updatedAt = new Date();
-    await db
-      .update(selectionsTable)
-      .set(set)
-      .where(eq(selectionsTable.id, selection.id));
+    await safeTx(async (tx) => {
+      await tx
+        .update(selectionsTable)
+        .set(set)
+        .where(eq(selectionsTable.id, selection.id));
+      if (passwordHash !== undefined) {
+        await tx
+          .delete(grantsTable)
+          .where(eq(grantsTable.selectionId, selection.id));
+      }
+    });
   }
 
   const row = await loadSelection(selection.catalogueId, selection.id);

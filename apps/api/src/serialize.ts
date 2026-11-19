@@ -169,7 +169,7 @@ const availabilityOf = (value: string | null): ArtworkAvailability | null => {
 };
 
 /** The skin-option value vocabulary `catalogueUpdateSchema` admits. */
-const isSkinOptions = (
+export const isSkinOptions = (
   value: unknown,
 ): value is NonNullable<CatalogueRead["skinOptions"]> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
