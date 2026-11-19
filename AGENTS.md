@@ -62,6 +62,7 @@ was not covering it. The tiers and mechanics are in
 | product, data model, media, access as built | [DESIGN.md](DESIGN.md)                             |
 | a module you have not touched               | [docs/architecture.md](docs/architecture.md)       |
 | tests                                       | [docs/testing.md](docs/testing.md)                 |
+| any word a person reads                     | [docs/ux-writing.md](docs/ux-writing.md)           |
 | vocabulary and rejected alternatives        | [GLOSSARY.md](GLOSSARY.md), [docs/adr/](docs/adr/) |
 | a contract or feature spec                  | [docs/specs/](docs/specs/)                         |
 | branches, CI, deployment                    | [README.md](README.md)                             |

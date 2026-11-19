@@ -1,13 +1,5 @@
 import React, { useState } from "react";
-import {
-  Alert,
-  Button,
-  Container,
-  Group,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Group, Text, TextInput, Title } from "@mantine/core";
 import { Link, useLocation } from "react-router-dom";
 import { authClient } from "@/auth/client";
 import { toAuthError } from "@/auth/errors";
@@ -40,30 +32,30 @@ const ResetRequestPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await authClient.requestPasswordReset({ email });
-      const failed = toAuthError(result, "Could not request a reset email");
+      const failed = toAuthError(result, "Could not send the reset link");
       if (failed) {
         setError(
           (failed as { code?: unknown }).code === "INVALID_EMAIL"
             ? "Enter a valid email address."
-            : "Could not request a reset email. Please try again.",
+            : "Could not send the reset link. Try again.",
         );
         return;
       }
       // A known and an unknown address answer identically, so the notice must
       // not confirm either way.
       setNotice(
-        "If an account exists for that address, a reset email is on its way.",
+        "If an account exists for that address, a reset link is on its way.",
       );
     } catch (err) {
       console.error("Reset request error:", err);
-      setError("Could not request a reset email. Please try again.");
+      setError("Could not send the reset link. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Title order={2}>Reset your password</Title>
 
       {error && (
@@ -90,16 +82,16 @@ const ResetRequestPage: React.FC = () => {
           />
           <Group mt="xl">
             <Button type="submit" loading={loading}>
-              Send reset email
+              Send reset link
             </Button>
           </Group>
         </form>
       ) : null}
 
       <Text mt="xl">
-        <Link to="/login">Back to sign in</Link>
+        <Link to="/login">Back to log in</Link>
       </Text>
-    </Container>
+    </>
   );
 };
 

@@ -83,22 +83,25 @@ describe("signing in from /login", () => {
 
     await user.type(await screen.findByLabelText(/^Email/), email);
     await user.type(screen.getByLabelText(/^Password/), password);
-    await user.click(screen.getByRole("button", { name: "Login" }));
+    await user.click(screen.getByRole("button", { name: "Log in" }));
 
-    // The manage shell renders the signed-in account in its navbar — a widget
-    // /login does not have — so its presence means the guard read a non-null
-    // session and the dashboard, not the form, is on screen.
-    const account = await screen.findByText(accountName, undefined, {
-      timeout: 10000,
-    });
+    // The session atom's refetch and the redirect both land asynchronously.
+    // Wait past them and prove the dashboard, not the form, is what remains:
+    // on the broken code this is where the guard has bounced back to an empty
+    // /login, and the dashboard's own heading never appears.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(
+      await screen.findByText("My catalogues", undefined, { timeout: 10000 }),
+    ).toBeInTheDocument();
 
-    // The session atom's refetch and the redirect both land asynchronously;
-    // wait past them and prove the guard did not send the visitor back. On the
-    // broken code this is where the empty form returns.
+    // The manage shell renders the signed-in account in its navbar. Once the
+    // dashboard is on screen this node is its header's, not a transient
+    // public-header copy, so it must survive the next window too.
+    const account = screen.getByText(accountName);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(account).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Login" }),
+      screen.queryByRole("button", { name: "Log in" }),
     ).not.toBeInTheDocument();
   }, 30000);
 });

@@ -481,7 +481,7 @@ apps/
       App.tsx                # routes
       catalogueSurface.ts    # what a kind means for the surface, as data
       auth/                  # the Better Auth React client
-      components/            # ProductPage, auth/, manage/, catalogue/,
+      components/            # landing/, auth/, layout/, manage/, catalogue/,
                              # invitation/, pdf/
       hooks/                 # useAuth, useArtworkPhotos, useArtworkDocuments,
                              # useUploadPool

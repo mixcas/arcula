@@ -213,11 +213,11 @@ const save = async (
   // The page waits for the catalogue's kind before it shows the fields, so a
   // test that saves has to wait for the form too.
   // Regex, because Mantine appends a required marker and the accessible name
-  // is "Title *" rather than "Title". Artist Name is narrowed to the input:
+  // is "Title *" rather than "Title". Artist name is narrowed to the input:
   // the Autocomplete's listbox is labelled by the same text, so a bare label
   // query would match the dropdown too.
   await user.type(await screen.findByLabelText(/^Title/), title);
-  const artistField = screen.getByLabelText(/^Artist Name/, {
+  const artistField = screen.getByLabelText(/^Artist name/, {
     selector: "input",
   });
   // A Portfolio arrives holding its own artist, so the field is emptied before
@@ -225,7 +225,7 @@ const save = async (
   // make every saved artist a different string than the one named here.
   await user.clear(artistField);
   await user.type(artistField, artist);
-  await user.click(screen.getByRole("button", { name: "Save Artwork" }));
+  await user.click(screen.getByRole("button", { name: "Save artwork" }));
 };
 
 const landedAt = () => screen.getByTestId("location").textContent;
@@ -341,7 +341,7 @@ describe("the Add page — the single write", () => {
     await save(user);
 
     expect(
-      await screen.findByText("Failed to create artwork. Please try again."),
+      await screen.findByText("Could not create the artwork. Try again."),
     ).toBeVisible();
     expect(landedAt()).toContain("/artwork/add");
   });
@@ -508,12 +508,12 @@ describe("the Add page — the catalogue's Availability field", () => {
  * the save records. An Inventory's name is the gallery's and a Collection's is
  * the collector's, so neither prefills.
  */
-describe("the Add page — the Artist Name a new work starts with", () => {
+describe("the Add page — the Artist name a new work starts with", () => {
   it("starts a Portfolio work credited to the portfolio", async () => {
     getCatalogue.mockResolvedValue(catalogue("portfolio"));
     renderPage();
 
-    const artistField = await screen.findByLabelText(/^Artist Name/, {
+    const artistField = await screen.findByLabelText(/^Artist name/, {
       selector: "input",
     });
     expect(artistField).toHaveValue(CATALOGUE_NAME);
@@ -522,11 +522,11 @@ describe("the Add page — the Artist Name a new work starts with", () => {
   it.each([
     { kind: "inventory" as const, label: "an Inventory" },
     { kind: "collection" as const, label: "a Collection" },
-  ])("starts $label work with an empty Artist Name", async ({ kind }) => {
+  ])("starts $label work with an empty Artist name", async ({ kind }) => {
     getCatalogue.mockResolvedValue(catalogue(kind));
     renderPage();
 
-    const artistField = await screen.findByLabelText(/^Artist Name/, {
+    const artistField = await screen.findByLabelText(/^Artist name/, {
       selector: "input",
     });
     expect(artistField).toHaveValue("");
@@ -554,12 +554,12 @@ describe("the Add page — the Artist Name a new work starts with", () => {
     // The prefill is a default, not a substitute for the field: an owner who
     // empties it gets the ordinary required-field refusal and nothing is
     // written.
-    const artistField = await screen.findByLabelText(/^Artist Name/, {
+    const artistField = await screen.findByLabelText(/^Artist name/, {
       selector: "input",
     });
     await user.type(await screen.findByLabelText(/^Title/), "Estudio en rojo");
     await user.clear(artistField);
-    await user.click(screen.getByRole("button", { name: "Save Artwork" }));
+    await user.click(screen.getByRole("button", { name: "Save artwork" }));
 
     expect(await screen.findByText("Artist name is required")).toBeVisible();
     expect(createArtwork).not.toHaveBeenCalled();
@@ -569,7 +569,7 @@ describe("the Add page — the Artist Name a new work starts with", () => {
 /**
  * The form renders the catalogue's Artwork fields, not Arcula's whole list:
  * a field the catalogue does not record is absent, and a Kind default the
- * member overrode follows the member's choice. Title and Artist Name are
+ * member overrode follows the member's choice. Title and Artist name are
  * always there, and the save never names a field the form did not show.
  */
 describe("the Add page — the catalogue's Artwork fields", () => {
@@ -579,12 +579,12 @@ describe("the Add page — the catalogue's Artwork fields", () => {
 
     // The kind's defaults arrive once the catalogue has loaded.
     expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^Acquisition Price/)).toBeNull();
-    expect(screen.queryByLabelText(/^Acquisition Date/)).toBeNull();
+    expect(screen.queryByLabelText(/^Acquisition price/)).toBeNull();
+    expect(screen.queryByLabelText(/^Acquisition date/)).toBeNull();
     // The two fixed fields are always recorded.
     expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/^Artist Name/, { selector: "input" }),
+      screen.getByLabelText(/^Artist name/, { selector: "input" }),
     ).toBeInTheDocument();
   });
 
@@ -595,7 +595,7 @@ describe("the Add page — the catalogue's Artwork fields", () => {
     renderPage();
 
     expect(
-      await screen.findByLabelText(/^Acquisition Price/),
+      await screen.findByLabelText(/^Acquisition price/),
     ).toBeInTheDocument();
   });
 

@@ -28,7 +28,7 @@ export function ownershipTransferMail(facts: TransferMailFacts): ComposedMail {
     heading: `You now own ${facts.catalogueName}`,
     lines: [
       greeting(facts.firstName),
-      `${facts.previousOwnerName} transferred the catalogue "${facts.catalogueName}" to you on Arcula. You are its owner now.`,
+      `${facts.previousOwnerName} transferred the catalogue “${facts.catalogueName}” to you on Arcula. You are its owner now.`,
     ],
     cta: { label: "Open catalogue", url: facts.url },
     reason:

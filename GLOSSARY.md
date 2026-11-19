@@ -319,6 +319,12 @@ _Avoid_: Thumbnail, rendition, size
 
 ### Agents
 
+**Agent**:
+An AI client acting for an account through a Connection, with the account's
+permissions and never more. The client is the agent; the Connection is its
+standing access.
+_Avoid_: Bot, assistant
+
 **Connection**:
 An agent's standing access to one account: the person's approval of one MCP
 client, named for that client, listed in the account profile with when it

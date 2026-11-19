@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Text, Button, Group, Card, Loader, Badge } from "@mantine/core";
+import {
+  Text,
+  Button,
+  Group,
+  Card,
+  Loader,
+  Badge,
+  Paper,
+  Stack,
+} from "@mantine/core";
 import { Link } from "react-router-dom";
 import { IconStackPlus } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,7 +38,7 @@ const ManagePage: React.FC = () => {
         setCatalogues(await catalogueService.getUserCatalogues());
       } catch (err) {
         console.error("Error fetching catalogues:", err);
-        setError("Failed to fetch catalogues");
+        setError("Could not load your catalogues");
       } finally {
         setLoading(false);
       }
@@ -76,7 +85,7 @@ const ManagePage: React.FC = () => {
       <PendingInvitations />
 
       <Group mb="xl" justify="space-between" align="center">
-        <Text size="h1">My Catalogues</Text>
+        <Text size="h1">My catalogues</Text>
         <Group gap="sm">
           <Text size="sm" c="dim">
             {owned.length} of {limit} catalogue
@@ -94,7 +103,27 @@ const ManagePage: React.FC = () => {
       </Group>
 
       {catalogues.length === 0 ? (
-        <Text>No catalogues yet. Create your first catalogue!</Text>
+        // The empty dashboard is a way forward, not a caption: a collector who
+        // owns nothing has one thing to do here, and the header's button alone
+        // leaves the empty page looking like the end of the story. The label
+        // differs from the header's "New catalogue" so the two never read as
+        // the same control to a screen reader.
+        <Paper p="xl" ta="center">
+          <Stack align="center" gap="sm">
+            <Text fw={500}>No catalogues yet</Text>
+            <Text size="sm" c="dimmed">
+              A catalogue is where your artworks live. Start with one — the rest
+              tend to follow.
+            </Text>
+            <Button
+              component={Link}
+              to="/manage/catalogue/new"
+              leftSection={<IconStackPlus size={18} />}
+            >
+              Create your first catalogue
+            </Button>
+          </Stack>
+        </Paper>
       ) : (
         <div>
           {catalogues.map((catalogue) => (

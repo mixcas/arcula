@@ -669,12 +669,15 @@ Every state renders inside `ManageLayout`
 every `/manage` page already uses — so the viewer has the app's fixed header
 rather than a second definition of it.
 
-- **The header is a slot.** The layout takes an optional `header` node that
-  defaults to `ManageNavBar`, so no `/manage` page changes; the viewer passes
-  its own bar instead of forking the shell.
-- **One height.** The layout exports `MANAGE_HEADER_HEIGHT` (60 px), which
-  configures the fixed header. It is the one number a body that fills the window
-  under the bar sizes against, so the preview writes no second 60.
+- **The header is a slot.** The shared shell requires a `header` node, so every
+  frame has one; the authenticated layout (`ManageLayout`) defaults it to
+  `ManageNavBar`, so no `/manage` page changes, and the viewer passes its own
+  bar instead of forking the shell.
+- **One height.** The shared header bar module
+  (`apps/web/src/components/layout/HeaderBar.tsx`) exports `APP_HEADER_HEIGHT`
+  (60 px), which the shell uses to configure the fixed header. It is the one
+  number a body that fills the window under the bar sizes against, so the
+  preview writes no second 60.
 - **A fluid body.** The viewer passes a fluid container, so the shared lock
   screen and state message keep their own measure instead of being boxed
   twice.
@@ -758,7 +761,7 @@ Two surfaces, and each one offers the actions exactly once.
   document and nothing else — an `iframe` titled **Collection PDF** and pointed
   at the blob URL, filling the window under the fixed bar. (An empty Collection
   keeps the one line that says it has no published artworks above the frame.)
-  Its height is the viewport less `MANAGE_HEADER_HEIGHT` and the body's own
+  Its height is the viewport less `APP_HEADER_HEIGHT` and the body's own
   `AppShell` padding, with a floor for short windows, so the page itself does
   not scroll and the document scrolls inside its own frame. The pages-and-size
   line that used to sit above the preview is gone.

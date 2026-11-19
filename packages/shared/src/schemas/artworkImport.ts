@@ -85,11 +85,11 @@ export interface ImportFieldMetadata {
  */
 export const ARTWORK_IMPORT_FIELDS: readonly ImportFieldMetadata[] = [
   { key: "title", label: "Title", required: true, kind: "text" },
-  { key: "artistName", label: "Artist Name", required: true, kind: "text" },
+  { key: "artistName", label: "Artist name", required: true, kind: "text" },
   { key: "serie", label: "Serie", required: false, kind: "text" },
   {
     key: "dateOfCreation",
-    label: "Date of Creation",
+    label: "Date of creation",
     required: false,
     kind: "text",
   },
@@ -98,19 +98,19 @@ export const ARTWORK_IMPORT_FIELDS: readonly ImportFieldMetadata[] = [
   { key: "editions", label: "Editions", required: false, kind: "text" },
   {
     key: "acquisitionDate",
-    label: "Acquisition Date",
+    label: "Acquisition date",
     required: false,
     kind: "date",
   },
   {
     key: "acquisitionPrice",
-    label: "Acquisition Price",
+    label: "Acquisition price",
     required: false,
     kind: "text",
   },
   {
     key: "placeOfOrigin",
-    label: "Place of Origin",
+    label: "Place of origin",
     required: false,
     kind: "text",
   },

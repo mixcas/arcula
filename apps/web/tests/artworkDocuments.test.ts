@@ -1,4 +1,4 @@
-// Pure-logic tests for the "Other Documents" helpers. No DOM, no canvas, no
+// Pure-logic tests for the "Other documents" helpers. No DOM, no canvas, no
 // server — the helpers encode decisions that are easy to make and hard to
 // notice being wrong: what an image tile reads, and when a save is allowed to
 // skip the field.

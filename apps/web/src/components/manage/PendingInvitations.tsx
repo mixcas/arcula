@@ -54,7 +54,7 @@ const PendingInvitations: React.FC = () => {
     try {
       const declined = await invitationService.declinePendingInvitation(id);
       if (declined.status !== "declined") {
-        setActionError("Could not decline the invitation. Please try again.");
+        setActionError("Could not decline the invitation. Try again.");
         return;
       }
       remove(id);
@@ -64,7 +64,7 @@ const PendingInvitations: React.FC = () => {
         remove(id);
         return;
       }
-      setActionError("Could not decline the invitation. Please try again.");
+      setActionError("Could not decline the invitation. Try again.");
     } finally {
       setDeclining(null);
     }

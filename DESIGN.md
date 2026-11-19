@@ -955,7 +955,7 @@ provider and JWT plugin write, hand-authored against `getAuthTables()`.
 
 `apps/web` is the SPA. `src/App.tsx` holds the routes:
 
-- **Public** — `/` (product page), `/login`, `/signup`,
+- **Public** — `/` (the landing page), `/login`, `/signup`,
   `/reset-password` (the request) and `/reset-password/:token` (the form the
   mailed link lands on), `/invite/:token` (the invitation landing page, which
   shows the catalogue and invited email before sign-in), `/consent` (the
@@ -965,6 +965,36 @@ provider and JWT plugin write, hand-authored against `getAuthTables()`.
 - **Protected** — everything under `/manage`: the dashboard, a catalogue and its
   settings, artwork add/edit, the CSV import, and the account profile, whose
   agent-access card carries the endpoint and the Connected apps list.
+
+App chrome has one header shape — the same bar, wordmark on the left and a
+session-following right side — rendered by the shared layout modules, while a
+skin-rendered Catalogue and the PDF viewer keep their own chrome because the
+presentation belongs to the Catalogue.
+
+The landing page at `/` has one job: a visitor who has never heard of Arcula
+should be able to decide, in one scroll, whether it is for them. It is composed
+in `src/components/landing/` as a hero with an example record, then the
+sections in this order — 01 The record, 02 The catalogues, 03 Getting started,
+04 What it does, an unnumbered agent band, 05 Questions, the final call to
+action and the footer. The route is the one full-bleed group in `App.tsx`: a
+fluid container with no frame padding and the landing paper behind the header,
+while the auth pages keep the narrow column that suits a form. Every sentence
+is in `content.ts`, the voice they are written in is `docs/ux-writing.md`, the
+four brand values are in `palette.ts`, and the hero's
+record is one object there — a real, credited work (Daniel Robles's
+_Membrana_), its photograph in `public/images/`, contained whole in the
+panel's plate rather than cropped. Its two conversion doors wear the landing
+palette's `accent` — a deeper
+orange than Mantine's scale reaches, because white labels need 4.5:1 and the
+shade above it is 4.30:1 — and the three kinds are cards in the colours and
+glyphs the catalogues themselves wear (`catalogueKindIcons.ts` is that table,
+shared with the create picker) — presentational cards, not a selector. The
+page's only other images are the agent band's three marks, drawn as paper
+silhouettes from `public/images/`; there is no stock photography. The footer's
+address is assembled on click so no complete `mailto:` sits in the page. The page is presentational, so it has no
+tests of copy, layout or content data: the one seam that is pinned is where its
+two conversion doors — the hero's action and the closing action, in both
+session states — lead, and the rest is a reviewer's job in a browser.
 
 `src/services/` is the client layer (`api.ts` is the transport the domain
 services share); `src/auth/` is the Better Auth React client; `src/skins/` is the

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Badge, Button, Group, Text } from "@mantine/core";
+import { Badge, Box, Button, Group, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
 import {
   DataTable,
@@ -44,8 +44,8 @@ interface ArtworksTableProps {
   fetching?: boolean;
   /** Whether this catalogue records a work's market state. */
   showAvailability?: boolean;
-  /** What to say when this page has no rows. The list decides which state that is. */
-  emptyLabel: React.ReactNode;
+  /** What to show when this page has no rows. The list decides which state that is. */
+  emptyState: React.ReactNode;
 }
 
 /**
@@ -81,7 +81,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
   onConfirmDeleteArtwork,
   fetching = false,
   showAvailability = false,
-  emptyLabel,
+  emptyState,
 }) => {
   // Edit returns to the search it came from; View is the public page and
   // deliberately does not. Both addresses come from `artworkLinks`, so the
@@ -151,7 +151,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
       },
       {
         accessor: "artistName",
-        title: "Artist Name",
+        title: "Artist name",
         sortable: true,
         render: (artwork) => <Text>{artwork.artistName}</Text>,
       },
@@ -236,9 +236,11 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
       striped={false}
       minHeight={200}
       emptyState={
-        <Text p="xl" ta="center">
-          {emptyLabel}
-        </Text>
+        // A Box, not a Text: the list's empty state is a Stack of copy and
+        // controls, and a <div> inside a <p> is not markup.
+        <Box p="xl" ta="center">
+          {emptyState}
+        </Box>
       }
     />
   );

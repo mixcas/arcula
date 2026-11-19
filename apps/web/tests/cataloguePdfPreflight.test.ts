@@ -390,7 +390,7 @@ describe("the fields the Catalogue records", () => {
     ]);
   });
 
-  it("always prints Title and Artist Name, even with every togglable field off", () => {
+  it("always prints Title and Artist name, even with every togglable field off", () => {
     const fields = cataloguePdfFields(
       catalogue({ artworkFields: everyFieldOff() }),
     );

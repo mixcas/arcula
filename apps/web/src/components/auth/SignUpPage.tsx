@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Container,
   TextInput,
   PasswordInput,
   Button,
@@ -49,7 +48,7 @@ function mapSignUpError(err: Error): string {
   if (status === 400 && code === "PASSWORD_TOO_SHORT") {
     return "Password must be at least 8 characters.";
   }
-  return "Sign up failed. Please try again.";
+  return "Could not create your account. Try again.";
 }
 
 const SignUpPage: React.FC = () => {
@@ -96,14 +95,14 @@ const SignUpPage: React.FC = () => {
       // A rejected fetch has no envelope to read: the server is not
       // answering at all, and that is not "the email exists".
       console.error("Sign up error:", err);
-      setError("Sign up failed. Please try again.");
+      setError("Could not create your account. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container size="sm" style={{ paddingTop: "2rem", paddingBottom: "2rem" }}>
+    <>
       <Text size="h2">Create your account</Text>
 
       {error && (
@@ -168,10 +167,10 @@ const SignUpPage: React.FC = () => {
       <Text mt="xl">
         Already have an account?{" "}
         <Link to="/login" state={crossLinkState}>
-          Login
+          Log in
         </Link>
       </Text>
-    </Container>
+    </>
   );
 };
 

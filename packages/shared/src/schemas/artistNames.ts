@@ -11,7 +11,7 @@ import { z } from "zod";
  */
 export const artistNamesSchema = z.array(
   z.string().refine((name) => name.trim() !== "", {
-    message: "Artist Name must not be blank",
+    message: "Artist name must not be blank",
   }),
 );
 

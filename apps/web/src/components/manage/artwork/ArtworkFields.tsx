@@ -51,7 +51,7 @@ interface ArtworkFieldsProps {
   artistNames: UseArtistNames;
   /**
    * The record fields this catalogue records, resolved from its Kind and its
-   * stored deviations. Title and Artist Name are always rendered; every other
+   * stored deviations. Title and Artist name are always rendered; every other
    * field — Availability included — appears only when its key is enabled, and
    * the page's save omits the disabled keys entirely: a hidden value is kept,
    * never cleared.
@@ -94,7 +94,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       */}
       <Autocomplete
         key={form.key("artistName")}
-        label="Artist Name"
+        label="Artist name"
         placeholder="Artist's full name"
         required
         mb="md"
@@ -147,7 +147,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       {enabledFields.dateOfCreation ? (
         <TextInput
           key={form.key("dateOfCreation")}
-          label="Date of Creation"
+          label="Date of creation"
           placeholder="YYYY-MM-DD"
           mb="md"
           {...form.getInputProps("dateOfCreation")}
@@ -157,7 +157,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       {enabledFields.acquisitionDate ? (
         <DateInput
           key={form.key("acquisitionDate")}
-          label="Acquisition Date"
+          label="Acquisition date"
           placeholder="Select date"
           mb="md"
           clearable
@@ -168,7 +168,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       {enabledFields.acquisitionPrice ? (
         <TextInput
           key={form.key("acquisitionPrice")}
-          label="Acquisition Price"
+          label="Acquisition price"
           placeholder="Price in currency"
           mb="md"
           {...form.getInputProps("acquisitionPrice")}
@@ -178,7 +178,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
       {enabledFields.placeOfOrigin ? (
         <TextInput
           key={form.key("placeOfOrigin")}
-          label="Place of Origin"
+          label="Place of origin"
           placeholder="City, Country"
           mb="md"
           {...form.getInputProps("placeOfOrigin")}
@@ -286,7 +286,7 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
 
       <Box mb="md">
         <Text size="sm" fw={500} mb={4}>
-          Other Documents
+          Other documents
         </Text>
         {uploadsDisabled ? (
           <Text size="sm" c="dimmed">

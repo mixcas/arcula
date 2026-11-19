@@ -10,6 +10,8 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import { IconPlus } from "@tabler/icons-react";
+import { Link } from "react-router-dom";
 import { artworkService } from "@/services/artworkService";
 import ArtworksTable from "@/components/manage/catalogue/ArtworksTable";
 import ArtworksGrid from "@/components/manage/catalogue/ArtworksGrid";
@@ -44,8 +46,8 @@ const DELETE_MODAL_ID = "delete-artworks";
 const SORT_OPTIONS = [
   { value: "title-asc", label: "Title A-Z" },
   { value: "title-desc", label: "Title Z-A" },
-  { value: "artist-asc", label: "Artist Name A-Z" },
-  { value: "artist-desc", label: "Artist Name Z-A" },
+  { value: "artist-asc", label: "Artist name A-Z" },
+  { value: "artist-desc", label: "Artist name Z-A" },
 ] as const;
 
 interface ArtworksListProps {
@@ -309,14 +311,43 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
   // takes the list's place rather than sitting above an empty shell.
   const searchFailedWithoutRows = searchError !== null && artworks.length === 0;
   // Before the first read answers, "no works" is not known: the page is
-  // loading. Only the answer afterwards may claim the catalogue is empty.
+  // loading. Only the answer afterwards may claim the catalogue is empty —
+  // and that answer carries the way to put something in it. Under a search
+  // neither applies: the no-results panel owns that case.
   const emptyLabel = !listSettled
     ? searchActive
       ? "Searching…"
       : "Loading artworks…"
-    : searchActive
-      ? "Searching…"
-      : "No artworks in this catalogue yet.";
+    : "Searching…";
+
+  const emptyState =
+    listSettled && !searchActive ? (
+      <Stack align="center" gap="sm">
+        <Text>No artworks in this catalogue yet.</Text>
+        <Group justify="center" gap="sm">
+          <Button
+            component={Link}
+            to={`/manage/catalogue/${catalogueParam}/artwork/add`}
+            leftSection={<IconPlus size={16} />}
+          >
+            Add your first artwork
+          </Button>
+          {/* The import already has a home in Settings → Data; the empty
+              catalogue is the moment it saves the most typing, so both ways
+              to the first work sit together. Neither label repeats the
+              header's "Add artwork" or the settings page's "Import". */}
+          <Button
+            component={Link}
+            variant="default"
+            to={`/manage/catalogue/${catalogueParam}/import/csv`}
+          >
+            Import from CSV
+          </Button>
+        </Group>
+      </Stack>
+    ) : (
+      <Text>{emptyLabel}</Text>
+    );
 
   return (
     <Stack gap="md">
@@ -443,7 +474,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           showAvailability={showAvailability}
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
-          emptyLabel={emptyLabel}
+          emptyState={emptyState}
           page={effectivePage}
           onPageChange={(next) =>
             setPageState({ forToken: resetToken, page: next })
@@ -473,7 +504,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           showAvailability={showAvailability}
           onConfirmDeleteArtwork={confirmDeleteArtwork}
           fetching={fetching}
-          emptyLabel={emptyLabel}
+          emptyState={emptyState}
         />
       )}
     </Stack>

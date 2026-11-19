@@ -218,7 +218,7 @@ describe("ArtworksList", () => {
     await user.click(screen.getByRole("button", { name: "2" }));
     await waitFor(() => expect(visibleTitles()[0]).toBe("Art 26"));
 
-    await user.click(screen.getByText("Artist Name"));
+    await user.click(screen.getByText("Artist name"));
 
     // Artist order from its first page: not the title order the table started
     // in, and not page 2 of it.
@@ -530,6 +530,52 @@ describe("ArtworksList", () => {
     expect(screen.queryByText(/No artworks match/)).toBeNull();
   });
 
+  it.each([
+    ["Grid", () => undefined],
+    ["Table", () => startInTable()],
+  ])(
+    "offers both ways to the first work on an empty catalogue in the %s",
+    (_view, start) => {
+      start();
+      renderList({ artworks: [] });
+
+      expect(
+        screen.getByText("No artworks in this catalogue yet."),
+      ).toBeTruthy();
+      // The empty catalogue is where a collector decides to add a work or
+      // import a batch, so both destinations are live links — built from the
+      // address's catalogue segment, exactly like the header's Add artwork.
+      expect(
+        screen.getByRole("link", { name: /add your first artwork/i }),
+      ).toHaveAttribute(
+        "href",
+        "/manage/catalogue/my-catalogue-catalogue1/artwork/add",
+      );
+      expect(
+        screen.getByRole("link", { name: /import from csv/i }),
+      ).toHaveAttribute(
+        "href",
+        "/manage/catalogue/my-catalogue-catalogue1/import/csv",
+      );
+    },
+  );
+
+  it.each<[string, Partial<ListProps>]>([
+    ["before the first read answers", { listSettled: false }],
+    ["while a search is running", { searchQuery: "picasso", fetching: true }],
+    [
+      "under a completed search that matched nothing",
+      { searchQuery: "picasso" },
+    ],
+  ])("does not offer the first-work actions %s", (_state, props) => {
+    renderList({ artworks: [], ...props });
+
+    expect(
+      screen.queryByRole("link", { name: /add your first artwork/i }),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: /import from csv/i })).toBeNull();
+  });
+
   it("shows a searching state rather than a completed answer on the first search", () => {
     renderList({ artworks: [], searchQuery: "picasso", fetching: true });
 
@@ -638,7 +684,7 @@ describe("ArtworksList", () => {
     ];
     const { rerender } = renderList({ artworks });
 
-    await user.click(screen.getByText("Artist Name"));
+    await user.click(screen.getByText("Artist name"));
     await waitFor(() =>
       expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
     );
@@ -658,12 +704,12 @@ describe("ArtworksList", () => {
     renderList({
       artworks: [artwork({ id: "a", title: "Art 1" })],
       searchQuery: "art",
-      searchError: "Failed to search artworks",
+      searchError: "Could not search the artworks",
       onRetry,
     });
 
     expect(screen.getByText("Art 1")).toBeTruthy();
-    expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+    expect(screen.getByText("Could not search the artworks")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -673,11 +719,11 @@ describe("ArtworksList", () => {
     renderList({
       artworks: [],
       searchQuery: "art",
-      searchError: "Failed to search artworks",
+      searchError: "Could not search the artworks",
       onRetry: vi.fn(),
     });
 
-    expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+    expect(screen.getByText("Could not search the artworks")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     // No table answers, and no state is invented in its place.
     expect(screen.queryByRole("table")).toBeNull();
@@ -869,11 +915,11 @@ describe("ArtworksList", () => {
       renderList({
         artworks: [],
         searchQuery: "art",
-        searchError: "Failed to search artworks",
+        searchError: "Could not search the artworks",
         onRetry,
       });
 
-      expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+      expect(screen.getByText("Could not search the artworks")).toBeTruthy();
       // The Grid is replaced, not rendered empty beneath the alert.
       expect(screen.queryByRole("list")).toBeNull();
       expect(screen.queryByText(/No artworks match/)).toBeNull();
@@ -953,16 +999,16 @@ describe("ArtworksList", () => {
       expect(await sortChoices(user)).toEqual([
         { label: "Title A-Z", order: ["Art 1", "Art 2", "Art 3"] },
         { label: "Title Z-A", order: ["Art 3", "Art 2", "Art 1"] },
-        { label: "Artist Name A-Z", order: ["Art 1", "Art 3", "Art 2"] },
-        { label: "Artist Name Z-A", order: ["Art 2", "Art 3", "Art 1"] },
+        { label: "Artist name A-Z", order: ["Art 1", "Art 3", "Art 2"] },
+        { label: "Artist name Z-A", order: ["Art 2", "Art 3", "Art 1"] },
       ]);
 
       // The select still holds the last choice, and the choice is written.
-      await user.click(options("Artist Name Z-A")[0]);
+      await user.click(options("Artist name Z-A")[0]);
       await waitFor(() =>
         expect(cardTitles()).toEqual(["Art 2", "Art 3", "Art 1"]),
       );
-      expect(sortBox()).toHaveValue("Artist Name Z-A");
+      expect(sortBox()).toHaveValue("Artist name Z-A");
       // Written at the one point either control changes the sort, so the next
       // catalogue — and the Table, if the collector switches back — opens on
       // it too.
@@ -984,8 +1030,8 @@ describe("ArtworksList", () => {
         artwork({ id: "c", title: "Art 3", artistName: "Caillebotte" }),
       ];
       const { rerender } = renderList({ artworks });
-      // The Table starts Title A-Z, so clicking Artist Name sorts ascending.
-      await user.click(screen.getByText("Artist Name"));
+      // The Table starts Title A-Z, so clicking Artist name sorts ascending.
+      await user.click(screen.getByText("Artist name"));
       await waitFor(() =>
         expect(visibleTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
       );
@@ -997,7 +1043,7 @@ describe("ArtworksList", () => {
       await waitFor(() =>
         expect(cardTitles()).toEqual(["Art 2", "Art 1", "Art 3"]),
       );
-      expect(sortBox()).toHaveValue("Artist Name A-Z");
+      expect(sortBox()).toHaveValue("Artist name A-Z");
     });
 
     it("opens on the remembered sort, and resets to Title A-Z when the store is corrupt", () => {
@@ -1015,7 +1061,7 @@ describe("ArtworksList", () => {
       ];
       const { unmount } = renderList({ artworks });
 
-      expect(sortBox()).toHaveValue("Artist Name Z-A");
+      expect(sortBox()).toHaveValue("Artist name Z-A");
       expect(cardTitles()).toEqual(["Art 1", "Art 2"]);
       unmount();
 
@@ -1055,13 +1101,13 @@ describe("ArtworksList", () => {
       await waitFor(() => expect(cardTitles()[0]).toBe("Art 51"));
 
       await openSort(user);
-      await user.click(options("Artist Name A-Z")[0]);
+      await user.click(options("Artist name A-Z")[0]);
       await waitFor(() => expect(cardTitles()[0]).toBe("Art 60"));
 
       // A search is a fresh view of the same order: the sort survives it.
       rerender(<ListTree artworks={artworks} searchQuery="art" />);
       await waitFor(() => expect(cardTitles()[0]).toBe("Art 60"));
-      expect(sortBox()).toHaveValue("Artist Name A-Z");
+      expect(sortBox()).toHaveValue("Artist name A-Z");
 
       // And a sort made while a search is in force is that sort, not a
       // fallback to the default: the query changes nothing about the choice.
@@ -1250,13 +1296,13 @@ describe("ArtworksList", () => {
       renderList({
         artworks: [artwork({ id: "a", title: "Art 1" })],
         searchQuery: "art",
-        searchError: "Failed to search artworks",
+        searchError: "Could not search the artworks",
         onRetry: vi.fn(),
       });
 
       // The alert says the read failed; the cards it could not replace stay,
       // so a transient failure does not blank a catalogue being browsed.
-      expect(screen.getByText("Failed to search artworks")).toBeTruthy();
+      expect(screen.getByText("Could not search the artworks")).toBeTruthy();
       expect(cardTitles()).toEqual(["Art 1"]);
     });
   });

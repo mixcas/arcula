@@ -27,15 +27,10 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
-import {
-  CheckIcon,
-  PaletteIcon,
-  PresentationIcon,
-  RugIcon,
-  type Icon,
-} from "@phosphor-icons/react";
+import { CheckIcon } from "@phosphor-icons/react";
 import { useAuth } from "@/hooks/useAuth";
 import { catalogueSlug, type CatalogueKind } from "@arcula/shared";
+import { KIND_ICONS } from "@/catalogueKindIcons";
 import {
   CATALOGUE_KINDS,
   catalogueSurface,
@@ -52,18 +47,7 @@ import { ApiRequestError } from "@/services/api";
 const KIND_PERSONAS: Record<CatalogueKind, string> = {
   portfolio: "Artist",
   inventory: "Gallery",
-  collection: "Art Collector",
-};
-
-/**
- * The kind's glyph. It lives here rather than in `catalogueSurface` because
- * that module is pure data and may not hold React components; this picker is
- * the icons' only consumer until a second screen needs them.
- */
-const KIND_ICONS: Record<CatalogueKind, Icon> = {
-  portfolio: PaletteIcon,
-  inventory: PresentationIcon,
-  collection: RugIcon,
+  collection: "Art collector",
 };
 
 interface KindCardProps {
@@ -72,6 +56,9 @@ interface KindCardProps {
   onSelect: (kind: CatalogueKind) => void;
 }
 
+/** One kind as a radio card. The glyph comes from `catalogueKindIcons`, shared
+ *  with the landing page's kind cards so both screens wear the same colour
+ *  code for the same kind. */
 const KindCard: React.FC<KindCardProps> = ({ kind, selected, onSelect }) => {
   const { kindLabel, kindColor } = catalogueSurface(kind);
   const Icon = KIND_ICONS[kind];
@@ -166,7 +153,7 @@ const NewCataloguePage: React.FC = () => {
     e.preventDefault();
 
     if (!currentUser) {
-      setError("User not authenticated");
+      setError("Your session has ended. Log in again.");
       return;
     }
 
@@ -206,7 +193,7 @@ const NewCataloguePage: React.FC = () => {
           err.status === 409 &&
           err.code === "limit-reached"
           ? err.message
-          : "Failed to create catalogue. Please try again.",
+          : "Could not create the catalogue. Try again.",
       );
     } finally {
       setLoading(false);
@@ -270,7 +257,7 @@ const NewCataloguePage: React.FC = () => {
 
         <Group mt="md">
           <Button type="submit" disabled={loading || kind === null}>
-            {loading ? <Loader size="sm" /> : "Create Catalogue"}
+            {loading ? <Loader size="sm" /> : "Create catalogue"}
           </Button>
         </Group>
       </form>

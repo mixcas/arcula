@@ -47,7 +47,7 @@ function mapChangePasswordError(err: Error): string {
   if (code === "PASSWORD_TOO_SHORT") {
     return "New password must be at least 8 characters.";
   }
-  return "Could not change the password. Please try again.";
+  return "Could not change the password. Try again.";
 }
 
 /**
@@ -117,7 +117,7 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
       setNameSaved(true);
     } catch (err) {
       console.error("Error saving profile:", err);
-      setNameError("Failed to save your name. Please try again.");
+      setNameError("Could not save your name. Try again.");
     } finally {
       setNameSaving(false);
     }
@@ -146,7 +146,7 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
       passwordForm.reset();
     } catch (err) {
       console.error("Error changing password:", err);
-      setPasswordError("Could not change the password. Please try again.");
+      setPasswordError("Could not change the password. Try again.");
     } finally {
       setPasswordSaving(false);
     }
@@ -155,7 +155,7 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
   return (
     <>
       <Text size="h2" mb="xl">
-        Profile
+        Account
       </Text>
 
       <Card withBorder>
@@ -174,7 +174,7 @@ const ProfileForms: React.FC<{ me: SessionUserRead }> = ({ me }) => {
         )}
         {nameSaved && (
           <Alert color="green" mb="md">
-            Profile updated.
+            Account updated.
           </Alert>
         )}
 

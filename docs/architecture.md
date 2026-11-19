@@ -189,8 +189,10 @@ a signed authorize query survives sign-in;
 apps list; `telemetry/logRocket.ts` is the session-replay hook, redacted at the
 client
 ([ADR-0011](docs/adr/0011-session-replay-is-redacted-at-the-client.md));
-`components/manage` and `components/catalogue`; `skins/` is the public-view
-system.
+`components/landing/` is the landing page at `/` — its sections are bands
+composed by `LandingPage.tsx`, with every sentence in `content.ts` and the four
+brand values in `palette.ts`; `components/manage` and `components/catalogue`;
+`skins/` is the public-view system.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather
