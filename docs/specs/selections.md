@@ -16,6 +16,8 @@ The design record:
 - Decision: [ADR-0015](../adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md)
   — a Selection is a second gate, not a narrower window, with its audience,
   membership, liveness, ordering, deletion and tier answers.
+- Ticket: [#345](https://github.com/mixcas/arcula/issues/345) — the spec as the
+  implementer reads it, carrying the test seams.
 - Contract: this document. Every decision below is settled; the "Out of Scope"
   section is the list of things deliberately not decided here.
 
