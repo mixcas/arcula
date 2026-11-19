@@ -26,7 +26,7 @@ const QuestionsSection: React.FC = () => (
       heading={LANDING_QUESTIONS.heading}
     />
 
-    <Box component="dl" m={0} mt={{ base: "lg", md: "xl" }} maw={820}>
+    <Box component="dl" m={0} mt={{ base: "xl", md: 48 }} maw={820}>
       {LANDING_QUESTIONS.items.map((item) => (
         <Box
           key={item.question}
