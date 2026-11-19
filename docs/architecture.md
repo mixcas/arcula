@@ -97,6 +97,15 @@ offset }` and the facets counted over the filtered set. The verdict is
   share: the signed-in owned-or-shared list (`catalogueScope.ts` is the filter,
   each row's role and a shared row's owner name) and a Catalogue's live works
   by status (a member gets every status, a visitor published only).
+- `selectionWrite.ts` · `selectionRead.ts` — the member slice of a Selection:
+  create, rename/describe and delete (one transaction that stamps the row,
+  closes its grants and touches no work, photo or Catalogue), and the
+  name-ordered list with each row's live-work count plus the single member read.
+  The write cores take a user id and import no Hono type; `authorize.ts` owns
+  `loadSelection`, `memberSelectionFor` (membership of the source Catalogue is
+  the whole verdict, a stranger and a missing Selection are the same not-found)
+  and the Context-bound `requireMemberSelection`. There is no cap and no media:
+  a Selection references works and owns no bytes.
 - `connectionList.ts` · `consentQuery.ts` — the account surface's pure halves:
   one row per client collapsed to the newest "last acted", and the signed
   consent query's rebuild and verification plus the `https:`-only client link.
@@ -113,11 +122,13 @@ offset }` and the facets counted over the filtered set. The verdict is
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
-  `artistNames` (the caller's suggestion read), `connections` (the verified
-  consent request, the account's Connections and Revoke), `me`, `media` (the
-  object proxy), `artworkMedia` (the presign and process routes: the browser
-  PUTs the bytes straight to storage under the caller's own staging prefix, and
-  process is the point the server validates them —
+  `selections` (the Catalogue's Selections list, create, read, rename/describe
+  and delete — member-only; the public reads and the works payload arrive in
+  the next slices), `artistNames` (the caller's suggestion read), `connections`
+  (the verified consent request, the account's Connections and Revoke), `me`,
+  `media` (the object proxy), `artworkMedia` (the presign and process routes: the
+  browser PUTs the bytes straight to storage under the caller's own staging
+  prefix, and process is the point the server validates them —
   [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `populations.ts` (what distinguishes photos from documents: tables, variants
@@ -134,7 +145,7 @@ offset }` and the facets counted over the filtered set. The verdict is
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
 artworkImport, artistNames, catalogue, connection, invitation, document, media,
-user),
+selection, user),
 `artworkFields.ts` (the Artwork fields registry: the thirteen togglable keys,
 the two fixed ones, the per-Kind defaults, `resolveArtworkFields`,
 `normaliseArtworkFields` and `disabledArtworkFieldsIn`, the predicate the save
@@ -175,6 +186,14 @@ leaves the column alone. `schemas/document.ts`'s `catalogueReadSchema` carries
 both, the deviations on every audience because the public PDF resolves them; the
 API's serializer validates a row against the three kind values
 (`catalogueKindOf`) and the deviation map before emitting them.
+`schemas/selection.ts` holds the member slice's wire and request shapes:
+`selectionReadSchema` / `selectionRowSchema` / `selectionPageSchema` (the
+name-ordered list, each row carrying its live-work count), and the strict
+`selectionCreateSchema` / `selectionUpdateSchema`, whose request types are named
+for their routes. The read schema never carries `passwordHash`; the member
+document's `isPasswordProtected` is the hash's presence, derived at the
+serializer boundary. `slug.ts` gains `selectionSlug` beside the Catalogue and
+artwork helpers.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
 means for the surface, as data: the kind's colour (`kindColor`, a literal union
@@ -192,7 +211,12 @@ client
 `components/landing/` is the landing page at `/` — its sections are bands
 composed by `LandingPage.tsx`, with every sentence in `content.ts` and the four
 brand values in `palette.ts`; `components/manage` and `components/catalogue`;
-`skins/` is the public-view system.
+`skins/` is the public-view system. A Catalogue's Selections live in
+`components/manage/catalogue/SelectionsPage.tsx` (the name-ordered list, the
+empty state and the create modal) and `SelectionPage.tsx` (the settings block
+and the delete confirmation); both canonicalise their address from
+`selectionSlug` and call `services/selectionService.ts`, which parses every read
+through the shared schema and folds a missing Selection to `null`.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather
