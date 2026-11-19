@@ -216,7 +216,8 @@ purpose.
 
 The photo proxy is Catalogue-scoped and would refuse a visitor the photo of a
 Draft, so the Selection read carries its scope in the URL and the proxy learns a
-second admission path.
+second admission path. **A Draft in a public Selection renders with its images —
+that is the feature, not a tolerated leak.**
 
 - `serializeArtwork` gains an option — `{ selectionId }` — that appends
   `&selection={selectionId}` to every **photo** URL (`variants` included). The

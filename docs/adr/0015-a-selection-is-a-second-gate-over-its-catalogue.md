@@ -115,14 +115,15 @@ surface on which a Draft can become visitor-visible.
   its Selections' addresses with it. The Selection's unlock route, throttle and
   grant cookie are its own, named for the Selection, so the Catalogue's remain
   untouched.
-- **Media.** The proxy is Catalogue-scoped today, so it would refuse a visitor
-  the photo of a Draft — exactly what a Selection of Drafts is for. The public
-  Selection read therefore tags its media URLs with the Selection's id, and the
-  proxy admits a request that names a readable Selection containing that live
-  work, the cookie grant included for a protected one. A work's photos are
-  readable by whoever can read the Selection that shows it and by nobody else; a
-  Private Selection, or a Protected one without its grant, still answers 404.
-  Documents stay members-only: a Selection never makes a certificate public.
+- **Media.** The proxy is Catalogue-scoped today, so it would refuse a visitor a
+  Draft's photos — the very thing a public Selection of Drafts exists to show.
+  The public Selection read therefore tags its media URLs with the Selection's
+  id, and the proxy admits a request that names a readable Selection containing
+  that live work, the cookie grant included for a protected one. **A Draft in a
+  public Selection renders with its images.** A work's photos are readable by
+  whoever can read the Selection that shows it and by nobody else; a Private
+  Selection, or a Protected one without its grant, still answers 404. Documents
+  stay members-only: a Selection never makes a certificate public.
 - **Vocabulary.** **Public**, **Private**, **Protected**, **Published**,
   **Draft**, **Deleted**, **Slug**, **Visitor**, **Artwork fields**, **Tier**
   and **Selection** are rewritten; **Selection PDF** is new. The manage view's
