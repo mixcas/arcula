@@ -34,6 +34,7 @@ import {
   catalogueAccessGrants as grantsTable,
   catalogueCollaborators as catalogueCollaboratorsTable,
   catalogues as cataloguesTable,
+  selections as selectionsTable,
 } from "@arcula/db";
 import {
   audienceOf,
@@ -56,6 +57,7 @@ import { resolveSession } from "./session";
 
 export type CatalogueRow = typeof cataloguesTable.$inferSelect;
 export type ArtworkRow = typeof artworksTable.$inferSelect;
+export type SelectionRow = typeof selectionsTable.$inferSelect;
 
 /**
  * The one loading point, and therefore the one place a deleted catalogue
@@ -334,4 +336,82 @@ export async function requireMemberArtwork(
   artworkId: string,
 ): Promise<{ catalogue: CatalogueRow; artwork: ArtworkRow }> {
   return memberArtworkFor(c.get("user").id, catalogueId, artworkId);
+}
+
+/**
+ * The live Selection inside one Catalogue, or `null`. Both facts are in the
+ * where-clause: a Selection row names its source Catalogue, and a stamped one
+ * is not a Selection any more.
+ *
+ * The Catalogue's own deletion is not this loader's question on the member
+ * routes — the membership check below loads a live parent first — but the
+ * public loader in the next slice will join a live Catalogue as well.
+ */
+export const loadSelection = async (
+  catalogueId: string,
+  selectionId: string,
+): Promise<SelectionRow | null> =>
+  (
+    await db
+      .select()
+      .from(selectionsTable)
+      .where(
+        and(
+          eq(selectionsTable.catalogueId, catalogueId),
+          eq(selectionsTable.id, selectionId),
+          isNull(selectionsTable.deletedAt),
+        ),
+      )
+  )[0] ?? null;
+
+/**
+ * The write-mode Catalogue check for the Selection routes: the Catalogue
+ * exists and the caller is a member of it.
+ *
+ * A stranger gets the same `not-found` as a Selection that does not exist,
+ * rather than the Catalogue routes' `forbidden`: a Selection's member surface
+ * is not a place to confirm what a stranger cannot reach, and the ticket's
+ * contract makes the two answers one. Membership is still the whole verdict
+ * (ADR-0004) — a collaborator curates exactly as the owner does.
+ */
+export async function memberCatalogueForSelection(
+  userId: string,
+  catalogueId: string,
+): Promise<CatalogueRow> {
+  const catalogue = await loadCatalogue(catalogueId);
+  if (!catalogue) {
+    throw new ApiError("not-found", "The catalogue does not exist");
+  }
+  const membership = await loadMembership(catalogueId, catalogue, userId);
+  if (!isMember(membership)) {
+    throw new ApiError("not-found", "The catalogue does not exist");
+  }
+  return catalogue;
+}
+
+/**
+ * The Selection write verdict: membership of the source Catalogue is the whole
+ * question, then a Selection that is not live in that Catalogue is the same
+ * not-found a stranger got a moment earlier.
+ */
+export async function memberSelectionFor(
+  userId: string,
+  catalogueId: string,
+  selectionId: string,
+): Promise<{ catalogue: CatalogueRow; selection: SelectionRow }> {
+  const catalogue = await memberCatalogueForSelection(userId, catalogueId);
+  const selection = await loadSelection(catalogueId, selectionId);
+  if (!selection) {
+    throw new ApiError("not-found", "The selection does not exist");
+  }
+  return { catalogue, selection };
+}
+
+/** The Context-bound version: the session's user, delegated to the core. */
+export async function requireMemberSelection(
+  c: Context,
+  catalogueId: string,
+  selectionId: string,
+): Promise<{ catalogue: CatalogueRow; selection: SelectionRow }> {
+  return memberSelectionFor(c.get("user").id, catalogueId, selectionId);
 }
