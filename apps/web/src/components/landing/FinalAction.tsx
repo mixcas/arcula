@@ -32,7 +32,7 @@ const FinalAction: React.FC = () => {
               component={Link}
               to={actions.signedIn.primary.href}
               size="md"
-              color="orange.5"
+              color={LANDING_PALETTE.accent}
               autoContrast
             >
               {actions.signedIn.primary.label}
@@ -43,7 +43,7 @@ const FinalAction: React.FC = () => {
                 component={Link}
                 to={actions.signedOut.primary.href}
                 size="md"
-                color="orange.5"
+                color={LANDING_PALETTE.accent}
                 autoContrast
               >
                 {actions.signedOut.primary.label}

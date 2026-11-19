@@ -16,6 +16,18 @@ export const LANDING_PALETTE = {
   muted: "#625C55",
   /** The hairline that separates sections and record fields. */
   rule: "rgba(43, 41, 39, 0.18)",
+  /**
+   * The conversion doors' fill — the one loud colour on the page.
+   *
+   * It is deeper than Mantine's `orange.9` (`#d9480f`) because that shade
+   * reaches only 4.30:1 against white, and the labels are white: at 5.18:1
+   * this one clears WCAG AA for normal text. The whole orange scale was
+   * measured, and no shade with white text passes — `orange.7` is 3.04:1 and
+   * `orange.8` is 3.58:1. Lighten this past about `#d2480f` and the buttons
+   * fail again; the ink-on-`orange.5` pairing (6.49:1) is the other way to
+   * stay legible, and it is not the look we want.
+   */
+  accent: "#c2410c",
 } as const;
 
 /**

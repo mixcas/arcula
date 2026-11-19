@@ -119,7 +119,7 @@ const HeroSection: React.FC = () => {
                 component={Link}
                 to={primary.href}
                 size="md"
-                color="orange.5"
+                color={LANDING_PALETTE.accent}
                 autoContrast
               >
                 {primary.label}
