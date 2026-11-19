@@ -24,11 +24,14 @@ import LandingSection, { LandingSectionHeading } from "./Section";
  * The hero's record: a real work, credited to its artist.
  *
  * It is a bordered paper panel with no shadow, and it opens with the work's
- * plate — the photograph contained inside a fixed-height frame rather than
- * cropped to fill it, because cropping a work to make a layout tidy is the
- * one thing an art catalogue must not do. The frame's height is fixed and the
- * image carries its intrinsic size, so the hero's column does not move as the
- * photograph lands.
+ * plate — the photograph at the panel's own width, at its own aspect ratio, so
+ * the whole work is seen and nothing is cropped to make a layout tidy. The
+ * intrinsic `width`/`height` reserve the plate's space before it lands.
+ *
+ * The record's facts sit in a two-column definition grid on any panel wide
+ * enough for one (the columns collapse to one on a narrow screen), which is
+ * what keeps six fields from stretching the hero past the fold now that the
+ * plate is tall.
  *
  * The panel is not a landmark and the work's title is not a heading: the page
  * has one h1, and the record illustrates it rather than starting a section.
@@ -46,20 +49,13 @@ const RecordPanel: React.FC<{ record: LandingHeroRecord }> = ({ record }) => (
     p={0}
     style={{ border: LANDING_RULE }}
   >
-    <Box h={{ base: 280, md: 360 }} w="100%" bg={LANDING_PALETTE.paper}>
-      <img
-        src={record.image.src}
-        alt={record.image.alt}
-        width={1080}
-        height={1321}
-        style={{
-          display: "block",
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-        }}
-      />
-    </Box>
+    <img
+      src={record.image.src}
+      alt={record.image.alt}
+      width={1080}
+      height={1321}
+      style={{ display: "block", width: "100%", height: "auto" }}
+    />
 
     <Box p={{ base: "lg", md: "xl" }}>
       <Text ff="text" fz={{ base: "lg", sm: "xl" }} lh={1.2}>
@@ -69,13 +65,25 @@ const RecordPanel: React.FC<{ record: LandingHeroRecord }> = ({ record }) => (
         {record.artist}
       </Text>
 
-      <Box component="dl" mt="lg" mb={0}>
-        {record.fields.map((field, index) => (
+      {/* `auto-fit` rather than a fixed two columns: the panel's own width
+          decides, so the facts pair up beside the hero and fall to one column
+          when the page is narrow, without a breakpoint to keep in step. */}
+      <Box
+        component="dl"
+        mt="lg"
+        mb={0}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          columnGap: "var(--mantine-spacing-lg)",
+        }}
+      >
+        {record.fields.map((field) => (
           <Box
             key={field.label}
             component="div"
             py="xs"
-            style={index === 0 ? undefined : { borderTop: LANDING_RULE }}
+            style={{ borderTop: LANDING_RULE }}
           >
             <Text component="dt" size="xs" c={LANDING_PALETTE.muted}>
               {field.label}
