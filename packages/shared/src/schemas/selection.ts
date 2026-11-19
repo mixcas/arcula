@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Selection } from "../types";
+import { passwordSchema } from "./catalogue";
 import { wireTimestamp } from "./document";
 
 /**
@@ -91,14 +92,81 @@ export type SelectionCreatePayload = z.infer<typeof selectionCreateSchema>;
  * one clearable text field here; a blank string is not a clear, it is a
  * mistake, so only `null` empties it.
  *
- * Visibility, the password and the works payload are deliberately absent:
- * the first two belong to the publish slice and the third to curation.
+ * `isPublic` and `password` are the publish slice's two fields. Visibility is
+ * independent of the source Catalogue's: a private Catalogue may have a public
+ * Selection. A string sets or overwrites the password, `null` clears it, and
+ * either write revokes every grant the Selection has issued — the same contract
+ * a Catalogue's settings follow.
  */
 export const selectionUpdateSchema = z
   .object({
     name: z.string().trim().min(1, "Selection name is required").optional(),
     description: z.string().trim().min(1).nullable().optional(),
+    isPublic: z.boolean().optional(),
+    password: passwordSchema.nullable().optional(),
   })
   .strict();
 
 export type SelectionUpdatePayload = z.infer<typeof selectionUpdateSchema>;
+
+/**
+ * POST /selections/{sid}/unlock. An attempt at a protected Selection's
+ * password, from the lock screen.
+ *
+ * Deliberately NOT `passwordSchema`: any non-blank string is a fair guess, and
+ * a short one is a wrong password rather than a malformed request — the route
+ * answers `invalid-password` for both. This mirrors the Catalogue's unlock
+ * schema exactly; the Selection's gate is its own, not a second copy of the
+ * request rules.
+ */
+export const selectionUnlockSchema = z
+  .object({
+    password: z.string().min(1, "Enter the selection's password"),
+  })
+  .strict();
+
+export type SelectionUnlockPayload = z.infer<typeof selectionUnlockSchema>;
+
+/**
+ * The public Selection document: what a visitor's page may know about it.
+ *
+ * Deliberately smaller than `selectionReadSchema`. There is no `catalogueId`,
+ * because the source Catalogue's id is a different address and often a private
+ * one; there is no password flag, because whether a password is set is a
+ * member fact. The strict object is what makes those omissions a parse failure
+ * rather than a silently stripped key.
+ */
+export const selectionPublicDocumentSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    isPublic: z.boolean(),
+  })
+  .strict();
+
+export type SelectionPublicDocument = z.infer<
+  typeof selectionPublicDocumentSchema
+>;
+
+/**
+ * GET /selections/{sid}. The Selection plus the source Catalogue's **name
+ * only** — never its id or address — and the presentation it inherits.
+ *
+ * `skin` and `skinOptions` are the source Catalogue's, raw: the web resolves
+ * them through `resolveSkin`/`resolveSkinOptions`, exactly as it does for a
+ * Catalogue, so a Selection renders in the Catalogue's skin and options
+ * without the API knowing what a skin is.
+ */
+export const selectionPublicReadSchema = z
+  .object({
+    selection: selectionPublicDocumentSchema,
+    catalogueName: z.string(),
+    skin: z.string().optional(),
+    skinOptions: z
+      .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))
+      .optional(),
+  })
+  .strict();
+
+export type SelectionPublicRead = z.infer<typeof selectionPublicReadSchema>;
