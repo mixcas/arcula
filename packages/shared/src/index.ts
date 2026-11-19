@@ -23,5 +23,6 @@ export * from "./schemas/connection";
 export * from "./schemas/document";
 export * from "./schemas/invitation";
 export * from "./schemas/media";
+export * from "./schemas/selection";
 export * from "./schemas/user";
 export * from "./stagedUpload";
