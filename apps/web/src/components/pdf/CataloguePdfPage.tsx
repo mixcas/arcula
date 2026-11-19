@@ -38,7 +38,7 @@ import { artworkService } from "@/services/artworkService";
 import { catalogueService } from "@/services/catalogueService";
 import { parseId, type Artwork, type Catalogue } from "@arcula/shared";
 
-import CatalogueLockScreen from "@/components/catalogue/CatalogueLockScreen";
+import LockScreen from "@/components/LockScreen";
 import PublicStateMessage from "@/components/catalogue/PublicStateMessage";
 import ManageLayout from "@/components/manage/layout/ManageLayout";
 import { APP_HEADER_HEIGHT } from "@/components/layout/HeaderBar";
@@ -442,10 +442,13 @@ const CataloguePdfPage: React.FC = () => {
 
   if (effectiveState.status === "locked") {
     return shell(
-      <CatalogueLockScreen
-        catalogueId={catalogueId}
-        catalogueName={effectiveState.catalogueName}
-        onUnlocked={reload}
+      <LockScreen
+        noun="catalogue"
+        name={effectiveState.catalogueName}
+        onUnlock={async (password) => {
+          await catalogueService.unlockCatalogue(catalogueId, password);
+          reload();
+        }}
       />,
     );
   }
