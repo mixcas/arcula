@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Center, Loader } from "@mantine/core";
-import ProductPage from "./components/ProductPage";
+import LandingPage from "./components/landing/LandingPage";
 import LoginPage from "./components/auth/LoginPage";
 import ConsentPage from "./components/auth/ConsentPage";
 import SignUpPage from "./components/auth/SignUpPage";
@@ -22,6 +22,7 @@ import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { LANDING_PALETTE } from "./components/landing/palette";
 import { AuthProvider } from "./auth/AuthProvider";
 
 // The PDF renderer is a large separate chunk: only this route may import it,
@@ -34,11 +35,29 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public Routes — one pathless group, so every public page carries
-            the app header and the content frame from PublicLayout and no page
-            opts in individually. */}
+        {/* The home route is the one full-bleed public page: its sections own
+            their gutters and reach the window's edge, so the frame contributes
+            neither a max width nor padding. It is still a PublicLayout child,
+            which is what keeps the header from being the page's to remember.
+            The header wears the landing page's paper, not the app's grey: `/`
+            is the product's public face and its sections are composed on that
+            surface. The auth pages keep the grey their forms were designed
+            against. */}
+        <Route
+          element={
+            <PublicLayout
+              containerProps={{ fluid: true, px: 0 }}
+              padding={0}
+              headerBackground={LANDING_PALETTE.paper}
+            />
+          }
+        >
+          <Route path="/" element={<LandingPage />} />
+        </Route>
+
+        {/* The auth pages keep the narrow column: a form wants a measure, and
+            the landing page's full width would strand one. */}
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<ProductPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           {/* The OAuth consent screen. Not wrapped in ProtectedRoute: the page

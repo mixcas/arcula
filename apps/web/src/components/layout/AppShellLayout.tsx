@@ -1,5 +1,6 @@
 import React from "react";
-import { AppShell, Container, ContainerProps } from "@mantine/core";
+import { AppShell, Container } from "@mantine/core";
+import type { AppShellProps, ContainerProps } from "@mantine/core";
 import { APP_HEADER_HEIGHT } from "./HeaderBar";
 
 interface AppShellLayoutProps {
@@ -12,6 +13,11 @@ interface AppShellLayoutProps {
   header: React.ReactNode;
   /** The content column's Mantine props, when a page needs another measure. */
   containerProps?: ContainerProps;
+  /**
+   * The padding around the main area. Defaults to the app's `md`; a full-bleed
+   * page passes `0` so its own sections can reach the window's edge.
+   */
+  padding?: AppShellProps["padding"];
 }
 
 /**
@@ -26,9 +32,10 @@ const AppShellLayout: React.FC<AppShellLayoutProps> = ({
   children,
   header,
   containerProps,
+  padding = "md",
 }) => {
   return (
-    <AppShell header={{ height: APP_HEADER_HEIGHT }} padding="md">
+    <AppShell header={{ height: APP_HEADER_HEIGHT }} padding={padding}>
       <AppShell.Header>{header}</AppShell.Header>
       <AppShell.Main>
         <Container {...containerProps}>{children}</Container>

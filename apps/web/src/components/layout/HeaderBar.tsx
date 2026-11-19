@@ -21,6 +21,11 @@ interface HeaderBarProps {
   homePath: string;
   /** What sits at the far end of the bar: the account control, or its signed-out counterpart. */
   right?: React.ReactNode;
+  /**
+   * The bar's surface. Defaults to the app's grey; the home route asks for the
+   * landing page's paper so its header reads as part of that page.
+   */
+  background?: string;
 }
 
 /**
@@ -31,8 +36,12 @@ interface HeaderBarProps {
  * the manage header cannot drift apart. What fills the slot is the caller's:
  * a shell passes its account control, and a page keeps its own branded bar.
  */
-const HeaderBar: React.FC<HeaderBarProps> = ({ homePath, right }) => (
-  <Group h="100%" px="md" justify="space-between" bg="gray.1">
+const HeaderBar: React.FC<HeaderBarProps> = ({
+  homePath,
+  right,
+  background = "gray.1",
+}) => (
+  <Group h="100%" px="md" justify="space-between" bg={background}>
     <Button variant="subtle" component={Link} to={homePath}>
       <AppTitle />
     </Button>
