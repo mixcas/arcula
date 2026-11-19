@@ -97,15 +97,21 @@ offset }` and the facets counted over the filtered set. The verdict is
   share: the signed-in owned-or-shared list (`catalogueScope.ts` is the filter,
   each row's role and a shared row's owner name) and a Catalogue's live works
   by status (a member gets every status, a visitor published only).
-- `selectionWrite.ts` · `selectionRead.ts` — the member slice of a Selection:
-  create, rename/describe and delete (one transaction that stamps the row,
-  closes its grants and touches no work, photo or Catalogue), and the
-  name-ordered list with each row's live-work count plus the single member read.
-  The write cores take a user id and import no Hono type; `authorize.ts` owns
-  `loadSelection`, `memberSelectionFor` (membership of the source Catalogue is
-  the whole verdict, a stranger and a missing Selection are the same not-found)
-  and the Context-bound `requireMemberSelection`. There is no cap and no media:
-  a Selection references works and owns no bytes.
+- `selectionWrite.ts` · `selectionRead.ts` — the Selection's write cores and
+  reads: create, rename/describe/publish/protect and delete (one transaction
+  that stamps the row, closes its grants and touches no work, photo or
+  Catalogue), the name-ordered list with each row's live-work count, the member
+  read, and the public read (the Selection plus the source Catalogue's name and
+  inherited skin/skinOptions — never its id, address or password state). The
+  write cores take a user id and import no Hono type; a password write revokes
+  every grant in the same transaction. `selectionAccess.ts` is the pure verdict
+  (`canSeeSelection` ignores the source Catalogue's visibility; its deletion is
+  the loader's join), `selectionGrants.ts` owns the Selection's cookie name over
+  the shared token algebra, and `authorize.ts` owns `loadSelection`,
+  `loadSelectionWithCatalogue`, `memberSelectionFor`, `readableSelectionFor`
+  (a non-challenge refusal folds to the visitor's not-found) and
+  `selectionGrantHeld`. There is no cap and no media: a Selection references
+  works and owns no bytes.
 - `connectionList.ts` · `consentQuery.ts` — the account surface's pure halves:
   one row per client collapsed to the newest "last acted", and the signed
   consent query's rebuild and verification plus the `https:`-only client link.
@@ -122,9 +128,9 @@ offset }` and the facets counted over the filtered set. The verdict is
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
-  `selections` (the Catalogue's Selections list, create, read, rename/describe
-  and delete — member-only; the public reads and the works payload arrive in
-  the next slices), `artistNames` (the caller's suggestion read), `connections`
+  `selections` (the Catalogue's Selections list, create, read,
+  rename/describe/publish/protect and delete, plus the flat public read and
+  unlock), `artistNames` (the caller's suggestion read), `connections`
   (the verified consent request, the account's Connections and Revoke), `me`,
   `media` (the object proxy), `artworkMedia` (the presign and process routes: the
   browser PUTs the bytes straight to storage under the caller's own staging
@@ -186,14 +192,17 @@ leaves the column alone. `schemas/document.ts`'s `catalogueReadSchema` carries
 both, the deviations on every audience because the public PDF resolves them; the
 API's serializer validates a row against the three kind values
 (`catalogueKindOf`) and the deviation map before emitting them.
-`schemas/selection.ts` holds the member slice's wire and request shapes:
+`schemas/selection.ts` holds the Selection's wire and request shapes:
 `selectionReadSchema` / `selectionRowSchema` / `selectionPageSchema` (the
-name-ordered list, each row carrying its live-work count), and the strict
-`selectionCreateSchema` / `selectionUpdateSchema`, whose request types are named
-for their routes. The read schema never carries `passwordHash`; the member
-document's `isPasswordProtected` is the hash's presence, derived at the
-serializer boundary. `slug.ts` gains `selectionSlug` beside the Catalogue and
-artwork helpers.
+name-ordered list, each row carrying its live-work count), the strict
+`selectionCreateSchema` / `selectionUpdateSchema` (the update carries visibility
+and the password's set-or-clear), `selectionUnlockSchema`, and
+`selectionPublicReadSchema` (the Selection document plus the source Catalogue's
+name and inherited `skin`/`skinOptions`). The read schemas never carry
+`passwordHash`; the member document's `isPasswordProtected` is the hash's
+presence, derived at the serializer boundary, and the public document carries
+neither the flag nor the source Catalogue's id. `slug.ts` gains `selectionSlug`
+beside the Catalogue and artwork helpers.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
 means for the surface, as data: the kind's colour (`kindColor`, a literal union
@@ -227,9 +236,15 @@ component; set `pointerEvents: "auto"` on any link inside a fixed bar; and
 test it with plain objects plus the carousel mock. A Catalogue's Selections
 live in `components/manage/catalogue/SelectionsPage.tsx` (the name-ordered
 list, the empty state and the create modal) and `SelectionPage.tsx` (the
-settings block and the delete confirmation); both canonicalise their address
-from `selectionSlug` and call `services/selectionService.ts`, which parses
-every read through the shared schema and folds a missing Selection to `null`.
+settings block — name, description, Private/Public/Protected and the password —
+and the delete confirmation); both canonicalise their address from
+`selectionSlug` and call `services/selectionService.ts`, which parses every read
+through the shared schema and folds a missing Selection to `null`. A Selection's
+public address is `components/catalogue/PublicSelectionPage.tsx` over
+`usePublicSelection.ts`: the same state union as the Catalogue's, a
+`password-required` refusal folded to the shared `LockScreen`, and the skin
+rendered with the Selection's subject and the source Catalogue's resolved
+options.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather
@@ -257,10 +272,10 @@ columns it skipped.
 `artworkDocuments`, plus the eight agent-access tables `jwks`, `oauthClient`,
 `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
 `oauthConsent`, `oauthClientAssertion`) and the `schema` object the adapter
-consumes. The four Selection tables are in the schema and nothing reads them
-yet: `0014_selections` shipped alone, ahead of the feature code. The Drizzle
-entity is `catalogues` and the relation property is `catalogueId`, but the
-physical Postgres tables keep their `collections` / `collection_*` names and the
+consumes. All four Selection tables are read and written by the Selection
+feature: `0014_selections` shipped alone, ahead of the code that uses them.
+The Drizzle entity is `catalogues` and the relation property is `catalogueId`,
+but the physical Postgres tables keep their `collections` / `collection_*` names and the
 physical column stays `"collectionId"` — a storage rename is a non-additive
 migration (ADR-0010). The
 two sharing tables are in the schema
