@@ -66,15 +66,25 @@ export const LANDING_HERO: LandingHeroContent = {
   },
 };
 
-/** One labelled fact in the example record. */
+/** One labelled fact in the record. */
 export interface LandingRecordField {
   label: string;
   value: string;
 }
 
-export interface LandingExampleRecord {
-  /** The visible label that keeps the panel from reading as a screenshot. */
-  label: string;
+/** The artwork plate that heads the record. */
+export interface LandingRecordImage {
+  /** A file under `public/`. */
+  src: string;
+  /**
+   * Empty when the work's title and artist follow the image directly: naming
+   * the work twice would only make a screen reader say it twice.
+   */
+  alt: string;
+}
+
+export interface LandingHeroRecord {
+  image: LandingRecordImage;
   title: string;
   artist: string;
   fields: LandingRecordField[];
@@ -82,32 +92,36 @@ export interface LandingExampleRecord {
 }
 
 /**
- * The hero's example record.
+ * The hero's record: a real, credited work.
  *
- * PLACEHOLDER: this is a fictional work, shown so the page can make the
- * record's distinction concrete (a text date, and two separate prices).
- * Replace this one object when the artist's permission for a real work
- * arrives, and keep the `label` above it — the panel is an example until the
- * work and its details are cleared.
+ * It is here so the page's promise is concrete rather than a claim — the
+ * record's distinctions are visible in it (a date written the way the work's
+ * own history writes it, and what was paid kept apart from what it may be
+ * worth). The work and the photograph are Daniel Robles's, supplied with
+ * permission; the panel names him and the work, so nothing has to call the
+ * record a sample.
+ *
+ * The image is not a background: the panel's plate contains the whole work
+ * rather than cropping it, which is why a portrait plate is taller than it is
+ * wide.
  */
-export const LANDING_EXAMPLE_RECORD: LandingExampleRecord = {
-  label: "Example record",
-  title: "Study in Ochre",
-  artist: "Ada Moreau",
+export const LANDING_HERO_RECORD: LandingHeroRecord = {
+  image: {
+    src: "/images/daniel_robles_membrana.jpg",
+    alt: "",
+  },
+  title: "Membrana",
+  artist: "Daniel Robles",
   fields: [
-    { label: "Date of creation", value: "circa 1889" },
-    { label: "Medium", value: "Oil on canvas" },
+    { label: "Date of creation", value: "circa 2018" },
+    { label: "Medium", value: "Silicone, synthetic hair, fiberglass" },
     { label: "Dimensions", value: "64 × 48 cm" },
-    {
-      label: "Provenance",
-      value:
-        "Studio of the artist; private collection, Lyon, 1954; acquired 2019.",
-    },
-    { label: "Acquisition price", value: "€4,200" },
+    { label: "Provenance", value: "The Yards Gallery" },
+    { label: "Acquisition price", value: "$4,200" },
     { label: "Current price", value: "Not estimated" },
   ],
   caption:
-    "An example record. Dates stay as written; what you paid and what it may be worth stay separate.",
+    "Dates stay as written; what you paid and what it may be worth stay separate.",
 };
 
 /** One of the three things a catalogue holds at once, kept distinct. */

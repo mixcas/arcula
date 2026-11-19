@@ -980,16 +980,17 @@ action and the footer. The route is the one full-bleed group in `App.tsx`: a
 fluid container with no frame padding and the landing paper behind the header,
 while the auth pages keep the narrow column that suits a form. Every sentence
 is in `content.ts`, the four brand values are in `palette.ts`, and the hero's
-example record is one labelled placeholder object there — fictional, marked as
-an example, and replaced as a single object when a real work is cleared. The
-page's two conversion doors wear the landing palette's `accent` — a deeper
+record is one object there — a real, credited work (Daniel Robles's
+_Membrana_), its photograph in `public/images/`, contained whole in the
+panel's plate rather than cropped. Its two conversion doors wear the landing
+palette's `accent` — a deeper
 orange than Mantine's scale reaches, because white labels need 4.5:1 and the
 shade above it is 4.30:1 — and the three kinds are cards in the colours and
 glyphs the catalogues themselves wear (`catalogueKindIcons.ts` is that table,
-shared with the create picker) — presentational cards, not a selector. The only images are
-the agent band's three marks, drawn as paper silhouettes from `public/images/`;
-there is no stock photography. The footer's address is assembled on click so no
-complete `mailto:` sits in the page. The page is presentational, so it has no
+shared with the create picker) — presentational cards, not a selector. The
+page's only other images are the agent band's three marks, drawn as paper
+silhouettes from `public/images/`; there is no stock photography. The footer's
+address is assembled on click so no complete `mailto:` sits in the page. The page is presentational, so it has no
 tests of copy, layout or content data: the one seam that is pinned is where its
 two conversion doors — the hero's action and the closing action, in both
 session states — lead, and the rest is a reviewer's job in a browser.

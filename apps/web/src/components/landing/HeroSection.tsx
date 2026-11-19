@@ -13,81 +13,90 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LANDING_ANCHORS,
-  LANDING_EXAMPLE_RECORD,
   LANDING_HERO,
-  type LandingExampleRecord,
+  LANDING_HERO_RECORD,
+  type LandingHeroRecord,
 } from "./content";
 import { LANDING_PALETTE, LANDING_RULE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
- * The example record: a fictional work shown so the page's promise is
- * concrete rather than a claim.
+ * The hero's record: a real work, credited to its artist.
  *
- * It is a bordered paper panel with no shadow, and it is a `section` named by
- * its own visible label so a screen reader hears "Example record" before the
- * work — the label is what keeps it from being mistaken for a screenshot or a
- * real customer's data. The work's title is not a heading: the page has one
- * h1, and the record is an illustration of it, not a subsection.
+ * It is a bordered paper panel with no shadow, and it opens with the work's
+ * plate — the photograph contained inside a fixed-height frame rather than
+ * cropped to fill it, because cropping a work to make a layout tidy is the
+ * one thing an art catalogue must not do. The frame's height is fixed and the
+ * image carries its intrinsic size, so the hero's column does not move as the
+ * photograph lands.
  *
- * The content comes from one object in `content.ts`; replacing the
- * placeholder with a cleared work is a change to that object alone.
+ * The panel is not a landmark and the work's title is not a heading: the page
+ * has one h1, and the record illustrates it rather than starting a section.
+ * The image's alternate text is empty because the title and artist sit
+ * directly beneath it.
+ *
+ * The content comes from one object in `content.ts`; changing the work is a
+ * change to that object and its file alone.
  */
-const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
-  record,
-}) => (
+const RecordPanel: React.FC<{ record: LandingHeroRecord }> = ({ record }) => (
   <Paper
-    component="section"
-    aria-label={record.label}
     shadow="none"
     radius={0}
     bg={LANDING_PALETTE.paper}
-    p={{ base: "lg", md: "xl" }}
+    p={0}
     style={{ border: LANDING_RULE }}
   >
-    <Text
-      size="xs"
-      tt="uppercase"
-      fw={600}
-      c={LANDING_PALETTE.muted}
-      style={{ letterSpacing: "0.14em" }}
-    >
-      {record.label}
-    </Text>
-    <Text ff="text" fz={{ base: "lg", sm: "xl" }} lh={1.2} mt="sm">
-      {record.title}
-    </Text>
-    <Text size="sm" c={LANDING_PALETTE.muted} mt="3xs">
-      {record.artist}
-    </Text>
-
-    <Box component="dl" mt="lg" mb={0}>
-      {record.fields.map((field, index) => (
-        <Box
-          key={field.label}
-          component="div"
-          py="xs"
-          style={index === 0 ? undefined : { borderTop: LANDING_RULE }}
-        >
-          <Text component="dt" size="xs" c={LANDING_PALETTE.muted}>
-            {field.label}
-          </Text>
-          <Text component="dd" size="sm" mt={2} mb={0}>
-            {field.value}
-          </Text>
-        </Box>
-      ))}
+    <Box h={{ base: 280, md: 360 }} w="100%" bg={LANDING_PALETTE.paper}>
+      <img
+        src={record.image.src}
+        alt={record.image.alt}
+        width={1080}
+        height={1321}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+        }}
+      />
     </Box>
 
-    <Text size="sm" c={LANDING_PALETTE.muted} mt="md">
-      {record.caption}
-    </Text>
+    <Box p={{ base: "lg", md: "xl" }}>
+      <Text ff="text" fz={{ base: "lg", sm: "xl" }} lh={1.2}>
+        {record.title}
+      </Text>
+      <Text size="sm" c={LANDING_PALETTE.muted} mt="3xs">
+        {record.artist}
+      </Text>
+
+      <Box component="dl" mt="lg" mb={0}>
+        {record.fields.map((field, index) => (
+          <Box
+            key={field.label}
+            component="div"
+            py="xs"
+            style={index === 0 ? undefined : { borderTop: LANDING_RULE }}
+          >
+            <Text component="dt" size="xs" c={LANDING_PALETTE.muted}>
+              {field.label}
+            </Text>
+            <Text component="dd" size="sm" mt={2} mb={0}>
+              {field.value}
+            </Text>
+          </Box>
+        ))}
+      </Box>
+
+      <Text size="sm" c={LANDING_PALETTE.muted} mt="md">
+        {record.caption}
+      </Text>
+    </Box>
   </Paper>
 );
 
 /**
  * The top of the landing page: the promise, the audience it is for, and the
- * page's only conversion path beside an example record.
+ * page's only conversion path beside a real record.
  *
  * Two columns on a desktop and one on a phone: the copy and its actions keep
  * a readable measure in the left column while the record sits beside them,
@@ -136,7 +145,7 @@ const HeroSection: React.FC = () => {
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 5 }}>
-          <RecordPanel record={LANDING_EXAMPLE_RECORD} />
+          <RecordPanel record={LANDING_HERO_RECORD} />
         </Grid.Col>
       </Grid>
     </LandingSection>
