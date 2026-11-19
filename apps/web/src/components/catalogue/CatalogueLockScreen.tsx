@@ -51,7 +51,7 @@ const attemptMessage = (error: unknown): string => {
   if (error instanceof ApiRequestError && error.code === "too-many-attempts") {
     return error.message;
   }
-  return "Could not unlock this catalogue. Please try again.";
+  return "Could not unlock this catalogue. Try again.";
 };
 
 const CatalogueLockScreen: React.FC<CatalogueLockScreenProps> = ({

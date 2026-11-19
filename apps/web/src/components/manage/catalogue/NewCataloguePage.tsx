@@ -47,7 +47,7 @@ import { ApiRequestError } from "@/services/api";
 const KIND_PERSONAS: Record<CatalogueKind, string> = {
   portfolio: "Artist",
   inventory: "Gallery",
-  collection: "Art Collector",
+  collection: "Art collector",
 };
 
 interface KindCardProps {
@@ -153,7 +153,7 @@ const NewCataloguePage: React.FC = () => {
     e.preventDefault();
 
     if (!currentUser) {
-      setError("User not authenticated");
+      setError("Your session has ended. Log in again.");
       return;
     }
 
@@ -193,7 +193,7 @@ const NewCataloguePage: React.FC = () => {
           err.status === 409 &&
           err.code === "limit-reached"
           ? err.message
-          : "Failed to create catalogue. Please try again.",
+          : "Could not create the catalogue. Try again.",
       );
     } finally {
       setLoading(false);
@@ -257,7 +257,7 @@ const NewCataloguePage: React.FC = () => {
 
         <Group mt="md">
           <Button type="submit" disabled={loading || kind === null}>
-            {loading ? <Loader size="sm" /> : "Create Catalogue"}
+            {loading ? <Loader size="sm" /> : "Create catalogue"}
           </Button>
         </Group>
       </form>

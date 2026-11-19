@@ -190,10 +190,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
       ) {
         setEmailError(err.fields.email);
       } else {
-        reportActionError(
-          err,
-          "Could not send the invitation. Please try again.",
-        );
+        reportActionError(err, "Could not send the invitation. Try again.");
       }
     } finally {
       setInviting(false);
@@ -211,10 +208,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
       replaceInvitation(rotated);
       if (!emailSent) setInviteWarning(MAIL_FAILED);
     } catch (err) {
-      reportActionError(
-        err,
-        "Could not resend the invitation. Please try again.",
-      );
+      reportActionError(err, "Could not resend the invitation. Try again.");
     } finally {
       setResending(null);
     }
@@ -231,7 +225,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
         invitation.id,
       );
       if (revoked.status !== "revoked") {
-        setActionError("Could not revoke the invitation. Please try again.");
+        setActionError("Could not revoke the invitation. Try again.");
         return;
       }
       setAccess((current) =>
@@ -245,10 +239,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
           : current,
       );
     } catch (err) {
-      reportActionError(
-        err,
-        "Could not revoke the invitation. Please try again.",
-      );
+      reportActionError(err, "Could not revoke the invitation. Try again.");
     } finally {
       setRevoking(null);
     }
@@ -270,10 +261,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
           : current,
       );
     } catch (err) {
-      reportActionError(
-        err,
-        "Could not remove the collaborator. Please try again.",
-      );
+      reportActionError(err, "Could not remove the collaborator. Try again.");
     }
   };
 
@@ -300,10 +288,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
       // re-read it rather than patching a role the server owns.
       refresh();
     } catch (err) {
-      reportActionError(
-        err,
-        "Could not transfer the catalogue. Please try again.",
-      );
+      reportActionError(err, "Could not transfer the catalogue. Try again.");
     } finally {
       setTransferring(null);
     }
@@ -354,10 +339,7 @@ const AccessCard: React.FC<AccessCardProps> = ({ catalogueId }) => {
       await accessService.leaveCatalogue(catalogueId);
       void navigate("/manage");
     } catch (err) {
-      reportActionError(
-        err,
-        "Could not leave the catalogue. Please try again.",
-      );
+      reportActionError(err, "Could not leave the catalogue. Try again.");
     }
   };
 

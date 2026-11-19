@@ -85,7 +85,7 @@ const CsvImportPage: React.FC = () => {
         setCatalogue(loaded);
       } catch (error) {
         console.error("Error loading import page:", error);
-        setLoadError("Failed to load the catalogue. Please try again.");
+        setLoadError("Could not load the catalogue. Try again.");
       }
     };
     void fetchCatalogue();
@@ -287,7 +287,7 @@ const CsvImportPage: React.FC = () => {
               Back
             </Button>
             <Button onClick={goToReview} disabled={!step1Ready}>
-              {step1Ready ? "Next" : "Map Title and Artist Name to continue"}
+              {step1Ready ? "Next" : "Map Title and Artist name to continue"}
             </Button>
           </Group>
         </Stepper.Step>

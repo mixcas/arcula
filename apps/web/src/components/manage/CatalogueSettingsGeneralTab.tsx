@@ -197,11 +197,11 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
         <Divider mt="md" mb="md" />
 
         <Text size="h3" mb="md">
-          Privacy Settings
+          Privacy settings
         </Text>
 
         <Text size="sm" fw={600}>
-          Make Catalogue Public
+          Make catalogue public
         </Text>
         <SegmentedControl
           data={[
@@ -325,7 +325,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({
           these follow the {surface.kindLabel} defaults.
         </Text>
         <Text size="sm" c="dimmed" mb="sm">
-          Title and Artist Name are always recorded.
+          Title and Artist name are always recorded.
         </Text>
 
         {/* The state of the buffer, not of the stored row: the Reset control

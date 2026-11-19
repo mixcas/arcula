@@ -200,7 +200,7 @@ describe("the profile page — the name save", () => {
       expect(updateProfile).toHaveBeenCalledWith({ lastName: "Solar" }),
     );
     await waitFor(() =>
-      expect(screen.getByText(/profile updated/i)).toBeInTheDocument(),
+      expect(screen.getByText(/account updated/i)).toBeInTheDocument(),
     );
     // First name was unchanged, so it must not ride the wire at all:
     // absent keys are "leave alone", and rewriting it would be a no-op write.
@@ -218,7 +218,7 @@ describe("the profile page — the name save", () => {
     await user.click(screen.getByRole("button", { name: "Save name" }));
 
     expect(updateProfile).not.toHaveBeenCalled();
-    expect(screen.queryByText(/profile updated/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/account updated/i)).not.toBeInTheDocument();
   });
 
   it("sends no request at all when nothing changed", async () => {

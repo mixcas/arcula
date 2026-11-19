@@ -137,7 +137,7 @@ const AgentAccessCard: React.FC = () => {
 
           {revokeFailed && (
             <Alert color="red" mb="md">
-              Could not disconnect that app. Please try again.
+              Could not disconnect that app. Try again.
             </Alert>
           )}
 

@@ -45,7 +45,7 @@ export function invitationMail(facts: InvitationMailFacts): ComposedMail {
     heading: `${facts.inviterName} invited you to ${facts.catalogueName}`,
     lines: [
       greeting(),
-      `You have been invited to collaborate on the catalogue "${facts.catalogueName}" on Arcula.`,
+      `You have been invited to collaborate on the catalogue “${facts.catalogueName}” on Arcula.`,
       `This invitation expires in ${INVITATION_DAYS} days and can be used once.`,
     ],
     cta: { label: "Accept invitation", url: facts.url },

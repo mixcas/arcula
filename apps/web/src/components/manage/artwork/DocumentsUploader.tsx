@@ -37,7 +37,7 @@ interface DocumentsUploaderProps {
 }
 
 /**
- * The "Other Documents" list for the Add and Edit Artwork forms.
+ * The "Other documents" list for the Add and Edit Artwork forms.
  *
  * A two-column tile grid, matching the photos beside it: the square is the
  * thumbnail for an image and a content-type glyph for everything else, with the

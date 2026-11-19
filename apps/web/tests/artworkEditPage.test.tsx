@@ -241,7 +241,7 @@ describe("the Edit page — the status the owner chose", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Draft" }));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await sentPatch()).status).toBe("draft");
   });
@@ -257,7 +257,7 @@ describe("the Edit page — the status the owner chose", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Published" }));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await sentPatch()).status).toBe("published");
   });
@@ -271,7 +271,7 @@ describe("the Edit page — the status the owner chose", () => {
  */
 describe("the Edit page — the artist a work records", () => {
   const artistField = async () =>
-    await screen.findByLabelText(/^Artist Name/, { selector: "input" });
+    await screen.findByLabelText(/^Artist name/, { selector: "input" });
 
   it("shows the work's recorded artist, not the portfolio's name", async () => {
     getCatalogue.mockResolvedValue(catalogue("portfolio"));
@@ -293,7 +293,7 @@ describe("the Edit page — the artist a work records", () => {
     const title = await screen.findByLabelText(/^Title/);
     await user.clear(title);
     await user.type(title, "Estudio en azul");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     // A page that prefilled this field from the catalogue would put "Flores
     // Solares" here — an artist the work never recorded.
@@ -317,7 +317,7 @@ describe("the Edit page — a work's availability", () => {
     expect(
       await screen.findByRole("combobox", { name: /^Availability/ }),
     ).toHaveValue("Available");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await sentPatch()).availability).toBe("available");
   });
@@ -331,7 +331,7 @@ describe("the Edit page — a work's availability", () => {
     expect(
       await screen.findByRole("combobox", { name: /^Availability/ }),
     ).toHaveValue("Sold");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await sentPatch()).availability).toBe("sold");
   });
@@ -368,7 +368,7 @@ describe("the Edit page — a work's availability", () => {
     expect(
       await screen.findByRole("combobox", { name: /^Availability/ }),
     ).toHaveValue("Reserved");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await sentPatch()).availability).toBe("reserved");
   });
@@ -381,7 +381,7 @@ describe("the Edit page — a work's availability", () => {
     expect(
       screen.queryByRole("combobox", { name: /^Availability/ }),
     ).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     // Absent, not null: the Collection's stored value stays exactly as it
     // was, which is null for a work this form never surfaces.
@@ -400,7 +400,7 @@ describe("the Edit page — a work's availability", () => {
     expect(
       screen.queryByRole("combobox", { name: /^Availability/ }),
     ).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await sentPatch()).not.toHaveProperty("availability");
   });
@@ -425,7 +425,7 @@ describe("the Edit page — a deleted work", () => {
     getArtwork.mockResolvedValue(stored({ deletedAt: DELETED_AT }));
     const page = within(renderPage().container);
     const saveButton = async () =>
-      await page.findByRole("button", { name: "Save Changes" });
+      await page.findByRole("button", { name: "Save changes" });
     return { page, saveButton };
   };
 
@@ -582,7 +582,7 @@ describe("the Edit page — the catalogue's Artwork fields", () => {
     renderPage();
 
     expect(await screen.findByLabelText(/^Medium/)).toBeInTheDocument();
-    expect(field(/^Acquisition Price/)).toBeNull();
+    expect(field(/^Acquisition price/)).toBeNull();
     expect(screen.getByLabelText(/^Title/)).toBeInTheDocument();
   });
 
@@ -593,7 +593,7 @@ describe("the Edit page — the catalogue's Artwork fields", () => {
     getArtwork.mockResolvedValue(stored({ acquisitionPrice: "1200" }));
     renderPage();
 
-    expect(await screen.findByLabelText(/^Acquisition Price/)).toHaveValue(
+    expect(await screen.findByLabelText(/^Acquisition price/)).toHaveValue(
       "1200",
     );
   });
@@ -608,7 +608,7 @@ describe("the Edit page — the catalogue's Artwork fields", () => {
 
     const title = await screen.findByLabelText(/^Title/);
     await user.type(title, " (edited)");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     const patch = await sentPatch();
     expect(patch).not.toHaveProperty("acquisitionPrice");
@@ -624,7 +624,7 @@ describe("the Edit page — the catalogue's Artwork fields", () => {
 
     await screen.findByLabelText(/^Title/);
     expect(field(/^Provenance/)).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await sentPatch()).not.toHaveProperty("provenance");
   });

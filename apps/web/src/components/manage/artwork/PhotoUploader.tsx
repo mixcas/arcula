@@ -118,8 +118,7 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
       {photos.entries.length === 0 ? (
         <Text size="sm" c="dimmed">
-          No images yet. The first image is the one used as the thumbnail
-          everywhere in the app.
+          No images yet. The first one becomes the thumbnail.
         </Text>
       ) : (
         <DndContext

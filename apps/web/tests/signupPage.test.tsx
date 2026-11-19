@@ -311,7 +311,7 @@ describe("the sign-up page", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText(/sign up failed\. please try again/i),
+        screen.getByText(/could not create your account/i),
       ).toBeInTheDocument(),
     );
     expect(screen.getByTestId("location").textContent).toBe("/signup");

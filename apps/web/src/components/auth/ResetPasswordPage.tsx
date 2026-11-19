@@ -43,7 +43,7 @@ function mapResetError(err: Error): ResetFailure {
   if (code === "PASSWORD_TOO_SHORT") {
     return { message: "Password must be at least 8 characters." };
   }
-  return { message: "Could not reset the password. Please try again." };
+  return { message: "Could not reset the password. Try again." };
 }
 
 const ResetPasswordPage: React.FC = () => {
@@ -79,7 +79,7 @@ const ResetPasswordPage: React.FC = () => {
     } catch (err) {
       console.error("Reset password error:", err);
       setFailure({
-        message: "Could not reset the password. Please try again.",
+        message: "Could not reset the password. Try again.",
       });
     } finally {
       setLoading(false);
@@ -106,7 +106,7 @@ const ResetPasswordPage: React.FC = () => {
       )}
       {done ? (
         <Alert mt="md" color="green">
-          Password updated. <Link to="/login">Sign in</Link>.
+          Password updated. <Link to="/login">Log in</Link>.
         </Alert>
       ) : (
         <form onSubmit={(e) => void form.onSubmit(handleReset)(e)}>

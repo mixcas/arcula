@@ -185,7 +185,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("a catalogue's nav bar", () => {
-  it("keeps Add Artwork a link and folds Deleted and Settings into one menu", async () => {
+  it("keeps Add artwork a link and folds Deleted and Settings into one menu", async () => {
     renderPage();
 
     await waitFor(() =>
@@ -205,10 +205,10 @@ describe("a catalogue's nav bar", () => {
     ).toBeInTheDocument();
   });
 
-  it("puts the search input beside Add Artwork", async () => {
+  it("puts the search input beside Add artwork", async () => {
     renderPage();
 
-    // The input is the member's way into the catalogue's works; Add Artwork
+    // The input is the member's way into the catalogue's works; Add artwork
     // is the way to add one. Both are in the bar once the catalogue loads.
     expect(await screen.findByRole("textbox", { name: /search/i })).toBe(
       searchInput(),
@@ -499,7 +499,7 @@ describe("Catalogue search", () => {
     await user.type(screen.getByRole("textbox"), "dali");
 
     expect(
-      await screen.findByText("Failed to search artworks"),
+      await screen.findByText("Could not search the artworks"),
     ).toBeInTheDocument();
     // A dropped connection does not wipe the page.
     expect(screen.getByText("Blue Nude")).toBeInTheDocument();
@@ -520,7 +520,7 @@ describe("Catalogue search", () => {
 
     // No query is active, so this is the list's failure, not a search's.
     expect(
-      await screen.findByText("Failed to fetch artworks"),
+      await screen.findByText("Could not load the artworks"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
     expect(screen.queryByText("No artworks in this catalogue yet.")).toBeNull();
@@ -531,7 +531,7 @@ describe("Catalogue search", () => {
     renderPage(`${CANONICAL_PATH}?q=monet`);
 
     expect(
-      await screen.findByText("Failed to search artworks"),
+      await screen.findByText("Could not search the artworks"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
@@ -541,7 +541,7 @@ describe("Catalogue search", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Failed to fetch catalogue data"),
+      await screen.findByText("Could not load the catalogue"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
   });

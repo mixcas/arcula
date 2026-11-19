@@ -38,7 +38,7 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-const HEADERS = ["Title", "Artist Name", "Acquisition price", "Medium"];
+const HEADERS = ["Title", "Artist name", "Acquisition price", "Medium"];
 const enabledFields = resolveArtworkFields("portfolio", null).enabled;
 
 let onMappingChange: ReturnType<typeof vi.fn>;

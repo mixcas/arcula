@@ -183,13 +183,13 @@ describe("the manage header", () => {
     expect(await openAccountMenu("Owner — account menu")).toBeInTheDocument();
   });
 
-  it("offers Profile and Logout, and no Manage item on the page Manage leads to", async () => {
+  it("offers Account and Log out, and no Manage item on the page Manage leads to", async () => {
     renderInApp(<ManageNavBar />);
     await openAccountMenu("Sofía Lara — account menu");
     const menu = await menuItems();
 
-    expect(menu.href("Profile")).toBe("/manage/profile");
-    expect(menu.has("Logout")).toBe(true);
+    expect(menu.href("Account")).toBe("/manage/profile");
+    expect(menu.has("Log out")).toBe(true);
     // The wordmark already reaches the dashboard; an item to the current
     // page would be a dead control.
     expect(menu.has("Manage")).toBe(false);
@@ -226,9 +226,9 @@ describe("the public header signed in", () => {
     await openAccountMenu("Sofía Lara — account menu");
     const menu = await menuItems();
 
-    expect(menu.href("Profile")).toBe("/manage/profile");
+    expect(menu.href("Account")).toBe("/manage/profile");
     expect(menu.href("Manage")).toBe("/manage");
-    expect(menu.has("Logout")).toBe(true);
+    expect(menu.has("Log out")).toBe(true);
     expect(
       screen.queryByRole("link", { name: "Log in" }),
     ).not.toBeInTheDocument();

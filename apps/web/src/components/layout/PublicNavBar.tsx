@@ -24,7 +24,7 @@ interface PublicNavBarProps {
  *
  * The doors carry no return path from an ordinary public page: arriving
  * signed out from `/` and authenticating lands on the dashboard, as the
- * landing page's own Login button always has. An invitation is the one page
+ * landing page's own Log in button always has. An invitation is the one page
  * that puts itself in router state, so a visitor who uses the header instead
  * of the invitation card's own doors does not lose the link they were sent.
  */

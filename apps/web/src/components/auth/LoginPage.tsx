@@ -82,7 +82,7 @@ const LoginPage: React.FC = () => {
       } else if (status === 400 && code === "INVALID_EMAIL") {
         setError("Invalid email address format.");
       } else {
-        setError("Login failed. Please try again.");
+        setError("Could not log in. Try again.");
       }
       setLoading(false);
     }
@@ -90,7 +90,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <>
-      <Text size="h2">Login to Arcula</Text>
+      <Text size="h2">Log in to Arcula</Text>
 
       {error && <Alert mt="md">{error}</Alert>}
 
@@ -122,13 +122,13 @@ const LoginPage: React.FC = () => {
             state={resetRequestStateFor(email)}
             size="sm"
           >
-            Forgot your password?
+            Reset your password
           </Anchor>
         </Group>
 
         <Group mt="xl">
           <Button type="submit" loading={loading}>
-            Login
+            Log in
           </Button>
         </Group>
       </form>

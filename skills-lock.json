@@ -265,6 +265,13 @@
       "skillPath": "skills/engineering/triage/SKILL.md",
       "computedHash": "4342a07c9ebe0696713ec93a883c46e56503a587a34d824fabab5ca61e3bdfbb"
     },
+    "ux-writing": {
+      "source": "content-designer/ux-writing-skill",
+      "commit": "98cacde4ba2dd10ed28df43a8d53eef1e321c539",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "6de71e9765142c33f55389eb1f4dd73cd08cb562b24167634878da1b5d2ad91c"
+    },
     "vite": {
       "source": "registry:joshuashepherd/vite",
       "commit_sha": "78d4659f0eb77d019e80c58ea5b2ab588ae38ef1",

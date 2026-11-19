@@ -31,7 +31,7 @@ import { connectionService } from "@/services/connectionService";
 const SCOPE_LABELS: Record<string, string> = {
   "mcp:read": "Read your Catalogues and Artworks",
   "mcp:write": "Create and change Catalogues and Artworks",
-  offline_access: "Stay connected without asking you to sign in again",
+  offline_access: "Stay connected without asking you to log in again",
   openid: "Confirm your identity",
   profile: "Read your name",
   email: "Read your email address",
@@ -123,7 +123,7 @@ const ConsentPage: React.FC = () => {
                 {currentUser.email ?? currentUser.displayName ?? "this account"}
               </Text>
               . Anything it does is your account&apos;s doing, and you can
-              disconnect it later from your profile.
+              disconnect it later from your account.
             </Text>
 
             <Text size="sm" c="dimmed">
