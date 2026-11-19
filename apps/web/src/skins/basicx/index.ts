@@ -17,5 +17,8 @@ export const basicxSkin: SkinDefinition = {
   theme: basicxTheme,
   Home: BasicxSkin,
   Artwork: BasicxSkin,
+  // A Selection is the same stage with its own subject and credit line; it
+  // has no Catalogue path, so the chrome offers no link back to the source.
+  Selection: BasicxSkin,
   // Present only so a test can prove the registry falls back; not a real skin.
 };

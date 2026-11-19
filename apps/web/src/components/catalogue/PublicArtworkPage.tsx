@@ -97,6 +97,7 @@ const PublicArtworkPage: React.FC = () => {
   return (
     <SkinHost
       view="artwork"
+      subject={{ name: catalogue.name, description: catalogue.description }}
       catalogue={catalogue}
       artworks={[artwork]}
       cataloguePath={cataloguePath}

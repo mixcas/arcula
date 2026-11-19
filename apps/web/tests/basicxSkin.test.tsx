@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { basicxSkin } from "@/skins/basicx";
 import { emblaDuration, slideSizes } from "@/skins/basicx/BasicxSection";
 import { resolveSkinOptions } from "@/skins/registry";
-import type { SkinProps } from "@/skins/types";
+import type { SkinProps, SkinSubject } from "@/skins/types";
 import type { Artwork, Catalogue, ImageVariantKey } from "@arcula/shared";
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -112,8 +112,37 @@ const rtlRender = rtl.render;
 
 const CATALOGUE_PATH = "/catalogue/flores-solares-catalogue-1";
 
+type HomeProps = Extract<SkinProps, { view: "home" }>;
+
+/** The props both catalogue views share; each adds its own `view` literal. */
+type CatalogueViewProps = Omit<HomeProps, "view">;
+
 /**
- * Render the skin's Home view.
+ * The catalogue views' props, from the plain objects a test hands in.
+ *
+ * The subject is the Catalogue's here; the skin no longer reads the document,
+ * so a test that wants to change the name or description changes the subject.
+ */
+const catalogueViewProps = ({
+  options: stored,
+  subject: subjectOverrides,
+  ...props
+}: Partial<CatalogueViewProps> & {
+  subject?: Partial<SkinSubject>;
+} = {}): CatalogueViewProps => ({
+  catalogue,
+  subject: { name: catalogue.name, ...subjectOverrides },
+  artworks: [artwork()],
+  cataloguePath: CATALOGUE_PATH,
+  artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
+  ...props,
+  // Resolved last: the props above may carry raw stored options, and
+  // `resolveSkinOptions` is exactly what the host does with them.
+  options: resolveSkinOptions(basicxSkin, stored).options,
+});
+
+/**
+ * Render a catalogue view.
  *
  * `SkinHost` is deliberately not used: it nests its own `MantineProvider` for the
  * isolation, and this file is about the skin's own rendering decisions rather
@@ -121,29 +150,66 @@ const CATALOGUE_PATH = "/catalogue/flores-solares-catalogue-1";
  * passed in, because they are the same component and the only difference is how
  * many sections the shell hands over.
  */
-const renderSkin = ({ options: stored, ...props }: Partial<SkinProps> = {}) => {
-  const merged: SkinProps = {
-    catalogue,
-    artworks: [artwork()],
-    view: "home",
-    cataloguePath: CATALOGUE_PATH,
-    artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
-    ...props,
-    // Resolved last: the props above may carry raw stored options, and
-    // `resolveSkinOptions` is exactly what the host does with them.
-    options: resolveSkinOptions(basicxSkin, stored).options,
-  };
+const renderSkin = ({
+  view = "home",
+  ...props
+}: Partial<CatalogueViewProps> & {
+  view?: "home" | "artwork";
+  subject?: Partial<SkinSubject>;
+} = {}) => {
+  const shared = catalogueViewProps(props);
   return rtlRender(
     <MantineProvider theme={basicxSkin.theme}>
       <MemoryRouter>
-        <basicxSkin.Home {...merged} />
+        {view === "artwork" ? (
+          <basicxSkin.Artwork {...shared} view="artwork" />
+        ) : (
+          <basicxSkin.Home {...shared} view="home" />
+        )}
       </MemoryRouter>
     </MantineProvider>,
   );
 };
 
 /** Shorthand for the common case; the artwork view passes `view` through it. */
-const render = (props: Partial<SkinProps> = {}) => renderSkin(props);
+const render = (props: Parameters<typeof renderSkin>[0] = {}) =>
+  renderSkin(props);
+
+const SELECTION_PATH = "/selection/winter-shortlist-BBBBBBBBBBBBBBBBBBBB";
+
+type SelectionProps = Extract<SkinProps, { view: "selection" }>;
+
+/**
+ * The props a Selection's public page will hand the skin.
+ *
+ * Built here rather than fetched: the skin is a pure component tree, and this
+ * file is about what it renders from a subject and a list of works. The page
+ * that assembles these from the Selection read is a later ticket's.
+ */
+const selectionProps = (
+  overrides: Partial<SelectionProps> = {},
+): SelectionProps => ({
+  view: "selection",
+  subject: {
+    name: "Winter shortlist",
+    description: "Twelve works for the fair.",
+    catalogueName: "Flores Solares",
+  },
+  artworks: [artwork()],
+  options: resolveSkinOptions(basicxSkin, undefined).options,
+  selectionPath: SELECTION_PATH,
+  artworkPath: (work) => `${SELECTION_PATH}/artwork/${work.title}-${work.id}`,
+  ...overrides,
+});
+
+const renderSelection = (overrides: Partial<SelectionProps> = {}) =>
+  rtlRender(
+    <MantineProvider theme={basicxSkin.theme}>
+      <MemoryRouter>
+        <basicxSkin.Selection {...selectionProps(overrides)} />
+      </MemoryRouter>
+    </MantineProvider>,
+  );
 
 /**
  * Whether a click on this element would actually reach it in a browser.
@@ -537,6 +603,54 @@ describe("Basicx — photographs", () => {
     render({ artworks: [artwork({ photos: [] })] });
     expect(screen.getAllByRole("region")).toHaveLength(1);
     expect(screen.queryByAltText("Estudio en rojo")).toBeNull();
+  });
+});
+
+describe("Basicx — the selection view", () => {
+  it("names the selection, credits its catalogue and keeps the works' order", () => {
+    // Two works in the order the Selection stores, not alphabetical: position
+    // is the content, so a skin that sorted them would destroy the feature.
+    renderSelection({
+      artworks: [
+        artwork({ id: "b", title: "Zeta" }),
+        artwork({ id: "a", title: "Alpha" }),
+      ],
+    });
+    // The title is text, not a link: a Selection has no Catalogue page to
+    // return to, and the skin is given no catalogue path to invent one from.
+    expect(screen.getByText("Winter shortlist")).toBeInTheDocument();
+    expect(screen.getByText("Flores Solares")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("region")
+        .map((section) => section.getAttribute("aria-label")),
+    ).toEqual(["Zeta", "Alpha"]);
+  });
+
+  it("credits the source catalogue without linking it", () => {
+    // The catalogue may be private, or newer than the Selection. A credit line
+    // that links would send the visitor to a lock screen or a 404, so the name
+    // is plain text — and nothing in the chrome points at a catalogue address.
+    renderSelection();
+    expect(screen.getByText("Flores Solares").closest("a")).toBeNull();
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("href") ?? "").not.toMatch(/^\/catalogue/);
+    }
+  });
+
+  it("links a work under the selection's own address", () => {
+    renderSelection();
+    expect(
+      screen.getByRole("link", { name: "Estudio en rojo" }),
+    ).toHaveAttribute(
+      "href",
+      `${SELECTION_PATH}/artwork/Estudio en rojo-artwork-1`,
+    );
+  });
+
+  it("shows the selection's own description", () => {
+    renderSelection();
+    expect(screen.getByText("Twelve works for the fair.")).toBeVisible();
   });
 });
 
