@@ -53,9 +53,9 @@ const GettingStartedSection: React.FC = () => (
 
     <Box
       component="ol"
-      m={0}
       p={0}
       mt={{ base: "xl", md: 48 }}
+      mb={0}
       style={{ listStyle: "none" }}
     >
       {LANDING_GETTING_STARTED.steps.map((step) => (

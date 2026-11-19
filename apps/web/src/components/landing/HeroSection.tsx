@@ -61,7 +61,7 @@ const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
       {record.artist}
     </Text>
 
-    <Box component="dl" m={0} mt="lg">
+    <Box component="dl" mt="lg" mb={0}>
       {record.fields.map((field, index) => (
         <Box
           key={field.label}
@@ -72,7 +72,7 @@ const RecordPanel: React.FC<{ record: LandingExampleRecord }> = ({
           <Text component="dt" size="xs" c={LANDING_PALETTE.muted}>
             {field.label}
           </Text>
-          <Text component="dd" size="sm" m={0} mt={2}>
+          <Text component="dd" size="sm" mt={2} mb={0}>
             {field.value}
           </Text>
         </Box>

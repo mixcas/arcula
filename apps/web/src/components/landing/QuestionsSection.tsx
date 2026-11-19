@@ -26,7 +26,11 @@ const QuestionsSection: React.FC = () => (
       heading={LANDING_QUESTIONS.heading}
     />
 
-    <Box component="dl" m={0} mt={{ base: "xl", md: 48 }} maw={820}>
+    {/* The space under the heading is `mt` alone: Mantine applies a
+        non-responsive style prop like `m={0}` inline, which would beat the
+        responsive `mt` class and collapse the gap. The other sides are reset
+        with their own longhands instead. */}
+    <Box component="dl" mt={{ base: "xl", md: 48 }} mb={0} maw={820}>
       {LANDING_QUESTIONS.items.map((item) => (
         <Box
           key={item.question}
@@ -39,8 +43,8 @@ const QuestionsSection: React.FC = () => (
           </Text>
           <Text
             component="dd"
-            m={0}
             mt="2xs"
+            mb={0}
             c={LANDING_PALETTE.muted}
             lh={1.5}
             maw={640}
