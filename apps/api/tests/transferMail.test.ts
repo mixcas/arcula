@@ -22,8 +22,8 @@ describe("ownership transfer mail", () => {
     const mail = ownershipTransferMail(facts);
 
     expect(mail.subject).toBe("You now own Summer in Lisbon on Arcula");
-    expect(mail.text).toContain('"Summer in Lisbon"');
-    expect(mail.html).toContain("&quot;Summer in Lisbon&quot;");
+    expect(mail.text).toContain("“Summer in Lisbon”");
+    expect(mail.html).toContain("“Summer in Lisbon”");
     expect(mail.tags).toEqual([{ name: "type", value: "transfer" }]);
   });
 

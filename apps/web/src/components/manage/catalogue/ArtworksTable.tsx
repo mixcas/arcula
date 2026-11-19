@@ -151,7 +151,7 @@ const ArtworksTable: React.FC<ArtworksTableProps> = ({
       },
       {
         accessor: "artistName",
-        title: "Artist Name",
+        title: "Artist name",
         sortable: true,
         render: (artwork) => <Text>{artwork.artistName}</Text>,
       },

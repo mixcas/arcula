@@ -38,7 +38,7 @@ const ManagePage: React.FC = () => {
         setCatalogues(await catalogueService.getUserCatalogues());
       } catch (err) {
         console.error("Error fetching catalogues:", err);
-        setError("Failed to fetch catalogues");
+        setError("Could not load your catalogues");
       } finally {
         setLoading(false);
       }
@@ -85,7 +85,7 @@ const ManagePage: React.FC = () => {
       <PendingInvitations />
 
       <Group mb="xl" justify="space-between" align="center">
-        <Text size="h1">My Catalogues</Text>
+        <Text size="h1">My catalogues</Text>
         <Group gap="sm">
           <Text size="sm" c="dim">
             {owned.length} of {limit} catalogue
@@ -112,8 +112,8 @@ const ManagePage: React.FC = () => {
           <Stack align="center" gap="sm">
             <Text fw={500}>No catalogues yet</Text>
             <Text size="sm" c="dimmed">
-              A catalogue is where your artworks live. Start one, then add your
-              first work.
+              A catalogue is where your artworks live. Start with one — the rest
+              tend to follow.
             </Text>
             <Button
               component={Link}

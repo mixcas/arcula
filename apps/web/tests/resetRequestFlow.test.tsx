@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
@@ -86,7 +92,7 @@ describe("the reset request and reset form as routes", () => {
 
     await user.type(screen.getByLabelText(/^Email/), "lapsed@example.test");
     const door = screen.getByRole("link", {
-      name: /forgot your password/i,
+      name: /reset your password/i,
     });
     // The address rides router state, never the URL: nothing about the typed
     // address is user-addressable or needs sanitising.
@@ -99,7 +105,7 @@ describe("the reset request and reset form as routes", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/^Email/)).toHaveValue("lapsed@example.test");
 
-    await user.click(screen.getByRole("button", { name: "Send reset email" }));
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
 
     await waitFor(() =>
       expect(requestPasswordReset).toHaveBeenCalledWith({
@@ -113,10 +119,10 @@ describe("the reset request and reset form as routes", () => {
     ).toBeInTheDocument();
     // The form is spent; only the way back to sign-in is left.
     expect(
-      screen.queryByRole("button", { name: "Send reset email" }),
+      screen.queryByRole("button", { name: "Send reset link" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Back to sign in" }),
+      screen.getByRole("link", { name: "Back to log in" }),
     ).toHaveAttribute("href", "/login");
   });
 
@@ -132,7 +138,7 @@ describe("the reset request and reset form as routes", () => {
     expect(email).toHaveValue("");
 
     await user.type(email, "bookmark@example.test");
-    await user.click(screen.getByRole("button", { name: "Send reset email" }));
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
 
     await waitFor(() =>
       expect(requestPasswordReset).toHaveBeenCalledWith({
@@ -145,15 +151,15 @@ describe("the reset request and reset form as routes", () => {
     renderApp("/signup");
 
     expect(
-      screen.queryByRole("link", { name: /forgot your password/i }),
+      screen.queryByRole("link", { name: /reset your password/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /forgot your password/i }),
+      screen.queryByRole("button", { name: /reset your password/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Login" })).toHaveAttribute(
-      "href",
-      "/login",
-    );
+    const crossLink = within(
+      screen.getByText(/Already have an account/i),
+    ).getByRole("link", { name: "Log in" });
+    expect(crossLink).toHaveAttribute("href", "/login");
   });
 
   it("turns the reset form's expired-link message into a way back to the request screen", async () => {

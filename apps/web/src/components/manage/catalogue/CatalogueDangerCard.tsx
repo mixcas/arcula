@@ -87,7 +87,7 @@ const CatalogueDangerCard: React.FC<CatalogueDangerCardProps> = ({
     notifications.show({
       color: "green",
       title: "Catalogue deleted",
-      message: `"${catalogue.name}" and its artworks have left Arcula.`,
+      message: `“${catalogue.name}” and its artworks have left Arcula.`,
     });
     void navigate("/manage");
   };
@@ -111,7 +111,7 @@ const CatalogueDangerCard: React.FC<CatalogueDangerCardProps> = ({
         setError(
           err instanceof ApiRequestError
             ? err.message
-            : "Could not delete the catalogue. Please try again.",
+            : "Could not delete the catalogue. Try again.",
         );
       }
     } finally {

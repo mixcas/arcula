@@ -24,7 +24,7 @@ type MessagedStatus = Exclude<UnreadyStatus, "loading">;
 
 const DEFAULT_LABELS: Record<MessagedStatus, string> = {
   invalid: "That catalogue link is not valid.",
-  error: "Failed to load this catalogue. Please try again.",
+  error: "Could not load this catalogue. Try again.",
   private: "This catalogue is private.",
   notFound: "This catalogue is not available.",
 };

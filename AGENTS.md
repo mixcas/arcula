@@ -249,6 +249,14 @@ mounts no `bearer()` plugin, and the deploy verifier asserts a deploy refuses
 the token as an `Authorization` bearer. Local development and the suites keep
 the bearer form for their own sign-in helpers.
 
+## Writing the interface
+
+Every word a person reads follows **[`docs/ux-writing.md`](docs/ux-writing.md)**
+— the voice (Precise, Dry, Warm), the surfaces where its humour is allowed to
+land, the no-fly list, and the mechanics. Read it before writing a string for
+the first time; a reviewer applies it to a diff the way they apply
+[`docs/testing.md`](docs/testing.md) to a test.
+
 ## What to test
 
 The suite is fast, so volume is not the problem. **Altitude** is: every test is

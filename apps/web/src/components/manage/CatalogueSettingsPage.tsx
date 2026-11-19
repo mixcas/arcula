@@ -109,7 +109,7 @@ const CatalogueSettingsPage: React.FC = () => {
           return;
         }
         console.error("Error fetching catalogue:", err);
-        setLoadError("Failed to load catalogue settings. Please try again.");
+        setLoadError("Could not load the settings. Try again.");
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -199,7 +199,7 @@ const CatalogueSettingsPage: React.FC = () => {
       notifications.show({
         color: "red",
         title: "Save failed",
-        message: "Failed to save settings. Please try again.",
+        message: "Could not save the settings. Try again.",
       });
     } finally {
       setSaving(false);
@@ -252,7 +252,7 @@ const CatalogueSettingsPage: React.FC = () => {
   return (
     <Container size="xl">
       <Group justify="space-between" align="center" mb="xl" gap="xl">
-        <Text size="h2">Catalogue Settings</Text>
+        <Text size="h2">Catalogue settings</Text>
         {/* One obvious step, for every tab: back to the catalogue. */}
         <Button
           component={Link}

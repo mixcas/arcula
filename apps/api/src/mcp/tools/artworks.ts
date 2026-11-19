@@ -212,7 +212,7 @@ export const artworkTools = [
         throw new ApiError("not-found", "The catalogue does not exist");
       }
       if (read.status === "unauthorized") {
-        throw new ApiError("unauthorized", "Sign in to search this catalogue");
+        throw new ApiError("unauthorized", "Log in to search this catalogue");
       }
       if (read.status === "forbidden") {
         throw new ApiError(

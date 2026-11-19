@@ -979,7 +979,8 @@ sections in this order — 01 The record, 02 The catalogues, 03 Getting started,
 action and the footer. The route is the one full-bleed group in `App.tsx`: a
 fluid container with no frame padding and the landing paper behind the header,
 while the auth pages keep the narrow column that suits a form. Every sentence
-is in `content.ts`, the four brand values are in `palette.ts`, and the hero's
+is in `content.ts`, the voice they are written in is `docs/ux-writing.md`, the
+four brand values are in `palette.ts`, and the hero's
 record is one object there — a real, credited work (Daniel Robles's
 _Membrana_), its photograph in `public/images/`, contained whole in the
 panel's plate rather than cropped. Its two conversion doors wear the landing

@@ -179,7 +179,7 @@ const ArtworkEditPage: React.FC = () => {
         initialize(values);
       } catch (err) {
         console.error("Error fetching artwork:", err);
-        setLoadError("Failed to load artwork. Please try again.");
+        setLoadError("Could not load the artwork. Try again.");
       } finally {
         setLoading(false);
       }
@@ -238,7 +238,7 @@ const ArtworkEditPage: React.FC = () => {
       // The banner stays, so the retry is the same button; the failure is
       // shown inside it rather than replacing the deleted state with an error.
       console.error("Error restoring artwork:", err);
-      setRestoreError("Failed to restore artwork. Please try again.");
+      setRestoreError("Could not restore the artwork. Try again.");
     } finally {
       restoringRef.current = false;
       setRestoring(false);
@@ -318,7 +318,7 @@ const ArtworkEditPage: React.FC = () => {
             // the unchanged inputs are both proof it worked.
             notifications.show({
               title: "Artwork saved",
-              message: `"${payload.title}" was updated.`,
+              message: `“${payload.title}” was updated.`,
             });
           } catch (err) {
             console.error("Error updating artwork:", err);
@@ -330,7 +330,7 @@ const ArtworkEditPage: React.FC = () => {
                 err.status === 409 &&
                 err.code === "limit-reached"
                 ? err.message
-                : "Failed to save artwork. Please try again.",
+                : "Could not save the artwork. Try again.",
             );
           }
         })}
@@ -355,7 +355,7 @@ const ArtworkEditPage: React.FC = () => {
           keyboard submission, validation and the `loading` state.
         */}
         <FormActionsBar
-          submitLabel="Save Changes"
+          submitLabel="Save changes"
           submitting={form.submitting}
           submitDisabled={isDeleted}
           backTo={`/manage/catalogue/${catalogueParam ?? ""}${searchSuffix}`}

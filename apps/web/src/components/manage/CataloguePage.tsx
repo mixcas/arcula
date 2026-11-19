@@ -112,8 +112,8 @@ const CataloguePage: React.FC = () => {
         // failed — only a query is a search.
         setSearchError(
           search.trim() === ""
-            ? "Failed to fetch artworks"
-            : "Failed to search artworks",
+            ? "Could not load the artworks"
+            : "Could not search the artworks",
         );
       } finally {
         if (id === requestId.current) {
@@ -144,7 +144,7 @@ const CataloguePage: React.FC = () => {
         // The catalogue itself is the page: without it there is no table, no
         // search and nothing to retry in place.
         console.error("Error fetching catalogue data:", err);
-        setPageError("Failed to fetch catalogue data");
+        setPageError("Could not load the catalogue");
         setLoading(false);
       }
     };
@@ -242,7 +242,7 @@ const CataloguePage: React.FC = () => {
   };
 
   if (loading) {
-    return <Text>Loading catalogue...</Text>;
+    return <Text>Loading catalogue…</Text>;
   }
 
   if (pageError) {

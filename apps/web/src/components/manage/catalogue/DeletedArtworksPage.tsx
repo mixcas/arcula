@@ -141,7 +141,7 @@ const DeletedArtworksPage: React.FC = () => {
       notifications.show({
         color: "green",
         title: "Restored",
-        message: `"${artwork.title}" is back in the catalogue.`,
+        message: `“${artwork.title}” is back in the catalogue.`,
       });
       await load();
     } catch (err) {
@@ -226,7 +226,7 @@ const DeletedArtworksPage: React.FC = () => {
     },
     {
       accessor: "artistName",
-      title: "Artist Name",
+      title: "Artist name",
       render: (artwork) => <Text>{artwork.artistName}</Text>,
     },
     {
