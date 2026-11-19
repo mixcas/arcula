@@ -184,6 +184,145 @@ describe("SelectionPage", () => {
     );
   });
 
+  it("publishes from the visibility control, refetching before it notifies", async () => {
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    renderPage();
+
+    expect(await screen.findByRole("radio", { name: "Private" })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        isPublic: true,
+      }),
+    );
+    // The same rule as every other manage write: re-read, then notify.
+    expect(getSelection.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      await screen.findByText("Selection settings saved."),
+    ).toBeInTheDocument();
+  });
+
+  it("publishes as Protected with a new password", async () => {
+    updateSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Protected" }),
+    );
+    await userEvent.type(screen.getByLabelText("Password"), "open-sesame");
+    await userEvent.type(
+      screen.getByLabelText("Confirm password"),
+      "open-sesame",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        isPublic: true,
+        password: "open-sesame",
+      }),
+    );
+  });
+
+  it("keeps a protected Selection's password when Protected is left alone", async () => {
+    getSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByRole("radio", { name: "Protected" }),
+    ).toBeChecked();
+    // No field was touched, so the Save is off — the stored password stays in
+    // effect without being re-sent as a value or cleared as a removal.
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("clears the password when Protected becomes Public", async () => {
+    getSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    renderPage();
+
+    await screen.findByRole("radio", { name: "Protected" });
+    await userEvent.click(screen.getByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        password: null,
+      }),
+    );
+  });
+
+  it("offers Remove password, which makes it public-unprotected", async () => {
+    getSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Remove password" }),
+    );
+    expect(screen.getByRole("radio", { name: "Public" })).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        password: null,
+      }),
+    );
+  });
+
+  it("changes an existing password behind Change password", async () => {
+    getSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    updateSelection.mockResolvedValue(
+      selection({ isPublic: true, isPasswordProtected: true }),
+    );
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Change password" }),
+    );
+    await userEvent.type(screen.getByLabelText("Password"), "a-new-password");
+    await userEvent.type(
+      screen.getByLabelText("Confirm password"),
+      "a-new-password",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        password: "a-new-password",
+      }),
+    );
+  });
+
+  it("refuses a mismatched password without writing anything", async () => {
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("radio", { name: "Protected" }),
+    );
+    await userEvent.type(screen.getByLabelText("Password"), "open-sesame");
+    await userEvent.type(
+      screen.getByLabelText("Confirm password"),
+      "nope-nope",
+    );
+
+    expect(await screen.findByText("The passwords do not match")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(updateSelection).not.toHaveBeenCalled();
+  });
+
   it("deletes behind a confirmation that names what it leaves untouched", async () => {
     removeSelection.mockResolvedValue(undefined);
     renderPage();

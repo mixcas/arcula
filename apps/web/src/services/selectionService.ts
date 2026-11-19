@@ -13,16 +13,20 @@
 
 import {
   selectionPageSchema,
+  selectionPublicReadSchema,
   selectionReadSchema,
   type Selection,
   type SelectionCreatePayload,
   type SelectionPageRow,
+  type SelectionPublicRead,
   type SelectionUpdatePayload,
 } from "@arcula/shared";
 import { ApiRequestError, apiRequest } from "./api";
 
 const base = (catalogueId: string) =>
   `/api/v1/catalogues/${catalogueId}/selections`;
+
+const publicBase = "/api/v1/selections";
 
 export const selectionService = {
   /** The Catalogue's live Selections, name-ordered, each with its Work count. */
@@ -84,6 +88,38 @@ export const selectionService = {
   async remove(catalogueId: string, selectionId: string): Promise<void> {
     await apiRequest<void>(`${base(catalogueId)}/${selectionId}`, {
       method: "DELETE",
+    });
+  },
+
+  /**
+   * One Selection at its public address. The read is session-optional: a
+   * visitor sees a public document, a member may preview a private one, and the
+   * API — not this client — decides which. A missing, deleted or private
+   * Selection resolves `null`; a protected one rejects `403 password-required`,
+   * which the public layer maps to the lock screen.
+   */
+  async getPublicSelection(id: string): Promise<SelectionPublicRead | null> {
+    try {
+      const body = await apiRequest<unknown>(`${publicBase}/${id}`);
+      return selectionPublicReadSchema.parse(body);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  },
+
+  /**
+   * The lock screen's attempt: a right password sets the Selection's grant
+   * cookie and the ordinary read then succeeds. A wrong one rejects `403
+   * invalid-password`; one too many failures from this address rejects `429
+   * too-many-attempts`; a Selection that is not protected rejects `409`.
+   */
+  async unlockSelection(id: string, password: string): Promise<void> {
+    await apiRequest<unknown>(`${publicBase}/${id}/unlock`, {
+      method: "POST",
+      body: { password },
     });
   },
 };

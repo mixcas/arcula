@@ -1,9 +1,10 @@
 /**
  * One Selection's manage page: its settings block and the delete control.
  *
- * This slice owns the name, the description and the delete. The ordered works
- * list, **Add works** and the publish controls arrive in the next slices; the
- * page's shape leaves room for them without pretending to have them.
+ * The settings own the name, the description, the visibility (Private, Public,
+ * Protected) and the password. The ordered works list, **Add works**, the
+ * publish warning and the Draft count arrive in the next slices; the page's
+ * shape leaves room for them without pretending to have them.
  *
  * Every save re-reads the document and only then notifies, so the form is the
  * server's answer rather than a local copy. The delete confirmation says the
@@ -14,10 +15,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  Box,
   Button,
   Card,
+  Divider,
   Group,
   Loader,
+  PasswordInput,
+  SegmentedControl,
   Stack,
   Text,
   Textarea,
@@ -37,6 +42,12 @@ import {
 import { ApiRequestError } from "@/services/api";
 import { catalogueService } from "@/services/catalogueService";
 import { selectionService } from "@/services/selectionService";
+import {
+  needsPasswordFields,
+  resolveSelectionSave,
+  storedVisibility,
+  type SelectionVisibility,
+} from "./selectionSettingsSave";
 
 const DELETE_MODAL_ID = "delete-selection";
 
@@ -46,10 +57,21 @@ interface SettingsProps {
   onSave: (payload: SelectionUpdatePayload) => Promise<void>;
 }
 
+/** What each visibility means, in one sentence the member can act on. */
+const VISIBILITY_DESCRIPTION: Record<SelectionVisibility, string> = {
+  private: "Only the Catalogue's members can open this selection.",
+  public: "Anyone with the link can read this selection.",
+  protected: "Anyone with the link needs a password to read this selection.",
+};
+
 /**
  * The settings form, keyed by the server's document so a save that changes it
- * remounts the inputs with the stored values. Only the changed keys reach the
- * payload; an emptied description is `null`, which clears the column.
+ * remounts the inputs with the stored values.
+ *
+ * The three visibility states are the product's, not the wire's: Private is
+ * `isPublic: false`, Public is public without a password, and Protected is
+ * public with one. The pure fold in `selectionSettingsSave` turns what the
+ * member chose into the PATCH, so this component only holds the inputs.
  */
 const SelectionSettings: React.FC<SettingsProps> = ({
   selection,
@@ -58,21 +80,41 @@ const SelectionSettings: React.FC<SettingsProps> = ({
 }) => {
   const [name, setName] = useState(selection.name);
   const [description, setDescription] = useState(selection.description ?? "");
+  const [visibility, setVisibility] = useState<SelectionVisibility>(() =>
+    storedVisibility({
+      isPublic: selection.isPublic,
+      isPasswordProtected: selection.isPasswordProtected === true,
+    }),
+  );
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [editingPassword, setEditingPassword] = useState(false);
 
-  const trimmedName = name.trim();
-  const trimmedDescription = description.trim();
-  const currentDescription = selection.description ?? "";
+  const loaded = {
+    name: selection.name,
+    description: selection.description ?? null,
+    isPublic: selection.isPublic,
+    isPasswordProtected: selection.isPasswordProtected === true,
+  };
+  const decision = resolveSelectionSave(loaded, {
+    name,
+    description,
+    visibility,
+    password,
+    confirm,
+    editingPassword,
+  });
+  const clean =
+    decision.kind === "payload" && Object.keys(decision.payload).length === 0;
 
-  const payload: SelectionUpdatePayload = {};
-  if (trimmedName !== "" && trimmedName !== selection.name) {
-    payload.name = trimmedName;
-  }
-  if (trimmedDescription !== currentDescription) {
-    payload.description = trimmedDescription === "" ? null : trimmedDescription;
-  }
-
-  const canSave =
-    trimmedName !== "" && Object.keys(payload).length > 0 && !saving;
+  const chooseVisibility = (value: string) => {
+    setVisibility(value as SelectionVisibility);
+    // The password fields belong to a choice, not to a buffer that outlives it:
+    // a half-typed password from another state must not be saved unseen.
+    setEditingPassword(false);
+    setPassword("");
+    setConfirm("");
+  };
 
   return (
     <Card withBorder padding="lg">
@@ -91,10 +133,103 @@ const SelectionSettings: React.FC<SettingsProps> = ({
           autosize
           minRows={3}
         />
+
+        <Divider my="xs" />
+
+        <Text size="h4">Visibility</Text>
+        <SegmentedControl
+          data={[
+            { label: "Private", value: "private" },
+            { label: "Public", value: "public" },
+            { label: "Protected", value: "protected" },
+          ]}
+          value={visibility}
+          onChange={chooseVisibility}
+          fullWidth
+        />
+        <Text size="sm" c="dimmed">
+          {VISIBILITY_DESCRIPTION[visibility]}
+        </Text>
+
+        {visibility === "protected" &&
+        selection.isPasswordProtected === true &&
+        !editingPassword ? (
+          <Box>
+            <Text size="sm" fw={600}>
+              A password is set. It stays in effect until you change or remove
+              it.
+            </Text>
+            <Group mt="xs">
+              <Button
+                variant="light"
+                onClick={() => {
+                  setPassword("");
+                  setConfirm("");
+                  setEditingPassword(true);
+                }}
+              >
+                Change password
+              </Button>
+              <Button
+                variant="subtle"
+                onClick={() => {
+                  // Clearing the password makes the Selection public and
+                  // unprotected; saying so in the control is what keeps the
+                  // three states honest.
+                  chooseVisibility("public");
+                }}
+              >
+                Remove password
+              </Button>
+            </Group>
+          </Box>
+        ) : null}
+
+        {needsPasswordFields(loaded, {
+          visibility,
+          editingPassword,
+        }) ? (
+          <>
+            <PasswordInput
+              label="Password"
+              description="Visitors need this password to read the selection."
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(event) => setPassword(event.currentTarget.value)}
+            />
+            <PasswordInput
+              label="Confirm password"
+              placeholder="Type it again"
+              value={confirm}
+              onChange={(event) => setConfirm(event.currentTarget.value)}
+            />
+            {editingPassword ? (
+              <Button
+                variant="subtle"
+                onClick={() => {
+                  setEditingPassword(false);
+                  setPassword("");
+                  setConfirm("");
+                }}
+              >
+                Cancel password change
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+
+        {decision.kind === "error" ? (
+          <Alert color="red">{decision.message}</Alert>
+        ) : null}
+
         <Group justify="flex-end">
           <Button
-            onClick={() => void onSave(payload)}
-            disabled={!canSave}
+            onClick={() => {
+              if (decision.kind === "payload") {
+                void onSave(decision.payload);
+              }
+            }}
+            disabled={clean || decision.kind === "error"}
             loading={saving}
           >
             Save changes
@@ -306,8 +441,7 @@ const SelectionPage: React.FC = () => {
         onSave={save}
       />
 
-      {/* The ordered works list, Add works and the publish controls land in the
-          next slices. This slice deliberately renders none of them. */}
+      {/* The ordered works list and Add works land in the next slice. */}
 
       <Card withBorder padding="lg">
         <Stack>
