@@ -411,7 +411,7 @@ export const LANDING_QUESTIONS: LandingQuestionsContent = {
     {
       question: "What happens when I delete a work?",
       answer:
-        "It moves to the catalogue’s Deleted view, where you can restore it. Its photos and documents are kept.",
+        "A slip costs nothing — a deleted work comes back whenever you want it, with its photographs and documents.",
     },
   ],
 };
