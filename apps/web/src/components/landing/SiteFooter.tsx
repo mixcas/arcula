@@ -54,20 +54,36 @@ const SiteFooter: React.FC = () => (
             >
               {LANDING_FOOTER.login.label}
             </Anchor>
+            {/* The address is written in two parts and the `mailto:` is built
+                only when someone asks for it, so the page holds no complete
+                address and no complete link. A button rather than an anchor,
+                because there is no `href` for a link to carry — and a link with
+                no destination is the dead control the header refuses. */}
             <Anchor
-              href={LANDING_FOOTER.contact.href}
+              component="button"
+              type="button"
               size="sm"
               c={LANDING_PALETTE.ink}
               underline="always"
+              onClick={() => {
+                window.location.href = `mailto:${LANDING_FOOTER.contact.user}@${LANDING_FOOTER.contact.domain}`;
+              }}
             >
-              {LANDING_FOOTER.contact.label}
+              {LANDING_FOOTER.contact.user}@{LANDING_FOOTER.contact.domain}
             </Anchor>
           </Group>
         </Group>
 
-        <Text size="xs" c={LANDING_PALETTE.muted} mt="xl">
-          {LANDING_FOOTER.copyright}
-        </Text>
+        <Group justify="space-between" gap="md" mt="xl" wrap="wrap">
+          <Text size="xs" c={LANDING_PALETTE.muted}>
+            {LANDING_FOOTER.copyright}
+          </Text>
+          {/* A joke for whoever reads the small print; hidden from the
+              accessibility tree because it is decoration, not information. */}
+          <Text size="xs" c={LANDING_PALETTE.muted} aria-hidden>
+            {LANDING_FOOTER.easterEgg}
+          </Text>
+        </Group>
       </Box>
     </Container>
   </Box>

@@ -10,6 +10,8 @@
  * it.
  */
 
+import type { CatalogueKind } from "@arcula/shared";
+
 /**
  * The ids the page's own links target.
  *
@@ -153,7 +155,11 @@ export const LANDING_RECORD: LandingRecordContent = {
 
 /** One of the three catalogue kinds, and the audience it speaks to. */
 export interface LandingCatalogueKind {
-  name: string;
+  /**
+   * Which kind: the review's own key, so the card wears the label, colour and
+   * glyph every other screen gives that kind rather than a copy of them.
+   */
+  kind: CatalogueKind;
   /** The one line that tells a visitor whether the kind is for them. */
   audience: string;
 }
@@ -173,15 +179,19 @@ export interface LandingCataloguesContent {
  * They are one product, not three tiers: the section's job is to let an
  * artist, a collector and a gallery each recognise themselves, and then to
  * say that one account can hold all three. The order is the order the kinds
- * were specified in, and the names are the product's own.
+ * were specified in, and the names come from `catalogueSurface` so the page
+ * cannot drift from the labels the app itself uses.
  */
 export const LANDING_CATALOGUES: LandingCataloguesContent = {
   label: "02 — The catalogues",
   heading: "One home, three ways to hold a body of work.",
   kinds: [
-    { name: "Portfolio", audience: "For an artist’s body of work." },
-    { name: "Collection", audience: "For what a collector owns." },
-    { name: "Inventory", audience: "For what a gallery represents for sale." },
+    { kind: "portfolio", audience: "For an artist’s body of work." },
+    { kind: "collection", audience: "For what a collector owns." },
+    {
+      kind: "inventory",
+      audience: "For what a gallery represents for sale.",
+    },
   ],
   closing: "One account can hold all three.",
 };
@@ -297,12 +307,24 @@ export const LANDING_FEATURES: LandingFeaturesContent = {
   ],
 };
 
+export interface LandingAgentMark {
+  /** The client's name, and the mark's accessible name. */
+  label: string;
+  /** A file under `public/`, drawn as a paper silhouette on the ink band. */
+  src: string;
+}
+
 export interface LandingAgentBandContent {
   /**
-   * The band's heading and its only content. A capability statement, not an
+   * The band's heading and its only sentence. A capability statement, not an
    * integration guide: no endpoint, no tool list, no protocol.
    */
   statement: string;
+  /**
+   * The clients the sentence points at, seated beside it. Marks, not links:
+   * the band names the option and still has nothing to click.
+   */
+  marks: LandingAgentMark[];
 }
 
 /**
@@ -316,6 +338,11 @@ export interface LandingAgentBandContent {
 export const LANDING_AGENT_BAND: LandingAgentBandContent = {
   statement:
     "Integrate with your favourite AI agents and let them manage your catalogues.",
+  marks: [
+    { label: "Claude", src: "/images/Claude_AI_symbol.svg" },
+    { label: "ChatGPT", src: "/images/ChatGPT-Logo.svg" },
+    { label: "Hermes", src: "/images/hermes-agent.svg" },
+  ],
 };
 
 /** One question the page answers, and the answer it settles on. */
@@ -409,13 +436,30 @@ export const LANDING_FINAL_ACTION: LandingFinalActionContent = {
   },
 };
 
+/** The contact address, held as two parts rather than one string. */
+export interface LandingContact {
+  /** The local part, e.g. `hello`. */
+  user: string;
+  /** The domain, without the `@`. */
+  domain: string;
+}
+
 export interface LandingFooterContent {
   name: string;
   tagline: string;
   /** The only place the source is offered; there is no open-source section. */
   github: LandingAction;
   login: LandingAction;
-  contact: LandingAction;
+  /**
+   * Split on purpose: the footer renders the two parts as separate text
+   * nodes and builds the `mailto:` only when someone clicks, so no complete
+   * address and no complete link sits in the page. That defeats a scraper
+   * reading the markup; a scraper that runs the page and reads the rendered
+   * text still gets the address, and the only cure for that is a form.
+   */
+  contact: LandingContact;
+  /** Dimmed beside the copyright, for whoever looks that far. */
+  easterEgg: string;
   copyright: string;
 }
 
@@ -424,13 +468,14 @@ export interface LandingFooterContent {
  *
  * It belongs to the landing page, not to the public layout, so the auth pages
  * keep their own chrome. GitHub is the page's only outbound link and opens in
- * a new tab; the address is a `mailto:` so a question needs no form.
+ * a new tab; the address is assembled on click so a question needs no form.
  */
 export const LANDING_FOOTER: LandingFooterContent = {
   name: "Arcula",
   tagline: "Catalogue management for people who own, make and sell the work.",
   github: { label: "GitHub", href: "https://github.com/mixcas/arcula" },
   login: { label: "Log in", href: "/login" },
-  contact: { label: "hello@arcula.art", href: "mailto:hello@arcula.art" },
+  contact: { user: "hello", domain: "arcula.art" },
+  easterEgg: "stan loona",
   copyright: "© 2026 Arcula.",
 };

@@ -32,6 +32,8 @@ const FinalAction: React.FC = () => {
               component={Link}
               to={actions.signedIn.primary.href}
               size="md"
+              color="orange.5"
+              autoContrast
             >
               {actions.signedIn.primary.label}
             </Button>
@@ -41,6 +43,8 @@ const FinalAction: React.FC = () => {
                 component={Link}
                 to={actions.signedOut.primary.href}
                 size="md"
+                color="orange.5"
+                autoContrast
               >
                 {actions.signedOut.primary.label}
               </Button>

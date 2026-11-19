@@ -115,7 +115,13 @@ const HeroSection: React.FC = () => {
               {LANDING_HERO.lede}
             </Text>
             <Group gap="lg" wrap="wrap">
-              <Button component={Link} to={primary.href} size="md">
+              <Button
+                component={Link}
+                to={primary.href}
+                size="md"
+                color="orange.5"
+                autoContrast
+              >
                 {primary.label}
               </Button>
               <Anchor

@@ -27,15 +27,10 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
-import {
-  CheckIcon,
-  PaletteIcon,
-  PresentationIcon,
-  RugIcon,
-  type Icon,
-} from "@phosphor-icons/react";
+import { CheckIcon } from "@phosphor-icons/react";
 import { useAuth } from "@/hooks/useAuth";
 import { catalogueSlug, type CatalogueKind } from "@arcula/shared";
+import { KIND_ICONS } from "@/catalogueKindIcons";
 import {
   CATALOGUE_KINDS,
   catalogueSurface,
@@ -55,23 +50,15 @@ const KIND_PERSONAS: Record<CatalogueKind, string> = {
   collection: "Art Collector",
 };
 
-/**
- * The kind's glyph. It lives here rather than in `catalogueSurface` because
- * that module is pure data and may not hold React components; this picker is
- * the icons' only consumer until a second screen needs them.
- */
-const KIND_ICONS: Record<CatalogueKind, Icon> = {
-  portfolio: PaletteIcon,
-  inventory: PresentationIcon,
-  collection: RugIcon,
-};
-
 interface KindCardProps {
   kind: CatalogueKind;
   selected: boolean;
   onSelect: (kind: CatalogueKind) => void;
 }
 
+/** One kind as a radio card. The glyph comes from `catalogueKindIcons`, shared
+ *  with the landing page's kind cards so both screens wear the same colour
+ *  code for the same kind. */
 const KindCard: React.FC<KindCardProps> = ({ kind, selected, onSelect }) => {
   const { kindLabel, kindColor } = catalogueSurface(kind);
   const Icon = KIND_ICONS[kind];

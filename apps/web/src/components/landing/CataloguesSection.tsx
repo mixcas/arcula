@@ -1,35 +1,60 @@
 import React from "react";
 import { Box, SimpleGrid, Text, Title } from "@mantine/core";
+import { catalogueSurface, kindColorVar } from "@/catalogueSurface";
+import { KIND_ICONS } from "@/catalogueKindIcons";
 import { LANDING_CATALOGUES, type LandingCatalogueKind } from "./content";
-import { LANDING_PALETTE, LANDING_RULE } from "./palette";
+import { LANDING_PALETTE } from "./palette";
 import LandingSection, { LandingSectionHeading } from "./Section";
 
 /**
- * One catalogue kind: its name and the audience it speaks to.
+ * One catalogue kind, wearing the code the app gives it: the kind's glyph and
+ * its colour, the same pairing the create-catalogue picker teaches.
  *
- * The rule sits above the name rather than around the block, so the three
- * kinds read as three columns of one page rather than as three products. There
- * is no panel, no shadow and no radius: a card here would say the kinds are
- * separate things to buy, which is the opposite of the section's point.
+ * The card is presentational. It borrows the picker's border and glyph colours
+ * but none of its controls — no radio, no check badge, no hover, no shadow —
+ * because the kinds are not a choice to make here; the closing line is what
+ * says an account holds all three. The card is paper with a shade-3 edge, not
+ * the picker's white body, so the three panels sit on the page's surface
+ * rather than cutting holes in it.
  */
-const CatalogueKind: React.FC<LandingCatalogueKind> = ({ name, audience }) => (
-  <Box pt={{ base: "md", md: "lg" }} style={{ borderTop: LANDING_RULE }}>
-    <Title order={3} ff="text" fz={{ base: "xl", md: "2xl" }}>
-      {name}
-    </Title>
-    <Text size="md" c={LANDING_PALETTE.muted} lh={1.45} mt="2xs">
-      {audience}
-    </Text>
-  </Box>
-);
+const CatalogueKind: React.FC<LandingCatalogueKind> = ({ kind, audience }) => {
+  const { kindLabel, kindColor } = catalogueSurface(kind);
+  const Icon = KIND_ICONS[kind];
+
+  return (
+    <Box
+      p={{ base: "lg", md: "xl" }}
+      style={{
+        backgroundColor: LANDING_PALETTE.paper,
+        border: `1px solid ${kindColorVar(kindColor, 3)}`,
+      }}
+    >
+      <Icon
+        size={28}
+        weight="regular"
+        color={kindColorVar(kindColor, 7)}
+        aria-hidden
+      />
+      <Title order={3} ff="text" fz={{ base: "xl", md: "2xl" }} mt="sm">
+        {kindLabel}
+      </Title>
+      <Text size="md" c={LANDING_PALETTE.muted} lh={1.45} mt="2xs">
+        {audience}
+      </Text>
+    </Box>
+  );
+};
 
 /**
  * The catalogues section: the three kinds, and the fact that one account can
  * hold all three.
  *
- * Three columns on a desktop and one on a phone. The audience line is what
- * makes the kinds a decision rather than a taxonomy, and the closing line is
- * set in the display face because it is the section's answer, not a footnote.
+ * Three cards on a desktop and one on a phone. Each wears its kind's colour
+ * and glyph — the same code the badges and the create picker use — so a
+ * visitor who meets the product elsewhere recognises the vocabulary. The
+ * cards carry no control: this is recognition, not selection, and the closing
+ * line is what keeps the section from reading as a role choice.
+ *
  * The kind names are `h3`s under the section's `h2`: they label a part of the
  * section, they do not start a new one.
  */
@@ -46,7 +71,7 @@ const CataloguesSection: React.FC = () => (
       mt={{ base: "lg", md: "xl" }}
     >
       {LANDING_CATALOGUES.kinds.map((kind) => (
-        <CatalogueKind key={kind.name} {...kind} />
+        <CatalogueKind key={kind.kind} {...kind} />
       ))}
     </SimpleGrid>
 

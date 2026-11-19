@@ -982,10 +982,16 @@ while the auth pages keep the narrow column that suits a form. Every sentence
 is in `content.ts`, the four brand values are in `palette.ts`, and the hero's
 example record is one labelled placeholder object there — fictional, marked as
 an example, and replaced as a single object when a real work is cleared. The
-page is presentational, so it has no tests of copy, layout or content data: the
-one seam that is pinned is where its two conversion doors — the hero's action
-and the closing action, in both session states — lead, and the rest is a
-reviewer's job in a browser.
+page's two conversion doors wear `orange.5` with the contrast-safe label Mantine
+derives for it, and the three kinds are cards in the colours and glyphs the
+catalogues themselves wear (`catalogueKindIcons.ts` is that table, shared with
+the create picker) — presentational cards, not a selector. The only images are
+the agent band's three marks, drawn as paper silhouettes from `public/images/`;
+there is no stock photography. The footer's address is assembled on click so no
+complete `mailto:` sits in the page. The page is presentational, so it has no
+tests of copy, layout or content data: the one seam that is pinned is where its
+two conversion doors — the hero's action and the closing action, in both
+session states — lead, and the rest is a reviewer's job in a browser.
 
 `src/services/` is the client layer (`api.ts` is the transport the domain
 services share); `src/auth/` is the Better Auth React client; `src/skins/` is the
