@@ -25,8 +25,9 @@
 import React from "react";
 import { MantineProvider } from "@mantine/core";
 
+import type { Catalogue } from "@arcula/shared";
 import { resolveSkin, resolveSkinOptions } from "@/skins/registry";
-import type { SkinProps, SkinView } from "@/skins/types";
+import type { SkinProps, SkinSubject } from "@/skins/types";
 
 /**
  * The wrapper element's class *and* the selector the provider writes to. One
@@ -35,8 +36,14 @@ import type { SkinProps, SkinView } from "@/skins/types";
 const SKIN_SCOPE = ".skin-scope";
 
 interface SkinHostProps {
-  view: SkinView;
-  catalogue: SkinProps["catalogue"];
+  view: "home" | "artwork";
+  /**
+   * What the skin presents. The shell builds it from the document it loaded —
+   * the Catalogue's name and optional description today, a Selection's own
+   * once a Selection page renders through this boundary.
+   */
+  subject: SkinSubject;
+  catalogue: Catalogue;
   artworks: SkinProps["artworks"];
   cataloguePath: string;
   artworkPath: SkinProps["artworkPath"];
@@ -44,6 +51,7 @@ interface SkinHostProps {
 
 const SkinHost: React.FC<SkinHostProps> = ({
   view,
+  subject,
   catalogue,
   artworks,
   cataloguePath,
@@ -51,19 +59,31 @@ const SkinHost: React.FC<SkinHostProps> = ({
 }) => {
   const skin = resolveSkin(catalogue.skin);
   const { options } = resolveSkinOptions(skin, catalogue.skinOptions);
-  const View = view === "artwork" ? skin.Artwork : skin.Home;
+
+  // Shared props, then the view's own. Written as two elements rather than a
+  // variable holding the component: the slots are typed to their own member
+  // of the `SkinProps` union, so the branch is also what tells the compiler
+  // which `view` literal matches which component.
+  const shared = { subject, artworks, options, artworkPath };
 
   return (
     <div className="skin-scope">
       <MantineProvider theme={skin.theme} cssVariablesSelector={SKIN_SCOPE}>
-        <View
-          catalogue={catalogue}
-          artworks={artworks}
-          view={view}
-          options={options}
-          cataloguePath={cataloguePath}
-          artworkPath={artworkPath}
-        />
+        {view === "artwork" ? (
+          <skin.Artwork
+            {...shared}
+            view="artwork"
+            catalogue={catalogue}
+            cataloguePath={cataloguePath}
+          />
+        ) : (
+          <skin.Home
+            {...shared}
+            view="home"
+            catalogue={catalogue}
+            cataloguePath={cataloguePath}
+          />
+        )}
       </MantineProvider>
     </div>
   );
