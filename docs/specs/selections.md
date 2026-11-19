@@ -116,7 +116,7 @@ The feature has two flows:
 Two tables and their access machinery, in **one additive migration** that ships
 alone: `0014_selections` (generated, then the guarded `DO` block revoking `anon`
 and `authenticated`, which is the shape `0012` and `0013` established —
-[packages/db/AGENTS.md](../../packages/db/AGENTS.md)).
+[packages/db/README.md](../../packages/db/README.md)).
 
 ```
 selections
@@ -256,8 +256,9 @@ POST   /api/v1/selections/:selectionId/unlock                         public
 ```
 
 - **Writes** go through a new `selectionWrite.ts`, which takes a `userId` and
-  imports no Hono type ([apps/api/AGENTS.md](../../apps/api/AGENTS.md)); routes
-  own status codes and the envelope.
+  imports no Hono type
+  ([the architecture map](../../docs/architecture.md)); routes own status codes
+  and the envelope.
 - **Create** takes `{ name, description?, isPublic? }`; `isPublic` defaults
   false, `description` empty becomes absent; the id is `mintId()`; the name is
   required and trimmed, as a Catalogue's is.
@@ -383,7 +384,8 @@ description?, isPublic, createdAt?, updatedAt? }` and the public read's
   inherits the presentation without a picker. `BasicxSkin` renders the
   selection view through its `Home` layout with the subject, the credit line and
   the works in position order; the add-a-skin checklist gains the third view
-  ([apps/web/AGENTS.md](../../apps/web/AGENTS.md)).
+  (the skins system is mapped in [the architecture
+  map](../../docs/architecture.md)).
 
 - **Public pages** never badge a Draft, never print availability (it is
   member-only on the wire), and never link a work to the Catalogue's artwork
