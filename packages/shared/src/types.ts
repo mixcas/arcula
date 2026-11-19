@@ -63,6 +63,31 @@ export interface Catalogue {
   updatedAt?: Timestamp;
 }
 
+// Selection type
+//
+// A curated, ordered subset of one Catalogue's works, with its own address and
+// its own audience (ADR-0015). It references works rather than owning them, so
+// it carries no skin, no media and nothing a work records: its presentation is
+// the source Catalogue's.
+export interface Selection {
+  id: string;
+  // The source Catalogue. The wire name is `catalogueId`; the physical column
+  // stays `collectionId` (ADR-0010).
+  catalogueId: string;
+  name: string;
+  description?: string;
+  // Private unless the curator publishes. Independent of the source
+  // Catalogue's own visibility.
+  isPublic: boolean;
+  // Whether a password is set, on a member read only. Derived from the hash's
+  // presence at the serializer boundary; the hash itself never leaves the
+  // server. Absent on every anonymous read.
+  isPasswordProtected?: boolean;
+  // Stamped by the API's serializer, not by callers.
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 // The owner's choice for a work: `published` puts it in front of the
 // catalogue's gate, `draft` keeps it inside. Absent on a document written
 // before the field existed, and absent reads as `published`.

@@ -61,3 +61,11 @@ export const catalogueSlug = (name: string, id: string): string =>
 /** The `:artworkId` route param for an artwork, which is named by its title. */
 export const artworkSlug = (title: string, id: string): string =>
   docSlug(title, id, "artwork");
+
+/**
+ * The `:selectionId` route param for a Selection, which is named by its own
+ * name — never the source Catalogue's. A rename changes the address and
+ * nothing the server looks up.
+ */
+export const selectionSlug = (name: string, id: string): string =>
+  docSlug(name, id, "selection");

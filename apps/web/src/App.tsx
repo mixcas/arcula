@@ -16,6 +16,8 @@ import CatalogueSettingsPage from "./components/manage/CatalogueSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
 import NewCataloguePage from "./components/manage/catalogue/NewCataloguePage";
 import DeletedArtworksPage from "./components/manage/catalogue/DeletedArtworksPage";
+import SelectionsPage from "./components/manage/catalogue/SelectionsPage";
+import SelectionPage from "./components/manage/catalogue/SelectionPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicLayout from "./components/layout/PublicLayout";
@@ -139,6 +141,28 @@ const App: React.FC = () => {
             <ProtectedRoute>
               <ManageLayout>
                 <ArtworkAddPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        {/* A Catalogue's Selections: the list and one Selection's manage page.
+            Both need the xl width the ordered works list will use. */}
+        <Route
+          path="/manage/catalogue/:catalogueId/selections"
+          element={
+            <ProtectedRoute>
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <SelectionsPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/catalogue/:catalogueId/selection/:selectionId"
+          element={
+            <ProtectedRoute>
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <SelectionPage />
               </ManageLayout>
             </ProtectedRoute>
           }
