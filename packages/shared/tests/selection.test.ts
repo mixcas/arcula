@@ -282,12 +282,41 @@ describe("selectionPublicReadSchema — GET /selections/{sid}", () => {
       isPublic: true,
     },
     catalogueName: "Flores Solares",
+    kind: "collection",
     skin: "basicx",
     skinOptions: { transitionSeconds: 0.5, showCaptions: true },
   };
 
   it("parses the public document and the source presentation", () => {
     expect(selectionPublicReadSchema.parse(publicRead)).toEqual(publicRead);
+  });
+
+  it("carries the source Catalogue's Kind and field deviations", () => {
+    const parsed = selectionPublicReadSchema.parse({
+      ...publicRead,
+      kind: "portfolio",
+      artworkFields: { medium: false, editions: false },
+    });
+
+    expect(parsed.kind).toBe("portfolio");
+    expect(parsed.artworkFields).toEqual({ medium: false, editions: false });
+  });
+
+  it("requires a Kind and refuses one the product does not know", () => {
+    const { kind: _kind, ...withoutKind } = publicRead;
+    void _kind;
+    expect(selectionPublicReadSchema.safeParse(withoutKind).success).toBe(
+      false,
+    );
+    expect(
+      selectionPublicReadSchema.safeParse({ ...publicRead, kind: "gallery" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("allows the field deviations to be absent, as a Catalogue's read does", () => {
+    const parsed = selectionPublicReadSchema.parse(publicRead);
+    expect(parsed).not.toHaveProperty("artworkFields");
   });
 
   it("carries the source Catalogue's name but not its id", () => {
