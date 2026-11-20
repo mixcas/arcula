@@ -56,6 +56,20 @@ describe("buildSelectionPdfPlan order", () => {
     expect(plannedArtworkIds(plan)).toEqual(["zulu", "alpha"]);
   });
 
+  it("keeps a mixed photo and no-photo list in the order it is read in", () => {
+    const plan = buildSelectionPdfPlan([
+      artwork("a-photo", { photos: [photo("a-one", 0)] }),
+      artwork("b-no-photo"),
+      artwork("c-photo", { photos: [photo("c-one", 0)] }),
+    ]);
+
+    expect(plannedArtworkIds(plan)).toEqual([
+      "a-photo",
+      "b-no-photo",
+      "c-photo",
+    ]);
+  });
+
   it("keeps the order two works that would tie in a sort are read in", () => {
     // `position` is the curator's, and the read breaks a duplicated position by
     // artwork id. Neither rule belongs here: the plan must not re-decide either

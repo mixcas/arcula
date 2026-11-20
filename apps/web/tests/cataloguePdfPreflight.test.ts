@@ -273,12 +273,12 @@ describe("cataloguePdfTexts", () => {
     expect(texts).toEqual(["C", IMAGE_UNAVAILABLE]);
   });
 
-  it("keeps document order: photo pages before the grid", () => {
+  it("keeps document order: the grid run before the photo page that follows", () => {
     const texts = cataloguePdfTexts(
       "C",
       [
-        // Sorts first by artist, but it is a grid work and comes after the
-        // photo pages in the document.
+        // Sorts first by artist, and its grid page prints first: a photo work
+        // only flushes the grid run before it, it does not jump ahead of it.
         artwork({ id: "grid", title: "Alpha", artistName: "Ana" }),
         artwork({
           id: "photo",
@@ -292,10 +292,10 @@ describe("cataloguePdfTexts", () => {
 
     expect(texts).toEqual([
       "C",
-      "Zulu",
-      "Zoe",
       "Alpha",
       "Ana",
+      "Zulu",
+      "Zoe",
       IMAGE_UNAVAILABLE,
     ]);
   });
@@ -355,10 +355,10 @@ describe("pdfTexts", () => {
 
     expect(pdfTexts("Flores Solares", pages, printed())).toEqual([
       "Flores Solares",
-      "Zulu",
-      "Zoe",
       "Alpha",
       "Ana",
+      "Zulu",
+      "Zoe",
       IMAGE_UNAVAILABLE,
     ]);
   });
@@ -495,13 +495,13 @@ describe("the fields the Catalogue records", () => {
       fields,
     );
 
-    // The photo page still leads the document; only the disabled line is gone.
+    // The works keep their sorted reading order; only the disabled line is gone.
     expect(texts).toEqual([
       "C",
-      "Zulu",
-      "Zoe",
       "Alpha",
       "Ana",
+      "Zulu",
+      "Zoe",
       IMAGE_UNAVAILABLE,
     ]);
   });
