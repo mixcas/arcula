@@ -79,10 +79,10 @@ alternatives are in
 
 ## The data model
 
-Twenty-two tables in Postgres: the domain model with sharing, password
-protection and the write limiter's counter, plus the eight tables the agent
-access surface's OAuth provider and JWT plugin write. All are defined in
-`packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
+Twenty-six tables in Postgres: the domain model with sharing, password
+protection, Selections and the write limiter's counter, plus the eight tables
+the agent access surface's OAuth provider and JWT plugin write. All are defined
+in `packages/db/src/index.ts` and migrated in `packages/db/migrations/`.
 
 **The entity is a Catalogue; the physical table is `collections`.** The Drizzle
 entity is exported as `catalogues`, and its relations are
@@ -238,6 +238,66 @@ key, plus `attempts` — the unlock throttle's counter, keyed by the pair so one
 catalogue's throttle cannot lock visitors out of another's through a shared
 address. The window length is the route's policy, not the schema's
 (`unlockThrottle.ts`), and the unlock route is the only writer and reader.
+
+### `selections` and `selection_works`
+
+`selections`: `id`, `collectionId`, `name`, `description?`, `isPublic` (default
+`false`), `passwordHash?`, `deletedAt?`, `createdAt`, `updatedAt`.
+
+A Selection is a curated, ordered subset of one Catalogue's works with an
+address and an audience of its own ([ADR-0015](docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md)).
+`collectionId` is the source Catalogue; `isPublic` defaults to **false**, because
+publishing is a deliberate act and private is the only default that cannot
+expose a work by accident. `passwordHash` is nullable and holds the same
+one-way scrypt string a Catalogue's does, so a Selection without a password is
+the normal state; `deletedAt` is the deletion stamp, null while live. There is
+no `skin`, `skinOptions` or `mediaNamespaceId` column: a Selection renders in
+its source Catalogue's presentation and owns no bytes.
+
+The Drizzle entity is **`selections`**, and unlike `catalogues` the physical
+table keeps its own name; only the `catalogueId` property is stored in the
+physical `"collectionId"` column, as every catalogue-id property is
+([ADR-0010](docs/adr/0010-collector-artist-and-gallery-are-catalogue-kinds-not-account-roles.md)).
+No index was added on `collectionId`: the one read that filters on it is a
+Catalogue's Selection list, the feature's working unit is a handful of rows, and
+the table starts small enough that a sequential scan is honest. An index is a
+decision for when a Catalogue's list is large enough to need one, and it would
+be an additive migration of its own.
+
+`selection_works`: `selectionId`, `artworkId`, `position`, with primary key
+`(selectionId, artworkId)` and an index on `artworkId`. The composite key makes
+adding the same work twice a refusal rather than a duplicate; `position` is
+0-based, rewritten to `0..n-1` on every write, and deliberately **not unique** —
+reordering would need a deferrable constraint — so reads order by
+`position, artworkId` and a duplicated position still sorts deterministically.
+The row is kept when the work is deleted in its Catalogue, so the work leaves
+the Selection's reads and rejoins them on restore without being re-curated.
+
+### `selection_access_grants` and `selection_unlock_attempts`
+
+`selection_access_grants`: `selectionId`, `tokenHash` (unique), `createdAt`,
+`expiresAt`, with an index on `selectionId` so a password write revokes a
+Selection's grants in one statement. It holds the SHA-256 hash of a 32-byte
+token, never the token, and expiry is computed from `expiresAt`, exactly as the
+Catalogue's grant table does.
+
+`selection_unlock_attempts`: `(ip, selectionId, windowStart)` as the primary
+key, plus `attempts` — the throttle's counter, keyed by address and Selection so
+one Selection's failures cannot lock visitors out of another's through a shared
+address. The ten-minute window is `unlockThrottle.ts`'s policy, not the
+schema's.
+
+The four tables are separate from the Catalogue's rather than a second,
+nullable subject on `collection_access_grants` and
+`collection_unlock_attempts`, which would need a check that exactly one column
+is set and would rewrite tables whose shape is load-bearing
+([ADR-0005](docs/adr/0005-a-password-is-a-second-condition-on-a-public-collection.md),
+[ADR-0015](docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md)).
+All four enable RLS with zero policies, and `0014_selections` carries the
+guarded `DO` block revoking `anon` and `authenticated` that `0012` and `0013`
+established. Every column is nullable or defaulted, so the migration is
+additive, ships **alone**, and precedes the code that reads it
+([AGENTS.md](AGENTS.md#migrations-are-forward-only)).
 
 ### `account_write_windows`
 
@@ -414,6 +474,26 @@ its segments, re-checks visibility against the row, and streams the object:
 - **staged object** — the uploader whose staging prefix holds it, while they are
   still a member of the catalogue the entry was staged under.
 
+A Selection's photo URLs carry their own scope. `serializeArtwork` takes an
+optional `{ selectionId }` and appends `&selection={id}` to every **photo** URL,
+Variants included; the public Selection read, the Selection artwork read and the
+manage works read pass it, and every other read does not. It is what lets a
+Draft in a public Selection render with its images: the Catalogue verdict
+refuses that photo, so the proxy asks a **second admission question** naming the
+scope — the Selection is live and readable by this reader (its own grant cookie
+included), its source Catalogue is live, it is cut from the key's Catalogue, and
+the work is live with a `selection_works` row. Only then do the bytes stream;
+every refused scope is the same `404` the photo branch always answers.
+
+A Selection-scoped response is `private, max-age=3600`, never `public`: the
+right to the bytes is bounded by a Selection the curator can unpublish or
+re-curate, and a shared cache must not outlive that. The header is private even
+where the Catalogue verdict alone would have admitted the photo, because the
+query string is part of the cache key. Documents stay members-only: the scope
+is accepted for `photos` only, so a Selection never makes a certificate public.
+A work deleted in its Catalogue leaves the Selection and its photo scope, and
+returns on restore with its curation row intact.
+
 ## Access control
 
 There is no rules language to audit: **the API is the only path to the data.**
@@ -483,6 +563,45 @@ place, keeping any unsaved input. Restore clears the stamp and touches nothing
 else, so the work returns with its status, fields, photos and documents as they
 were. No purge and no retention window exist: a deleted row lives until it is
 restored.
+
+### A Selection is a second gate
+
+A Selection has an address and an audience of its own, and
+`selectionAccess.ts` answers the read as a pure function over loaded rows.
+`canSeeSelection` admits a member of the source Catalogue — owner or
+collaborator — always, and everyone else exactly when the Selection is public
+and either has no password or the request holds a valid grant. **The source
+Catalogue's visibility and password never enter the verdict.** A private
+Inventory may have a public Selection and a public Catalogue a protected one;
+that is the feature
+([ADR-0015](docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md)),
+and the unit matrix varies the Catalogue's state against every cell to keep it
+so.
+
+Membership of the source Catalogue is also the write verdict: the owner and
+every collaborator create, rename, reorder, publish, protect and delete every
+Selection cut from it, because **a Selection has no members of its own**. Its
+readers are visitors. It spends no tier allowance, because the cap counts owned
+Catalogues and a Selection owns nothing.
+
+What the source Catalogue does own is existence. `authorize.ts`'s loader joins
+the pair, and a deleted Catalogue answers not-found at every Selection address
+while its Selection rows stay unstamped, so an operator's restore of the
+Catalogue restores the addresses. A deleted Selection is the same not-found, and
+a private and a deleted Selection are one answer to a visitor: `404`, with the
+single-work read folding every refusal into the same not-found. A protected
+Selection's document read is the one distinct refusal — `403
+password-required` with the Selection's name in `details.selectionName` — which
+the lock screen answers. The public reads resolve the session optionally, so a
+member may preview their own private Selection at its address.
+
+Its grant and throttle are its own pair, never the Catalogue's:
+`arcula_selection_grant_{selectionId}` carries the same 32-byte token, stored
+only as a SHA-256 hash, for twelve hours on `Path=/api/v1`;
+`selection_unlock_attempts` counts `(ip, selectionId, windowStart)` with the
+Catalogue's fixed ten-minute window and ten-failure limit. A password write
+revokes the Selection's grants in the same transaction, exactly as a Catalogue's
+does.
 
 ### Access administration and the grant
 
@@ -700,6 +819,44 @@ strings: counts order the list and are never serialized. No migration, index or
 extension is involved — the grouping is over exact spellings and the collapse
 is pure, behind a module with no Hono type, so a future curated index can
 replace its source without changing the wire.
+
+A Selection's member routes hang off the Catalogue it was cut from —
+`/catalogues/:catalogueId/selections` and `…/selections/:selectionId`, with
+`/works` for append (`POST`) and replace (`PUT`) — because membership of that
+Catalogue is the write verdict. Its public routes are flat and mirror the
+Catalogue's address space: `GET /selections/:selectionId`,
+`GET /selections/:selectionId/artworks`,
+`GET /selections/:selectionId/artworks/:artworkId` and
+`POST /selections/:selectionId/unlock`. The member list is name-ordered and each
+row carries its live-work count and last change; create takes a name and an
+optional description with `isPublic` defaulting to false; PATCH keeps the app's
+one meaning for a value, `null` and an absent key, and a password write revokes
+the Selection's grants in the same transaction. Append skips an id already
+present, so a double click is harmless; replace states the whole list and is the
+reorder and the remove, empty included. Both refuse an id that is not a live work
+of the source Catalogue and renumber to `0..n-1`. Delete stamps the Selection
+and deletes its grants, leaving every work, photo and the Catalogue untouched.
+
+**The works read is one query and one rule for every audience.** It takes live
+works only — `artworks.deletedAt IS NULL` — ordered by `position, artworkId`,
+with **no status filter**: Drafts are included, which is the decision. A work
+deleted in its Catalogue therefore leaves the Selection without a row being
+removed and returns on restore. The audience decides only what a document
+carries: a member sees status, availability and documents, a visitor sees the
+work without them — and both see a Draft's images, because the photo URLs carry
+the Selection's media scope.
+
+The public read answers the Selection document plus `catalogueName`, `skin`,
+`skinOptions`, `kind` and `artworkFields` — enough to render in the source
+Catalogue's presentation and print the same fields — and **no source-Catalogue
+id, slug or address**: the Catalogue's page is a different gate, often a private
+one, and a link to it would be a dead end or a lock screen. Nor does it carry
+the source Catalogue's password state. Unlock mirrors the Catalogue's: `404`
+when the Selection or its Catalogue is missing or deleted, `409` when it is not
+protected, the throttle claimed before the secret is read, and on success a
+twelve-hour grant cookie named for the Selection. Deleting the source Catalogue
+therefore takes every one of its Selections' addresses with it; the rows are not
+stamped.
 
 ## Agent access (MCP)
 
@@ -947,9 +1104,10 @@ per [A schema change ships alone](AGENTS.md#migrations-are-forward-only). No
 release has shipped either separately: a single dev→main release carrying a
 migration together with the code that reads it would deploy the Lambda before
 it migrates, which is exactly what the rule forbids, so the release that
-carries the migrations must still precede the MCP code's. The twenty-two tables
-above are the result: the limiter's counter, and the eight agent tables the
-provider and JWT plugin write, hand-authored against `getAuthTables()`.
+carries the migrations must still precede the MCP code's. The twenty-six tables
+above are the result: the limiter's counter, the four Selection tables, and the
+eight agent tables the provider and JWT plugin write, hand-authored against
+`getAuthTables()`.
 
 ## The frontend
 
@@ -961,10 +1119,14 @@ provider and JWT plugin write, hand-authored against `getAuthTables()`.
   shows the catalogue and invited email before sign-in), `/consent` (the
   Connection approval screen, which sends a signed-out visitor back to `/login`
   with the signed query), and the skin-rendered
-  `/catalogue/:catalogueId` and `/catalogue/:catalogueId/artwork/:artworkId`.
+  `/catalogue/:catalogueId` and `/catalogue/:catalogueId/artwork/:artworkId`,
+  plus a Selection's own skin-rendered `/selection/:selectionId` and
+  `/selection/:selectionId/artwork/:artworkId`, and its `/selection/:selectionId/pdf`
+  viewer.
 - **Protected** — everything under `/manage`: the dashboard, a catalogue and its
-  settings, artwork add/edit, the CSV import, and the account profile, whose
-  agent-access card carries the endpoint and the Connected apps list.
+  settings, artwork add/edit, the CSV import, a catalogue's Selections list and
+  one Selection's manage page, and the account profile, whose agent-access card
+  carries the endpoint and the Connected apps list.
 
 App chrome has one header shape — the same bar, wordmark on the left and a
 session-following right side — rendered by the shared layout modules, while a
@@ -1016,6 +1178,61 @@ one attempt failure with its own sentence. On success it calls the hook's
 with the grant cookie now set, so there is one path to ready. An expired grant
 re-enters the same way: the next read is refused again and the reader lands back
 on the lock screen rather than on an error page.
+
+A Selection's public address is `PublicSelectionPage.tsx` over
+`usePublicSelection.ts`: the same state union and canonical-URL rewrite as the
+Catalogue's, a `password-required` refusal folded to the shared `LockScreen`
+(named for a selection), and the Selection read before the works read, so a
+refused Selection never issues the second round trip. The works arrive in the
+curator's order with Drafts included, and the page passes them untouched: a
+public view never badges a Draft, never prints availability (the visitor
+serializer omits it) and never links a work to the Catalogue's address — the
+link is `/selection/{slug}/artwork/{slug}`. The skin gains a third view,
+`selection`, and reads a `subject` rather than a `Catalogue` document: the
+Selection's own name and description, with the source Catalogue's
+`catalogueName` as an unlinked credit line. The `selection` variant carries a
+`selectionPath` and deliberately **no** `cataloguePath`, so a skin cannot link a
+private Catalogue. `options` are the source Catalogue's resolved skin options,
+so a Selection inherits the presentation without a picker. An empty Selection
+still renders its name and description through the skin, with one app-chrome
+line saying it has no works yet.
+
+The curation surfaces live under the Catalogue. `SelectionsPage.tsx` is the
+name-ordered list — each row's name, visibility, live-work count and last
+change — with the empty state and the create modal; the Catalogue page's header
+gains **Selections** between **PDF** and the search box. `SelectionPage.tsx` is
+one Selection: its settings block (name, description, Private/Public/Protected
+and the password), its ordered works list and its delete confirmation, with
+**View** and **PDF** opening the Selection's own address. `SelectionWorksList.tsx`
+is deliberately not `ArtworksTable`: no sort, no paging, a drag handle and a
+remove control per row, each with an accessible name naming the work and its
+position, and **Add works** opening a picker over the Catalogue's live works.
+`ArtworksList`'s toolbar gains **Add to selection** beside **Delete selected**
+when works are checked; `AddToSelectionModal.tsx` lists the Catalogue's
+Selections plus **New selection** and appends in the checked order, which
+`curationOrder.ts`'s two pure folds (a drag's `moveWorkIds` and the checked
+works' `checkedOrder`) keep in one place. Every mutation re-reads before it
+notifies, the manage area's rule.
+
+A standing dimmed line on the Selection's page counts the works that are Drafts
+whenever there are any, whatever its visibility, so the member sees how much of
+the list is off the Catalogue's page before deciding to publish; the page
+re-reads the works after curation, so the count follows it. Making a Selection
+public while its source Catalogue is not visitor-readable is a confirmation that
+names the Draft count and the Catalogue's state, and a dimmed note carries the
+same fact on every visit while the state holds
+(`selectionSettingsSave.ts`'s `publishRisk` and `catalogueRisk`, both pure folds
+that answer `null` when there is nothing to say). The **Selection PDF** is a
+second plan over the same document, not a second exporter: `selectionPdfPlan.ts`
+keeps the curator's position order and the Drafts, drops only works deleted in
+their Catalogue, and reuses the ≤3-photo pages, the six-per-grid pages and the
+empty page. `CataloguePdf` takes a title, a page plan, the printed fields and
+the photo sources rather than a Catalogue, so both exports share one document;
+the fields are the source Catalogue's resolved set, carried on the public read. A refused photo mid-export
+is rechecked with `recheckSelectionAccess` (mirroring `cataloguePdfAccess.ts`):
+a still-readable Selection means the object is missing and prints the
+placeholder, a dead grant re-locks, a Selection made private or deleted while
+the export ran ends it in the page's own state.
 
 The dashboard lists owned and shared catalogues together with a kind badge, a
 role badge and the owner's name on a shared row; its cap counter counts owned
