@@ -36,6 +36,10 @@ import {
   oauthRefreshToken,
   oauthResource,
   schema,
+  selectionAccessGrants,
+  selectionUnlockAttempts,
+  selectionWorks,
+  selections,
   session,
   user,
   verification,
@@ -113,6 +117,10 @@ const TABLE_NAMES = [
   "catalogueAccessGrants",
   "catalogueUnlockAttempts",
   "accountWriteWindows",
+  "selections",
+  "selectionWorks",
+  "selectionAccessGrants",
+  "selectionUnlockAttempts",
   "artworks",
   "artworkPhotos",
   "artworkPhotoVariants",
@@ -213,12 +221,16 @@ const WRITE_WINDOWS_SQL = readMigration("0012_account_write_windows");
 // the MCP code that reads them.
 const AGENT_ACCESS_SQL = readMigration("0013_agent_access");
 
+// The Selection entity, its ordered membership and its access machinery: four
+// additive tables, alone, ahead of the feature code that reads them.
+const SELECTIONS_SQL = readMigration("0014_selections");
+
 // The four market states, as the spec names them. Shared by the Drizzle check
 // assertion and the committed migration, so the two cannot disagree.
 const AVAILABILITY_CHECK = `"availability" in ('available', 'reserved', 'sold', 'on-consignment')`;
 
-describe("the twenty-two-table schema", () => {
-  it("declares exactly the twenty-two tables, and `user` is singular", () => {
+describe("the twenty-six-table schema", () => {
+  it("declares exactly the twenty-six tables, and `user` is singular", () => {
     expect(Object.keys(schema)).toEqual(TABLE_NAMES);
   });
 
@@ -509,6 +521,124 @@ describe("the twenty-two-table schema", () => {
       name: "account_write_windows_bucket_check",
       sql: "\"bucket\" in ('write', 'import')",
     });
+  });
+
+  it("selections carries the source Catalogue, defaults to private, and owns no presentation", () => {
+    const c = cols(selections);
+    expect(Object.keys(c)).toEqual([
+      "id",
+      "catalogueId",
+      "name",
+      "description",
+      "isPublic",
+      "passwordHash",
+      "deletedAt",
+      "createdAt",
+      "updatedAt",
+    ]);
+    expect(c.id.primary).toBe(true);
+    // The source Catalogue is one fact, under the physical name ADR-0010 keeps.
+    expect(c.catalogueId.notNull).toBe(true);
+    expect(c.name.notNull).toBe(true);
+    // Optional, and absent is the normal state rather than a gap to backfill.
+    expect(c.description.notNull).toBe(false);
+    expect(c.description.hasDefault).toBe(false);
+    // Publishing is deliberate: private is the only default that cannot
+    // expose a work by accident.
+    expect(c.isPublic.notNull).toBe(true);
+    expect(c.isPublic.default).toBe(false);
+    // A one-way hash, as `collections.passwordHash`: no default, no read-back.
+    expect(c.passwordHash.dataType).toBe("string");
+    expect(c.passwordHash.notNull).toBe(false);
+    expect(c.passwordHash.hasDefault).toBe(false);
+    // NULL = live.
+    expect(c.deletedAt.dataType).toBe("date");
+    expect(c.deletedAt.notNull).toBe(false);
+    expect(c.deletedAt.hasDefault).toBe(false);
+    expect(c.createdAt.dataType).toBe("date");
+    expect(c.createdAt.notNull).toBe(true);
+    expect(c.createdAt.hasDefault).toBe(true);
+    // It renders in the source Catalogue's skin, so it stores none of its own.
+    expect(c.skin).toBeUndefined();
+    expect(c.skinOptions).toBeUndefined();
+  });
+
+  it("selection_works is keyed by (selectionId, artworkId), ordered by position, and indexed by artwork", () => {
+    const c = cols(selectionWorks);
+    expect(Object.keys(c)).toEqual(["selectionId", "artworkId", "position"]);
+    expect(c.selectionId.notNull).toBe(true);
+    expect(c.artworkId.notNull).toBe(true);
+    // 0-based and rewritten to 0..n-1 on every write; the schema only carries
+    // the integer, because a unique constraint would need to be deferrable.
+    expect(c.position.dataType).toBe("number");
+    expect(c.position.notNull).toBe(true);
+    expect(c.position.hasDefault).toBe(false);
+    const pk = getTableConfig(selectionWorks).primaryKeys[0];
+    expect(pk.getName()).toBe("selection_works_selectionId_artworkId_pk");
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "selectionId",
+      "artworkId",
+    ]);
+    // Reverse lookups: the selections that show one work.
+    expect(indexesOf(selectionWorks)).toMatchObject({
+      selection_works_artwork_id_idx: ["artworkId"],
+    });
+    // Position is deliberately not unique: reordering would need a deferrable
+    // constraint, and reads break a duplicate tie by artworkId instead.
+    expect(Object.keys(indexesOf(selectionWorks))).toEqual([
+      "selection_works_artwork_id_idx",
+    ]);
+  });
+
+  it("selection_access_grants keeps the token's hash, and indexes the Selection for revocation", () => {
+    const c = cols(selectionAccessGrants);
+    expect(Object.keys(c)).toEqual([
+      "selectionId",
+      "tokenHash",
+      "createdAt",
+      "expiresAt",
+    ]);
+    expect(c.selectionId.notNull).toBe(true);
+    // The raw token exists only in the reader's cookie; a database leak is a
+    // set of unguessable hashes rather than a set of working grants.
+    expect(c.tokenHash.notNull).toBe(true);
+    expect(c.tokenHash.isUnique).toBe(true);
+    expect(c.createdAt.dataType).toBe("date");
+    expect(c.createdAt.notNull).toBe(true);
+    expect(c.createdAt.hasDefault).toBe(true);
+    // Expiry is computed from the timestamp, never stored as a status.
+    expect(c.expiresAt.dataType).toBe("date");
+    expect(c.expiresAt.notNull).toBe(true);
+    // One statement deletes a Selection's grants on a password change.
+    expect(indexesOf(selectionAccessGrants)).toMatchObject({
+      selection_access_grants_selection_id_idx: ["selectionId"],
+    });
+  });
+
+  it("selection_unlock_attempts is keyed by address, Selection and window", () => {
+    const c = cols(selectionUnlockAttempts);
+    expect(Object.keys(c)).toEqual([
+      "ip",
+      "selectionId",
+      "windowStart",
+      "attempts",
+    ]);
+    expect(c.ip.notNull).toBe(true);
+    expect(c.selectionId.notNull).toBe(true);
+    expect(c.windowStart.dataType).toBe("date");
+    expect(c.windowStart.notNull).toBe(true);
+    expect(c.windowStart.hasDefault).toBe(false);
+    expect(c.attempts.dataType).toBe("number");
+    expect(c.attempts.notNull).toBe(true);
+    expect(c.attempts.default).toBe(0);
+    // The triple is the key: one counter per address, Selection and window, so
+    // one Selection's throttle cannot lock a visitor out of another's.
+    const pk = getTableConfig(selectionUnlockAttempts).primaryKeys[0];
+    expect(pk.columns.map((col) => col.name)).toEqual([
+      "ip",
+      "selectionId",
+      "windowStart",
+    ]);
   });
 
   it("catalogue_collaborators is keyed by (catalogueId, userId), with the dashboard index on user", () => {
@@ -1250,6 +1380,117 @@ describe("the committed agent-access migration (as it will actually be applied)"
   });
 });
 
+describe("the committed selections migration (as it will actually be applied)", () => {
+  it("creates the four Selection tables, reference-free", () => {
+    const created = [...SELECTIONS_SQL.matchAll(/CREATE TABLE "([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    expect(created.sort()).toEqual(
+      [
+        "selections",
+        "selection_works",
+        "selection_access_grants",
+        "selection_unlock_attempts",
+      ].sort(),
+    );
+    // Domain tables stay reference-free, like the ones before them.
+    expect(SELECTIONS_SQL).not.toContain("FOREIGN KEY");
+  });
+
+  it("is additive and forward-only: no row write, no drop, no alter column", () => {
+    // The release ships alone, ahead of the code that reads the tables: every
+    // statement must leave the old code's rows and queries intact.
+    expect(rowWrites(SELECTIONS_SQL)).toEqual([]);
+    expect(SELECTIONS_SQL).not.toMatch(/\b(DROP|TRUNCATE)\b/);
+    expect(SELECTIONS_SQL).not.toMatch(/ALTER COLUMN/);
+  });
+
+  it("defaults visibility to private, and keeps description, password and stamp optional", () => {
+    // Publishing is deliberate; private is the only default that cannot expose
+    // a work by accident.
+    expect(SELECTIONS_SQL).toContain(
+      '"isPublic" boolean DEFAULT false NOT NULL',
+    );
+    expect(SELECTIONS_SQL).toMatch(/"description" text[;,]/);
+    expect(SELECTIONS_SQL).not.toMatch(/"description" text[^;\n]*DEFAULT/);
+    // As a Catalogue's: a Selection without a password is the normal state, so
+    // no default, no backfill and no NOT NULL step is owed later.
+    expect(SELECTIONS_SQL).toMatch(/"passwordHash" text[;,]/);
+    expect(SELECTIONS_SQL).not.toMatch(/"passwordHash" text[^;\n]*DEFAULT/);
+    // NULL = live.
+    expect(SELECTIONS_SQL).toMatch(/"deletedAt" timestamp with time zone[;,]/);
+    expect(SELECTIONS_SQL).not.toMatch(/"deletedAt"[^;\n]*DEFAULT/);
+  });
+
+  it("keys membership by (selectionId, artworkId) and indexes the artwork", () => {
+    expect(SELECTIONS_SQL).toMatch(
+      /CREATE TABLE "selection_works" \([\s\S]*CONSTRAINT "selection_works_selectionId_artworkId_pk" PRIMARY KEY\("selectionId","artworkId"\)/,
+    );
+    expect(SELECTIONS_SQL).toMatch(
+      /CREATE INDEX "selection_works_artwork_id_idx" ON "selection_works" USING btree \("artworkId"\)/,
+    );
+    // One index, and no uniqueness on position: a deferrable constraint would
+    // be needed to reorder a list, so the schema does not claim one.
+    expect(
+      SELECTIONS_SQL.match(/CREATE (UNIQUE )?INDEX "selection_works_/g),
+    ).toHaveLength(1);
+  });
+
+  it("keeps grant hashes unique and keys the counter by address, Selection and window", () => {
+    expect(SELECTIONS_SQL).toContain(
+      `CONSTRAINT "selection_access_grants_tokenHash_unique" UNIQUE("tokenHash")`,
+    );
+    expect(SELECTIONS_SQL).toMatch(
+      /CREATE INDEX "selection_access_grants_selection_id_idx" ON "selection_access_grants" USING btree \("selectionId"\)/,
+    );
+    expect(SELECTIONS_SQL).toMatch(
+      /CREATE TABLE "selection_unlock_attempts" \([\s\S]*PRIMARY KEY\("ip","selectionId","windowStart"\)/,
+    );
+    expect(SELECTIONS_SQL).toContain('"attempts" integer DEFAULT 0 NOT NULL');
+    expect(SELECTIONS_SQL).toContain(
+      '"expiresAt" timestamp with time zone NOT NULL',
+    );
+  });
+
+  it("uses timestamptz for every timestamp", () => {
+    expect(
+      SELECTIONS_SQL.replace(/timestamp with time zone/g, ""),
+    ).not.toContain("timestamp");
+  });
+
+  it("enables RLS and revokes both client roles inside the existence guard", () => {
+    const tables = [
+      "selections",
+      "selection_works",
+      "selection_access_grants",
+      "selection_unlock_attempts",
+    ];
+    for (const table of tables) {
+      expect(SELECTIONS_SQL).toContain(
+        `ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;`,
+      );
+    }
+    const block = guardBlock(SELECTIONS_SQL);
+    for (const role of ["anon", "authenticated"]) {
+      const branch = roleBranch(block, role);
+      for (const table of tables) {
+        expect(branch).toContain(`REVOKE ALL ON "${table}" FROM ${role};`);
+      }
+      // One revoke per table, and no fifth statement smuggled in beside them.
+      expect(branch.match(/REVOKE ALL/g)).toHaveLength(tables.length);
+    }
+    // No revoke escapes the guard.
+    expect(
+      SELECTIONS_SQL.slice(0, SELECTIONS_SQL.indexOf("DO $$")),
+    ).not.toMatch(/REVOKE/);
+  });
+
+  it("does not force RLS onto the table owner", () => {
+    const statements = SELECTIONS_SQL.replace(/--[^\n]*/g, "");
+    expect(statements.toUpperCase()).not.toContain("FORCE ROW LEVEL SECURITY");
+  });
+});
+
 describe("the committed lock-down migration (as it will actually be applied)", () => {
   // The schema's own table names, which the committed migrations must render
   // one enablement per. Derived from the Drizzle object, so a table added there
@@ -1271,16 +1512,16 @@ describe("the committed lock-down migration (as it will actually be applied)", (
     const disabled = Object.values(schema)
       .filter((table) => !getTableConfig(table as PgTable).enableRLS)
       .map((table) => getTableConfig(table as PgTable).name);
-    // All twenty-two, not a sample: a new table is closed unless its
+    // All twenty-six, not a sample: a new table is closed unless its
     // declaration omits `enableRLS()`, which this turns red.
     expect(disabled).toEqual([]);
-    expect(schemaTableNames).toHaveLength(22);
+    expect(schemaTableNames).toHaveLength(26);
   });
 
   it("renders one enablement statement per table, matching the schema", () => {
     expect(enabledTableNames).toEqual(expect.arrayContaining(schemaTableNames));
     expect(enabledTableNames).toHaveLength(schemaTableNames.length);
-    expect(enabledTableNames).toHaveLength(22);
+    expect(enabledTableNames).toHaveLength(26);
   });
 
   it("revokes tables, sequences and defaults for both client roles, inside the pg_roles guard", () => {
