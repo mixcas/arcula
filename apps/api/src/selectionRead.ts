@@ -22,11 +22,12 @@ import {
   selectionWorks as selectionWorksTable,
   selections as selectionsTable,
 } from "@arcula/db";
-import type {
-  ArtworkRead,
-  SelectionPageRow,
-  SelectionPublicRead,
-  SelectionRead,
+import {
+  artworkFieldDeviationsSchema,
+  type ArtworkRead,
+  type SelectionPageRow,
+  type SelectionPublicRead,
+  type SelectionRead,
 } from "@arcula/shared";
 import type { CatalogueAudience } from "./access";
 import { groupChildren, loadChildren, noChildren } from "./artworkRead";
@@ -34,7 +35,12 @@ import type { ArtworkRow, CatalogueRow, SelectionRow } from "./authorize";
 import { db } from "./db";
 import { ApiError } from "./errors";
 import { mediaNamespaceOf } from "./media/keys";
-import { isSkinOptions, serializeArtwork, wireTimestamp } from "./serialize";
+import {
+  catalogueKindOf,
+  isSkinOptions,
+  serializeArtwork,
+  wireTimestamp,
+} from "./serialize";
 
 /**
  * The exact member wire document.
@@ -70,6 +76,11 @@ export function readSelection(row: SelectionRow): SelectionRead {
  * web resolves them through the same registry it uses for a Catalogue, so the
  * API never has to know what a skin declares — and a Selection renders in the
  * Catalogue's presentation without a schema of its own.
+ *
+ * `kind` and `artworkFields` are the presentation facts a Catalogue's own
+ * public read carries, validated exactly as `serializeCatalogue` validates
+ * them: the visitor's PDF resolves the same printed field set a member's does.
+ * They say what the Catalogue records, never which Catalogue it is.
  */
 export function readPublicSelection(
   selection: SelectionRow,
@@ -86,7 +97,17 @@ export function readPublicSelection(
   const out: SelectionPublicRead = {
     selection: document,
     catalogueName: catalogue.name,
+    kind: catalogueKindOf(catalogue.kind),
   };
+  if (catalogue.artworkFields !== null) {
+    const parsed = artworkFieldDeviationsSchema.safeParse(
+      catalogue.artworkFields,
+    );
+    if (!parsed.success) {
+      throw new ApiError("internal", "Malformed catalogue artwork fields");
+    }
+    out.artworkFields = parsed.data;
+  }
   if (catalogue.skin !== null) {
     out.skin = catalogue.skin;
   }

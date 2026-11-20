@@ -131,6 +131,7 @@ describe("GET /selections/{sid} — who may read the address", () => {
         isPublic: true,
       },
       catalogueName: PRIVATE_CATALOGUE_NAME,
+      kind: "collection",
     });
     // The source Catalogue's id, address and password state are not on the
     // wire: its page is a different gate, often a private one.
@@ -160,6 +161,26 @@ describe("GET /selections/{sid} — who may read the address", () => {
     );
     expect(body.skin).toBe("basicx");
     expect(body.skinOptions).toEqual({ transitionSeconds: 0.75 });
+  });
+
+  it("carries the source Catalogue's Kind and field choices, never its address", async () => {
+    // The same presentation facts a Catalogue's own public read carries: the
+    // visitor's PDF must print the field set a member's does.
+    const cid = await makeCatalogue(owner.userId, {
+      isPublic: false,
+      name: "Field Source",
+      kind: "portfolio",
+      artworkFields: { medium: false, editions: false },
+    });
+    const selection = await createSelection(cid, "Field Trial");
+    await patchSelection(cid, selection.id, { isPublic: true });
+
+    const body = await json<SelectionPublicRead>(
+      await readPublic(selection.id),
+    );
+    expect(body.kind).toBe("portfolio");
+    expect(body.artworkFields).toEqual({ medium: false, editions: false });
+    expect(JSON.stringify(body)).not.toContain(cid);
   });
 
   it("answers not-found for a private Selection, and for a deleted one", async () => {
