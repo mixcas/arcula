@@ -4,8 +4,9 @@
  * The works list is the curation surface — add, reorder, remove — and the
  * settings own the name, the description, the visibility (Private, Public,
  * Protected) and the password. The header opens the Selection at its own
- * address and exports its PDF; the Catalogue is credited, never linked.
- * The publish warning and the Draft count arrive with the visibility slice.
+ * address and exports its PDF; the Catalogue is credited, never linked. A
+ * standing line counts the works that are Drafts, whatever the visibility; the
+ * publish warning and its note name the source Catalogue's state.
  *
  * Every save or curation re-reads what it changed and only then notifies, so the
  * page is the server's answer rather than a local copy. The delete confirmation
@@ -95,10 +96,23 @@ const publishWarningNote = (
   }
   const drafts =
     risk.draftCount === 1
-      ? "It has 1 draft, which is readable at the selection's address."
-      : `It has ${risk.draftCount} drafts, which are readable at the selection's address.`;
+      ? "It has 1 draft, which is readable at the selection’s address."
+      : `It has ${risk.draftCount} drafts, which are readable at the selection’s address.`;
   return `${standing} ${drafts}`;
 };
+
+/**
+ * The standing Draft count: the page's own fact, not a warning.
+ *
+ * A Selection may hold Drafts whatever its visibility, so this line is present
+ * on a private one too — it is what tells the member how much of the list is
+ * off the Catalogue's page before they decide to publish. A warning is a plain
+ * surface, so the count is stated and nothing is argued.
+ */
+const draftCountLine = (count: number): string =>
+  count === 1
+    ? "1 work in this selection is a draft."
+    : `${count} works in this selection are drafts.`;
 
 interface SettingsProps {
   selection: Selection;
@@ -108,7 +122,7 @@ interface SettingsProps {
 
 /** What each visibility means, in one sentence the member can act on. */
 const VISIBILITY_DESCRIPTION: Record<SelectionVisibility, string> = {
-  private: "Only the Catalogue's members can open this selection.",
+  private: "Only the catalogue's members can open this selection.",
   public: "Anyone with the link can read this selection.",
   protected: "Anyone with the link needs a password to read this selection.",
 };
@@ -474,7 +488,7 @@ const SelectionPage: React.FC = () => {
       children: (
         <Text size="sm">
           The selection will be removed and its address will stop working. Its
-          works, their photos and the Catalogue are untouched.
+          works, their photos and the catalogue are untouched.
         </Text>
       ),
       labels: { confirm: "Delete", cancel: "Cancel" },
@@ -513,6 +527,11 @@ const SelectionPage: React.FC = () => {
   // Catalogue a visitor cannot read. Unpublishing, or the Catalogue becoming
   // visitor-readable, takes it away with it.
   const note = selection.isPublic ? catalogueRisk(catalogue, works) : null;
+
+  // Drafts are the Selection's own state, not the Catalogue's, so this count
+  // is shown whatever the visibility — and it follows curation, because the
+  // page re-reads the works it lists.
+  const draftCount = works.filter((work) => work.status === "draft").length;
 
   // The Selection's own public address. View and PDF open there in a new tab,
   // like the Catalogue's header controls; the Catalogue itself is deliberately
@@ -569,6 +588,12 @@ const SelectionPage: React.FC = () => {
         </Text>
       ) : null}
 
+      {draftCount > 0 ? (
+        <Text size="sm" c="dimmed">
+          {draftCountLine(draftCount)}
+        </Text>
+      ) : null}
+
       <SelectionSettings
         key={settingsKey}
         selection={selection}
@@ -588,7 +613,7 @@ const SelectionPage: React.FC = () => {
           <Text size="h3">Delete selection</Text>
           <Text size="sm" c="dimmed">
             Deleting a selection removes it from this catalogue&rsquo;s list.
-            Its works, their photos and the Catalogue are untouched.
+            Its works, their photos and the catalogue are untouched.
           </Text>
           <Group justify="flex-end">
             <Button

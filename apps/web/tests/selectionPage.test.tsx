@@ -383,7 +383,7 @@ describe("SelectionPage", () => {
     const modal = await screen.findByRole("dialog");
     expect(
       within(modal).getByText(
-        /works, their photos and the Catalogue are untouched/i,
+        /works, their photos and the catalogue are untouched/i,
       ),
     ).toBeInTheDocument();
     await userEvent.click(
@@ -500,7 +500,7 @@ describe("SelectionPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /It has 1 draft, which is readable at the selection's address\./,
+        /It has 1 draft, which is readable at the selection’s address\./,
       ),
     ).toBeInTheDocument();
   });
@@ -527,7 +527,7 @@ describe("SelectionPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /It has 1 draft, which is readable at the selection's address\./,
+        /It has 1 draft, which is readable at the selection’s address\./,
       ),
     ).toBeInTheDocument();
   });
@@ -545,7 +545,7 @@ describe("SelectionPage", () => {
 
     expect(
       await screen.findByText(
-        /It has 1 draft, which is readable at the selection's address\./,
+        /It has 1 draft, which is readable at the selection’s address\./,
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Remove Alpha" }));
@@ -556,6 +556,47 @@ describe("SelectionPage", () => {
       ]),
     );
     expect(await screen.findByText(/It has no drafts\./)).toBeInTheDocument();
+  });
+
+  it("counts the drafts on a private selection, before anything is published", async () => {
+    getWorks.mockResolvedValue([
+      work("alpha", "Alpha", "draft"),
+      work("bravo", "Bravo"),
+      work("charlie", "Charlie", "draft"),
+    ]);
+    renderPage();
+
+    expect(
+      await screen.findByText("2 works in this selection are drafts."),
+    ).toBeInTheDocument();
+    // Private is the state the count has to be readable in: it is what the
+    // member weighs before the publish, not a warning about a live page.
+    expect(screen.getByRole("radio", { name: "Private" })).toBeChecked();
+  });
+
+  it("recounts the drafts in the line after curation changes the list", async () => {
+    getWorks
+      .mockResolvedValueOnce([
+        work("alpha", "Alpha", "draft"),
+        work("bravo", "Bravo", "draft"),
+      ])
+      .mockResolvedValue([work("bravo", "Bravo", "draft")]);
+    replaceWorks.mockResolvedValue(undefined);
+    renderPage();
+
+    expect(
+      await screen.findByText("2 works in this selection are drafts."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove Alpha" }));
+
+    await waitFor(() =>
+      expect(replaceWorks).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, [
+        "bravo",
+      ]),
+    );
+    expect(
+      await screen.findByText("1 work in this selection is a draft."),
+    ).toBeInTheDocument();
   });
 
   it("puts the slugged Selection address in the bar once the name is known", async () => {
