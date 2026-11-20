@@ -97,13 +97,6 @@ describe("canSeeSelection — the visitor half", () => {
       canSeeSelection(null, catalogue(), selection({ isPublic: false }), true),
     ).toBe(false);
   });
-
-  it("refuses a missing source Catalogue row only through the loader", () => {
-    // The predicate has no deletion fact to read; this pins that the catalogue
-    // is inert as an object, not that deletion is ignored by the product. The
-    // route suite is where the loader's `deletedAt IS NULL` join is asserted.
-    expect(canSeeSelection(null, catalogue(), selection())).toBe(true);
-  });
 });
 
 describe("canSeeSelection — the source Catalogue never moves an answer", () => {
