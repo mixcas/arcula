@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { Selection } from "../types";
+import { MINTED_ID_RE } from "./artwork";
 import { passwordSchema } from "./catalogue";
-import { wireTimestamp } from "./document";
+import { artworkReadSchema, wireTimestamp } from "./document";
 
 /**
  * A Selection's payloads, and the wire documents the API answers.
@@ -108,6 +109,75 @@ export const selectionUpdateSchema = z
   .strict();
 
 export type SelectionUpdatePayload = z.infer<typeof selectionUpdateSchema>;
+
+/**
+ * One work as the Selection's ordered list names it: an id minted like any
+ * other, and nothing else. `MINTED_ID_RE` is the package's one id validator —
+ * a hyphen is refused because `parseId` recovers an id by cutting at the last
+ * one.
+ */
+const selectionArtworkIdSchema = z
+  .string()
+  .regex(MINTED_ID_RE, "Invalid artwork id");
+
+/**
+ * POST /catalogues/{cid}/selections/{sid}/works — append.
+ *
+ * The payload names at least one work: an append that appends nothing is a
+ * request that cannot mean what it says. A **duplicate id is deliberately
+ * tolerated** — the core skips the ones already present, so a double click or
+ * two tabs sending the same id is a harmless repeat rather than an error.
+ *
+ * That is the whole difference from `selectionWorksReplaceSchema` below: an
+ * append adds to a list it did not state, so repeating is idempotent; a
+ * replace *is* the list, so a repeat there would name the same work twice and
+ * the schema refuses it.
+ */
+export const selectionWorksSchema = z
+  .object({
+    artworkIds: z.array(selectionArtworkIdSchema).min(1),
+  })
+  .strict();
+
+export type SelectionWorksPayload = z.infer<typeof selectionWorksSchema>;
+
+/**
+ * PUT /catalogues/{cid}/selections/{sid}/works — replace: the reorder and the
+ * remove.
+ *
+ * An empty list is allowed and meaningful: removing the last work leaves an
+ * empty Selection. A duplicate id is refused with a refinement because the
+ * payload states the whole list, and a list naming one work twice has no
+ * order to write; the string names `artworkIds` so a client can point at it.
+ */
+export const selectionWorksReplaceSchema = z
+  .object({
+    artworkIds: z
+      .array(selectionArtworkIdSchema)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Each artwork can appear only once",
+      ),
+  })
+  .strict();
+
+export type SelectionWorksReplacePayload = z.infer<
+  typeof selectionWorksReplaceSchema
+>;
+
+/**
+ * GET /selections/{sid}/artworks — the one ordered works read, for both the
+ * manage page and the visitor page.
+ *
+ * An envelope, as every list route in this package answers one, and the same
+ * `artworkReadSchema` a Catalogue's works read answers: the serializer decides
+ * what an audience sees, so the two pages parse one shape.
+ */
+export const selectionWorksReadSchema = z.object({
+  artworks: z.array(artworkReadSchema),
+});
+
+export type SelectionWorksRead = z.infer<typeof selectionWorksReadSchema>;
 
 /**
  * POST /selections/{sid}/unlock. An attempt at a protected Selection's

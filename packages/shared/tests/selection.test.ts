@@ -15,6 +15,9 @@ import {
   selectionSlug,
   selectionUnlockSchema,
   selectionUpdateSchema,
+  selectionWorksReadSchema,
+  selectionWorksReplaceSchema,
+  selectionWorksSchema,
 } from "../src";
 
 const read = {
@@ -139,6 +142,105 @@ describe("selectionUnlockSchema — POST /selections/{sid}/unlock", () => {
       selectionUnlockSchema.safeParse({ password: "x", catalogueId: "cat1" })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("selectionWorksSchema — POST …/selections/{sid}/works (append)", () => {
+  it("accepts a list of minted ids", () => {
+    expect(
+      selectionWorksSchema.parse({ artworkIds: ["aB3d9Kx2Qp", "zY8w7V6u5T"] }),
+    ).toEqual({ artworkIds: ["aB3d9Kx2Qp", "zY8w7V6u5T"] });
+  });
+
+  it("refuses an empty list: an append names at least one work", () => {
+    expect(selectionWorksSchema.safeParse({ artworkIds: [] }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses an id carrying a hyphen, which `parseId` would cut in two", () => {
+    expect(
+      selectionWorksSchema.safeParse({ artworkIds: ["aB3d-9Kx2"] }).success,
+    ).toBe(false);
+  });
+
+  it("tolerates a duplicate: the route appends the one it does not have", () => {
+    // A double click, or two tabs on the same list, sends the same id twice.
+    // An append is idempotent by design, so this is a valid request rather
+    // than a client bug the server has to reject.
+    expect(
+      selectionWorksSchema.parse({ artworkIds: ["aB3d9Kx2Qp", "aB3d9Kx2Qp"] }),
+    ).toEqual({ artworkIds: ["aB3d9Kx2Qp", "aB3d9Kx2Qp"] });
+  });
+
+  it("refuses an unknown key", () => {
+    expect(
+      selectionWorksSchema.safeParse({
+        artworkIds: ["aB3d9Kx2Qp"],
+        selectionId: "aB3d9Kx2Qp",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("selectionWorksReplaceSchema — PUT …/selections/{sid}/works", () => {
+  it("accepts an empty list: replace is how the last work leaves", () => {
+    expect(selectionWorksReplaceSchema.parse({ artworkIds: [] })).toEqual({
+      artworkIds: [],
+    });
+  });
+
+  it("accepts a reordered list", () => {
+    expect(
+      selectionWorksReplaceSchema.parse({
+        artworkIds: ["zY8w7V6u5T", "aB3d9Kx2Qp"],
+      }),
+    ).toEqual({ artworkIds: ["zY8w7V6u5T", "aB3d9Kx2Qp"] });
+  });
+
+  it("refuses a duplicate id: a list names each work once", () => {
+    // The asymmetry with append is deliberate: an append may repeat an id and
+    // skip it, because it is a harmless double click; a replace states the
+    // whole list, and a repeated id there is a list with no meaning.
+    expect(
+      selectionWorksReplaceSchema.safeParse({
+        artworkIds: ["aB3d9Kx2Qp", "aB3d9Kx2Qp"],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses an id carrying a hyphen", () => {
+    expect(
+      selectionWorksReplaceSchema.safeParse({ artworkIds: ["aB3d-9Kx2"] })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("selectionWorksReadSchema — GET /selections/{sid}/artworks", () => {
+  const artwork = {
+    id: "aB3d9Kx2Qp",
+    userId: "u1",
+    title: "Untitled",
+    artistName: "Unknown",
+    documents: [],
+    photos: [],
+    catalogueId: "cat1",
+    status: "draft",
+    availability: null,
+    deletedAt: null,
+    createdAt: { seconds: 1, nanoseconds: 0 },
+    updatedAt: { seconds: 1, nanoseconds: 0 },
+  };
+
+  it("parses the ordered works envelope", () => {
+    const parsed = selectionWorksReadSchema.parse({ artworks: [artwork] });
+    expect(parsed.artworks[0].id).toBe("aB3d9Kx2Qp");
+    expect(parsed.artworks[0].status).toBe("draft");
+  });
+
+  it("refuses a bare array: the read answers an envelope", () => {
+    expect(selectionWorksReadSchema.safeParse([artwork]).success).toBe(false);
   });
 });
 
