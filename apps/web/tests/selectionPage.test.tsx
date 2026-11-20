@@ -72,6 +72,7 @@ const getSelection = vi.mocked(selectionService.get);
 const getWorks = vi.mocked(selectionService.getWorks);
 const updateSelection = vi.mocked(selectionService.update);
 const removeSelection = vi.mocked(selectionService.remove);
+const replaceWorks = vi.mocked(selectionService.replaceWorks);
 /* eslint-enable @typescript-eslint/unbound-method */
 
 const CATALOGUE_ID = "cccccccccccccccccccc";
@@ -232,6 +233,12 @@ describe("SelectionPage", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Public" }));
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
+    // A private catalogue is not visitor-readable, so the publish asks first.
+    const modal = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(modal).getByRole("button", { name: "Publish" }),
+    );
+
     await waitFor(() =>
       expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
         isPublic: true,
@@ -245,6 +252,9 @@ describe("SelectionPage", () => {
   });
 
   it("publishes as Protected with a new password", async () => {
+    // A readable catalogue means the publish is not the risk moment: this test
+    // is about the password fold, not the warning.
+    getCatalogue.mockResolvedValue({ ...catalogue, isPublic: true });
     updateSelection.mockResolvedValue(
       selection({ isPublic: true, isPasswordProtected: true }),
     );
@@ -389,6 +399,163 @@ describe("SelectionPage", () => {
       ),
     );
     expect(await screen.findByText(/was removed/)).toBeInTheDocument();
+  });
+
+  it("asks before publishing when the catalogue is not visitor-readable", async () => {
+    getWorks.mockResolvedValue([
+      work("alpha", "Alpha", "draft"),
+      work("bravo", "Bravo"),
+      work("charlie", "Charlie", "draft"),
+    ]);
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const modal = await screen.findByRole("dialog");
+    // The count first, then the catalogue's state — the two facts the risk is.
+    expect(
+      within(modal).getByText(
+        /2 drafts in this selection will be readable at its address\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(modal).getByText(/“Flores Solares” is private\./),
+    ).toBeInTheDocument();
+    // The selection is private until the member confirms.
+    expect(updateSelection).not.toHaveBeenCalled();
+  });
+
+  it("leaves the selection private when the warning is cancelled", async () => {
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const modal = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(modal).getByRole("button", { name: "Cancel" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(updateSelection).not.toHaveBeenCalled();
+    // The form still holds the unsaved choice; the document is still private.
+    expect(screen.getByRole("radio", { name: "Public" })).toBeChecked();
+  });
+
+  it("publishes without asking when a visitor can read the catalogue", async () => {
+    getCatalogue.mockResolvedValue({ ...catalogue, isPublic: true });
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateSelection).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, {
+        isPublic: true,
+      }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("carries no publish note while the selection is private", async () => {
+    getWorks.mockResolvedValue([work("alpha", "Alpha", "draft")]);
+    renderPage();
+
+    await screen.findByRole("radio", { name: "Private" });
+    expect(
+      screen.queryByText(/This selection is public/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("carries no publish note when a visitor can read the catalogue", async () => {
+    getCatalogue.mockResolvedValue({ ...catalogue, isPublic: true });
+    getSelection.mockResolvedValue(selection({ isPublic: true }));
+    getWorks.mockResolvedValue([work("alpha", "Alpha", "draft")]);
+    renderPage();
+
+    expect(await screen.findByRole("radio", { name: "Public" })).toBeChecked();
+    expect(
+      screen.queryByText(/This selection is public/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("carries the fact on every visit while a public selection's catalogue is protected", async () => {
+    getCatalogue.mockResolvedValue({
+      ...catalogue,
+      isPublic: true,
+      isPasswordProtected: true,
+    });
+    getSelection.mockResolvedValue(selection({ isPublic: true }));
+    getWorks.mockResolvedValue([work("alpha", "Alpha", "draft")]);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /This selection is public while “Flores Solares” is protected\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /It has 1 draft, which is readable at the selection's address\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("carries the note from the moment the selection is published", async () => {
+    getSelection.mockResolvedValueOnce(selection());
+    // The re-read after the publish is the server's answer: public now.
+    getSelection.mockResolvedValue(selection({ isPublic: true }));
+    updateSelection.mockResolvedValue(selection({ isPublic: true }));
+    getWorks.mockResolvedValue([work("alpha", "Alpha", "draft")]);
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Public" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const modal = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(modal).getByRole("button", { name: "Publish" }),
+    );
+
+    expect(
+      await screen.findByText(
+        /This selection is public while “Flores Solares” is private\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /It has 1 draft, which is readable at the selection's address\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("recounts the drafts after curation changes the list", async () => {
+    getSelection.mockResolvedValue(selection({ isPublic: true }));
+    getWorks
+      .mockResolvedValueOnce([
+        work("alpha", "Alpha", "draft"),
+        work("bravo", "Bravo"),
+      ])
+      .mockResolvedValue([work("bravo", "Bravo")]);
+    replaceWorks.mockResolvedValue(undefined);
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /It has 1 draft, which is readable at the selection's address\./,
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Remove Alpha" }));
+
+    await waitFor(() =>
+      expect(replaceWorks).toHaveBeenCalledWith(CATALOGUE_ID, SELECTION_ID, [
+        "bravo",
+      ]),
+    );
+    expect(await screen.findByText(/It has no drafts\./)).toBeInTheDocument();
   });
 
   it("puts the slugged Selection address in the bar once the name is known", async () => {

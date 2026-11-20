@@ -7,9 +7,12 @@
 // from the contract instead.
 
 import { describe, expect, it } from "vitest";
+import type { Artwork, Catalogue } from "@arcula/shared";
 
 import {
+  catalogueRisk,
   needsPasswordFields,
+  publishRisk,
   resolveSelectionSave,
   storedVisibility,
   type SelectionSettingsEdited,
@@ -195,6 +198,123 @@ describe("resolveSelectionSave — the password's own checks", () => {
         }),
       ),
     ).toEqual({ password: "a-new-password" });
+  });
+});
+
+// The publish warning is the one moment this model's risk is taken: a Selection
+// going public while its Catalogue is not visitor-readable. The truth table is
+// the state's, the count is the list the page holds now, and a visitor-readable
+// Catalogue means there is no risk to name.
+
+type CatalogueFacts = Pick<Catalogue, "isPublic" | "isPasswordProtected">;
+
+/** A Catalogue as the member read gives it: public or not, protected or not. */
+const source = (
+  isPublic: boolean,
+  isPasswordProtected = false,
+): CatalogueFacts => ({ isPublic, isPasswordProtected });
+
+const work = (status: "draft" | "published"): Pick<Artwork, "status"> => ({
+  status,
+});
+
+const riskOf = (input: {
+  selectionPublic?: boolean;
+  update?: { isPublic?: boolean; name?: string };
+  catalogue: CatalogueFacts;
+  works?: Array<Pick<Artwork, "status">>;
+}) =>
+  publishRisk({
+    selection: { isPublic: input.selectionPublic ?? false },
+    update: input.update ?? { isPublic: true },
+    catalogue: input.catalogue,
+    works: input.works ?? [],
+  });
+
+describe("publishRisk", () => {
+  it("names a private catalogue and counts the drafts the publish reveals", () => {
+    expect(
+      riskOf({
+        catalogue: source(false),
+        works: [work("draft"), work("published"), work("draft")],
+      }),
+    ).toEqual({ catalogueState: "private", draftCount: 2 });
+  });
+
+  it("names a protected catalogue as protected", () => {
+    expect(
+      riskOf({
+        catalogue: source(true, true),
+        works: [work("draft")],
+      }),
+    ).toEqual({ catalogueState: "protected", draftCount: 1 });
+  });
+
+  it("says nothing when a visitor can already read the catalogue", () => {
+    expect(
+      riskOf({ catalogue: source(true), works: [work("draft")] }),
+    ).toBeNull();
+  });
+
+  it("says nothing when the selection is already public", () => {
+    expect(
+      riskOf({
+        selectionPublic: true,
+        catalogue: source(false),
+        works: [work("draft")],
+      }),
+    ).toBeNull();
+  });
+
+  it("says nothing when the save does not publish", () => {
+    expect(
+      riskOf({ update: { name: "Fair selection" }, catalogue: source(false) }),
+    ).toBeNull();
+    expect(
+      riskOf({ update: { isPublic: false }, catalogue: source(false) }),
+    ).toBeNull();
+  });
+
+  it("counts no drafts as zero rather than inventing a warning", () => {
+    expect(
+      riskOf({ catalogue: source(false), works: [work("published")] }),
+    ).toEqual({ catalogueState: "private", draftCount: 0 });
+    expect(riskOf({ catalogue: source(false), works: [] })).toEqual({
+      catalogueState: "private",
+      draftCount: 0,
+    });
+  });
+
+  it("counts the list the page holds now, not the one it loaded", () => {
+    expect(
+      riskOf({
+        catalogue: source(false),
+        works: [work("draft"), work("draft"), work("draft")],
+      })?.draftCount,
+    ).toBe(3);
+    // The same call after curation: the count follows the list it is given.
+    expect(
+      riskOf({
+        catalogue: source(false),
+        works: [work("published"), work("published")],
+      })?.draftCount,
+    ).toBe(0);
+  });
+});
+
+describe("catalogueRisk", () => {
+  it("carries the state and the draft count while the state holds", () => {
+    expect(
+      catalogueRisk(source(false), [work("draft"), work("published")]),
+    ).toEqual({ catalogueState: "private", draftCount: 1 });
+    expect(catalogueRisk(source(true, true), [])).toEqual({
+      catalogueState: "protected",
+      draftCount: 0,
+    });
+  });
+
+  it("is silent once a visitor can read the catalogue", () => {
+    expect(catalogueRisk(source(true), [work("draft")])).toBeNull();
   });
 });
 

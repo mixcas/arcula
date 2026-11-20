@@ -9,9 +9,20 @@
 // A save names only what changed. The name goes out trimmed, a description that
 // was emptied is `null`, and the password is written only when the member asked
 // for a new one or when leaving Protected for Public must clear the old one.
+//
+// The other decision here is the publish warning. Publishing a Selection whose
+// Catalogue is not visitor-readable is the single moment this model's risk is
+// taken, so the transition and the standing fact are one fold, computed from the
+// member read and the works the page holds — never from the public read, which
+// carries the Catalogue's name and nothing else.
 
 import { passwordSchema } from "@arcula/shared";
-import type { SelectionUpdatePayload } from "@arcula/shared";
+import type {
+  Artwork,
+  Catalogue,
+  Selection,
+  SelectionUpdatePayload,
+} from "@arcula/shared";
 
 /** What the selector offers, and what the stored row means. */
 export type SelectionVisibility = "private" | "public" | "protected";
@@ -134,4 +145,84 @@ export const resolveSelectionSave = (
   }
   payload.password = parsed.data;
   return { kind: "payload", payload };
+};
+
+/** Which way a visitor is stopped at the source Catalogue. */
+export type CatalogueGate = "private" | "protected";
+
+/** The fact both the publish confirmation and the persistent note state. */
+export interface PublishRisk {
+  catalogueState: CatalogueGate;
+  draftCount: number;
+}
+
+interface PublishRiskInput {
+  /** The Selection as the server last answered it. */
+  selection: Pick<Selection, "isPublic">;
+  /** The PATCH about to be written. */
+  update: Pick<SelectionUpdatePayload, "isPublic">;
+  /** The source Catalogue, from the member read. */
+  catalogue: Pick<Catalogue, "isPublic" | "isPasswordProtected">;
+  /** The Selection's live works, in the order the page holds them. */
+  works: ReadonlyArray<Pick<Artwork, "status">>;
+}
+
+/**
+ * Why a visitor cannot read the Catalogue, or null when they can.
+ *
+ * A protected Catalogue is public and passworded: a visitor without the
+ * password still sees nothing, so it is not visitor-readable either, and the
+ * state is named "protected" rather than merged into "private".
+ */
+const catalogueGate = (
+  catalogue: Pick<Catalogue, "isPublic" | "isPasswordProtected">,
+): CatalogueGate | null =>
+  catalogue.isPublic !== true
+    ? "private"
+    : catalogue.isPasswordProtected === true
+      ? "protected"
+      : null;
+
+/**
+ * The standing fact, while it holds: the Catalogue's state and how many of the
+ * Selection's works are Drafts.
+ *
+ * The count is over the works the page has loaded, so it follows curation after
+ * the refetch rather than drifting into a second source of truth. A Draft is
+ * `status === "draft"`; an absent status is a published work.
+ */
+export const catalogueRisk = (
+  catalogue: Pick<Catalogue, "isPublic" | "isPasswordProtected">,
+  works: ReadonlyArray<Pick<Artwork, "status">>,
+): PublishRisk | null => {
+  const catalogueState = catalogueGate(catalogue);
+  if (catalogueState === null) {
+    return null;
+  }
+  return {
+    catalogueState,
+    draftCount: works.filter((work) => work.status === "draft").length,
+  };
+};
+
+/**
+ * Whether this PATCH is the moment the risk is taken: a Selection that is not
+ * public becoming public while its Catalogue is not visitor-readable.
+ *
+ * Anything else — a rename, a password change, a publish from a Catalogue
+ * visitors can read — has nothing to warn about, and the save proceeds.
+ */
+export const publishRisk = ({
+  selection,
+  update,
+  catalogue,
+  works,
+}: PublishRiskInput): PublishRisk | null => {
+  if (selection.isPublic) {
+    return null;
+  }
+  if (update.isPublic !== true) {
+    return null;
+  }
+  return catalogueRisk(catalogue, works);
 };
