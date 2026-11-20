@@ -3,9 +3,9 @@
  *
  * The works list is the curation surface — add, reorder, remove — and the
  * settings own the name, the description, the visibility (Private, Public,
- * Protected) and the password. The publish warning, the Draft count and the PDF
- * arrive in later slices; the page's shape leaves room for them without
- * pretending to have them.
+ * Protected) and the password. The header opens the Selection at its own
+ * address and exports its PDF; the Catalogue is credited, never linked.
+ * The publish warning and the Draft count arrive with the visibility slice.
  *
  * Every save or curation re-reads what it changed and only then notifies, so the
  * page is the server's answer rather than a local copy. The delete confirmation
@@ -514,6 +514,14 @@ const SelectionPage: React.FC = () => {
   // visitor-readable, takes it away with it.
   const note = selection.isPublic ? catalogueRisk(catalogue, works) : null;
 
+  // The Selection's own public address. View and PDF open there in a new tab,
+  // like the Catalogue's header controls; the Catalogue itself is deliberately
+  // not linked — its page is a different gate, often a private one.
+  const selectionPath = `/selection/${selectionSlug(
+    selection.name,
+    selection.id,
+  )}`;
+
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="center" gap="xl">
@@ -523,16 +531,36 @@ const SelectionPage: React.FC = () => {
             from {catalogue.name}
           </Text>
         </Group>
-        <Button
-          component={Link}
-          to={`/manage/catalogue/${catalogueSlug(
-            catalogue.name,
-            catalogue.id,
-          )}/selections`}
-          variant="outline"
-        >
-          Back to selections
-        </Button>
+        <Group gap="sm" wrap="wrap">
+          <Button
+            variant="subtle"
+            component="a"
+            href={selectionPath}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View
+          </Button>
+          <Button
+            variant="subtle"
+            component="a"
+            href={`${selectionPath}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            PDF
+          </Button>
+          <Button
+            component={Link}
+            to={`/manage/catalogue/${catalogueSlug(
+              catalogue.name,
+              catalogue.id,
+            )}/selections`}
+            variant="outline"
+          >
+            Back to selections
+          </Button>
+        </Group>
       </Group>
 
       {note ? (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  artworkPdfFields,
   cataloguePdfFields,
   cataloguePdfFileName,
   cataloguePdfTexts,
@@ -11,8 +12,14 @@ import {
   PRINT_BOX_PX,
   printedArtworkFields,
   printedSize,
+  pdfTexts,
+  selectionPdfFileName,
   shouldWarnForLargeExport,
 } from "@/components/pdf/cataloguePdfPreflight";
+import {
+  buildCataloguePdfPlan,
+  type CataloguePdfPage,
+} from "@/components/pdf/cataloguePdfPlan";
 import {
   ARTWORK_FIELD_KEYS,
   pdfFallbackCharacters,
@@ -333,6 +340,51 @@ describe("cataloguePdfTexts", () => {
   });
 });
 
+describe("pdfTexts", () => {
+  it("collects the document's own title and the works its pages print", () => {
+    const works = [
+      artwork({
+        id: "photo",
+        title: "Zulu",
+        artistName: "Zoe",
+        photos: [photo("one")],
+      }),
+      artwork({ id: "grid", title: "Alpha", artistName: "Ana" }),
+    ];
+    const pages = buildCataloguePdfPlan(works);
+
+    expect(pdfTexts("Flores Solares", pages, printed())).toEqual([
+      "Flores Solares",
+      "Zulu",
+      "Zoe",
+      "Alpha",
+      "Ana",
+      IMAGE_UNAVAILABLE,
+    ]);
+  });
+
+  it("reads the pages it is given, not a Catalogue's plan", () => {
+    // A Selection's plan keeps Drafts and never sorts; feeding the document's
+    // own pages is what keeps the fallback font's set and the printed title in
+    // agreement with the renderer.
+    const pages: CataloguePdfPage[] = [
+      {
+        kind: "grid",
+        artworks: [artwork({ id: "draft", title: "Draft", status: "draft" })],
+      },
+    ];
+
+    const texts = pdfTexts("Winter shortlist", pages, printed());
+
+    expect(texts).toEqual([
+      "Winter shortlist",
+      "Draft",
+      "Unknown",
+      IMAGE_UNAVAILABLE,
+    ]);
+  });
+});
+
 /** Every togglable field off: a Catalogue that records only the fixed two. */
 const everyFieldOff = (): ArtworkFieldDeviations =>
   Object.fromEntries(ARTWORK_FIELD_KEYS.map((field) => [field, false]));
@@ -482,6 +534,19 @@ describe("the fields the Catalogue records", () => {
       cataloguePdfTexts(visitor.name, works, cataloguePdfFields(visitor)),
     ).not.toContain("Oil");
   });
+
+  it("resolves a Selection's public read to the source Catalogue's printed set", () => {
+    // The public Selection read carries the same Kind and deviations a
+    // Catalogue's does, so both exports pass the same facts to this resolver.
+    const source = catalogue({
+      kind: "portfolio",
+      artworkFields: { medium: false, editions: false },
+    });
+
+    expect(artworkPdfFields(source.kind, source.artworkFields)).toEqual(
+      cataloguePdfFields(source),
+    );
+  });
 });
 
 describe("shouldWarnForLargeExport", () => {
@@ -525,5 +590,19 @@ describe("cataloguePdfFileName", () => {
 
   it("falls back to catalogue for an empty name", () => {
     expect(cataloguePdfFileName("")).toBe("catalogue.pdf");
+  });
+});
+
+describe("selectionPdfFileName", () => {
+  it("urlizes the Selection's name", () => {
+    expect(selectionPdfFileName("Winter Shortlist")).toBe(
+      "winter-shortlist.pdf",
+    );
+  });
+
+  it("falls back to selection, never to catalogue", () => {
+    expect(selectionPdfFileName("收藏")).toBe("selection.pdf");
+    expect(selectionPdfFileName("!!!")).toBe("selection.pdf");
+    expect(selectionPdfFileName("")).toBe("selection.pdf");
   });
 });

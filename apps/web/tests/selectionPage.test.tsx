@@ -565,4 +565,18 @@ describe("SelectionPage", () => {
       expect(screen.getByTestId("address").textContent).toBe(canonicalPath),
     );
   });
+
+  it("opens View and PDF at the Selection's address, never the Catalogue's", async () => {
+    renderPage();
+
+    const view = await screen.findByRole("link", { name: "View" });
+    expect(view).toHaveAttribute("href", `/selection/${SELECTION_SLUG}`);
+    const pdf = screen.getByRole("link", { name: "PDF" });
+    expect(pdf).toHaveAttribute("href", `/selection/${SELECTION_SLUG}/pdf`);
+
+    // The source Catalogue's page is a different gate, often a private one.
+    for (const link of [view, pdf]) {
+      expect(link.getAttribute("href")).not.toContain("/catalogue/");
+    }
+  });
 });

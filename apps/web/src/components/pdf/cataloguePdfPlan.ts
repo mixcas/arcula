@@ -43,19 +43,22 @@ const compareArtworks = (a: Artwork, b: Artwork): number =>
   idOrder(a.id, b.id);
 
 /**
- * The pages of one Catalogue in reading order.
+ * The pages of one work list in reading order.
  *
- * Every exportable work with photos contributes up to three photo pages in the
- * one sorted order; the works without photos follow, six per grid page. A work
- * belongs to exactly one of those groups. Nothing exportable yields one empty
+ * Every work with photos contributes up to three photo pages in the order it
+ * was handed; the works without photos follow, six per grid page. A work
+ * belongs to exactly one of those groups. Nothing in the list yields one empty
  * page rather than an empty document.
+ *
+ * The list is taken as given: each caller decides its own membership and order
+ * (the Catalogue's published, sorted works; a Selection's live works in the
+ * curator's order), so this is the one page-building rule both exports share.
  */
-export function buildCataloguePdfPlan(artworks: Artwork[]): CataloguePdfPage[] {
-  const exportable = artworks.filter(isExportableArtwork).sort(compareArtworks);
+export function buildWorkListPdfPages(works: Artwork[]): CataloguePdfPage[] {
   const pages: CataloguePdfPage[] = [];
   const gridArtworks: Artwork[] = [];
 
-  for (const artwork of exportable) {
+  for (const artwork of works) {
     const photos = sortPhotos(artwork.photos).slice(0, PHOTOS_PER_ARTWORK);
     if (photos.length === 0) {
       gridArtworks.push(artwork);
@@ -74,6 +77,20 @@ export function buildCataloguePdfPlan(artworks: Artwork[]): CataloguePdfPage[] {
   }
 
   return pages.length > 0 ? pages : [{ kind: "empty" }];
+}
+
+/**
+ * The pages of one Catalogue in reading order.
+ *
+ * Every exportable work with photos contributes up to three photo pages in the
+ * one sorted order; the works without photos follow, six per grid page. A work
+ * belongs to exactly one of those groups. Nothing exportable yields one empty
+ * page rather than an empty document.
+ */
+export function buildCataloguePdfPlan(artworks: Artwork[]): CataloguePdfPage[] {
+  return buildWorkListPdfPages(
+    artworks.filter(isExportableArtwork).sort(compareArtworks),
+  );
 }
 
 /**

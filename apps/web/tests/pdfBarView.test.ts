@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { pdfBarView, type PdfBarRun } from "@/components/pdf/pdfBarView";
+import {
+  pdfBarView,
+  selectionPdfBarView,
+  type PdfBarRun,
+} from "@/components/pdf/pdfBarView";
 import type { PublicState } from "@/components/catalogue/usePublicCatalogue";
-import type { Catalogue } from "@arcula/shared";
+import type { PublicSelectionState } from "@/components/catalogue/usePublicSelection";
+import type { Catalogue, SelectionPublicRead } from "@arcula/shared";
 
 const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
   id: "catalogue-1",
@@ -176,5 +181,80 @@ describe("pdfBarView", () => {
     // Bytes round up to at least one kB, megabytes keep two decimals.
     expect(summaryFor(400)).toBe("17 pages · 1 kB");
     expect(summaryFor(2_500_000)).toBe("17 pages · 2.38 MB");
+  });
+});
+
+const selectionRead: SelectionPublicRead = {
+  selection: {
+    id: "SSSSSSSSSSSSSSSSSSSS",
+    name: "Winter shortlist",
+    isPublic: true,
+  },
+  catalogueName: "Flores Solares",
+  kind: "collection",
+};
+
+type SelectionBarState = PublicSelectionState<{
+  selection: SelectionPublicRead;
+  artworks: [];
+}>;
+
+const selectionReady: SelectionBarState = {
+  status: "ready",
+  value: { selection: selectionRead, artworks: [] },
+};
+
+describe("selectionPdfBarView", () => {
+  it("names the Selection and links its own address, never the Catalogue's", () => {
+    expect(selectionPdfBarView(selectionReady, idle, false)).toEqual({
+      title: "Winter shortlist",
+      subtitle: "Selection PDF",
+      href: "/selection/winter-shortlist-SSSSSSSSSSSSSSSSSSSS",
+      detail: { kind: "none" },
+    });
+  });
+
+  it("keeps the name a locked refusal disclosed, without a link", () => {
+    expect(
+      selectionPdfBarView(
+        { status: "locked", selectionName: "Winter shortlist" },
+        idle,
+        false,
+      ),
+    ).toEqual({
+      title: "Winter shortlist",
+      subtitle: "Selection PDF",
+      href: null,
+      detail: { kind: "none" },
+    });
+  });
+
+  it("is `Selection PDF` alone when no read disclosed a name", () => {
+    const nameless: SelectionBarState[] = [
+      { status: "loading" },
+      { status: "invalid" },
+      { status: "notFound" },
+      { status: "private" },
+      { status: "error" },
+      { status: "locked" },
+    ];
+
+    for (const state of nameless) {
+      expect(selectionPdfBarView(state, idle, false)).toEqual({
+        title: "Selection PDF",
+        subtitle: null,
+        href: null,
+        detail: { kind: "none" },
+      });
+    }
+  });
+
+  it("names the finished file from the Selection, not the Catalogue", () => {
+    const view = selectionPdfBarView(selectionReady, done, false);
+
+    expect(view.detail).toMatchObject({
+      kind: "file",
+      fileName: "winter-shortlist.pdf",
+    });
   });
 });

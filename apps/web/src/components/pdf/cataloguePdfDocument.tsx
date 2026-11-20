@@ -18,7 +18,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 
-import type { Artwork, Catalogue } from "@arcula/shared";
+import type { Artwork } from "@arcula/shared";
 
 import type { CataloguePdfPage } from "./cataloguePdfPlan";
 import {
@@ -261,13 +261,13 @@ const PhotoMetadata: React.FC<{
 const PhotoPage: React.FC<{
   artwork: Artwork;
   source: ConvertedPhoto | undefined;
-  catalogueName: string;
+  title: string;
   fields: PrintedArtworkFields;
   fontFamily: PdfFontFamily;
-}> = ({ artwork, source, catalogueName, fields, fontFamily }) => {
+}> = ({ artwork, source, title, fields, fontFamily }) => {
   return (
     <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
-      <PageHeader name={catalogueName} />
+      <PageHeader name={title} />
       {/* A photo that failed has no source and draws the placeholder in the
           same box. The page itself is unaffected: the plan, not the image,
           decides how many pages the document has. */}
@@ -329,12 +329,12 @@ const GridBlock: React.FC<{
 
 const GridPage: React.FC<{
   artworks: Artwork[];
-  catalogueName: string;
+  title: string;
   fields: PrintedArtworkFields;
   fontFamily: PdfFontFamily;
-}> = ({ artworks, catalogueName, fields, fontFamily }) => (
+}> = ({ artworks, title, fields, fontFamily }) => (
   <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
-    <PageHeader name={catalogueName} />
+    <PageHeader name={title} />
     {artworks.map((artwork, index) => (
       <GridBlock
         key={artwork.id}
@@ -350,11 +350,11 @@ const GridPage: React.FC<{
 );
 
 const EmptyPage: React.FC<{
-  catalogueName: string;
+  title: string;
   fontFamily: PdfFontFamily;
-}> = ({ catalogueName, fontFamily }) => (
+}> = ({ title, fontFamily }) => (
   <Page size="LETTER" wrap={false} style={[styles.page, { fontFamily }]}>
-    <PageHeader name={catalogueName} />
+    <PageHeader name={title} />
   </Page>
 );
 
@@ -370,33 +370,41 @@ const EmptyPage: React.FC<{
 type PdfPhotoSources = ReadonlyMap<string, ConvertedPhoto>;
 
 export interface CataloguePdfProps {
-  catalogue: Catalogue;
+  /** The name the document and every page header print. */
+  title: string;
   pages: CataloguePdfPage[];
-  /** The metadata the Catalogue records, in the design's two columns. */
+  /** The metadata the source Catalogue records, in the design's two columns. */
   fields: PrintedArtworkFields;
   /** Every registered fallback family, in chunk order. */
   fallbackFamilies: string[];
   photoSources: PdfPhotoSources;
 }
 
+/**
+ * The one document component both exports render.
+ *
+ * It takes a title, a field set and a page plan — never a Catalogue and never a
+ * Selection — so the Catalogue export and the Selection export cannot drift
+ * apart in what a page looks like. Which works are in the plan, and which
+ * fields it prints, are the adapter's decisions.
+ */
 export const CataloguePdf: React.FC<CataloguePdfProps> = ({
-  catalogue,
+  title,
   pages,
   fields,
   fallbackFamilies,
   photoSources,
 }) => {
-  const name = catalogue.name;
   const fontFamily: PdfFontFamily = ["Darker Grotesque", ...fallbackFamilies];
 
   return (
-    <Document title={name} creator="Arcula" producer="Arcula">
+    <Document title={title} creator="Arcula" producer="Arcula">
       {pages.map((page, index) => {
         if (page.kind === "empty") {
           return (
             <EmptyPage
               key={`empty-${index}`}
-              catalogueName={name}
+              title={title}
               fontFamily={fontFamily}
             />
           );
@@ -406,7 +414,7 @@ export const CataloguePdf: React.FC<CataloguePdfProps> = ({
             <GridPage
               key={`grid-${index}`}
               artworks={page.artworks}
-              catalogueName={name}
+              title={title}
               fields={fields}
               fontFamily={fontFamily}
             />
@@ -417,7 +425,7 @@ export const CataloguePdf: React.FC<CataloguePdfProps> = ({
             key={`photo-${page.photo.id}-${index}`}
             artwork={page.artwork}
             source={photoSources.get(page.photo.id)}
-            catalogueName={name}
+            title={title}
             fields={fields}
             fontFamily={fontFamily}
           />
