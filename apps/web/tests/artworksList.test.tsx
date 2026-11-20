@@ -17,10 +17,19 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ArtworksList from "@/components/manage/catalogue/ArtworksList";
 import { artworkService } from "@/services/artworkService";
-import type { Artwork } from "@arcula/shared";
+import { selectionService } from "@/services/selectionService";
+import type { Artwork, SelectionPageRow } from "@arcula/shared";
 
 vi.mock("@/services/artworkService", () => ({
   artworkService: { softDeleteArtworks: vi.fn() },
+}));
+
+vi.mock("@/services/selectionService", () => ({
+  selectionService: {
+    list: vi.fn(),
+    create: vi.fn(),
+    addWorks: vi.fn(),
+  },
 }));
 
 // React 19 requires this flag for act() outside a browser environment.
@@ -43,6 +52,11 @@ const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 // eslint-disable-next-line @typescript-eslint/unbound-method
 const softDeleteMock = vi.mocked(artworkService.softDeleteArtworks);
+/* eslint-disable @typescript-eslint/unbound-method */
+const listSelectionsMock = vi.mocked(selectionService.list);
+const createSelectionMock = vi.mocked(selectionService.create);
+const addWorksMock = vi.mocked(selectionService.addWorks);
+/* eslint-enable @typescript-eslint/unbound-method */
 
 const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   userId: "user-1",
@@ -53,6 +67,20 @@ const artwork = (overrides: Partial<Artwork> & { id: string }): Artwork => ({
   catalogueId: "catalogue1",
   status: "published",
   deletedAt: null,
+  ...overrides,
+});
+
+const selectionRow = (
+  overrides: Partial<SelectionPageRow> = {},
+): SelectionPageRow => ({
+  id: "s1",
+  catalogueId: "catalogue1",
+  name: "Fair 2026",
+  isPublic: false,
+  isPasswordProtected: false,
+  workCount: 0,
+  createdAt: { seconds: 1, nanoseconds: 0 },
+  updatedAt: { seconds: 1, nanoseconds: 0 },
   ...overrides,
 });
 
@@ -154,6 +182,9 @@ describe("ArtworksList", () => {
   beforeEach(() => {
     softDeleteMock.mockReset();
     softDeleteMock.mockResolvedValue(undefined);
+    listSelectionsMock.mockReset();
+    createSelectionMock.mockReset();
+    addWorksMock.mockReset();
     // The list reads its remembered view and sort from browser storage on
     // mount, so a test that does not say what is stored must start from
     // nothing — otherwise a previous test's Grid choice leaks into this one.
@@ -1346,6 +1377,103 @@ describe("ArtworksList", () => {
     });
 
     expect(screen.queryByText("Sold")).toBeNull();
+  });
+
+  it("adds the checked works in the order they were checked", async () => {
+    const user = userEvent.setup();
+    startInTable();
+    listSelectionsMock.mockResolvedValue([selectionRow()]);
+    addWorksMock.mockResolvedValue([]);
+    renderList({
+      artworks: [
+        artwork({ id: "a", title: "Art 1" }),
+        artwork({ id: "b", title: "Art 2" }),
+        artwork({ id: "c", title: "Art 3" }),
+      ],
+    });
+
+    // Checked third, then first: the append follows the ticks, not the title
+    // order the table draws. `checkedOrder` keeps that true whichever order a
+    // view happens to report its checked set in (`curationOrder.test.ts` pins
+    // the fold itself).
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[3]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: "Add to Selection" }));
+
+    const dialog = within(await dialogEl());
+    // One existing Selection is chosen for the person.
+    await user.click(dialog.getByRole("button", { name: "Add to selection" }));
+
+    await waitFor(() =>
+      expect(addWorksMock).toHaveBeenCalledWith("catalogue1", "s1", ["c", "a"]),
+    );
+  });
+
+  it("starts a new Selection from the checked works and appends them", async () => {
+    const user = userEvent.setup();
+    startInTable();
+    listSelectionsMock.mockResolvedValue([]);
+    createSelectionMock.mockResolvedValue({
+      id: "new1",
+      catalogueId: "catalogue1",
+      name: "Fair 2026",
+      isPublic: false,
+      isPasswordProtected: false,
+      createdAt: { seconds: 1, nanoseconds: 0 },
+      updatedAt: { seconds: 1, nanoseconds: 0 },
+    });
+    addWorksMock.mockResolvedValue([]);
+    renderList({
+      artworks: [
+        artwork({ id: "a", title: "Art 1" }),
+        artwork({ id: "b", title: "Art 2" }),
+      ],
+    });
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[2]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: "Add to Selection" }));
+
+    const dialog = within(await dialogEl());
+    // No Selections yet: the New selection entry is already chosen.
+    await user.type(
+      dialog.getByRole("textbox", { name: /^Name/ }),
+      "Fair 2026",
+    );
+    await user.click(dialog.getByRole("button", { name: "Add to selection" }));
+
+    await waitFor(() =>
+      expect(createSelectionMock).toHaveBeenCalledWith("catalogue1", {
+        name: "Fair 2026",
+        description: undefined,
+      }),
+    );
+    await waitFor(() =>
+      expect(addWorksMock).toHaveBeenCalledWith("catalogue1", "new1", [
+        "b",
+        "a",
+      ]),
+    );
+  });
+
+  it("offers Add to Selection only when a work is checked", async () => {
+    const user = userEvent.setup();
+    startInTable();
+    renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
+
+    expect(
+      screen.queryByRole("button", { name: "Add to Selection" }),
+    ).toBeNull();
+
+    await user.click(screen.getAllByRole("checkbox")[1]);
+    expect(
+      screen.getByRole("button", { name: "Add to Selection" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Delete selected" }),
+    ).toBeDefined();
   });
 
   it("still marks a draft beside the market state", () => {

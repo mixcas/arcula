@@ -1,15 +1,16 @@
 /**
- * One Selection's manage page: its settings block and the delete control.
+ * One Selection's manage page: its ordered works and its settings block.
  *
- * The settings own the name, the description, the visibility (Private, Public,
- * Protected) and the password. The ordered works list, **Add works**, the
- * publish warning and the Draft count arrive in the next slices; the page's
- * shape leaves room for them without pretending to have them.
+ * The works list is the curation surface — add, reorder, remove — and the
+ * settings own the name, the description, the visibility (Private, Public,
+ * Protected) and the password. The publish warning, the Draft count and the PDF
+ * arrive in later slices; the page's shape leaves room for them without
+ * pretending to have them.
  *
- * Every save re-reads the document and only then notifies, so the form is the
- * server's answer rather than a local copy. The delete confirmation says the
- * true consequence: the Selection goes, its works and their photos and the
- * source Catalogue stay exactly where they are.
+ * Every save or curation re-reads what it changed and only then notifies, so the
+ * page is the server's answer rather than a local copy. The delete confirmation
+ * says the true consequence: the Selection goes, its works and their photos and
+ * the source Catalogue stay exactly where they are.
  */
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -35,6 +36,7 @@ import {
   catalogueSlug,
   parseId,
   selectionSlug,
+  type Artwork,
   type Catalogue,
   type Selection,
   type SelectionUpdatePayload,
@@ -42,6 +44,7 @@ import {
 import { ApiRequestError } from "@/services/api";
 import { catalogueService } from "@/services/catalogueService";
 import { selectionService } from "@/services/selectionService";
+import SelectionWorksList from "./SelectionWorksList";
 import {
   needsPasswordFields,
   resolveSelectionSave,
@@ -253,6 +256,7 @@ const SelectionPage: React.FC = () => {
 
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [works, setWorks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -263,6 +267,18 @@ const SelectionPage: React.FC = () => {
     if (next) setSelection(next);
     return next;
   }, [catalogueId, selectionId]);
+
+  // The works read is the one ordered read: it resolves this session and
+  // answers the member audience, because the page's reader is a member of the
+  // source Catalogue.
+  const reloadWorks = useCallback(async (): Promise<void> => {
+    if (!selectionId) return;
+    setWorks(await selectionService.getWorks(selectionId));
+  }, [selectionId]);
+
+  const reloadPage = useCallback(async (): Promise<void> => {
+    await Promise.all([reload(), reloadWorks()]);
+  }, [reload, reloadWorks]);
 
   useEffect(() => {
     if (!catalogueId || !selectionId) return;
@@ -284,6 +300,12 @@ const SelectionPage: React.FC = () => {
           return;
         }
         setSelection(loadedSelection);
+        // The works read comes after the document: its 404 means the same
+        // "not found" the document's `null` already answered, and asking it
+        // first would turn a missing Selection into a generic failure.
+        const loadedWorks = await selectionService.getWorks(selectionId);
+        if (cancelled) return;
+        setWorks(loadedWorks);
         setLoadError(null);
       } catch (err) {
         if (cancelled) return;
@@ -441,7 +463,12 @@ const SelectionPage: React.FC = () => {
         onSave={save}
       />
 
-      {/* The ordered works list and Add works land in the next slice. */}
+      <SelectionWorksList
+        catalogueId={catalogueId}
+        selectionId={selectionId}
+        works={works}
+        onChanged={reloadPage}
+      />
 
       <Card withBorder padding="lg">
         <Stack>
