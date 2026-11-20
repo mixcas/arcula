@@ -103,8 +103,17 @@ offset }` and the facets counted over the filtered set. The verdict is
   Catalogue), the name-ordered list with each row's live-work count, the member
   read, and the public read (the Selection plus the source Catalogue's name and
   inherited skin/skinOptions — never its id, address or password state). The
-  write cores take a user id and import no Hono type; a password write revokes
-  every grant in the same transaction. `selectionAccess.ts` is the pure verdict
+  same two modules own curation: `addSelectionWorks` appends in the argument
+  order and skips ids already present (a double click is harmless),
+  `replaceSelectionWorks` states the whole list — the reorder and the remove,
+  empty included — and both refuse an id that is not a live work of the source
+  Catalogue and renumber to `0..n-1` in one transaction. `readSelectionWorks`
+  is the one ordered works read for every audience: live works only, no status
+  filter (Drafts are the point), ordered by position then artwork id, children
+  taken from `artworkRead.ts`'s batched loader, and photo URLs carrying the
+  Selection's media scope. The write cores take a user id and import no Hono
+  type; a password write revokes every grant in the same transaction.
+  `selectionAccess.ts` is the pure verdict
   (`canSeeSelection` ignores the source Catalogue's visibility; its deletion is
   the loader's join), `selectionGrants.ts` owns the Selection's cookie name over
   the shared token algebra, and `authorize.ts` owns `loadSelection`,
@@ -196,7 +205,11 @@ API's serializer validates a row against the three kind values
 `selectionReadSchema` / `selectionRowSchema` / `selectionPageSchema` (the
 name-ordered list, each row carrying its live-work count), the strict
 `selectionCreateSchema` / `selectionUpdateSchema` (the update carries visibility
-and the password's set-or-clear), `selectionUnlockSchema`, and
+and the password's set-or-clear), `selectionWorksSchema` (append: at least one
+minted id, a duplicate tolerated) and `selectionWorksReplaceSchema` (replace: an
+empty list allowed, a duplicate refused, because the payload _is_ the list),
+`selectionWorksReadSchema` (the ordered `{ artworks }` envelope both the manage
+page and the visitor page parse), `selectionUnlockSchema`, and
 `selectionPublicReadSchema` (the Selection document plus the source Catalogue's
 name and inherited `skin`/`skinOptions`). The read schemas never carry
 `passwordHash`; the member document's `isPasswordProtected` is the hash's
@@ -237,9 +250,19 @@ test it with plain objects plus the carousel mock. A Catalogue's Selections
 live in `components/manage/catalogue/SelectionsPage.tsx` (the name-ordered
 list, the empty state and the create modal) and `SelectionPage.tsx` (the
 settings block — name, description, Private/Public/Protected and the password —
-and the delete confirmation); both canonicalise their address from
+and the delete confirmation) over `SelectionWorksList.tsx`: the ordered works,
+each row a thumbnail, title, artist, a Draft badge, a drag handle and a remove
+control, with **Add works** opening a picker over the Catalogue's live works.
+`curationOrder.ts` is the two pure folds both surfaces share — a drag's
+`moveWorkIds` and the checked works' `checkedOrder` — and
+`AddToSelectionModal.tsx` is the checked-works action: the Catalogue's
+Selections plus a **New selection** entry, appending in the checked order. Both
+pages canonicalise their address from
 `selectionSlug` and call `services/selectionService.ts`, which parses every read
-through the shared schema and folds a missing Selection to `null`. A Selection's
+through the shared schema and folds a missing Selection to `null`; `getWorks` is
+the one ordered read (the public address, which answers a member the member
+audience and a visitor the visitor's), and `addWorks`/`replaceWorks` are the
+curation writes. A Selection's
 public address is `components/catalogue/PublicSelectionPage.tsx` over
 `usePublicSelection.ts`: the same state union as the Catalogue's, a
 `password-required` refusal folded to the shared `LockScreen`, and the skin
