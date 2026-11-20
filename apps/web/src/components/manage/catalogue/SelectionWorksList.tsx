@@ -72,6 +72,19 @@ const DraftBadge: React.FC = () => (
   </Badge>
 );
 
+/**
+ * The standing Draft count: a fact about this list, not a warning.
+ *
+ * A Selection may hold Drafts whatever its visibility, so the line is present
+ * on a private one too — it tells the member how much of the list is off the
+ * Catalogue's page before they decide to publish. It follows curation because
+ * the page re-reads the works it lists.
+ */
+const draftCountLine = (count: number): string =>
+  count === 1
+    ? "1 work in this selection is a draft."
+    : `${count} works in this selection are drafts.`;
+
 const thumbnailSrc = (artwork: Artwork): string | null =>
   primaryPhotoUrl(artwork, "square_sm");
 
@@ -338,6 +351,7 @@ const SelectionWorksList: React.FC<SelectionWorksListProps> = ({
   );
 
   const ids = useMemo(() => works.map((artwork) => artwork.id), [works]);
+  const draftCount = works.filter((work) => work.status === "draft").length;
 
   // The one write: state the whole list, re-read, then say what happened. The
   // reorder and the remove differ only in the list they compute, so they cannot
@@ -409,6 +423,12 @@ const SelectionWorksList: React.FC<SelectionWorksListProps> = ({
             </Button>
           ) : null}
         </Group>
+
+        {draftCount > 0 ? (
+          <Text size="sm" c="dimmed">
+            {draftCountLine(draftCount)}
+          </Text>
+        ) : null}
 
         {works.length === 0 ? (
           <Stack gap="xs" py="md">
