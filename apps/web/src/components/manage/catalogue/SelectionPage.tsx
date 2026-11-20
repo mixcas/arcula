@@ -46,13 +46,59 @@ import { catalogueService } from "@/services/catalogueService";
 import { selectionService } from "@/services/selectionService";
 import SelectionWorksList from "./SelectionWorksList";
 import {
+  catalogueRisk,
   needsPasswordFields,
+  publishRisk,
   resolveSelectionSave,
   storedVisibility,
+  type PublishRisk,
   type SelectionVisibility,
 } from "./selectionSettingsSave";
 
 const DELETE_MODAL_ID = "delete-selection";
+const PUBLISH_MODAL_ID = "publish-selection";
+
+/**
+ * What the confirmation says before the PATCH: the number of drafts first, then
+ * the Catalogue's state.
+ *
+ * The count is the risk and the state is why it is one, so the two are stated
+ * and nothing is argued. A warning is a plain surface — no alarm, no softening,
+ * and no sentence that the reader has to decode.
+ */
+const publishWarningBody = (
+  risk: PublishRisk,
+  catalogueName: string,
+): string => {
+  const state = `“${catalogueName}” is ${risk.catalogueState}.`;
+  if (risk.draftCount === 0) {
+    return `This selection has no drafts. ${state}`;
+  }
+  const drafts =
+    risk.draftCount === 1
+      ? "1 draft in this selection will be readable at its address."
+      : `${risk.draftCount} drafts in this selection will be readable at its address.`;
+  return `${drafts} ${state}`;
+};
+
+/**
+ * The dimmed line the page carries while the state holds: the same two facts,
+ * in the present tense of a page someone is looking at on any visit.
+ */
+const publishWarningNote = (
+  risk: PublishRisk,
+  catalogueName: string,
+): string => {
+  const standing = `This selection is public while “${catalogueName}” is ${risk.catalogueState}.`;
+  if (risk.draftCount === 0) {
+    return `${standing} It has no drafts.`;
+  }
+  const drafts =
+    risk.draftCount === 1
+      ? "It has 1 draft, which is readable at the selection's address."
+      : `It has ${risk.draftCount} drafts, which are readable at the selection's address.`;
+  return `${standing} ${drafts}`;
+};
 
 interface SettingsProps {
   selection: Selection;
@@ -337,8 +383,8 @@ const SelectionPage: React.FC = () => {
     );
   }, [param, selectionParam, catalogue, selection, navigate]);
 
-  const save = async (payload: SelectionUpdatePayload) => {
-    if (Object.keys(payload).length === 0) return;
+  /** The PATCH itself, once the member has chosen to make it. */
+  const write = async (payload: SelectionUpdatePayload) => {
     setSaving(true);
     try {
       await selectionService.update(catalogueId, selectionId, payload);
@@ -363,6 +409,34 @@ const SelectionPage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const save = async (payload: SelectionUpdatePayload) => {
+    if (Object.keys(payload).length === 0) return;
+    // The warning is computed on the member read — the source Catalogue's own
+    // state — because the public read carries only its name. Both documents are
+    // loaded before the page renders a Save control; the guard is the
+    // compiler's witness, not a case at runtime.
+    if (!selection || !catalogue) return;
+    const risk = publishRisk({ selection, update: payload, catalogue, works });
+    if (risk === null) {
+      await write(payload);
+      return;
+    }
+    modals.openConfirmModal({
+      modalId: PUBLISH_MODAL_ID,
+      title: `Publish “${selection.name}”?`,
+      centered: true,
+      children: (
+        <Text size="sm">{publishWarningBody(risk, catalogue.name)}</Text>
+      ),
+      labels: { confirm: "Publish", cancel: "Cancel" },
+      onConfirm: () => {
+        // Cancelling leaves the Selection private: nothing is written until
+        // this runs, and the modal owns the choice.
+        void write(payload);
+      },
+    });
   };
 
   const remove = async (name: string) => {
@@ -435,6 +509,11 @@ const SelectionPage: React.FC = () => {
     selection.updatedAt?.nanoseconds ?? 0,
   ].join(":");
 
+  // The fact stays on the page while it holds: a public Selection over a
+  // Catalogue a visitor cannot read. Unpublishing, or the Catalogue becoming
+  // visitor-readable, takes it away with it.
+  const note = selection.isPublic ? catalogueRisk(catalogue, works) : null;
+
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="center" gap="xl">
@@ -455,6 +534,12 @@ const SelectionPage: React.FC = () => {
           Back to selections
         </Button>
       </Group>
+
+      {note ? (
+        <Text size="sm" c="dimmed">
+          {publishWarningNote(note, catalogue.name)}
+        </Text>
+      ) : null}
 
       <SelectionSettings
         key={settingsKey}
