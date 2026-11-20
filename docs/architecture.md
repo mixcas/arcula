@@ -216,7 +216,8 @@ empty list allowed, a duplicate refused, because the payload _is_ the list),
 `selectionWorksReadSchema` (the ordered `{ artworks }` envelope both the manage
 page and the visitor page parse), `selectionUnlockSchema`, and
 `selectionPublicReadSchema` (the Selection document plus the source Catalogue's
-name and inherited `skin`/`skinOptions`). The read schemas never carry
+name and inherited `skin`/`skinOptions`/`kind`/`artworkFields`). The read schemas
+never carry
 `passwordHash`; the member document's `isPasswordProtected` is the hash's
 presence, derived at the serializer boundary, and the public document carries
 neither the flag nor the source Catalogue's id. `slug.ts` gains `selectionSlug`
