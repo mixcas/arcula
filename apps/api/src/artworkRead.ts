@@ -120,8 +120,13 @@ export type ArtworkListResult =
 
 type ArtworkChildren = Pick<ArtworkJoined, "photos" | "documents" | "variants">;
 
-/** An Artwork's no children: a work with nothing attached to it. */
-const noChildren = (): ArtworkChildren => ({
+/**
+ * An Artwork's no children: a work with nothing attached to it.
+ *
+ * Exported because a second read of works — the Selection's ordered list —
+ * batches through this module's loader rather than growing one of its own.
+ */
+export const noChildren = (): ArtworkChildren => ({
   photos: [],
   documents: [],
   variants: [],
@@ -131,7 +136,7 @@ const noChildren = (): ArtworkChildren => ({
  * The children of every Artwork in `artworkIds`: one photos query, one
  * documents query and one Variants query, whatever the size of the set.
  */
-async function loadChildren(
+export async function loadChildren(
   artworkIds: readonly string[],
 ): Promise<ArtworkChildren> {
   if (artworkIds.length === 0) return noChildren();
@@ -160,8 +165,11 @@ async function loadChildren(
  * The flat child rows split per Artwork, in one pass. Variants hang off a
  * photo or a document, so the parent map assigns them to the work that owns
  * their parent.
+ *
+ * Exported beside `loadChildren`: the Selection's works read takes a set of
+ * works in its own order and needs the same grouping.
  */
-function groupChildren(
+export function groupChildren(
   artworkIds: readonly string[],
   children: ArtworkChildren,
 ): Map<string, ArtworkChildren> {

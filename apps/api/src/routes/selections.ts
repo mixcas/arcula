@@ -7,10 +7,13 @@
 //   GET    /catalogues/{cid}/selections/{sid}           one Selection
 //   PATCH  /catalogues/{cid}/selections/{sid}           rename / describe / publish / protect
 //   DELETE /catalogues/{cid}/selections/{sid}           delete
+//   POST   /catalogues/{cid}/selections/{sid}/works     append works
+//   PUT    /catalogues/{cid}/selections/{sid}/works     replace works (reorder, remove)
 //
 // Public (flat, mirroring the Catalogue's address space):
 //
 //   GET  /selections/{sid}                              the public read
+//   GET  /selections/{sid}/artworks                     the ordered works read
 //   POST /selections/{sid}/unlock                       the lock screen's attempt
 //
 // Every member route is behind the session and then membership of the source
@@ -35,9 +38,13 @@ import {
   selectionCreateSchema,
   selectionUnlockSchema,
   selectionUpdateSchema,
+  selectionWorksReplaceSchema,
+  selectionWorksSchema,
   type SelectionCreatePayload,
   type SelectionUnlockPayload,
   type SelectionUpdatePayload,
+  type SelectionWorksPayload,
+  type SelectionWorksReplacePayload,
 } from "@arcula/shared";
 import {
   loadSelectionWithCatalogue,
@@ -56,6 +63,7 @@ import {
   readPublicSelection,
   readSelection,
   readSelectionPage,
+  readSelectionWorks,
 } from "../selectionRead";
 import {
   GRANT_COOKIE_PATH,
@@ -65,8 +73,10 @@ import {
   selectionGrantCookieName,
 } from "../selectionGrants";
 import {
+  addSelectionWorks,
   createSelection,
   deleteSelection,
+  replaceSelectionWorks,
   writeSelection,
 } from "../selectionWrite";
 import { requireSession, resolveSession } from "../session";
@@ -160,6 +170,64 @@ selectionRoutes.delete(
   },
 );
 
+// POST …/selections/{sid}/works — append the checked works, in the order they
+// were checked. Membership of the source Catalogue is checked before the body
+// is parsed, as on every member route here; the write core then refuses an id
+// that is not a live work of that Catalogue. The answer is the updated ordered
+// works envelope at the member audience: the page renders one read, not a
+// write's echo.
+selectionRoutes.post(
+  "/catalogues/:catalogueId/selections/:selectionId/works",
+  requireSession,
+  async (c) => {
+    const { catalogue, selection } = await requireMemberSelection(
+      c,
+      param(c, "catalogueId"),
+      param(c, "selectionId"),
+    );
+    const payload: SelectionWorksPayload = await parseBody(
+      c,
+      selectionWorksSchema,
+    );
+    await addSelectionWorks(
+      c.get("user").id,
+      catalogue.id,
+      selection.id,
+      payload.artworkIds,
+    );
+    return c.json({
+      artworks: await readSelectionWorks(selection.id, catalogue, "member"),
+    });
+  },
+);
+
+// PUT …/selections/{sid}/works — state the whole list: the reorder and the
+// remove, empty included. The same verdict and the same envelope as the append.
+selectionRoutes.put(
+  "/catalogues/:catalogueId/selections/:selectionId/works",
+  requireSession,
+  async (c) => {
+    const { catalogue, selection } = await requireMemberSelection(
+      c,
+      param(c, "catalogueId"),
+      param(c, "selectionId"),
+    );
+    const payload: SelectionWorksReplacePayload = await parseBody(
+      c,
+      selectionWorksReplaceSchema,
+    );
+    await replaceSelectionWorks(
+      c.get("user").id,
+      catalogue.id,
+      selection.id,
+      payload.artworkIds,
+    );
+    return c.json({
+      artworks: await readSelectionWorks(selection.id, catalogue, "member"),
+    });
+  },
+);
+
 /**
  * The public Selection address: flat, session-optional, and readable without
  * any Catalogue membership when the Selection itself is public.
@@ -180,6 +248,33 @@ publicSelectionRoutes.get("/selections/:selectionId", async (c) => {
     () => selectionGrantHeld(c, selectionId),
   );
   return c.json(readPublicSelection(pair.selection, pair.catalogue));
+});
+
+/**
+ * GET /selections/{sid}/artworks — the ordered works, the one read both the
+ * visitor's page and the curator's page use.
+ *
+ * The session is optional for the same reason the document read's is: a member
+ * previewing a Private Selection at its address is legitimate, and the member
+ * audience is the one that carries a Draft's status and availability. Everyone
+ * else who can read the Selection is a visitor: Drafts included — that is the
+ * feature — and no availability or documents, which are member facts.
+ */
+publicSelectionRoutes.get("/selections/:selectionId/artworks", async (c) => {
+  const session = await resolveSession(c);
+  const selectionId = param(c, "selectionId");
+  const pair = await readableSelectionFor(
+    session?.user.id ?? null,
+    selectionId,
+    () => selectionGrantHeld(c, selectionId),
+  );
+  return c.json({
+    artworks: await readSelectionWorks(
+      pair.selection.id,
+      pair.catalogue,
+      pair.audience,
+    ),
+  });
 });
 
 // POST /selections/{sid}/unlock — the lock screen's password attempt, and the
