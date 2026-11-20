@@ -77,15 +77,6 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
 }) => (
   <Grid gap="xl">
     <Grid.Col span={{ base: 12, sm: 8 }}>
-      <TextInput
-        key={form.key("title")}
-        label="Title"
-        placeholder="Artwork title"
-        required
-        mb="md"
-        {...form.getInputProps("title")}
-      />
-
       {/*
         Autocomplete, not Select: a name that has never been recorded must
         still save exactly as typed. It stays uncontrolled like every field
@@ -104,13 +95,22 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         {...form.getInputProps("artistName")}
       />
 
-      {enabledFields.serie ? (
+      <TextInput
+        key={form.key("title")}
+        label="Title"
+        placeholder="Artwork title"
+        required
+        mb="md"
+        {...form.getInputProps("title")}
+      />
+
+      {enabledFields.dateOfCreation ? (
         <TextInput
-          key={form.key("serie")}
-          label="Serie"
-          placeholder="Serie name"
+          key={form.key("dateOfCreation")}
+          label="Date of creation"
+          placeholder="YYYY-MM-DD"
           mb="md"
-          {...form.getInputProps("serie")}
+          {...form.getInputProps("dateOfCreation")}
         />
       ) : null}
 
@@ -134,6 +134,16 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
         />
       ) : null}
 
+      {enabledFields.serie ? (
+        <TextInput
+          key={form.key("serie")}
+          label="Serie"
+          placeholder="Serie name"
+          mb="md"
+          {...form.getInputProps("serie")}
+        />
+      ) : null}
+
       {enabledFields.editions ? (
         <TextInput
           key={form.key("editions")}
@@ -141,16 +151,6 @@ const ArtworkFields: React.FC<ArtworkFieldsProps> = ({
           placeholder="e.g. 3/10, Open edition"
           mb="md"
           {...form.getInputProps("editions")}
-        />
-      ) : null}
-
-      {enabledFields.dateOfCreation ? (
-        <TextInput
-          key={form.key("dateOfCreation")}
-          label="Date of creation"
-          placeholder="YYYY-MM-DD"
-          mb="md"
-          {...form.getInputProps("dateOfCreation")}
         />
       ) : null}
 
