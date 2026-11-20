@@ -247,7 +247,17 @@ else
   spa_maps=$(find "$STAGE/web/dist" -name '*.map' -print)
   [ -n "$spa_maps" ] ||
     gate_fail "the served SPA carries no .map (the build did not emit source maps)"
+  #    Every script the build authored names its map, with one exception that is
+  #    the bundler's and not ours: when two chunks share CommonJS interop,
+  #    rolldown hoists its helper prelude into `rolldown-runtime-<hash>.js` and
+  #    emits that chunk with no source and no map. It carries no application
+  #    code, so there is nothing of ours to make readable; the second lazy PDF
+  #    page is what first made it appear. Skipping exactly that name keeps the
+  #    rest of the rule exact.
   for js in "$STAGE"/web/dist/assets/*.js; do
+    case "$js" in
+      */rolldown-runtime-*.js) continue ;;
+    esac
     grep -qF 'sourceMappingURL=' "$js" ||
       gate_fail "the served SPA script $js names no source map"
   done
