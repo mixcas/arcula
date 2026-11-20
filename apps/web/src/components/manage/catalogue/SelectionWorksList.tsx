@@ -227,7 +227,7 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
       .catch((err: unknown) => {
         if (cancelled) return;
         console.error("Error loading the catalogue's works:", err);
-        setError("Could not load this catalogue's works. Try again.");
+        setError("Could not load this catalogue’s works. Try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

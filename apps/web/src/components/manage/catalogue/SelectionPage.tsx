@@ -122,7 +122,7 @@ interface SettingsProps {
 
 /** What each visibility means, in one sentence the member can act on. */
 const VISIBILITY_DESCRIPTION: Record<SelectionVisibility, string> = {
-  private: "Only the catalogue's members can open this selection.",
+  private: "Only the catalogue’s members can open this selection.",
   public: "Anyone with the link can read this selection.",
   protected: "Anyone with the link needs a password to read this selection.",
 };

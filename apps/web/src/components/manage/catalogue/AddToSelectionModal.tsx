@@ -92,7 +92,7 @@ const AddToSelectionBody: React.FC<AddToSelectionModalProps> = ({
       .catch((err: unknown) => {
         if (cancelled) return;
         console.error("Error loading the selections:", err);
-        setError("Could not load this catalogue's selections. Try again.");
+        setError("Could not load this catalogue’s selections. Try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -186,7 +186,7 @@ const AddToSelectionBody: React.FC<AddToSelectionModalProps> = ({
           />
           <Textarea
             label="Description"
-            description="Optional. Shown under the name on the selection's page."
+            description="Optional. Shown under the name on the selection’s page."
             value={description}
             onChange={(event) => setDescription(event.currentTarget.value)}
             autosize
