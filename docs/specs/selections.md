@@ -44,7 +44,7 @@ read it is a visitor.
 The feature has two flows:
 
 - **Curation**, on the Catalogue's manage page: a **Selections** list, a
-  Selection's own page with an ordered list, and **Add to Selection** beside
+  Selection's own page with an ordered list, and **Add to selection** beside
   **Delete selected** on the checked works.
 - **Reading**, on the Selection's own address: a public page in the Catalogue's
   skin, an artwork detail page under the same address, and a password challenge
@@ -59,12 +59,12 @@ The feature has two flows:
    with each one's name, visibility, work count and last change, so that I can
    tell them apart at a glance.
 3. As an Owner or a Collaborator, I want an empty state that explains what a
-   Selection is and offers **Create Selection**, so that the list is not a blank
+   Selection is and offers **Create selection**, so that the list is not a blank
    page the first time I open it.
 4. As an Owner or a Collaborator, I want to create a Selection from its name and
    an optional description, so that its address and its page say what it is.
-5. As an Owner or a Collaborator, I want **Add to Selection** on the checked
-   works, with a picker of existing Selections and a **New Selection** entry, so
+5. As an Owner or a Collaborator, I want **Add to selection** on the checked
+   works, with a picker of existing Selections and a **New selection** entry, so
    that I can curate from the works I am already looking at.
 6. As an Owner or a Collaborator, I want the Selection's page to list its works
    in the order I set, with a drag handle, so that the order is the content.
@@ -180,8 +180,8 @@ The source Catalogue's **visibility never enters the verdict** — that is the
 decision (Q2c) — but its **deletion does**, and so does the Selection's:
 
 ```ts
-selectionRefusal(catalogue, selection) =>
-  catalogue.isPublic || selection.isPublic
+selectionRefusal(selection) =>
+  selection.isPublic && selection.passwordHash !== null
     ? new ApiError("password-required", "This Selection is protected",
                    { details: { selectionName: selection.name } })
     : new ApiError("forbidden", "This Selection is private");
@@ -275,11 +275,13 @@ POST   /api/v1/selections/:selectionId/unlock                         public
   work, photo and the Catalogue itself untouched, in one transaction.
 - **Privacy and ordering** of the member list: name order, with each row's
   `workCount` and `updatedAt`.
-- **The public read** answers `{ selection, catalogueName }` — the source
-  Catalogue's name only, never its id or address (Q16) — and requires the
-  Selection to be live and readable. The works read answers the ordered
-  `Artwork[]` serialized at the viewer's audience, and the single-work read
-  folds every refusal into 404.
+- **The public read** answers `{ selection, catalogueName, skin, skinOptions,
+kind, artworkFields }` — the source Catalogue's name as a credit, plus the
+  presentation the Selection inherits (its skin and raw options, its Kind and
+  field choices), and never the source Catalogue's id or address (Q16). It
+  requires the Selection to be live and readable. The works read answers the
+  ordered `Artwork[]` serialized at the viewer's audience, and the single-work
+  read folds every refusal into 404.
 - **Unlock** mirrors the Catalogue's: 404 if the Selection is missing or
   deleted; 409 if it is not protected (`!isPublic || passwordHash === null`);
   the throttle claim **before** reading the secret, keyed `(ip, selectionId)` and
@@ -297,7 +299,7 @@ POST   /api/v1/selections/:selectionId/unlock                         public
 
 - `packages/shared/src/types.ts` — `Selection { id, catalogueId, name,
 description?, isPublic, createdAt?, updatedAt? }` and the public read's
-  `{ selection, catalogueName }`.
+  `{ selection, catalogueName, skin?, skinOptions?, kind, artworkFields? }`.
 - New `schemas/selection.ts`, star-exported from the package index:
   `selectionReadSchema`, `selectionPageSchema` (the member list),
   `selectionCreateSchema`, `selectionUpdateSchema`, `selectionWorksSchema`
@@ -399,9 +401,9 @@ description?, isPublic, createdAt?, updatedAt? }` and the public read's
   rule.
 - **Entry points.** `CataloguePage`'s header gains a **Selections** button
   between **PDF** and the search box (Q18: header, not the kebab).
-  `ArtworksList`'s toolbar gains **Add to Selection** beside **Delete selected**
+  `ArtworksList`'s toolbar gains **Add to selection** beside **Delete selected**
   when at least one work is checked; it opens a modal listing the Catalogue's
-  Selections plus **New Selection**, and appends on confirm.
+  Selections plus **New selection**, and appends on confirm.
 - **The publish warning** is a confirmation on the transition to public, shown
   when the source Catalogue is not visitor-readable (`!isPublic` or
   `isPasswordProtected`): it names the Catalogue's state and how many of the

@@ -266,7 +266,6 @@ pages canonicalise their address from
 `selectionSlug` and call `services/selectionService.ts`, which parses every read
 through the shared schema and folds a missing Selection to `null`; `getWorks` is
 the one ordered read (the public address, which answers a member the member
-the one ordered read (the public address, which answers a member the member
 audience and a visitor the visitor's), `getArtwork` is the single-work read
 (404 → `null`), and `addWorks`/`replaceWorks` are the
 curation writes. `selectionSettingsSave.ts` also owns the publish warning, as
