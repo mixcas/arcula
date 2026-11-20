@@ -262,7 +262,15 @@ pages canonicalise their address from
 through the shared schema and folds a missing Selection to `null`; `getWorks` is
 the one ordered read (the public address, which answers a member the member
 audience and a visitor the visitor's), and `addWorks`/`replaceWorks` are the
-curation writes. A Selection's
+curation writes. `selectionSettingsSave.ts` also owns the publish warning, as
+two folds over the member read and the works the page holds: `publishRisk` is
+the transition — a Selection that is not public becoming public while the
+source Catalogue is not visitor-readable (`!isPublic` or `isPasswordProtected`) —
+returning the Catalogue's state and the Draft count, and `catalogueRisk` is the
+same fact while it stands, which the page shows as a dimmed line while the
+Selection is public. Both return `null` when there is nothing to say, so the
+warning never depends on the public read, which carries no Catalogue state. A
+Selection's
 public address is `components/catalogue/PublicSelectionPage.tsx` over
 `usePublicSelection.ts`: the same state union as the Catalogue's, a
 `password-required` refusal folded to the shared `LockScreen`, and the skin
