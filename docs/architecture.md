@@ -111,8 +111,11 @@ offset }` and the facets counted over the filtered set. The verdict is
   is the one ordered works read for every audience: live works only, no status
   filter (Drafts are the point), ordered by position then artwork id, children
   taken from `artworkRead.ts`'s batched loader, and photo URLs carrying the
-  Selection's media scope. The write cores take a user id and import no Hono
-  type; a password write revokes every grant in the same transaction.
+  Selection's media scope. `readSelectionArtwork` is the single-work read over
+  the same batched loader and serializer: the work must be live and have a
+  curation row in this Selection, and every absence is one `null` the route
+  answers as 404. The write cores take a user id and import no Hono type; a
+  password write revokes every grant in the same transaction.
   `selectionAccess.ts` is the pure verdict
   (`canSeeSelection` ignores the source Catalogue's visibility; its deletion is
   the loader's join), `selectionGrants.ts` owns the Selection's cookie name over
@@ -138,10 +141,12 @@ offset }` and the facets counted over the filtered set. The verdict is
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
   `selections` (the Catalogue's Selections list, create, read,
-  rename/describe/publish/protect and delete, plus the flat public read and
-  unlock), `artistNames` (the caller's suggestion read), `connections`
+  rename/describe/publish/protect and delete, plus the flat public read, the
+  ordered works read, the single curated work and unlock), `artistNames` (the
+  caller's suggestion read), `connections`
   (the verified consent request, the account's Connections and Revoke), `me`,
-  `media` (the object proxy), `artworkMedia` (the presign and process routes: the
+  `media` (the object proxy: the Catalogue's verdict, the Selection's photo
+  scope, and documents members-only), `artworkMedia` (the presign and process routes: the
   browser PUTs the bytes straight to storage under the caller's own staging
   prefix, and process is the point the server validates them —
   [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
@@ -261,7 +266,9 @@ pages canonicalise their address from
 `selectionSlug` and call `services/selectionService.ts`, which parses every read
 through the shared schema and folds a missing Selection to `null`; `getWorks` is
 the one ordered read (the public address, which answers a member the member
-audience and a visitor the visitor's), and `addWorks`/`replaceWorks` are the
+the one ordered read (the public address, which answers a member the member
+audience and a visitor the visitor's), `getArtwork` is the single-work read
+(404 → `null`), and `addWorks`/`replaceWorks` are the
 curation writes. `selectionSettingsSave.ts` also owns the publish warning, as
 two folds over the member read and the works the page holds: `publishRisk` is
 the transition — a Selection that is not public becoming public while the
@@ -273,9 +280,15 @@ warning never depends on the public read, which carries no Catalogue state. A
 Selection's
 public address is `components/catalogue/PublicSelectionPage.tsx` over
 `usePublicSelection.ts`: the same state union as the Catalogue's, a
-`password-required` refusal folded to the shared `LockScreen`, and the skin
-rendered with the Selection's subject and the source Catalogue's resolved
-options.
+`password-required` refusal folded to the shared `LockScreen`, the Selection
+read before the works read (so a refusal never issues the second round trip),
+the works passed through in the curator's order with Drafts included and no
+badge or availability, and the skin rendered with the Selection's subject and
+the source Catalogue's resolved options — never a link to the Catalogue.
+`PublicSelectionArtworkPage.tsx` is the same shell for one work at
+`/selection/{sid}/artwork/{aid}`: both segments parsed and canonicalised, one
+not-found for a refused Selection or an uncurated work, and the skin's
+`selection` view with a one-element `artworks` array.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather

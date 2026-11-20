@@ -30,7 +30,7 @@ import type {
 } from "@arcula/shared";
 import type { CatalogueAudience } from "./access";
 import { groupChildren, loadChildren, noChildren } from "./artworkRead";
-import type { CatalogueRow, SelectionRow } from "./authorize";
+import type { ArtworkRow, CatalogueRow, SelectionRow } from "./authorize";
 import { db } from "./db";
 import { ApiError } from "./errors";
 import { mediaNamespaceOf } from "./media/keys";
@@ -190,12 +190,80 @@ export async function readSelectionWorks(
       ),
     )
     .orderBy(asc(selectionWorksTable.position), asc(artworksTable.id));
-  if (rows.length === 0) return [];
+  return serializeWorks(
+    rows.map((row) => row.artwork),
+    selectionId,
+    catalogue,
+    audience,
+  );
+}
 
-  const artworkIds = rows.map((row) => row.artwork.id);
+/**
+ * One curated work at the Selection's own artwork address, or `null` when it
+ * is not there — a work outside the Selection, a work deleted in its Catalogue,
+ * and a work from another Catalogue are the same absence.
+ *
+ * It shares the list's children loader and serializer rather than opening a
+ * second path: the same batched photo/document queries, the same audience rule,
+ * and the same `{ selectionId }` scope on the photo URLs. The curation row is
+ * the membership proof, and `deletedAt IS NULL` is the liveness rule the row
+ * alone does not carry (a deleted work keeps its row so a restore rejoins).
+ */
+export async function readSelectionArtwork(
+  selectionId: string,
+  catalogue: CatalogueRow,
+  artworkId: string,
+  audience: CatalogueAudience,
+): Promise<ArtworkRead | null> {
+  const row = (
+    await db
+      .select({ artwork: artworksTable })
+      .from(selectionWorksTable)
+      .innerJoin(
+        artworksTable,
+        eq(artworksTable.id, selectionWorksTable.artworkId),
+      )
+      .where(
+        and(
+          eq(selectionWorksTable.selectionId, selectionId),
+          eq(selectionWorksTable.artworkId, artworkId),
+          eq(artworksTable.catalogueId, catalogue.id),
+          isNull(artworksTable.deletedAt),
+        ),
+      )
+  )[0];
+  if (!row) return null;
+  const [document] = await serializeWorks(
+    [row.artwork],
+    selectionId,
+    catalogue,
+    audience,
+  );
+  return document ?? null;
+}
+
+/**
+ * The one place a curated work becomes a wire document: the batched children
+ * loader, the source Catalogue's media namespace (a Selection owns no bytes)
+ * and the serializer with the Selection's photo scope.
+ *
+ * A visitor is not shown that a work has documents at all — the bytes were
+ * never theirs, and a certificate's existence is a member fact. The array is
+ * emptied rather than the key omitted, because every works read answers the
+ * same document shape.
+ */
+async function serializeWorks(
+  artworks: ArtworkRow[],
+  selectionId: string,
+  catalogue: CatalogueRow,
+  audience: CatalogueAudience,
+): Promise<ArtworkRead[]> {
+  if (artworks.length === 0) return [];
+
+  const artworkIds = artworks.map((artwork) => artwork.id);
   const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
   const namespaceId = mediaNamespaceOf(catalogue);
-  return rows.map(({ artwork }) => {
+  return artworks.map((artwork) => {
     const document = serializeArtwork(
       { artwork, ...(grouped.get(artwork.id) ?? noChildren()) },
       namespaceId,

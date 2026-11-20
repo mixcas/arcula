@@ -14,6 +14,7 @@
 //
 //   GET  /selections/{sid}                              the public read
 //   GET  /selections/{sid}/artworks                     the ordered works read
+//   GET  /selections/{sid}/artworks/{aid}               one curated work
 //   POST /selections/{sid}/unlock                       the lock screen's attempt
 //
 // Every member route is behind the session and then membership of the source
@@ -62,6 +63,7 @@ import { param, parseBody } from "../http";
 import {
   readPublicSelection,
   readSelection,
+  readSelectionArtwork,
   readSelectionPage,
   readSelectionWorks,
 } from "../selectionRead";
@@ -276,6 +278,58 @@ publicSelectionRoutes.get("/selections/:selectionId/artworks", async (c) => {
     ),
   });
 });
+
+/**
+ * GET /selections/{sid}/artworks/{aid} — one work under the Selection's own
+ * address, so a Draft shown there is readable there and nowhere else.
+ *
+ * The work must be live and curated by this Selection, and the Selection must
+ * admit this reader. **Every refusal is the same not-found**, as the
+ * Catalogue's single-artwork read does: this route never confirms that a work
+ * exists in a Selection the reader cannot see, or that a hidden Selection
+ * exists at all — including the protected case, whose challenge the page
+ * answers from the Selection read that necessarily comes first.
+ */
+publicSelectionRoutes.get(
+  "/selections/:selectionId/artworks/:artworkId",
+  async (c) => {
+    const notFound = () =>
+      new ApiError("not-found", "The artwork does not exist");
+    const selectionId = param(c, "selectionId");
+    const artworkId = param(c, "artworkId");
+    try {
+      const session = await resolveSession(c);
+      const pair = await readableSelectionFor(
+        session?.user.id ?? null,
+        selectionId,
+        () => selectionGrantHeld(c, selectionId),
+      );
+      const artwork = await readSelectionArtwork(
+        pair.selection.id,
+        pair.catalogue,
+        artworkId,
+        pair.audience,
+      );
+      if (!artwork) {
+        throw notFound();
+      }
+      return c.json(artwork);
+    } catch (error) {
+      // The refusal kinds this read can meet — a private or missing Selection,
+      // a protected one without its grant, a work outside it — all leave the
+      // same address. Anything else is a real fault and keeps its own answer.
+      if (
+        error instanceof ApiError &&
+        (error.code === "not-found" ||
+          error.code === "forbidden" ||
+          error.code === "password-required")
+      ) {
+        throw notFound();
+      }
+      throw error;
+    }
+  },
+);
 
 // POST /selections/{sid}/unlock — the lock screen's password attempt, and the
 // one route a non-member reaches a Protected Selection through.

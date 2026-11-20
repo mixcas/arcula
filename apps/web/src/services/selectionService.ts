@@ -12,6 +12,7 @@
  */
 
 import {
+  artworkReadSchema,
   selectionPageSchema,
   selectionPublicReadSchema,
   selectionReadSchema,
@@ -153,6 +154,31 @@ export const selectionService = {
     try {
       const body = await apiRequest<unknown>(`${publicBase}/${id}`);
       return selectionPublicReadSchema.parse(body);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  },
+
+  /**
+   * One work under the Selection's own address.
+   *
+   * The route folds every refusal — a work outside the Selection, a work
+   * deleted in its Catalogue, a private or stamped Selection, a protected one
+   * without its grant — into one 404, and a 404 resolves `null`. Saying which
+   * refused would confirm what is hidden.
+   */
+  async getArtwork(
+    selectionId: string,
+    artworkId: string,
+  ): Promise<Artwork | null> {
+    try {
+      const body = await apiRequest<unknown>(
+        `${publicBase}/${selectionId}/artworks/${artworkId}`,
+      );
+      return artworkReadSchema.parse(body);
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 404) {
         return null;

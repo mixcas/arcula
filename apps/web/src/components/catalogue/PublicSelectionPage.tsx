@@ -23,8 +23,10 @@ import { selectionService } from "@/services/selectionService";
  * still get the legible address, and rewriting first would write a private
  * document's name into the URL and the browser history.
  *
- * The works read arrives in #352; this slice renders the Selection's subject
- * and an empty stage, and says plainly that there is nothing in it yet.
+ * The works arrive in the curator's order, Drafts included — the server's one
+ * rule for every audience. Public pages never badge a Draft and never print
+ * availability (the visitor serializer omits it); a work links under the
+ * Selection's own address, never the Catalogue's.
  */
 const PublicSelectionPage: React.FC = () => {
   const { selectionId: param } = useParams<{ selectionId: string }>();
@@ -40,7 +42,10 @@ const PublicSelectionPage: React.FC = () => {
     if (!param || !ready) {
       return;
     }
-    const canonical = selectionSlug(ready.selection.name, ready.selection.id);
+    const canonical = selectionSlug(
+      ready.selection.selection.name,
+      ready.selection.selection.id,
+    );
     if (canonical === param) {
       return;
     }
@@ -77,7 +82,8 @@ const PublicSelectionPage: React.FC = () => {
     );
   }
 
-  const { selection, catalogueName, skin, skinOptions } = state.value;
+  const { selection: document, artworks } = state.value;
+  const { selection, catalogueName, skin, skinOptions } = document;
   const selectionPath = `/selection/${selectionSlug(
     selection.name,
     selection.id,
@@ -85,14 +91,17 @@ const PublicSelectionPage: React.FC = () => {
 
   return (
     <>
-      {/*
-        An empty Selection still shows its own name and description through the
-        skin; this line is app chrome, because the skin's empty stage would
-        otherwise read as a loading failure. One sentence is the whole state.
-      */}
-      <Container size="xl" pt="4rem">
-        <Text>This selection has no works yet.</Text>
-      </Container>
+      {artworks.length === 0 ? (
+        /*
+          An empty Selection still shows its own name and description through
+          the skin; this line is app chrome, because the skin's empty stage
+          would otherwise read as a loading failure. One sentence is the whole
+          state, and it is shown for a genuinely empty Selection only.
+        */
+        <Container size="xl" pt="4rem">
+          <Text>This selection has no works yet.</Text>
+        </Container>
+      ) : null}
 
       <SkinHost
         view="selection"
@@ -101,7 +110,7 @@ const PublicSelectionPage: React.FC = () => {
           description: selection.description,
           catalogueName,
         }}
-        artworks={[]}
+        artworks={artworks}
         selectionPath={selectionPath}
         artworkPath={(artwork) =>
           `${selectionPath}/artwork/${artworkSlug(artwork.title, artwork.id)}`

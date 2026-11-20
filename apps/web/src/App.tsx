@@ -24,6 +24,7 @@ import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
 import PublicSelectionPage from "./components/catalogue/PublicSelectionPage";
+import PublicSelectionArtworkPage from "./components/catalogue/PublicSelectionArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { LANDING_PALETTE } from "./components/landing/palette";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -218,6 +219,10 @@ const App: React.FC = () => {
         <Route
           path="/selection/:selectionId"
           element={<PublicSelectionPage />}
+        />
+        <Route
+          path="/selection/:selectionId/artwork/:artworkId"
+          element={<PublicSelectionArtworkPage />}
         />
         {/* The Catalogue PDF viewer. Public chrome: the route itself decides
             access through the ordinary reads, never a ProtectedRoute. */}

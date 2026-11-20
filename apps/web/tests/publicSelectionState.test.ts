@@ -5,15 +5,21 @@
 // (a member's preview is legitimate), a `password-required` refusal is a
 // challenge that carries the name, and the name is parsed rather than read
 // loosely so a reshaped detail cannot render "undefined".
+//
+// The works are carried exactly as the read answered them. That is not a
+// tautology to be tidied away: the server's rule is `position, artworkId`, and
+// a client that sorted by title would silently destroy the curator's order —
+// which is the content of a Selection.
 
 import { describe, expect, it } from "vitest";
 
 import { ApiRequestError } from "@/services/api";
 import {
+  publicSelectionArtworkState,
   publicSelectionFailure,
   publicSelectionState,
 } from "@/components/catalogue/usePublicSelection";
-import type { SelectionPublicRead } from "@arcula/shared";
+import type { Artwork, SelectionPublicRead } from "@arcula/shared";
 
 const document = (
   overrides: Partial<SelectionPublicRead> = {},
@@ -27,9 +33,21 @@ const document = (
   ...overrides,
 });
 
+const work = (id: string, title: string, status?: "draft" | "published") =>
+  ({
+    id,
+    userId: "UUUUUUUUUUUUUUUUUUUU",
+    catalogueId: "CCCCCCCCCCCCCCCCCCCC",
+    title,
+    artistName: "C. Cas",
+    status,
+    photos: [],
+    documents: [],
+  }) satisfies Artwork;
+
 describe("publicSelectionState", () => {
   it("is notFound for a missing, deleted or hidden Selection", () => {
-    expect(publicSelectionState(null)).toEqual({ status: "notFound" });
+    expect(publicSelectionState(null, [])).toEqual({ status: "notFound" });
   });
 
   it("is ready for a document, private or not", () => {
@@ -42,9 +60,45 @@ describe("publicSelectionState", () => {
         isPublic: false,
       },
     });
-    expect(publicSelectionState(privateDocument)).toEqual({
+    expect(publicSelectionState(privateDocument, [])).toEqual({
       status: "ready",
-      value: privateDocument,
+      value: { selection: privateDocument, artworks: [] },
+    });
+  });
+
+  it("carries the works in the order the server answered, Drafts included", () => {
+    // Deliberately anti-title-order (Bravo before Alpha) and with a Draft:
+    // the fold must not sort, filter or re-status them.
+    const artworks = [
+      work("WWWWWWWWWWWWWWWWWWW2", "Bravo", "draft"),
+      work("WWWWWWWWWWWWWWWWWWW1", "Alpha", "published"),
+    ];
+    expect(publicSelectionState(document(), artworks)).toEqual({
+      status: "ready",
+      value: { selection: document(), artworks },
+    });
+  });
+});
+
+describe("publicSelectionArtworkState", () => {
+  const one = work("WWWWWWWWWWWWWWWWWWW1", "Alpha", "draft");
+
+  it("is ready for the Selection and its one work, whatever the work's status", () => {
+    const pair = { selection: document(), artwork: one };
+    expect(publicSelectionArtworkState(pair.selection, one)).toEqual({
+      status: "ready",
+      value: pair,
+    });
+  });
+
+  it("is one not-found for a refused Selection and for a work it does not curate", () => {
+    // The route folds every refusal to 404, so the fold cannot tell them apart
+    // — which is the point: no address confirms what is hidden.
+    expect(publicSelectionArtworkState(null, one)).toEqual({
+      status: "notFound",
+    });
+    expect(publicSelectionArtworkState(document(), null)).toEqual({
+      status: "notFound",
     });
   });
 });

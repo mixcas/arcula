@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicSelectionPage from "@/components/catalogue/PublicSelectionPage";
 import { ApiRequestError } from "@/services/api";
-import type { SelectionPublicRead } from "@arcula/shared";
+import type { Artwork, SelectionPublicRead } from "@arcula/shared";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -37,12 +37,15 @@ vi.mock("@mantine/carousel", async () => {
 });
 
 const getPublicSelection = vi.fn<() => Promise<SelectionPublicRead | null>>();
+const getWorks = vi.fn<() => Promise<Artwork[]>>();
 const unlockSelection = vi.fn<() => Promise<void>>();
 
 vi.mock("@/services/selectionService", () => ({
   selectionService: {
     getPublicSelection: (...args: unknown[]) =>
       (getPublicSelection as unknown as (...a: unknown[]) => unknown)(...args),
+    getWorks: (...args: unknown[]) =>
+      (getWorks as unknown as (...a: unknown[]) => unknown)(...args),
     unlockSelection: (...args: unknown[]) =>
       (unlockSelection as unknown as (...a: unknown[]) => unknown)(...args),
   },
@@ -70,6 +73,26 @@ const selectionRead = (
   ...overrides,
 });
 
+/**
+ * One work as the Selection read answers it. `status` is present because the
+ * server's envelope carries it; the page must not turn it into a badge, and
+ * `availability` is absent because a visitor's document never has one.
+ */
+const work = (
+  id: string,
+  title: string,
+  status: "draft" | "published" = "published",
+): Artwork => ({
+  id,
+  userId: "UUUUUUUUUUUUUUUUUUUU",
+  catalogueId: "CCCCCCCCCCCCCCCCCCCC",
+  title,
+  artistName: "C. Cas",
+  status,
+  photos: [],
+  documents: [],
+});
+
 const AddressProbe: React.FC = () => {
   const location = useLocation();
   return <div data-testid="address">{location.pathname}</div>;
@@ -94,7 +117,10 @@ const renderPage = (entry = canonicalPath) =>
 
 beforeEach(() => {
   getPublicSelection.mockReset();
+  getWorks.mockReset();
   unlockSelection.mockReset();
+  // An empty Selection is the default: a test that cares about works says so.
+  getWorks.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -155,6 +181,55 @@ describe("PublicSelectionPage — the states", () => {
     expect(
       await screen.findByText(/Could not load this selection/),
     ).toBeVisible();
+  });
+});
+
+describe("PublicSelectionPage — the works", () => {
+  // Deliberately anti-title order, and a Draft first: the server's rule is
+  // `position, artworkId`, so anything the page does to this list is a bug.
+  const works = [
+    work("WWWWWWWWWWWWWWWWWWW2", "Bravo", "draft"),
+    work("WWWWWWWWWWWWWWWWWWW1", "Alpha", "published"),
+  ];
+
+  it("lists every work in the curator's order, Drafts included and unbadged", async () => {
+    getPublicSelection.mockResolvedValue(selectionRead());
+    getWorks.mockResolvedValue(works);
+    renderPage();
+
+    await screen.findByText("Winter shortlist");
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("region").map((r) => r.getAttribute("aria-label")),
+      ).toEqual(["Bravo", "Alpha"]),
+    );
+
+    // A visitor's page never badges a Draft…
+    expect(screen.queryByText(/^draft$/i)).toBeNull();
+    // …and never prints availability, which the visitor serializer omits.
+    expect(screen.queryByText(/for sale|sold|available/i)).toBeNull();
+    // The empty-stage sentence belongs to an empty Selection only.
+    expect(screen.queryByText("This selection has no works yet.")).toBeNull();
+  });
+
+  it("puts every work link under the Selection's own address", async () => {
+    getPublicSelection.mockResolvedValue(selectionRead());
+    getWorks.mockResolvedValue(works);
+    renderPage();
+
+    await screen.findByText("Winter shortlist");
+    const links = await screen.findAllByRole("link");
+    expect(links.length).toBeGreaterThan(0);
+    // A Selection page links its own works and nothing of the Catalogue's: the
+    // app's brand link is not a document address and is left out of this.
+    const hrefs = links
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => !href.startsWith("http"));
+    expect(hrefs.some((href) => href.startsWith("/selection/"))).toBe(true);
+    for (const href of hrefs) {
+      expect(href).not.toMatch(/^\/catalogue/);
+    }
+    expect(screen.getByText("Flores Solares").closest("a")).toBeNull();
   });
 });
 
