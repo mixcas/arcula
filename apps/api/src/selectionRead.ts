@@ -1,10 +1,18 @@
-// The Selection reads: the member list and the member document.
+// The Selection reads: the member list, the member document and the ordered
+// works.
 //
 // The list is name-ordered and carries each row's live-work count, counted
 // over the works a reader would actually see: a work deleted in its Catalogue
 // is not counted, and a Draft is (a Selection shows Drafts on purpose). One
 // grouped query for every row — the count is a fact about the page, not a
 // reason to ask per Selection.
+//
+// The works read is the one list every audience gets: the manage page and the
+// visitor page consume the same ordered envelope, and only the serializer's
+// audience decides what a Draft or a document looks like on it. There is no
+// status filter — a Draft is the point — and a work deleted in its Catalogue
+// simply leaves, without its curation row being removed, so a restore rejoins
+// it.
 //
 // No Hono type lives here: the route owns the envelope and the status codes.
 
@@ -15,14 +23,18 @@ import {
   selections as selectionsTable,
 } from "@arcula/db";
 import type {
+  ArtworkRead,
   SelectionPageRow,
   SelectionPublicRead,
   SelectionRead,
 } from "@arcula/shared";
+import type { CatalogueAudience } from "./access";
+import { groupChildren, loadChildren, noChildren } from "./artworkRead";
 import type { CatalogueRow, SelectionRow } from "./authorize";
 import { db } from "./db";
 import { ApiError } from "./errors";
-import { isSkinOptions, wireTimestamp } from "./serialize";
+import { mediaNamespaceOf } from "./media/keys";
+import { isSkinOptions, serializeArtwork, wireTimestamp } from "./serialize";
 
 /**
  * The exact member wire document.
@@ -137,4 +149,59 @@ export async function readSelectionPage(
     ...readSelection(row),
     workCount: counted.get(row.id) ?? 0,
   }));
+}
+
+/**
+ * A Selection's works, in the curator's order, as the viewer's audience sees
+ * them — the one ordered read both the manage page and the visitor page use.
+ *
+ * Ordering is `position`, then `artworkId` so a row that ever carried a
+ * duplicated position still sorts deterministically: every write renumbers, and
+ * this is the answer if one ever did not. Live works only — `deletedAt IS NULL`
+ * — and **no status filter**: a Draft is shown here on purpose, and the media
+ * scope on the photo URLs is what lets its images load.
+ *
+ * Children come from `artworkRead.ts`'s batched loader, so this is the same
+ * three queries the Catalogue's list uses rather than a second child path, and
+ * every work is serialized by the one serializer. `selectionId` rides the photo
+ * URLs only.
+ *
+ * A visitor is not shown that a work has documents at all: the bytes were
+ * never theirs, and a certificate's existence is a member fact. The array is
+ * emptied rather than the key omitted, because the read's document shape is
+ * the same one every works read answers.
+ */
+export async function readSelectionWorks(
+  selectionId: string,
+  catalogue: CatalogueRow,
+  audience: CatalogueAudience,
+): Promise<ArtworkRead[]> {
+  const rows = await db
+    .select({ artwork: artworksTable })
+    .from(selectionWorksTable)
+    .innerJoin(
+      artworksTable,
+      eq(artworksTable.id, selectionWorksTable.artworkId),
+    )
+    .where(
+      and(
+        eq(selectionWorksTable.selectionId, selectionId),
+        isNull(artworksTable.deletedAt),
+      ),
+    )
+    .orderBy(asc(selectionWorksTable.position), asc(artworksTable.id));
+  if (rows.length === 0) return [];
+
+  const artworkIds = rows.map((row) => row.artwork.id);
+  const grouped = groupChildren(artworkIds, await loadChildren(artworkIds));
+  const namespaceId = mediaNamespaceOf(catalogue);
+  return rows.map(({ artwork }) => {
+    const document = serializeArtwork(
+      { artwork, ...(grouped.get(artwork.id) ?? noChildren()) },
+      namespaceId,
+      audience,
+      { selectionId },
+    );
+    return audience === "member" ? document : { ...document, documents: [] };
+  });
 }

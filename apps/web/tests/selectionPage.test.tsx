@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   catalogueSlug,
   selectionSlug,
+  type Artwork,
   type Catalogue,
   type Selection,
 } from "@arcula/shared";
@@ -42,8 +43,11 @@ vi.mock("@/services/catalogueService", () => ({
 vi.mock("@/services/selectionService", () => ({
   selectionService: {
     get: vi.fn(),
+    getWorks: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    addWorks: vi.fn(),
+    replaceWorks: vi.fn(),
   },
 }));
 
@@ -65,6 +69,7 @@ Object.defineProperty(window, "matchMedia", {
 /* eslint-disable @typescript-eslint/unbound-method */
 const getCatalogue = vi.mocked(catalogueService.getCatalogue);
 const getSelection = vi.mocked(selectionService.get);
+const getWorks = vi.mocked(selectionService.getWorks);
 const updateSelection = vi.mocked(selectionService.update);
 const removeSelection = vi.mocked(selectionService.remove);
 /* eslint-enable @typescript-eslint/unbound-method */
@@ -99,6 +104,22 @@ const selection = (overrides: Partial<Selection> = {}): Selection => ({
   ...overrides,
 });
 
+const work = (
+  id: string,
+  title: string,
+  status: "published" | "draft" = "published",
+): Artwork => ({
+  id,
+  userId: "u1",
+  title,
+  artistName: "Ana",
+  documents: [],
+  photos: [],
+  catalogueId: CATALOGUE_ID,
+  status,
+  deletedAt: null,
+});
+
 const AddressProbe: React.FC = () => {
   const location = useLocation();
   return <div data-testid="address">{location.pathname}</div>;
@@ -131,6 +152,7 @@ const renderPage = (entry = canonicalPath) =>
 beforeEach(() => {
   getCatalogue.mockResolvedValue(catalogue);
   getSelection.mockResolvedValue(selection());
+  getWorks.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -140,6 +162,24 @@ afterEach(() => {
 });
 
 describe("SelectionPage", () => {
+  it("lists the selection's works in the curator's order and badges a Draft", async () => {
+    getWorks.mockResolvedValue([
+      work("bravo", "Bravo", "draft"),
+      work("alpha", "Alpha"),
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("Bravo")).toBeInTheDocument();
+    // The order is the content: no sorting, no paging, no catalogue order.
+    expect(
+      screen
+        .getAllByRole("listitem")
+        .map((item) => item.textContent?.match(/Alpha|Bravo/)?.[0] ?? ""),
+    ).toEqual(["Bravo", "Alpha"]);
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(getWorks).toHaveBeenCalledWith(SELECTION_ID);
+  });
+
   it("saves only the changed fields, refetches, then notifies", async () => {
     updateSelection.mockResolvedValue(
       selection({ name: "Fair selection", description: "A shortlist." }),

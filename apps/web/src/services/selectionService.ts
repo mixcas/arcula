@@ -15,6 +15,8 @@ import {
   selectionPageSchema,
   selectionPublicReadSchema,
   selectionReadSchema,
+  selectionWorksReadSchema,
+  type Artwork,
   type Selection,
   type SelectionCreatePayload,
   type SelectionPageRow,
@@ -89,6 +91,55 @@ export const selectionService = {
     await apiRequest<void>(`${base(catalogueId)}/${selectionId}`, {
       method: "DELETE",
     });
+  },
+
+  /**
+   * The Selection's works, in the curator's order.
+   *
+   * This is the public address, deliberately: the read resolves the session
+   * optionally and answers the member audience to a member of the source
+   * Catalogue and the visitor audience to everyone else. The manage page and
+   * the visitor page therefore parse one envelope from one route, and the
+   * server — not the page — decides what a Draft or a document looks like.
+   */
+  async getWorks(selectionId: string): Promise<Artwork[]> {
+    const body = await apiRequest<unknown>(
+      `${publicBase}/${selectionId}/artworks`,
+    );
+    return selectionWorksReadSchema.parse(body).artworks;
+  },
+
+  /**
+   * Append works, in the order they were checked. A work already in the
+   * Selection is skipped by the server, so a repeat is harmless. The answer is
+   * the updated ordered list.
+   */
+  async addWorks(
+    catalogueId: string,
+    selectionId: string,
+    artworkIds: string[],
+  ): Promise<Artwork[]> {
+    const body = await apiRequest<unknown>(
+      `${base(catalogueId)}/${selectionId}/works`,
+      { method: "POST", body: { artworkIds } },
+    );
+    return selectionWorksReadSchema.parse(body).artworks;
+  },
+
+  /**
+   * State the whole list: the reorder and the remove. An empty list empties the
+   * Selection. The answer is the updated ordered list.
+   */
+  async replaceWorks(
+    catalogueId: string,
+    selectionId: string,
+    artworkIds: string[],
+  ): Promise<Artwork[]> {
+    const body = await apiRequest<unknown>(
+      `${base(catalogueId)}/${selectionId}/works`,
+      { method: "PUT", body: { artworkIds } },
+    );
+    return selectionWorksReadSchema.parse(body).artworks;
   },
 
   /**

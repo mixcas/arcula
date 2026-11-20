@@ -230,6 +230,7 @@ function serializePhoto(
   namespaceId: string,
   catalogueId: string,
   artworkId: string,
+  selectionId?: string,
 ): PhotoRead {
   // The photo row carries no metadata: the `original` variant row is where
   // the source's size/type/dimensions live.
@@ -256,6 +257,7 @@ function serializePhoto(
       "original",
       extOf(originalType, `photo ${row.id} original`),
     ),
+    selectionId,
   );
   const size = present(original.size, `photo ${row.id} original size`);
   return {
@@ -280,6 +282,7 @@ function serializePhoto(
             key,
             extOf(v.contentType, `photo ${row.id} variant ${key}`),
           ),
+          selectionId,
         ),
       ),
     ),
@@ -350,11 +353,22 @@ function serializeDocument(
  *
  *  `audience` decides whether `availability` — a member-facing market fact —
  *  is on the document at all: a member read carries the key (null included),
- *  and a visitor's read does not, though the row stores the value either way. */
+ *  and a visitor's read does not, though the row stores the value either way.
+ *
+ *  `options.selectionId` is the Selection scope: every **photo** URL gains
+ *  `&selection={id}`, so the media proxy can admit a Draft's image through the
+ *  Selection that curates it. Documents never take it — a Selection is a way to
+ *  read works, not a second way to read their certificates. */
+export interface SerializeArtworkOptions {
+  /** The Selection whose works read is emitting this document. */
+  selectionId?: string;
+}
+
 export function serializeArtwork(
   joined: ArtworkJoined,
   namespaceId: string,
   audience: CatalogueAudience,
+  options: SerializeArtworkOptions = {},
 ): ArtworkRead {
   const { artwork, photos, documents, variants } = joined;
   const byParent = new Map<string, VariantRow[]>();
@@ -385,6 +399,7 @@ export function serializeArtwork(
         namespaceId,
         artwork.catalogueId,
         artwork.id,
+        options.selectionId,
       ),
     ),
     catalogueId: artwork.catalogueId,
