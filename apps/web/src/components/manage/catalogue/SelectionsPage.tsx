@@ -11,21 +11,22 @@
  * rule, so the list is always the server's answer rather than a local splice.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Group,
   Loader,
   Modal,
   Stack,
-  Table,
   Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   catalogueSlug,
@@ -161,12 +162,69 @@ const SelectionsPage: React.FC = () => {
     }
   };
 
+  // The row action, not the name, is the link: this is the same grammar as
+  // the artworks table (data columns, one pinned action), and it keeps the
+  // Selection's name plain text a reader can select.
+  const columns = useMemo<DataTableColumn<SelectionPageRow>[]>(
+    () => [
+      {
+        accessor: "name",
+        title: "Name",
+        render: (selection) => <Text>{selection.name}</Text>,
+      },
+      {
+        accessor: "visibility",
+        title: "Visibility",
+        render: (selection) => (
+          <Badge variant="light" color={selection.isPublic ? "green" : "gray"}>
+            {visibilityWord(selection)}
+          </Badge>
+        ),
+      },
+      {
+        accessor: "workCount",
+        title: "Works",
+        render: (selection) => <Text>{worksWord(selection.workCount)}</Text>,
+      },
+      {
+        accessor: "updatedAt",
+        title: "Last change",
+        render: (selection) => <Text>{relativeTime(selection.updatedAt)}</Text>,
+      },
+      {
+        accessor: "actions",
+        title: "",
+        width: 110,
+        pinned: "right",
+        render: (selection) => (
+          <Button
+            size="compact-xs"
+            variant="default"
+            component={Link}
+            to={`/manage/catalogue/${param ?? ""}/selection/${selectionSlug(
+              selection.name,
+              selection.id,
+            )}`}
+            aria-label={`Open ${selection.name}`}
+          >
+            Open
+          </Button>
+        ),
+      },
+    ],
+    [param],
+  );
+
   if (!catalogueId) {
     return <Alert color="red">Catalogue not found</Alert>;
   }
 
   if (loading) {
-    return <Loader />;
+    return (
+      <Group justify="center" py="xl">
+        <Loader />
+      </Group>
+    );
   }
 
   if (pageError) {
@@ -192,9 +250,10 @@ const SelectionsPage: React.FC = () => {
           >
             Back to catalogue
           </Button>
-          {selections.length > 0 ? (
-            <Button onClick={openCreate}>Create selection</Button>
-          ) : null}
+          {/* Always present, as the artworks page keeps Add Artwork: the empty
+              state offers its own differently-worded way in, so the two never
+              read as the same control to a screen reader. */}
+          <Button onClick={openCreate}>Create selection</Button>
         </Group>
       </Group>
 
@@ -204,57 +263,42 @@ const SelectionsPage: React.FC = () => {
         </Alert>
       ) : null}
 
-      {selections.length === 0 ? (
-        <Stack align="center" gap="sm" py="xl">
-          <Text size="h3">No selections yet</Text>
-          <Text c="dimmed" maw={520} ta="center">
-            A selection is a curated subset of this catalogue&rsquo;s works with
-            its own address. Start one, then add works in the order you want
-            them shown.
+      <Stack gap="md">
+        {selections.length > 0 ? (
+          <Text size="sm" c="dimmed">
+            {selections.length === 1
+              ? "1 selection"
+              : `${selections.length} selections`}
           </Text>
-          <Button onClick={openCreate} mt="sm">
-            Create selection
-          </Button>
-        </Stack>
-      ) : (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Name</Table.Th>
-              <Table.Th>Visibility</Table.Th>
-              <Table.Th>Works</Table.Th>
-              <Table.Th>Last change</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {selections.map((selection) => (
-              <Table.Tr key={selection.id}>
-                <Table.Td>
-                  <Text
-                    component={Link}
-                    to={`/manage/catalogue/${param ?? ""}/selection/${selectionSlug(
-                      selection.name,
-                      selection.id,
-                    )}`}
-                  >
-                    {selection.name}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <Badge
-                    variant="light"
-                    color={selection.isPublic ? "green" : "gray"}
-                  >
-                    {visibilityWord(selection)}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>{worksWord(selection.workCount)}</Table.Td>
-                <Table.Td>{relativeTime(selection.updatedAt)}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      )}
+        ) : null}
+
+        <DataTable<SelectionPageRow>
+          idAccessor="id"
+          records={selections}
+          columns={columns}
+          withTableBorder
+          highlightOnHover
+          striped={false}
+          minHeight={200}
+          emptyState={
+            // A Box, not a Text: the empty state is a Stack of copy and a
+            // control, and a <div> inside a <p> is not markup.
+            <Box p="xl" ta="center">
+              <Stack align="center" gap="sm">
+                <Text size="h3">No selections yet</Text>
+                <Text c="dimmed" maw={520} ta="center">
+                  A selection is a curated subset of this catalogue&rsquo;s
+                  works with its own address. Start one, then add works in the
+                  order you want them shown.
+                </Text>
+                <Button onClick={openCreate} mt="sm">
+                  Create your first selection
+                </Button>
+              </Stack>
+            </Box>
+          }
+        />
+      </Stack>
 
       <Modal
         opened={createOpen}

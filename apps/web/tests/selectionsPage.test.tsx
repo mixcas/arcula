@@ -15,6 +15,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   catalogueSlug,
+  selectionSlug,
   type Catalogue,
   type SelectionPageRow,
 } from "@arcula/shared";
@@ -137,8 +138,13 @@ describe("SelectionsPage", () => {
     renderPage();
 
     expect(await screen.findByText("No selections yet")).toBeInTheDocument();
+    // The header and the empty state are two controls with different words, so
+    // neither is announced as the same button twice.
     expect(
       screen.getByRole("button", { name: "Create selection" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create your first selection" }),
     ).toBeInTheDocument();
   });
 
@@ -155,6 +161,22 @@ describe("SelectionsPage", () => {
     expect(screen.getByText("1 work")).toBeInTheDocument();
     expect(screen.getAllByText("Private")).toHaveLength(2);
     expect(screen.getAllByText(/ago$/).length).toBe(2);
+
+    // The row action is the way in, at the Selection's slugged manage address.
+    await waitFor(() =>
+      expect(screen.getByTestId("address").textContent).toBe(
+        `/manage/catalogue/${CATALOGUE_SLUG}/selections`,
+      ),
+    );
+    expect(
+      screen.getByRole("link", { name: "Open Fair 2026" }),
+    ).toHaveAttribute(
+      "href",
+      `/manage/catalogue/${CATALOGUE_SLUG}/selection/${selectionSlug(
+        "Fair 2026",
+        "s1",
+      )}`,
+    );
   });
 
   it("creates from the empty state, refetches and then notifies", async () => {
@@ -164,7 +186,9 @@ describe("SelectionsPage", () => {
     renderPage();
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Create selection" }),
+      await screen.findByRole("button", {
+        name: "Create your first selection",
+      }),
     );
     const modal = await dialog();
     await userEvent.type(
