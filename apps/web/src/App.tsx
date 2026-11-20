@@ -34,6 +34,11 @@ import { AuthProvider } from "./auth/AuthProvider";
 const CataloguePdfPage = React.lazy(
   () => import("./components/pdf/CataloguePdfPage"),
 );
+// The same renderer serves a Selection's export; this route is its own chunk
+// entry so the public Selection pages never pay for React-PDF.
+const SelectionPdfPage = React.lazy(
+  () => import("./components/pdf/SelectionPdfPage"),
+);
 
 const App: React.FC = () => {
   return (
@@ -223,6 +228,22 @@ const App: React.FC = () => {
         <Route
           path="/selection/:selectionId/artwork/:artworkId"
           element={<PublicSelectionArtworkPage />}
+        />
+        {/* A Selection's PDF viewer: the same lazy shape as the Catalogue's,
+            and public chrome for the same reason — the ordinary reads decide. */}
+        <Route
+          path="/selection/:selectionId/pdf"
+          element={
+            <React.Suspense
+              fallback={
+                <Center py="xl">
+                  <Loader />
+                </Center>
+              }
+            >
+              <SelectionPdfPage />
+            </React.Suspense>
+          }
         />
         {/* The Catalogue PDF viewer. Public chrome: the route itself decides
             access through the ordinary reads, never a ProtectedRoute. */}

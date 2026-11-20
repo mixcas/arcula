@@ -145,7 +145,7 @@ const kindOf = (kind: string): DocumentRead["kind"] => {
 
 /** The catalogue kind the schema's check constraint permits. Deliberately
  *  named for the catalogue: `kindOf` above is the document's kind. */
-const catalogueKindOf = (kind: string): CatalogueKind => {
+export const catalogueKindOf = (kind: string): CatalogueKind => {
   const parsed = catalogueKindSchema.safeParse(kind);
   if (!parsed.success) {
     throw new ApiError("internal", `Unrecognized catalogue kind ${kind}`);

@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { Selection } from "../types";
 import { MINTED_ID_RE } from "./artwork";
-import { passwordSchema } from "./catalogue";
+import {
+  artworkFieldDeviationsSchema,
+  catalogueKindSchema,
+  passwordSchema,
+} from "./catalogue";
 import { artworkReadSchema, wireTimestamp } from "./document";
 
 /**
@@ -227,11 +231,18 @@ export type SelectionPublicDocument = z.infer<
  * them through `resolveSkin`/`resolveSkinOptions`, exactly as it does for a
  * Catalogue, so a Selection renders in the Catalogue's skin and options
  * without the API knowing what a skin is.
+ *
+ * `kind` and `artworkFields` are the same presentation facts a Catalogue's own
+ * public read carries: a visitor's PDF resolves exactly the field set a
+ * member's does. They reveal which fields the source Catalogue records and
+ * nothing about its identity.
  */
 export const selectionPublicReadSchema = z
   .object({
     selection: selectionPublicDocumentSchema,
     catalogueName: z.string(),
+    kind: catalogueKindSchema,
+    artworkFields: artworkFieldDeviationsSchema.optional(),
     skin: z.string().optional(),
     skinOptions: z
       .record(z.string(), z.union([z.boolean(), z.number(), z.string()]))

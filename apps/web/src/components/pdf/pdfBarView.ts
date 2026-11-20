@@ -26,18 +26,33 @@
  * session, a service or a renderer; the bar renders a view and owns no state.
  */
 
-import { catalogueSlug } from "@arcula/shared";
+import { catalogueSlug, selectionSlug } from "@arcula/shared";
 
 import type { PublicState } from "@/components/catalogue/usePublicCatalogue";
-import { cataloguePdfFileName } from "./cataloguePdfPreflight";
+import type { PublicSelectionState } from "@/components/catalogue/usePublicSelection";
+import {
+  cataloguePdfFileName,
+  selectionPdfFileName,
+} from "./cataloguePdfPreflight";
 
-/** The bar's title until a read names the Catalogue, and its subtitle after. */
+/** The bar's title until a read names the document, and its subtitle after. */
 const CATALOGUE_PDF = "Catalogue PDF";
+const SELECTION_PDF = "Selection PDF";
 
 /** The one fact the bar needs from a read that succeeded. */
 export interface PdfBarCatalogue {
   id: string;
   name: string;
+}
+
+/** The Selection's own name, nested as its public read carries it. */
+export interface PdfBarSelection {
+  selection: {
+    selection: {
+      id: string;
+      name: string;
+    };
+  };
 }
 
 /**
@@ -134,7 +149,8 @@ const preparingDetail = (done: number, total: number): PdfBarDetail =>
 const runDetail = (
   run: PdfBarRun,
   mobile: boolean,
-  catalogueName: string,
+  name: string,
+  fileNameFor: (name: string) => string,
 ): PdfBarDetail => {
   switch (run.status) {
     case "preparing":
@@ -152,7 +168,7 @@ const runDetail = (
             kind: "file",
             summary: pdfFileSummary(run.pages, run.size),
             url: run.url,
-            fileName: cataloguePdfFileName(catalogueName),
+            fileName: fileNameFor(name),
           };
     case "idle":
     case "cancelled":
@@ -182,7 +198,7 @@ export const pdfBarView = (
       title: name,
       subtitle: CATALOGUE_PDF,
       href: `/catalogue/${catalogueSlug(name, id)}`,
-      detail: runDetail(run, mobile, name),
+      detail: runDetail(run, mobile, name, cataloguePdfFileName),
     };
   }
 
@@ -199,6 +215,46 @@ export const pdfBarView = (
 
   return {
     title: CATALOGUE_PDF,
+    subtitle: null,
+    href: null,
+    detail: NO_DETAIL,
+  };
+};
+
+/**
+ * The Selection's bar: the same view, named after the Selection and linked to
+ * its own address.
+ *
+ * A Selection is never linked to its source Catalogue — that page is a
+ * different gate, often a private one. The finished file is named from the
+ * Selection, so the download's fallback is `selection`, never `catalogue`.
+ */
+export const selectionPdfBarView = (
+  state: PublicSelectionState<PdfBarSelection>,
+  run: PdfBarRun,
+  mobile: boolean,
+): PdfBarView => {
+  if (state.status === "ready") {
+    const { selection } = state.value.selection;
+    return {
+      title: selection.name,
+      subtitle: SELECTION_PDF,
+      href: `/selection/${selectionSlug(selection.name, selection.id)}`,
+      detail: runDetail(run, mobile, selection.name, selectionPdfFileName),
+    };
+  }
+
+  if (state.status === "locked" && state.selectionName) {
+    return {
+      title: state.selectionName,
+      subtitle: SELECTION_PDF,
+      href: null,
+      detail: NO_DETAIL,
+    };
+  }
+
+  return {
+    title: SELECTION_PDF,
     subtitle: null,
     href: null,
     detail: NO_DETAIL,

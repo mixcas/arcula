@@ -25,7 +25,12 @@ import type { Catalogue } from "@arcula/shared";
 /** The verdict of the re-read: carry on, or stop in one of the viewer's states. */
 export type AccessOutcome =
   | { status: "continue" }
-  | { status: "locked"; catalogueName?: string }
+  /**
+   * A challenge. The detail key names the document whose own read answered it:
+   * a Catalogue's refusal carries `catalogueName`, a Selection's
+   * `selectionName`. Each viewer reads its own, and the other is absent.
+   */
+  | { status: "locked"; catalogueName?: string; selectionName?: string }
   | { status: "private" }
   | { status: "notFound" };
 

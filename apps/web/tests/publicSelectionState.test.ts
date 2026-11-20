@@ -30,6 +30,7 @@ const document = (
     isPublic: true,
   },
   catalogueName: "Flores Solares",
+  kind: "collection",
   ...overrides,
 });
 

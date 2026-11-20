@@ -68,6 +68,7 @@ const selectionRead = (
     isPublic: true,
   },
   catalogueName: "Flores Solares",
+  kind: "collection",
   skin: "basicx",
   skinOptions: { transitionSeconds: 0.5 },
   ...overrides,
