@@ -187,11 +187,11 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
   // the order they were checked, not in whatever order the view happened to
   // list them. The Grid appends on click; the Table's rows are drawn in
   // catalogue order, so a report from it is not a check order by itself. This
-  // is what makes **Add to Selection** append in the checked order from both.
+  // is what makes **Add to selection** append in the checked order from both.
   const changeSelection = (ids: string[]) =>
     setSelection({ forToken: resetToken, ids: checkedOrder(selectedIds, ids) });
 
-  // Add to Selection's modal. The parent owns `opened` so the toolbar's button
+  // Add to selection's modal. The parent owns `opened` so the toolbar's button
   // and the dialog cannot disagree, and the id it writes to lives in the modal.
   const [addToSelectionOpen, setAddToSelectionOpen] = useState(false);
 
@@ -401,7 +401,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
               size="compact-sm"
               onClick={() => setAddToSelectionOpen(true)}
             >
-              Add to Selection
+              Add to selection
             </Button>
           ) : null}
         </Group>

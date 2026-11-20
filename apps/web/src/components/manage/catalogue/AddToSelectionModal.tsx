@@ -1,5 +1,5 @@
 /**
- * **Add to Selection**, from the Catalogue's checked works.
+ * **Add to selection**, from the Catalogue's checked works.
  *
  * One controlled modal rather than a menu: the list of the Catalogue's
  * Selections and a **New Selection** entry have to sit together, and a `Menu`

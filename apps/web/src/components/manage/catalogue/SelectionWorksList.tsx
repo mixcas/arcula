@@ -249,7 +249,7 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
         title: "Added",
         message:
           chosen.length === 1
-            ? "One work was added to the selection."
+            ? "1 work was added to the selection."
             : `${chosen.length} works were added to the selection.`,
       });
     } catch (err) {

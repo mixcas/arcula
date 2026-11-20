@@ -1399,7 +1399,7 @@ describe("ArtworksList", () => {
     const checkboxes = screen.getAllByRole("checkbox");
     await user.click(checkboxes[3]);
     await user.click(checkboxes[1]);
-    await user.click(screen.getByRole("button", { name: "Add to Selection" }));
+    await user.click(screen.getByRole("button", { name: "Add to selection" }));
 
     const dialog = within(await dialogEl());
     // One existing Selection is chosen for the person.
@@ -1434,7 +1434,7 @@ describe("ArtworksList", () => {
     const checkboxes = screen.getAllByRole("checkbox");
     await user.click(checkboxes[2]);
     await user.click(checkboxes[1]);
-    await user.click(screen.getByRole("button", { name: "Add to Selection" }));
+    await user.click(screen.getByRole("button", { name: "Add to selection" }));
 
     const dialog = within(await dialogEl());
     // No Selections yet: the New selection entry is already chosen.
@@ -1458,18 +1458,18 @@ describe("ArtworksList", () => {
     );
   });
 
-  it("offers Add to Selection only when a work is checked", async () => {
+  it("offers Add to selection only when a work is checked", async () => {
     const user = userEvent.setup();
     startInTable();
     renderList({ artworks: [artwork({ id: "a", title: "Art 1" })] });
 
     expect(
-      screen.queryByRole("button", { name: "Add to Selection" }),
+      screen.queryByRole("button", { name: "Add to selection" }),
     ).toBeNull();
 
     await user.click(screen.getAllByRole("checkbox")[1]);
     expect(
-      screen.getByRole("button", { name: "Add to Selection" }),
+      screen.getByRole("button", { name: "Add to selection" }),
     ).toBeDefined();
     expect(
       screen.getByRole("button", { name: "Delete selected" }),

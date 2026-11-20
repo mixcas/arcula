@@ -193,7 +193,7 @@ const SelectionsPage: React.FC = () => {
             Back to catalogue
           </Button>
           {selections.length > 0 ? (
-            <Button onClick={openCreate}>Create Selection</Button>
+            <Button onClick={openCreate}>Create selection</Button>
           ) : null}
         </Group>
       </Group>
@@ -213,7 +213,7 @@ const SelectionsPage: React.FC = () => {
             them shown.
           </Text>
           <Button onClick={openCreate} mt="sm">
-            Create Selection
+            Create selection
           </Button>
         </Stack>
       ) : (
@@ -298,7 +298,7 @@ const SelectionsPage: React.FC = () => {
                 Cancel
               </Button>
               <Button type="submit" loading={creating}>
-                Create Selection
+                Create selection
               </Button>
             </Group>
           </Stack>

@@ -138,7 +138,7 @@ describe("SelectionsPage", () => {
 
     expect(await screen.findByText("No selections yet")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Create Selection" }),
+      screen.getByRole("button", { name: "Create selection" }),
     ).toBeInTheDocument();
   });
 
@@ -164,7 +164,7 @@ describe("SelectionsPage", () => {
     renderPage();
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Create Selection" }),
+      await screen.findByRole("button", { name: "Create selection" }),
     );
     const modal = await dialog();
     await userEvent.type(
@@ -176,7 +176,7 @@ describe("SelectionsPage", () => {
       "  Twelve works for the fair. ",
     );
     await userEvent.click(
-      within(modal).getByRole("button", { name: "Create Selection" }),
+      within(modal).getByRole("button", { name: "Create selection" }),
     );
 
     await waitFor(() =>
