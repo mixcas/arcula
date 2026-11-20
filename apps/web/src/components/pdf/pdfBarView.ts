@@ -45,14 +45,10 @@ export interface PdfBarCatalogue {
   name: string;
 }
 
-/** The Selection's own name, nested as its public read carries it. */
+/** The one fact the bar needs from the Selection's public read. */
 export interface PdfBarSelection {
-  selection: {
-    selection: {
-      id: string;
-      name: string;
-    };
-  };
+  id: string;
+  name: string;
 }
 
 /**
@@ -235,7 +231,7 @@ export const selectionPdfBarView = (
   mobile: boolean,
 ): PdfBarView => {
   if (state.status === "ready") {
-    const { selection } = state.value.selection;
+    const selection = state.value;
     return {
       title: selection.name,
       subtitle: SELECTION_PDF,

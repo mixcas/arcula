@@ -194,14 +194,11 @@ const selectionRead: SelectionPublicRead = {
   kind: "collection",
 };
 
-type SelectionBarState = PublicSelectionState<{
-  selection: SelectionPublicRead;
-  artworks: [];
-}>;
+type SelectionBarState = PublicSelectionState<SelectionPublicRead["selection"]>;
 
 const selectionReady: SelectionBarState = {
   status: "ready",
-  value: { selection: selectionRead, artworks: [] },
+  value: selectionRead.selection,
 };
 
 describe("selectionPdfBarView", () => {

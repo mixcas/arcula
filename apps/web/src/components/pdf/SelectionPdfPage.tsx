@@ -52,6 +52,7 @@ import {
   pdfFileSummary,
   selectionPdfBarView,
   type PdfBarRun,
+  type PdfBarSelection,
 } from "./pdfBarView";
 import {
   publicSelectionFailure,
@@ -267,6 +268,12 @@ const SelectionPdfPage: React.FC = () => {
     () => (selectionId ? state : { status: "invalid" }),
     [selectionId, state],
   );
+  // The bar names the Selection alone, so the page flattens the one field it
+  // needs out of the read: the viewer below still holds the whole document.
+  const barState: PublicSelectionState<PdfBarSelection> =
+    effectiveState.status === "ready"
+      ? { status: "ready", value: effectiveState.value.selection.selection }
+      : effectiveState;
   // The plan is derived once here so the warning, the progress total and the
   // document all read the same pages. It is the curator's order, Drafts kept.
   const plan = useMemo(
@@ -441,7 +448,7 @@ const SelectionPdfPage: React.FC = () => {
     <ManageLayout
       header={
         <CataloguePdfBar
-          view={selectionPdfBarView(effectiveState, currentRun, mobile)}
+          view={selectionPdfBarView(barState, currentRun, mobile)}
           onCancel={cancelExport}
         />
       }
