@@ -189,6 +189,13 @@ describe("GET /catalogues", () => {
     // The test stack persists across runs, so the anon public list also
     // holds earlier runs' public catalogues: assert membership, not the
     // exact list.
+    //
+    // Sibling suites run in parallel against this one database, and a
+    // catalogue is public-unprotected for the instant between its create and
+    // the PATCH that protects it. Recorded before the request so the loop
+    // below can skip a row that moved after this list was read; only a row
+    // that stayed still pins the filter to the verdict.
+    const listedAt = new Date();
     const anon = await json<Record<string, unknown>[]>(
       await req("GET", "/api/v1/catalogues"),
     );
@@ -227,7 +234,16 @@ describe("GET /catalogues", () => {
         ),
       );
     expect(storedRows).toHaveLength(anon.length);
+    // At least one row must actually be checked, or the guard above would
+    // turn this into a vacuous pass.
+    expect(
+      storedRows.some((stored) => stored.updatedAt <= listedAt),
+      "no listed row stayed still long enough to compare",
+    ).toBe(true);
     for (const stored of storedRows) {
+      if (stored.updatedAt > listedAt) {
+        continue;
+      }
       expect(
         canSeeCatalogue(membershipOf(null, stored, null), stored),
         `the anonymous list returned ${stored.name}`,

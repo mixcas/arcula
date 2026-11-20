@@ -31,8 +31,9 @@ The design record, in order:
 
 A **Collection PDF** is the public-facing export of a Collection's published,
 live Artworks as one document: a photo page for each of an Artwork's first three
-photos, then a 2 × 3 grid of the Artworks that have no photos. It is an export of
-the Collection, never a second presentation of it.
+photos, and a 2 × 3 grid for the Artworks that have no photos, both in the
+Collection's one sorted order. It is an export of the Collection, never a second
+presentation of it.
 
 It is generated **in the browser**. There is no server-side PDF generation and
 no endpoint that answers `application/pdf`; the API's only role is the font
@@ -148,13 +149,15 @@ with identical artist and title stable. A blank artist name is not a case:
 
 ### Photo pages
 
-For each exportable Artwork **with at least one photo**, in sorted order:
+The plan walks the sorted works once. A work **with at least one photo**:
 
-- take the first **three** photos in the Artwork's stored order (`sortPhotos`
+- takes the first **three** photos in the Artwork's stored order (`sortPhotos`
   from `packages/shared/src/artworkPhotos.ts`);
-- emit one page per photo, so a work with one photo is one page, and a work with
+- emits one page per photo, so a work with one photo is one page, and a work with
   three is three pages;
-- the Artwork's metadata block is repeated on every one of its pages.
+- repeats the Artwork's metadata block on every one of its pages;
+- flushes the grid run in progress **before** its first page, so a no-photo work
+  that sorts earlier is printed earlier.
 
 A fourth and later photo is never used. A work is classified by the photos it
 **has**, not by whether they load: a non-empty `photos` array whose every URL is
@@ -162,10 +165,11 @@ missing or fails still gets its photo pages, with placeholders.
 
 ### The no-photo grid
 
-After every photo page, the exportable Artworks **with no photos** follow in the
-same sorted order, six per page: a 2-column × 3-row grid, filled left to right,
-top to bottom. A partial last page keeps the same geometry and the repeated
-header; a page never spills a seventh block.
+A work **with no photos** joins the current grid run, in the sorted order. A run
+is six per page — a 2-column × 3-row grid, filled left to right, top to bottom —
+and is flushed when a photo work follows it or the list ends, so a partial grid
+is never deferred past a photo page. A partial run keeps the same geometry and
+the repeated header; a page never spills a seventh block.
 
 A work with photos never appears in the grid, and a work without photos never
 gets a photo page.
@@ -183,7 +187,7 @@ Collaborator and a Visitor see the same thing.
 
 ```
 photoPages = Σ min(3, |photos(artwork)|)   over exportable works with photos
-gridPages  = ceil(|exportable works with no photos| / 6)
+gridPages  = Σ ceil(|run| / 6)              over maximal runs of no-photo works
 pages      = photoPages + gridPages       (or 1 when both are zero)
 ```
 

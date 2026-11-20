@@ -16,11 +16,15 @@ import CatalogueSettingsPage from "./components/manage/CatalogueSettingsPage";
 import CsvImportPage from "./components/manage/import/CsvImportPage";
 import NewCataloguePage from "./components/manage/catalogue/NewCataloguePage";
 import DeletedArtworksPage from "./components/manage/catalogue/DeletedArtworksPage";
+import SelectionsPage from "./components/manage/catalogue/SelectionsPage";
+import SelectionPage from "./components/manage/catalogue/SelectionPage";
 import ProfilePage from "./components/manage/ProfilePage";
 import ManageLayout from "./components/manage/layout/ManageLayout";
 import PublicLayout from "./components/layout/PublicLayout";
 import PublicCataloguePage from "./components/catalogue/PublicCataloguePage";
 import PublicArtworkPage from "./components/catalogue/PublicArtworkPage";
+import PublicSelectionPage from "./components/catalogue/PublicSelectionPage";
+import PublicSelectionArtworkPage from "./components/catalogue/PublicSelectionArtworkPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { LANDING_PALETTE } from "./components/landing/palette";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -29,6 +33,11 @@ import { AuthProvider } from "./auth/AuthProvider";
 // so no other page pays for React-PDF in the main bundle.
 const CataloguePdfPage = React.lazy(
   () => import("./components/pdf/CataloguePdfPage"),
+);
+// The same renderer serves a Selection's export; this route is its own chunk
+// entry so the public Selection pages never pay for React-PDF.
+const SelectionPdfPage = React.lazy(
+  () => import("./components/pdf/SelectionPdfPage"),
 );
 
 const App: React.FC = () => {
@@ -143,6 +152,28 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        {/* A Catalogue's Selections: the list and one Selection's manage page.
+            Both need the xl width the ordered works list will use. */}
+        <Route
+          path="/manage/catalogue/:catalogueId/selections"
+          element={
+            <ProtectedRoute>
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <SelectionsPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manage/catalogue/:catalogueId/selection/:selectionId"
+          element={
+            <ProtectedRoute>
+              <ManageLayout containerProps={{ size: "xl" }}>
+                <SelectionPage />
+              </ManageLayout>
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/manage/catalogue/:catalogueId/artwork/:artworkId"
           element={
@@ -186,6 +217,33 @@ const App: React.FC = () => {
         <Route
           path="/catalogue/:catalogueId/artwork/:artworkId"
           element={<PublicArtworkPage />}
+        />
+        {/* A Selection's own address: public chrome, no ProtectedRoute. The
+            page decides access through the ordinary read, so a visitor lands on
+            the lock screen or the not-found state rather than /login. */}
+        <Route
+          path="/selection/:selectionId"
+          element={<PublicSelectionPage />}
+        />
+        <Route
+          path="/selection/:selectionId/artwork/:artworkId"
+          element={<PublicSelectionArtworkPage />}
+        />
+        {/* A Selection's PDF viewer: the same lazy shape as the Catalogue's,
+            and public chrome for the same reason — the ordinary reads decide. */}
+        <Route
+          path="/selection/:selectionId/pdf"
+          element={
+            <React.Suspense
+              fallback={
+                <Center py="xl">
+                  <Loader />
+                </Center>
+              }
+            >
+              <SelectionPdfPage />
+            </React.Suspense>
+          }
         />
         {/* The Catalogue PDF viewer. Public chrome: the route itself decides
             access through the ordinary reads, never a ProtectedRoute. */}

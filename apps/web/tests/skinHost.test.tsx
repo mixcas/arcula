@@ -44,6 +44,7 @@ const renderHost = (overrides: Partial<Parameters<typeof SkinHost>[0]> = {}) =>
     <MemoryRouter>
       <SkinHost
         view="home"
+        subject={{ name: catalogue.name }}
         catalogue={catalogue}
         artworks={[artwork]}
         cataloguePath="/catalogue/flores-solares-AAAAAAAAAAAAAAAAAAAA"
@@ -146,5 +147,58 @@ describe("SkinHost — dispatch", () => {
   it("gives the artwork view one section, from the same component", () => {
     renderHost({ view: "artwork" });
     expect(screen.getAllByRole("region")).toHaveLength(1);
+  });
+
+  it("hands the skin the subject, not the Catalogue document's words", () => {
+    // The shell is the only place that knows what the document is called. A
+    // Selection presents its own name over the same Catalogue's skin, so the
+    // contract is the subject; a host that passed `catalogue.name` would look
+    // right on every Catalogue page and be wrong on every Selection.
+    renderHost({
+      subject: {
+        name: "Winter shortlist",
+        description: "Chosen for the fair.",
+      },
+      catalogue: {
+        ...catalogue,
+        name: "Flores Solares",
+        description: "The whole catalogue.",
+      },
+    });
+    expect(
+      screen.getByRole("link", { name: "Winter shortlist" }),
+    ).toHaveAttribute("href", "/catalogue/flores-solares-AAAAAAAAAAAAAAAAAAAA");
+    expect(screen.getByText("Chosen for the fair.")).toBeVisible();
+    expect(screen.queryByText("Flores Solares")).not.toBeInTheDocument();
+    expect(screen.queryByText("The whole catalogue.")).not.toBeInTheDocument();
+  });
+
+  it("renders the selection branch from the source presentation, with no Catalogue", () => {
+    // The selection branch takes no `catalogue` at all: the skin is resolved
+    // from the source Catalogue's stored id and options, and there is no
+    // address to link. Passing a document here would be a type error, which is
+    // the point of the union.
+    render(
+      <MemoryRouter>
+        <SkinHost
+          view="selection"
+          subject={{
+            name: "Winter shortlist",
+            description: "Chosen for the fair.",
+            catalogueName: "Flores Solares",
+          }}
+          artworks={[artwork]}
+          selectionPath="/selection/winter-shortlist-BBBBBBBBBBBBBBBBBBBB"
+          artworkPath={(work) => `/selection/x/${work.id}`}
+          skin="basicx"
+          skinOptions={{ transitionSeconds: 0.5 }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Winter shortlist")).toBeVisible();
+    expect(screen.getByText("Flores Solares")).toBeVisible();
+    expect(screen.getByText("Flores Solares").closest("a")).toBeNull();
+    expect(screen.getByRole("main")).toHaveAttribute("aria-label", "Selection");
   });
 });

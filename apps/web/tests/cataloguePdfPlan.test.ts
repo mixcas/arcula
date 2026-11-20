@@ -222,6 +222,24 @@ describe("buildCataloguePdfPlan grid pages", () => {
     expect(ids).toEqual(["a", "b", "c", "d", "e", "f", "g"]);
   });
 
+  it("prints a mixed photo and no-photo sorted list in reading order", () => {
+    const plan = buildCataloguePdfPlan([
+      artwork({
+        id: "c-photo",
+        artistName: "C",
+        photos: [photo("c-one", 0)],
+      }),
+      artwork({ id: "a-photo", artistName: "A", photos: [photo("a-one", 0)] }),
+      artwork({ id: "b-no-photo", artistName: "B" }),
+    ]);
+
+    expect(plannedArtworkIds(plan)).toEqual([
+      "a-photo",
+      "b-no-photo",
+      "c-photo",
+    ]);
+  });
+
   it("never crosses a work between the photo pages and the grid", () => {
     const withPhotos = artwork({
       id: "photo-work",

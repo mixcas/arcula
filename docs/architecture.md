@@ -97,6 +97,33 @@ offset }` and the facets counted over the filtered set. The verdict is
   share: the signed-in owned-or-shared list (`catalogueScope.ts` is the filter,
   each row's role and a shared row's owner name) and a Catalogue's live works
   by status (a member gets every status, a visitor published only).
+- `selectionWrite.ts` · `selectionRead.ts` — the Selection's write cores and
+  reads: create, rename/describe/publish/protect and delete (one transaction
+  that stamps the row, closes its grants and touches no work, photo or
+  Catalogue), the name-ordered list with each row's live-work count, the member
+  read, and the public read (the Selection plus the source Catalogue's name and
+  inherited skin/skinOptions — never its id, address or password state). The
+  same two modules own curation: `addSelectionWorks` appends in the argument
+  order and skips ids already present (a double click is harmless),
+  `replaceSelectionWorks` states the whole list — the reorder and the remove,
+  empty included — and both refuse an id that is not a live work of the source
+  Catalogue and renumber to `0..n-1` in one transaction. `readSelectionWorks`
+  is the one ordered works read for every audience: live works only, no status
+  filter (Drafts are the point), ordered by position then artwork id, children
+  taken from `artworkRead.ts`'s batched loader, and photo URLs carrying the
+  Selection's media scope. `readSelectionArtwork` is the single-work read over
+  the same batched loader and serializer: the work must be live and have a
+  curation row in this Selection, and every absence is one `null` the route
+  answers as 404. The write cores take a user id and import no Hono type; a
+  password write revokes every grant in the same transaction.
+  `selectionAccess.ts` is the pure verdict
+  (`canSeeSelection` ignores the source Catalogue's visibility; its deletion is
+  the loader's join), `selectionGrants.ts` owns the Selection's cookie name over
+  the shared token algebra, and `authorize.ts` owns `loadSelection`,
+  `loadSelectionWithCatalogue`, `memberSelectionFor`, `readableSelectionFor`
+  (a non-challenge refusal folds to the visitor's not-found) and
+  `selectionGrantHeld`. There is no cap and no media: a Selection references
+  works and owns no bytes.
 - `connectionList.ts` · `consentQuery.ts` — the account surface's pure halves:
   one row per client collapsed to the newest "last acted", and the signed
   consent query's rebuild and verification plus the `https:`-only client link.
@@ -113,11 +140,15 @@ offset }` and the facets counted over the filtered set. The verdict is
   resend, revoke, public preview, accept, decline, the invitee's inbox and
   in-app decline), `artworks`, `artworkSave` (the write half of a save: the
   staged entries promoted, upserted and deleted once the payload validates),
-  `artistNames` (the caller's suggestion read), `connections` (the verified
-  consent request, the account's Connections and Revoke), `me`, `media` (the
-  object proxy), `artworkMedia` (the presign and process routes: the browser
-  PUTs the bytes straight to storage under the caller's own staging prefix, and
-  process is the point the server validates them —
+  `selections` (the Catalogue's Selections list, create, read,
+  rename/describe/publish/protect and delete, plus the flat public read, the
+  ordered works read, the single curated work and unlock), `artistNames` (the
+  caller's suggestion read), `connections`
+  (the verified consent request, the account's Connections and Revoke), `me`,
+  `media` (the object proxy: the Catalogue's verdict, the Selection's photo
+  scope, and documents members-only), `artworkMedia` (the presign and process routes: the
+  browser PUTs the bytes straight to storage under the caller's own staging
+  prefix, and process is the point the server validates them —
   [ADR-0012](docs/adr/0012-media-uploads-go-direct-to-storage.md)).
 - `media/` — `keys.ts` (the object-key algebra), `pipeline.ts` (Sharp),
   `populations.ts` (what distinguishes photos from documents: tables, variants
@@ -134,7 +165,7 @@ offset }` and the facets counted over the filtered set. The verdict is
 
 **`packages/shared/src/`** — the contract: `schemas/` (access, artwork,
 artworkImport, artistNames, catalogue, connection, invitation, document, media,
-user),
+selection, user),
 `artworkFields.ts` (the Artwork fields registry: the thirteen togglable keys,
 the two fixed ones, the per-Kind defaults, `resolveArtworkFields`,
 `normaliseArtworkFields` and `disabledArtworkFieldsIn`, the predicate the save
@@ -175,6 +206,22 @@ leaves the column alone. `schemas/document.ts`'s `catalogueReadSchema` carries
 both, the deviations on every audience because the public PDF resolves them; the
 API's serializer validates a row against the three kind values
 (`catalogueKindOf`) and the deviation map before emitting them.
+`schemas/selection.ts` holds the Selection's wire and request shapes:
+`selectionReadSchema` / `selectionRowSchema` / `selectionPageSchema` (the
+name-ordered list, each row carrying its live-work count), the strict
+`selectionCreateSchema` / `selectionUpdateSchema` (the update carries visibility
+and the password's set-or-clear), `selectionWorksSchema` (append: at least one
+minted id, a duplicate tolerated) and `selectionWorksReplaceSchema` (replace: an
+empty list allowed, a duplicate refused, because the payload _is_ the list),
+`selectionWorksReadSchema` (the ordered `{ artworks }` envelope both the manage
+page and the visitor page parse), `selectionUnlockSchema`, and
+`selectionPublicReadSchema` (the Selection document plus the source Catalogue's
+name and inherited `skin`/`skinOptions`/`kind`/`artworkFields`). The read schemas
+never carry
+`passwordHash`; the member document's `isPasswordProtected` is the hash's
+presence, derived at the serializer boundary, and the public document carries
+neither the flag nor the source Catalogue's id. `slug.ts` gains `selectionSlug`
+beside the Catalogue and artwork helpers.
 
 **`apps/web/src/`** — `App.tsx` routes; `catalogueSurface.ts` is what a kind
 means for the surface, as data: the kind's colour (`kindColor`, a literal union
@@ -192,7 +239,56 @@ client
 `components/landing/` is the landing page at `/` — its sections are bands
 composed by `LandingPage.tsx`, with every sentence in `content.ts` and the four
 brand values in `palette.ts`; `components/manage` and `components/catalogue`;
-`skins/` is the public-view system.
+`skins/` is the public-view system. `types.ts` is the contract between the
+shell and a skin: `SkinProps` is a union on `view` — `home`, `artwork`,
+`selection` — carrying a `subject` (the presented document's name and optional
+description, and on a Selection the source Catalogue's `catalogueName` as an
+unlinked credit) plus the props that view has. `registry.ts` resolves a
+Catalogue's stored skin and options; `basicx/` is the one skin. **Adding a
+skin** is a folder plus one entry in the registry: implement all three views
+and register them in `SkinDefinition`; read the `subject`, never a
+`Catalogue` document; build every URL from the `artworkPath`/`selectionPath`
+the shell passed in, because a `selection` has no `cataloguePath`; keep the
+works in the order given (for a Selection, the curator's position order);
+narrow `options` once through the skin's own function; use no portaled Mantine
+component; set `pointerEvents: "auto"` on any link inside a fixed bar; and
+test it with plain objects plus the carousel mock. A Catalogue's Selections
+live in `components/manage/catalogue/SelectionsPage.tsx` (the name-ordered
+list, the empty state and the create modal) and `SelectionPage.tsx` (the
+settings block — name, description, Private/Public/Protected and the password —
+and the delete confirmation) over `SelectionWorksList.tsx`: the ordered works,
+each row a thumbnail, title, artist, a Draft badge, a drag handle and a remove
+control, with **Add works** opening a picker over the Catalogue's live works.
+`curationOrder.ts` is the two pure folds both surfaces share — a drag's
+`moveWorkIds` and the checked works' `checkedOrder` — and
+`AddToSelectionModal.tsx` is the checked-works action: the Catalogue's
+Selections plus a **New selection** entry, appending in the checked order. Both
+pages canonicalise their address from
+`selectionSlug` and call `services/selectionService.ts`, which parses every read
+through the shared schema and folds a missing Selection to `null`; `getWorks` is
+the one ordered read (the public address, which answers a member the member
+audience and a visitor the visitor's), `getArtwork` is the single-work read
+(404 → `null`), and `addWorks`/`replaceWorks` are the
+curation writes. `selectionSettingsSave.ts` also owns the publish warning, as
+two folds over the member read and the works the page holds: `publishRisk` is
+the transition — a Selection that is not public becoming public while the
+source Catalogue is not visitor-readable (`!isPublic` or `isPasswordProtected`) —
+returning the Catalogue's state and the Draft count, and `catalogueRisk` is the
+same fact while it stands, which the page shows as a dimmed line while the
+Selection is public. Both return `null` when there is nothing to say, so the
+warning never depends on the public read, which carries no Catalogue state. A
+Selection's
+public address is `components/catalogue/PublicSelectionPage.tsx` over
+`usePublicSelection.ts`: the same state union as the Catalogue's, a
+`password-required` refusal folded to the shared `LockScreen`, the Selection
+read before the works read (so a refusal never issues the second round trip),
+the works passed through in the curator's order with Drafts included and no
+badge or availability, and the skin rendered with the Selection's subject and
+the source Catalogue's resolved options — never a link to the Catalogue.
+`PublicSelectionArtworkPage.tsx` is the same shell for one work at
+`/selection/{sid}/artwork/{aid}`: both segments parsed and canonicalised, one
+not-found for a refused Selection or an uncurated work, and the skin's
+`selection` view with a one-element `artworks` array.
 
 The Artwork fields registry (`@arcula/shared`) decides what the Add and Edit
 forms render: a disabled field has no input, and the save omits its key rather
@@ -220,10 +316,10 @@ columns it skipped.
 `artworkDocuments`, plus the eight agent-access tables `jwks`, `oauthClient`,
 `oauthResource`, `oauthClientResource`, `oauthRefreshToken`, `oauthAccessToken`,
 `oauthConsent`, `oauthClientAssertion`) and the `schema` object the adapter
-consumes. The four Selection tables are in the schema and nothing reads them
-yet: `0014_selections` shipped alone, ahead of the feature code. The Drizzle
-entity is `catalogues` and the relation property is `catalogueId`, but the
-physical Postgres tables keep their `collections` / `collection_*` names and the
+consumes. All four Selection tables are read and written by the Selection
+feature: `0014_selections` shipped alone, ahead of the code that uses them.
+The Drizzle entity is `catalogues` and the relation property is `catalogueId`,
+but the physical Postgres tables keep their `collections` / `collection_*` names and the
 physical column stays `"collectionId"` — a storage rename is a non-additive
 migration (ADR-0010). The
 two sharing tables are in the schema

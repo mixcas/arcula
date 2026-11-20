@@ -13,8 +13,10 @@ import {
   resolveArtworkFields,
   urlizeName,
   type Artwork,
+  type ArtworkFieldDeviations,
   type ArtworkFieldStates,
   type Catalogue,
+  type CatalogueKind,
 } from "@arcula/shared";
 
 import {
@@ -164,14 +166,31 @@ export function printedArtworkFields(
 }
 
 /**
+ * The same answer, resolved from a Kind and the stored deviations.
+ *
+ * The one entry point both exports use: a Catalogue passes its own two fields,
+ * a Selection passes the source Catalogue's — the public Selection read carries
+ * them for exactly this reason — so a visitor's document prints the same set a
+ * member's does.
+ */
+export function artworkPdfFields(
+  kind: CatalogueKind,
+  artworkFields: ArtworkFieldDeviations | null | undefined,
+): PrintedArtworkFields {
+  return printedArtworkFields(
+    resolveArtworkFields(kind, artworkFields).enabled,
+  );
+}
+
+/**
  * The same answer, resolved from a Catalogue: the public read carries its
  * deviations, so a visitor building this PDF resolves exactly what a member
  * does. Nothing member-only is read.
  */
-export function cataloguePdfFields(catalogue: Catalogue): PrintedArtworkFields {
-  return printedArtworkFields(
-    resolveArtworkFields(catalogue.kind, catalogue.artworkFields).enabled,
-  );
+export function cataloguePdfFields(
+  catalogue: Pick<Catalogue, "kind" | "artworkFields">,
+): PrintedArtworkFields {
+  return artworkPdfFields(catalogue.kind, catalogue.artworkFields);
 }
 
 const valuesFor = (
@@ -195,26 +214,29 @@ const artworksOnPage = (page: CataloguePdfPage): Artwork[] => {
 };
 
 /**
- * Every distinct string the document draws, in document order.
+ * Every distinct string the document draws, in page order.
  *
- * The plan is the source, so only exportable works contribute and the order is
- * the reading order rather than the stored array's. Only the fields the
- * Catalogue records join the set — the same set the document prints, which is
- * what keeps the fallback font covering every character it draws. Photo
- * filenames are not drawn and are deliberately absent.
+ * The pages are the source, so only the works the document prints contribute
+ * and the order is the reading order rather than the stored array's. Only the
+ * fields the document records join the set — the same set the document prints,
+ * which is what keeps the fallback font covering every character it draws.
+ * Photo filenames are not drawn and are deliberately absent.
+ *
+ * The title is the one the document itself prints: a Catalogue's name or a
+ * Selection's, never the other.
  */
-export function cataloguePdfTexts(
-  catalogueName: string,
-  artworks: Artwork[],
+export function pdfTexts(
+  title: string,
+  pages: CataloguePdfPage[],
   fields: PrintedArtworkFields,
 ): string[] {
   const texts = new Set<string>();
 
-  if (catalogueName !== "") {
-    texts.add(catalogueName);
+  if (title !== "") {
+    texts.add(title);
   }
 
-  for (const page of buildCataloguePdfPlan(artworks)) {
+  for (const page of pages) {
     for (const artwork of artworksOnPage(page)) {
       for (const value of valuesFor(artwork, fields)) {
         if (value !== "") {
@@ -226,6 +248,20 @@ export function cataloguePdfTexts(
 
   texts.add(IMAGE_UNAVAILABLE);
   return [...texts];
+}
+
+/**
+ * Every distinct string a Catalogue's document draws, in document order.
+ *
+ * The Catalogue's own plan is the source, so only exportable works contribute
+ * and the order is the reading order rather than the stored array's.
+ */
+export function cataloguePdfTexts(
+  catalogueName: string,
+  artworks: Artwork[],
+  fields: PrintedArtworkFields,
+): string[] {
+  return pdfTexts(catalogueName, buildCataloguePdfPlan(artworks), fields);
 }
 
 /**
@@ -252,3 +288,11 @@ export const shouldWarnForLargeExport = (
 /** The downloaded filename: the urlized name, `catalogue` when nothing is. */
 export const cataloguePdfFileName = (name: string): string =>
   `${urlizeName(name) || "catalogue"}.pdf`;
+
+/**
+ * A Selection's downloaded filename: its own name, and `selection` when there
+ * is nothing to urlize. The fallback is never a Catalogue's — the document is
+ * named after the Selection, not the record it borrows its presentation from.
+ */
+export const selectionPdfFileName = (name: string): string =>
+  `${urlizeName(name) || "selection"}.pdf`;

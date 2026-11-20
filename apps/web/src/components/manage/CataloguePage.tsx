@@ -297,6 +297,16 @@ const CataloguePage: React.FC = () => {
           </Button>
         </Group>
         <Group wrap="wrap">
+          {/* The Selections list lives in the app, so a router link is right
+              here; View and PDF open the public document in a new tab. It sits
+              between PDF and the search box, as the header's one order is
+              title → document → curation → search → actions. */}
+          <Button
+            component={Link}
+            to={`/manage/catalogue/${param ?? ""}/selections`}
+          >
+            Selections
+          </Button>
           <TextInput
             value={inputValue}
             onChange={(event) => {

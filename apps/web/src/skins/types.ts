@@ -38,7 +38,7 @@ import type { MantineThemeOverride } from "@mantine/core";
 import type { Artwork, Catalogue } from "@arcula/shared";
 
 /** Which public view the shell is rendering. */
-export type SkinView = "home" | "artwork";
+export type SkinView = "home" | "artwork" | "selection";
 
 /** A value a skin option may hold. Mirrors `Catalogue.skinOptions`. */
 export type SkinOptionValue = boolean | number | string;
@@ -88,24 +88,72 @@ interface TextOptionSpec extends SkinOptionSpecBase {
 export type SkinOptionSpec =
   BooleanOptionSpec | NumberOptionSpec | TextOptionSpec;
 
-/** Everything the shell knows and a skin is allowed to ask about. */
-export interface SkinProps {
-  catalogue: Catalogue;
+/**
+ * What the skin is presenting, independent of where it came from.
+ *
+ * A Catalogue's public views and a Selection's share one presenter, so the
+ * skin reads this rather than a `Catalogue` document: `name` and `description`
+ * are the document's own, and on a Selection `catalogueName` is the credit
+ * line naming the Catalogue it was cut from. A skin that read
+ * `catalogue.description` instead would render the source Catalogue's words on
+ * a Selection, and would have no credit line at all.
+ */
+export interface SkinSubject {
+  /** The document's name: the Catalogue's or the Selection's. */
+  name: string;
+  /** Its own description. Absent or blank means nothing to introduce. */
+  description?: string;
   /**
-   * On `home` this is every public, live artwork in the catalogue. On
-   * `artwork` it is the single work being viewed — still an array, because the
-   * two views differ only in how many sections there are, and a skin that
-   * renders one component for both needs one shape.
+   * The source Catalogue's name, on a `selection` view only.
+   *
+   * A credit, never a link: the Catalogue may be private, so a skin is given
+   * no path to it and must not build one.
+   */
+  catalogueName?: string;
+}
+
+/** Props every view shares, whichever document it is presenting. */
+interface SkinViewProps {
+  /** What is being presented. Read `subject`, never `catalogue`. */
+  subject: SkinSubject;
+  /**
+   * On `home` and `selection` this is every work in the document, in the order
+   * the shell decided (the Catalogue's public list, or the Selection's
+   * position order). On `artwork` it is the single work being viewed — still an
+   * array, because the views differ only in how many sections there are, and a
+   * skin that renders one component for all of them needs one shape.
    */
   artworks: Artwork[];
-  view: SkinView;
   /** Already resolved against this skin's specs: every declared key present. */
   options: SkinOptions;
-  /** The canonical public path of the catalogue, for links back to it. */
-  cataloguePath: string;
-  /** The canonical public path of one artwork. */
+  /** The canonical public path of one artwork, wherever the document lives. */
   artworkPath: (artwork: Artwork) => string;
 }
+
+/**
+ * Everything the shell knows and a skin is allowed to ask about.
+ *
+ * A union on `view`, not a flat interface with optional fields: the selection
+ * variant has a `selectionPath` and deliberately **no** `cataloguePath`, so a
+ * skin cannot link a source Catalogue that may be private (or gone). Making
+ * the path absent rather than empty is what turns that rule into a type.
+ */
+export type SkinProps =
+  | (SkinViewProps & {
+      view: "home";
+      catalogue: Catalogue;
+      cataloguePath: string;
+    })
+  | (SkinViewProps & {
+      view: "artwork";
+      catalogue: Catalogue;
+      cataloguePath: string;
+    })
+  | (SkinViewProps & {
+      view: "selection";
+      /** The canonical public path of the Selection, for its own links. */
+      selectionPath: string;
+    });
 
 export interface SkinDefinition {
   /** Persisted on `Catalogue.skin`. Never renamed once shipped. */
@@ -128,7 +176,12 @@ export interface SkinDefinition {
    */
   theme?: MantineThemeOverride;
   /** The catalogue homepage — normally one section per artwork. */
-  Home: ComponentType<SkinProps>;
+  Home: ComponentType<Extract<SkinProps, { view: "home" }>>;
   /** The single-artwork view. May show more than `Home` does. */
-  Artwork: ComponentType<SkinProps>;
+  Artwork: ComponentType<Extract<SkinProps, { view: "artwork" }>>;
+  /**
+   * A Selection's public page: the same works-in-order layout as `Home`, with
+   * the Selection's subject and its Catalogue credited by name.
+   */
+  Selection: ComponentType<Extract<SkinProps, { view: "selection" }>>;
 }

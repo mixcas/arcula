@@ -28,18 +28,21 @@
  * `pointerEvents: "auto"` on the link itself, and a test that walks the ancestor
  * chain — see `tests/basicxSkin.test.tsx`.
  *
- * ## The nav's empty second line
+ * ## The nav's second line
  *
- * The nav is left to its two-column row for now; the space for a second line
- * is reserved and deliberately unrendered. An empty box is indistinguishable
- * from no box, and the reserved slot is better recorded here than as markup.
- * (`catalogue.description` is *not* the thing for it — see the footer
- * below, which is where the description actually lives.)
+ * The nav's left slot is a zero-gap stack: the document's name, and — on a
+ * Selection — the Catalogue it was cut from. That credit is the second line
+ * and it is plain text, because the source Catalogue may be private or gone
+ * and the skin is given no path to it. On a Catalogue's own views the stack
+ * holds one line, so nothing about them changes. (The description is *not*
+ * the second line; it lives in the footer, below.)
  */
 
 import React from "react";
 import { Anchor, Box, Group, Stack, Text } from "@mantine/core";
 import { Link } from "react-router-dom";
+
+import type { SkinView } from "@/skins/types";
 
 /**
  * The artwork the footer is describing, already resolved to display values.
@@ -56,10 +59,19 @@ export interface FooterArtwork {
 }
 
 interface BasicxChromeProps {
-  catalogueTitle: string;
-  /** Canonical public path of the catalogue, for the nav title and the back link. */
-  cataloguePath: string;
-  view: "home" | "artwork";
+  /** The presented document's name: the Catalogue's or the Selection's. */
+  title: string;
+  /**
+   * Canonical public path of the document, for the nav title and the back
+   * link. `null` on a Selection: it has no Catalogue page to return to.
+   */
+  documentPath: string | null;
+  /**
+   * The source Catalogue's name on a Selection, already trimmed; blank on a
+   * Catalogue's own views. A credit, never a link.
+   */
+  creditLine: string;
+  view: SkinView;
   /**
    * The artwork currently in view, or null before the first section reports
    * itself — which is the whole of the artwork view's steady state, since
@@ -67,7 +79,7 @@ interface BasicxChromeProps {
    */
   artwork: FooterArtwork | null;
   /**
-   * The catalogue description, already trimmed. Blank means the footer's
+   * The document's description, already trimmed. Blank means the footer's
    * left slot renders the artwork and nothing else.
    */
   description: string;
@@ -90,8 +102,9 @@ const DIM_COLOR = "rgba(0, 0, 0, 0.4)";
 const DESCRIPTION_MAX_WIDTH_REM = "22rem";
 
 const BasicxChrome: React.FC<BasicxChromeProps> = ({
-  catalogueTitle,
-  cataloguePath,
+  title,
+  documentPath,
+  creditLine,
   view,
   artwork,
   description,
@@ -100,8 +113,9 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
 }) => (
   <>
     {/*
-      Nav. Two columns, gutter 1rem: the catalogue title on the left where the
-      reference has its site title, links right-aligned where it has
+      Nav. Two columns, gutter 1rem: the document title (and, on a Selection,
+      its source catalogue's name beneath it) on the left where the reference
+      has its site title, links right-aligned where it has
       Information / Index / Email.
       Padding: 1rem at the sides, 0.9rem at the top, and 2.5rem below — the last
       one deliberately generous, so the bar clears the image beneath it.
@@ -118,26 +132,45 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
       style={{ zIndex: 2, pointerEvents: "none" }}
     >
       <Group justify="space-between" align="flex-start" gap="md" wrap="nowrap">
-        <Anchor
-          component={Link}
-          to={cataloguePath}
-          underline="never"
-          size="bodycopy"
-          fw={550}
-          lh={1.2}
-          c={LINK_COLOR}
-          style={{ pointerEvents: "auto" }}
-        >
-          {catalogueTitle}
-        </Anchor>
+        <Stack gap={0} align="flex-start">
+          {documentPath === null ? (
+            // A Selection has no Catalogue page to return to, and no path to
+            // the source Catalogue at all: the title stays the same line,
+            // styled identically, and is simply not a control.
+            <Text size="bodycopy" fw={550} lh={1.2} c={LINK_COLOR}>
+              {title}
+            </Text>
+          ) : (
+            <Anchor
+              component={Link}
+              to={documentPath}
+              underline="never"
+              size="bodycopy"
+              fw={550}
+              lh={1.2}
+              c={LINK_COLOR}
+              style={{ pointerEvents: "auto" }}
+            >
+              {title}
+            </Anchor>
+          )}
+          {creditLine.length === 0 ? null : (
+            // The source Catalogue's name, on a Selection only. Not an
+            // Anchor: a link would take the visitor to a private catalogue's
+            // lock screen — exactly what the contract withholds the path for.
+            <Text size="caption" fw={450} lh={1.2} c={DIM_COLOR}>
+              {creditLine}
+            </Text>
+          )}
+        </Stack>
 
         <Group gap="md" wrap="nowrap" style={{ pointerEvents: "auto" }}>
-          {view === "artwork" ? (
+          {view === "artwork" && documentPath !== null ? (
             // "Index" rather than "Back": terse and gallery-familiar, and the
             // one word that names what it returns to.
             <Anchor
               component={Link}
-              to={cataloguePath}
+              to={documentPath}
               underline="never"
               size="bodycopy"
               fw={550}
@@ -181,7 +214,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
     </Box>
 
     {/*
-      Footer: the catalogue description pinned to the bottom-left of the bar,
+      Footer: the document's description pinned to the bottom-left of the bar,
       against the artwork in view on the bottom-right — two stacked lines, the
       title bold on top and the artist beneath it, dimmer because it is the
       quieter of the two. The title links to the artwork's own public view,
@@ -212,7 +245,7 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
         gap="xl"
       >
         {/*
-          The description, when the catalogue has one, in the left slot.
+          The description, when the document has one, in the left slot.
           Fades out in place: `visibility` transitions as a discrete step that
           stays `visible` until the end of the duration, so the text is
           readable while it fades and gone (not selectable, not announced)
@@ -251,17 +284,19 @@ const BasicxChrome: React.FC<BasicxChromeProps> = ({
           {/* A non-breaking space on each line holds its height until the first
               section reports itself, so the bar does not jump as it fills in. */}
           {/*
-            Linked on `home` only. On the artwork view this path is the page the
-            visitor is already on, so a link there is a control that navigates
-            nowhere — and the `Text` below is the same line, styled identically,
-            so the two branches differ in behaviour and not in appearance.
+            Linked on `home` and `selection`: both are a list of works, so the
+            title is a way into the work under it. On the artwork view this
+            path is the page the visitor is already on, so a link there is a
+            control that navigates nowhere — and the `Text` below is the same
+            line, styled identically, so the two branches differ in behaviour
+            and not in appearance.
 
             The `pointerEvents: "auto"` is not optional and neither is its
             absence from the nav: the footer is `none`, that inherits, and
             without this the click lands on the carousel. See the note at the
             top of this file.
           */}
-          {artwork?.path && view === "home" ? (
+          {artwork?.path && (view === "home" || view === "selection") ? (
             <Anchor
               component={Link}
               to={artwork.path}

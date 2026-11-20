@@ -1,11 +1,12 @@
 import React, { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import CatalogueLockScreen from "./CatalogueLockScreen";
+import LockScreen from "@/components/LockScreen";
 import SkinHost from "./SkinHost";
 import PublicStateMessage from "./PublicStateMessage";
 import { usePublicArtwork } from "./usePublicCatalogue";
 import { artworkSlug, catalogueSlug, parseId } from "@arcula/shared";
+import { catalogueService } from "@/services/catalogueService";
 
 /**
  * The public view of a single artwork.
@@ -61,12 +62,16 @@ const PublicArtworkPage: React.FC = () => {
 
   if (state.status === "locked") {
     // The same challenge as the catalogue page, because a work's own link is
-    // not a way around the catalogue's lock (ADR-0005).
+    // not a way around the catalogue's lock (ADR-0005). The attempt and the
+    // reload are this page's; the screen only asks.
     return (
-      <CatalogueLockScreen
-        catalogueId={catalogueId}
-        catalogueName={state.catalogueName}
-        onUnlocked={reload}
+      <LockScreen
+        noun="catalogue"
+        name={state.catalogueName}
+        onUnlock={async (password) => {
+          await catalogueService.unlockCatalogue(catalogueId, password);
+          reload();
+        }}
       />
     );
   }
@@ -92,6 +97,7 @@ const PublicArtworkPage: React.FC = () => {
   return (
     <SkinHost
       view="artwork"
+      subject={{ name: catalogue.name, description: catalogue.description }}
       catalogue={catalogue}
       artworks={[artwork]}
       cataloguePath={cataloguePath}
