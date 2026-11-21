@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { basicxSkin } from "@/skins/basicx";
 import { resolveSkinOptions } from "@/skins/registry";
-import type { SkinProps } from "@/skins/types";
+import type { SkinProps, SkinSubject } from "@/skins/types";
 import type { Artwork, Catalogue, ImageVariantKey } from "@arcula/shared";
 import type { MockEmblaApi } from "./helpers/carouselMock";
 
@@ -122,32 +122,65 @@ const rtlRender = rtl.render;
 
 const CATALOGUE_PATH = "/catalogue/flores-solares-catalogue-1";
 
-const makeProps = ({
-  options: stored,
-  catalogue: withCatalogue,
-  ...props
-}: Partial<SkinProps> & { catalogue?: Catalogue } = {}): SkinProps => ({
-  catalogue: { ...catalogue, ...withCatalogue },
-  artworks: [artwork()],
+type HomeProps = Extract<SkinProps, { view: "home" }>;
+
+/** The props both catalogue views share; each adds its own `view` literal. */
+type CatalogueViewProps = Omit<HomeProps, "view">;
+
+interface CatalogueViewOverrides extends Partial<CatalogueViewProps> {
+  view?: "home" | "artwork";
+  subject?: Partial<SkinSubject>;
+}
+
+/**
+ * The catalogue views' props. The description under test is the subject's:
+ * the skin no longer reads it from the Catalogue document.
+ */
+const catalogueViewProps = (
+  overrides: CatalogueViewOverrides = {},
+): CatalogueViewProps => {
+  const {
+    options: stored,
+    subject: subjectOverrides,
+    view: _view,
+    ...props
+  } = overrides;
+  return {
+    catalogue,
+    subject: { name: catalogue.name, ...subjectOverrides },
+    artworks: [artwork()],
+    cataloguePath: CATALOGUE_PATH,
+    artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
+    ...props,
+    // Resolved last: the props above may carry raw stored options, and
+    // `resolveSkinOptions` is exactly what the host does with them.
+    options: resolveSkinOptions(basicxSkin, stored).options,
+  };
+};
+
+/** The Home view's props, for a rerender with the same values. */
+const makeProps = (overrides: CatalogueViewOverrides = {}): HomeProps => ({
+  ...catalogueViewProps(overrides),
   view: "home",
-  cataloguePath: CATALOGUE_PATH,
-  artworkPath: (work) => `${CATALOGUE_PATH}/artwork/${work.title}-${work.id}`,
-  ...props,
-  // Resolved last: the props above may carry raw stored options, and
-  // `resolveSkinOptions` is exactly what the host does with them.
-  options: resolveSkinOptions(basicxSkin, stored).options,
 });
 
 const renderSkin = ({
+  view = "home",
   ...props
-}: Partial<SkinProps> & { catalogue?: Catalogue } = {}) =>
-  rtlRender(
+}: CatalogueViewOverrides = {}) => {
+  const shared = catalogueViewProps(props);
+  return rtlRender(
     <MantineProvider theme={basicxSkin.theme}>
       <MemoryRouter>
-        <basicxSkin.Home {...makeProps(props)} />
+        {view === "artwork" ? (
+          <basicxSkin.Artwork {...shared} view="artwork" />
+        ) : (
+          <basicxSkin.Home {...shared} view="home" />
+        )}
       </MemoryRouter>
     </MantineProvider>,
   );
+};
 
 /** The fake embla apis of the rendered carousels, in document order. */
 const carouselApis = (): MockEmblaApi[] =>
@@ -182,7 +215,7 @@ afterEach(() => {
 
 describe("Basicx — the catalogue description", () => {
   it("renders the description bottom-right on home when the catalogue has one", () => {
-    renderSkin({ catalogue: { description: "A handful of sunscapes." } });
+    renderSkin({ subject: { description: "A handful of sunscapes." } });
     const box = descriptionBox();
     expect(box).not.toBeNull();
     expect(box).toHaveStyle({ opacity: "1", visibility: "visible" });
@@ -190,7 +223,7 @@ describe("Basicx — the catalogue description", () => {
   });
 
   it("keeps the artwork lines and the description in the same footer", () => {
-    renderSkin({ catalogue: { description: "A handful of sunscapes." } });
+    renderSkin({ subject: { description: "A handful of sunscapes." } });
     const box = descriptionBox();
     const footer = box?.closest("footer");
     expect(footer).not.toBeNull();
@@ -201,28 +234,20 @@ describe("Basicx — the catalogue description", () => {
   });
 
   it("renders nothing when the description is blank or whitespace", () => {
-    renderSkin({ catalogue: { description: "   \n  " } });
+    renderSkin({ subject: { description: "   \n  " } });
     expect(screen.queryByText(/sunscapes/)).toBeNull();
   });
 
   it("keeps the description out of the artwork view, not merely faded over it", () => {
-    // It is an introduction to the catalogue, and a visitor on one artwork
+    // It is an introduction to the document, and a visitor on one artwork
     // has already stepped past the introduction. The chrome mounts the box
     // (so the fade it would play never measures a fresh element), which means
     // "hidden" rather than "absent" is what "not shown" asserts: invisible to
     // the eye, to the screen reader, and to any pointer.
-    rtlRender(
-      <MantineProvider theme={basicxSkin.theme}>
-        <MemoryRouter>
-          <basicxSkin.Artwork
-            {...makeProps({
-              catalogue: { description: "A handful of sunscapes." },
-              view: "artwork" as const,
-            })}
-          />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderSkin({
+      subject: { description: "A handful of sunscapes." },
+      view: "artwork",
+    });
     const box = descriptionBox();
     expect(box).not.toBeNull();
     expect(box).toHaveStyle({ opacity: "0", visibility: "hidden" });
@@ -231,7 +256,7 @@ describe("Basicx — the catalogue description", () => {
 
   it("fades out when the visitor clicks to the second photo of the first artwork", () => {
     renderSkin({
-      catalogue: { description: "A handful of sunscapes." },
+      subject: { description: "A handful of sunscapes." },
       artworks: [artwork()],
     });
     const [api] = carouselApis();
@@ -252,7 +277,7 @@ describe("Basicx — the catalogue description", () => {
     // clause can never fire — hiding the description here would mean it never
     // appears at all. Only the scroll can dismiss it.
     renderSkin({
-      catalogue: { description: "A handful of sunscapes." },
+      subject: { description: "A handful of sunscapes." },
       artworks: [artwork({ photos: [photo("p1", 0)] })],
     });
     expect(screen.queryAllByTestId("carousel")).toHaveLength(0);
@@ -263,7 +288,7 @@ describe("Basicx — the catalogue description", () => {
     // The latch: the description is an introduction, and a visitor who has
     // already passed it does not get it back by scrolling up.
     renderSkin({
-      catalogue: { description: "A handful of sunscapes." },
+      subject: { description: "A handful of sunscapes." },
       artworks: [artwork({ id: "work-a" }), artwork({ id: "work-b" })],
     });
     moveTo(carouselApis()[0], 1);
@@ -276,7 +301,7 @@ describe("Basicx — the catalogue description", () => {
 
   it("dismisses when the visitor scrolls to the second artwork, for good", () => {
     const merged = makeProps({
-      catalogue: { description: "A handful of sunscapes." },
+      subject: { description: "A handful of sunscapes." },
       artworks: [artwork({ id: "work-a" }), artwork({ id: "work-b" })],
     });
     const result = rtlRender(

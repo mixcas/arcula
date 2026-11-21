@@ -318,6 +318,16 @@ export const extensionFor = (contentType: string | undefined): string | null =>
  * fields with these, and the stage/process responses return them so
  * the form can render previews straight from the staged objects without
  * encoding anything itself.
+ *
+ * `selectionId` is the Selection's media scope: a photo a visitor may not
+ * read through its Catalogue — a Draft in a public Selection — is admitted by
+ * the proxy when the URL names the Selection the work is curated into. It is
+ * optional and it is **photos only**: documents keep the bare URL, so a
+ * Selection never makes a certificate public.
  */
-export const mediaUrl = (key: string): string =>
-  `/api/v1/media?key=${encodeURIComponent(key)}`;
+export const mediaUrl = (key: string, selectionId?: string): string =>
+  `/api/v1/media?key=${encodeURIComponent(key)}${
+    selectionId === undefined
+      ? ""
+      : `&selection=${encodeURIComponent(selectionId)}`
+  }`;

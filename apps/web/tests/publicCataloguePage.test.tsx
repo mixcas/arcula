@@ -202,6 +202,22 @@ describe("PublicCataloguePage — the reachable states", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   });
 
+  it("presents the catalogue's name and description as the skin's subject", async () => {
+    // The skin no longer reads the Catalogue document, so these two facts
+    // reach it only if this page puts them in the subject. A page that passed
+    // only the document would render a nameless stage and no introduction.
+    getCatalogue.mockResolvedValue(
+      catalogue({ description: "A handful of sunscapes." }),
+    );
+    getCatalogueArtworks.mockResolvedValue([artwork("a1", "Bodegón")]);
+    renderPage();
+    await waitFor(() => expect(screen.getAllByRole("region")).toHaveLength(1));
+    expect(
+      screen.getByRole("link", { name: "Flores Solares" }),
+    ).toHaveAttribute("href", `/catalogue/flores-solares-${CATALOGUE_ID}`);
+    expect(screen.getByText("A handful of sunscapes.")).toBeVisible();
+  });
+
   it("offers the attribution link in the skin's nav, and no login link", async () => {
     getCatalogue.mockResolvedValue(catalogue());
     getCatalogueArtworks.mockResolvedValue([artwork("a1", "Bodegón")]);
@@ -301,10 +317,12 @@ describe("PublicCataloguePage — a protected catalogue", () => {
     expect(getCatalogueArtworks).not.toHaveBeenCalled();
   });
 
-  it("says the window is spent, in the server's words, and stays on the lock screen", async () => {
+  it("keeps a spent window on the lock screen and does not re-read", async () => {
     getCatalogue.mockRejectedValue(passwordRequired());
     // The screen cannot word this one itself: the window is the server's
-    // policy, and it states the window without counting down.
+    // policy, and it states the window without counting down. What this page
+    // owns is that the refusal is reported rather than swallowed, and that it
+    // is not treated as an unlock.
     unlockCatalogue.mockRejectedValue(
       new ApiRequestError(
         429,

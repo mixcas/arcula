@@ -34,8 +34,9 @@ the MCP write limiter's counter, claimed by `agentLimiter.ts`: a rolling
 alone, ahead of the limiter that reads it, per the rule that a schema change is
 deployed before the code that reads it.
 
-The four Selection tables are in the schema and **nothing reads them yet**:
-`0014_selections` shipped alone, ahead of the feature code, on that same rule.
+The four Selection tables are in the schema and read and written by the
+Selection feature: `0014_selections` shipped alone, ahead of that code, on the
+same rule.
 `selections` is the entity (source Catalogue, name, optional description,
 visibility defaulting to private, optional password hash, deletion stamp,
 timestamps); `selection_works` is its ordered membership; the grant and unlock

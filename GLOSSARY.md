@@ -48,9 +48,15 @@ Its name is the gallery's name and its description is about the gallery.
 _Avoid_: Stock, booth, catalogue (when meaning the umbrella)
 
 **Selection**:
-A curated subset of a Catalogue's works, published on its own address with its
-own audience. It references works rather than owning them, and it is not a kind:
-any kind can be selected from.
+A curated, ordered subset of one Catalogue's works, given its own address and
+its own audience — Public, Private or Protected, independently of its
+Catalogue's own. It references works rather than owning them and never edits
+them, and it shows them as they are now: a work deleted in its Catalogue leaves
+the Selection and returns on restore. It is not a kind, and it has no owner or
+collaborators of its own: the source Catalogue's owner and collaborators curate
+it, and its readers are visitors. A public Selection is reached by link only and
+is advertised nowhere, its own Catalogue's page included. Not the artworks
+manage view's checked works, which are a page state.
 _Avoid_: Catalogue (this was its old name), subset, shortlist
 
 **Reset request**:
@@ -125,8 +131,9 @@ descriptive fields recorded against it.
 _Avoid_: Piece, item, object, painting, entry
 
 **Visitor**:
-Anyone reading a Catalogue or an artwork without an account, or without being
-its owner or a collaborator. A visitor sees only what is public.
+Anyone reading a Catalogue, a Selection or an artwork without an account, or
+without being an owner or a collaborator of the Catalogue it comes from. A
+visitor sees only what is public.
 _Avoid_: Guest, reader, viewer
 
 ### Mail
@@ -192,8 +199,9 @@ them, starting from the defaults its Kind brings, with Title and Artist Name
 always recorded. A field a Catalogue does not record is not asked for, is
 refused on a save, is not matched by Catalogue search and is not printed in the
 Catalogue PDF; a value already recorded is kept and returns when the field is
-turned back on. Photos and Other Documents are not fields, and Published or
-Draft is the work's stamp rather than one of its fields.
+turned back on. A Selection has no choice of its own and prints its source
+Catalogue's. Photos and Other Documents are not fields, and Published or Draft
+is the work's stamp rather than one of its fields.
 _Avoid_: Record fields, field visibility, schema, columns
 
 **Artwork photo**:
@@ -221,38 +229,46 @@ _Avoid_: Upload, ingestion, batch, bulk add
 ### What is seen
 
 **Public**:
-Readable by a visitor. Only a Catalogue carries this choice: it is the gate on
-everything inside it. A work is never public on its own account.
+Readable by a visitor. A Catalogue and a Selection each carry this choice, and
+each is the gate on what it holds, on its own terms: a work is never public on
+its own account, and it is public when a public Catalogue lists it or a public
+Selection includes it.
 _Avoid_: Published, shared, live
 
 **Private**:
-Readable by its owner and collaborators alone. To a visitor a private Catalogue
-is indistinguishable from one that does not exist.
+Readable by the owner and collaborators of its Catalogue — for a Selection, of
+the Catalogue it is cut from — and by no visitor. To a visitor a private
+Catalogue or Selection is indistinguishable from one that does not exist.
 _Avoid_: Hidden, unpublished, draft
 
 **Protected**:
-A public Catalogue that also requires its password. A second condition on public
-readability rather than a visibility of its own: the Catalogue is still public,
-and the owner and collaborators never face the challenge. A protected Catalogue
+A public Catalogue or Selection that also requires its password. A second
+condition on public readability rather than a visibility of its own: it is still
+public, and the members who curate it never face the challenge. A protected one
 is absent from the public list and reachable only by its link.
 _Avoid_: Locked, password-protected, gated, restricted
 
 **Lock screen**:
-What a visitor to a protected Catalogue is shown instead of the page until they
-enter its password. App chrome, never a skin, because the lock belongs to the
-Catalogue rather than to how the Catalogue is presented; the public views call
-the state it puts them in `locked`, and a refused read is what reaches it.
+What a visitor to a protected Catalogue or Selection is shown instead of the
+page until they enter its password. App chrome, never a skin, because the lock
+belongs to the thing being read rather than to how it is presented; the public
+views call the state it puts them in `locked`, and a refused read is what
+reaches it.
 _Avoid_: Password page, gate, interstitial
 
 **Published**:
-An artwork the owner or a collaborator has put in front of the Catalogue's gate.
-A published work is visible to a visitor exactly when its Catalogue is public.
+An artwork the owner or a collaborator has put on its Catalogue's own page. A
+published work is visible there exactly when its Catalogue is public. A
+Selection does not consult this: a work can be in front of a Selection's gate
+while its Catalogue has not listed it, and being listed does not put it in any
+Selection.
+_Avoid_: Public (for a work), live
 
 **Draft**:
-An artwork the owner or a collaborator keeps inside the Catalogue but has not
-put in front of the gate. The owner and collaborators see it everywhere; a
-visitor never does, whatever the Catalogue's own visibility. A draft counts as
-part of the Catalogue.
+An artwork the owner or a collaborator keeps off its Catalogue's own page. The
+members see it everywhere; a visitor never sees it on the Catalogue's page or in
+the Catalogue PDF, though a Selection that includes it does show it — the only
+way a visitor meets a draft.
 _Avoid_: Private (for a work), unpublished, hidden, WIP
 
 **Deleted**:
@@ -262,13 +278,18 @@ member restores it from the Catalogue's **Deleted** view, most recently deleted
 first. A Catalogue is Deleted when its owner deletes it: it leaves every list and
 every collaborator's dashboard, and every address that named it answers
 not-found, for everyone including the owner; only an operator's database update
-restores it — the app offers no restore for a Catalogue. Both senses keep the
-record, its works and their media; the difference is who may bring it back.
+restores it — the app offers no restore for a Catalogue. A Selection is Deleted
+when a member of its source Catalogue deletes it: its address answers not-found
+for everyone, and an operator's update is again the only restore; deleting the
+Catalogue takes its Selections with it. Every sense keeps the record; for a
+Catalogue that includes its works and their media. The difference is who may
+bring it back and how far the deletion reaches.
 _Avoid_: Soft-deleted, removed, trashed, archived
 
 **Slug**:
-The readable name in a Catalogue's or artwork's address, alongside the id.
-It is cosmetic: only the id is ever looked up, and a rename changes the address.
+The readable name in a Catalogue's, a Selection's or an artwork's address,
+alongside the id. It is cosmetic: only the id is ever looked up, and a rename
+changes the address.
 The id is the identity: short, opaque and hyphen-free — a route recovers it by
 cutting at the last hyphen, so a hyphen inside it would break the address. Ids
 minted before the short form are longer and permanent; both lengths live in the
@@ -277,12 +298,13 @@ tree on purpose
 _Avoid_: Path, permalink
 
 **Skin**:
-The presentation a public Catalogue is rendered in — its type, layout and
-chrome.
+The presentation a public Catalogue or Selection is rendered in — its type,
+layout and chrome.
 _Avoid_: Theme, template, layout, design
 
 **Skin options**:
-A Catalogue's choices within its skin — the settings the skin itself defines.
+A Catalogue's choices within its skin — the settings the skin itself defines. A
+Selection has none of its own: it inherits its source Catalogue's.
 _Avoid_: Theme settings, preferences
 
 **Artworks manage view**:
@@ -299,6 +321,12 @@ for each of an artwork's photos, up to three, and a grid for the artworks that
 have none, ordered by artist then title. An export of the Catalogue, never a
 second presentation of it.
 _Avoid_: Catalogue, portfolio
+
+**Selection PDF**:
+A Selection's works exported as one document, in the order its curator set, with
+its Catalogue's Artwork fields and its Drafts included. An export of the
+Selection, never a second presentation of it.
+_Avoid_: Catalogue PDF, shortlist, fair catalogue
 
 ### Media
 
@@ -339,7 +367,7 @@ _Avoid_: Token, API key, integration, app, plugin
 **Tier**:
 The allowance an account is on — what it may create — and the unit the
 Catalogue cap is counted against. The cap counts the Catalogues an account
-owns, not those shared with it.
+owns, not those shared with it; a Selection is neither counted nor capped.
 _Avoid_: Plan, subscription, level
 
 **Free tier**:

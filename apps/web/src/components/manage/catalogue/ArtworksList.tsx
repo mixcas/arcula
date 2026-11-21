@@ -16,6 +16,8 @@ import { artworkService } from "@/services/artworkService";
 import ArtworksTable from "@/components/manage/catalogue/ArtworksTable";
 import ArtworksGrid from "@/components/manage/catalogue/ArtworksGrid";
 import ArtworksViewToggle from "@/components/manage/catalogue/ArtworksViewToggle";
+import AddToSelectionModal from "@/components/manage/catalogue/AddToSelectionModal";
+import { checkedOrder } from "@/components/manage/catalogue/curationOrder";
 import {
   RECORDS_PER_PAGE_OPTIONS,
   sortArtworks,
@@ -180,6 +182,18 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
     () => (selection.forToken === resetToken ? selection.ids : []),
     [selection, resetToken],
   );
+
+  // Every checked set the views report goes through the one fold: ids stay in
+  // the order they were checked, not in whatever order the view happened to
+  // list them. The Grid appends on click; the Table's rows are drawn in
+  // catalogue order, so a report from it is not a check order by itself. This
+  // is what makes **Add to selection** append in the checked order from both.
+  const changeSelection = (ids: string[]) =>
+    setSelection({ forToken: resetToken, ids: checkedOrder(selectedIds, ids) });
+
+  // Add to selection's modal. The parent owns `opened` so the toolbar's button
+  // and the dialog cannot disagree, and the id it writes to lives in the modal.
+  const [addToSelectionOpen, setAddToSelectionOpen] = useState(false);
 
   const sortedArtworks = useMemo(
     () => sortArtworks(artworks, sort),
@@ -381,6 +395,15 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
               Delete selected
             </Button>
           ) : null}
+          {selectedIds.length > 0 ? (
+            <Button
+              variant="light"
+              size="compact-sm"
+              onClick={() => setAddToSelectionOpen(true)}
+            >
+              Add to selection
+            </Button>
+          ) : null}
         </Group>
         <Group gap="sm" wrap="wrap">
           {/*
@@ -423,12 +446,11 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
                   // still reads as Select all, and Clear selection removes
                   // exactly the page's ids.
                   onClick={() =>
-                    setSelection({
-                      forToken: resetToken,
-                      ids: pageFullySelected
+                    changeSelection(
+                      pageFullySelected
                         ? selectedIds.filter((id) => !pageIds.includes(id))
-                        : [...new Set([...selectedIds, ...pageIds])],
-                    })
+                        : [...selectedIds, ...pageIds],
+                    )
                   }
                 >
                   {pageFullySelected ? "Clear selection" : "Select all"}
@@ -466,9 +488,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
         <ArtworksGrid
           records={pageRecords}
           selectedIds={selectedIds}
-          onSelectionChange={(ids) =>
-            setSelection({ forToken: resetToken, ids })
-          }
+          onSelectionChange={changeSelection}
           catalogueParam={catalogueParam}
           searchQuery={searchQuery}
           showAvailability={showAvailability}
@@ -487,9 +507,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
         <ArtworksTable
           records={pageRecords}
           selectedRecords={selectedRecords}
-          onSelectionChange={(ids) =>
-            setSelection({ forToken: resetToken, ids })
-          }
+          onSelectionChange={changeSelection}
           sort={sort}
           onSortChange={changeSort}
           page={effectivePage}
@@ -507,6 +525,12 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           emptyState={emptyState}
         />
       )}
+      <AddToSelectionModal
+        opened={addToSelectionOpen}
+        onClose={() => setAddToSelectionOpen(false)}
+        catalogueId={parseId(catalogueParam)}
+        artworkIds={selectedIds}
+      />
     </Stack>
   );
 };

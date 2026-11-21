@@ -42,27 +42,34 @@ too, before the transport reads the body.
 
 `/api/v1/*` is the resource API, all under the error envelope:
 
-| Method                     | Path                                                                |
-| -------------------------- | ------------------------------------------------------------------- |
-| `GET` / `PATCH`            | `/me`                                                               |
-| `GET`                      | `/connections/request` — the verified OAuth consent query           |
-| `GET`                      | `/connections` — the account's Connections and the MCP endpoint     |
-| `DELETE`                   | `/connections/:connectionId` — Revoke one Connection                |
-| `GET`                      | `/media?key=` — the object proxy (re-checks visibility per request) |
-| `GET` / `POST`             | `/catalogues`                                                       |
-| `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId`                                          |
-| `POST`                     | `/catalogues/:catalogueId/unlock`                                   |
-| `POST`                     | `/catalogues/:catalogueId/import/csv`                               |
-| `GET`                      | `/catalogues/:catalogueId/deleted-artworks`                         |
-| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-delete`                     |
-| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-restore`                    |
-| `POST`                     | `/catalogues/:catalogueId/artworks/:artworkId/restore`              |
-| `POST`                     | `/catalogues/:catalogueId/maintenance/sweep`                        |
-| `GET` / `POST`             | `/catalogues/:catalogueId/artworks`                                 |
-| `GET` / `PATCH`            | `/catalogues/:catalogueId/artworks/:artworkId`                      |
-| `POST`                     | `…/artworks/:artworkId/photos/stage` · `…/process`                  |
-| `DELETE`                   | `…/artworks/:artworkId/photos/:entryId`                             |
-| `POST` / `DELETE`          | the same three under `/documents`                                   |
+| Method                     | Path                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET` / `PATCH`            | `/me`                                                                                                          |
+| `GET`                      | `/connections/request` — the verified OAuth consent query                                                      |
+| `GET`                      | `/connections` — the account's Connections and the MCP endpoint                                                |
+| `DELETE`                   | `/connections/:connectionId` — Revoke one Connection                                                           |
+| `GET`                      | `/media?key=&selection=` — the object proxy (re-checks visibility per request; `selection` is the photo scope) |
+| `GET` / `POST`             | `/catalogues`                                                                                                  |
+| `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId`                                                                                     |
+| `GET` / `POST`             | `/catalogues/:catalogueId/selections`                                                                          |
+| `GET` / `PATCH` / `DELETE` | `/catalogues/:catalogueId/selections/:selectionId`                                                             |
+| `POST` / `PUT`             | `/catalogues/:catalogueId/selections/:selectionId/works`                                                       |
+| `GET`                      | `/selections/:selectionId`                                                                                     |
+| `GET`                      | `/selections/:selectionId/artworks`                                                                            |
+| `GET`                      | `/selections/:selectionId/artworks/:artworkId`                                                                 |
+| `POST`                     | `/selections/:selectionId/unlock`                                                                              |
+| `POST`                     | `/catalogues/:catalogueId/unlock`                                                                              |
+| `POST`                     | `/catalogues/:catalogueId/import/csv`                                                                          |
+| `GET`                      | `/catalogues/:catalogueId/deleted-artworks`                                                                    |
+| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-delete`                                                                |
+| `POST`                     | `/catalogues/:catalogueId/artworks/bulk-restore`                                                               |
+| `POST`                     | `/catalogues/:catalogueId/artworks/:artworkId/restore`                                                         |
+| `POST`                     | `/catalogues/:catalogueId/maintenance/sweep`                                                                   |
+| `GET` / `POST`             | `/catalogues/:catalogueId/artworks`                                                                            |
+| `GET` / `PATCH`            | `/catalogues/:catalogueId/artworks/:artworkId`                                                                 |
+| `POST`                     | `…/artworks/:artworkId/photos/stage` · `…/process`                                                             |
+| `DELETE`                   | `…/artworks/:artworkId/photos/:entryId`                                                                        |
+| `POST` / `DELETE`          | the same three under `/documents`                                                                              |
 
 A save is one Postgres transaction: the field write, the per-entry S3 copy
 (staged → final) and the row upserts, then the row deletes for dropped entries.
@@ -253,6 +260,52 @@ mistyped carries no debt; the pair is the key, so one catalogue's throttle
 cannot lock a shared address out of another's. The address is the gateway's
 `sourceIp`, carried by the Lambda entry in `x-arcula-client-ip` and never read
 from a forwarding header (`clientAddress.ts`).
+
+## Selections
+
+A **Selection** is a curated, ordered subset of one Catalogue's works with an
+address and an audience of its own
+([ADR-0015](../../docs/adr/0015-a-selection-is-a-second-gate-over-its-catalogue.md)).
+Its member routes hang off the source Catalogue because membership of that
+Catalogue is the write verdict; its public routes are flat, mirroring the
+Catalogue's address space. It has no members and spends no tier allowance.
+
+**The verdicts** are `selectionAccess.ts`'s pure functions. A member of the
+source Catalogue — owner or collaborator — reads every Selection cut from it;
+everyone else reads one exactly when it is public and either has no password or
+holds a valid Access grant. The source Catalogue's visibility and password never
+enter the answer; its deletion does, through the loader's join, and a deleted
+source Catalogue answers not-found at every Selection address without stamping a
+Selection row. Private and deleted are one not-found to a visitor, and the
+single-work read folds every refusal into it; a Protected Selection's document
+read is the one distinct refusal, `403 password-required` naming it in
+`details.selectionName`.
+
+**The works read is one rule for every audience.** Live works only, ordered by
+`position, artworkId`, with no status filter: Drafts are included, which is the
+feature. A work deleted in its Catalogue leaves the Selection and returns on
+restore, because its `selection_works` row is kept. Append (`POST`) skips ids
+already present and replace (`PUT`) states the whole list — the reorder and the
+remove, empty included; both refuse an id that is not a live work of the source
+Catalogue and renumber to `0..n-1`. Delete stamps the Selection and removes its
+grants, touching no work, photo or the Catalogue.
+
+**The grant and the throttle are its own.** `POST
+/selections/:selectionId/unlock` mirrors the Catalogue's: `404` when missing or
+deleted, `409` when not protected, a fixed ten-minute window and ten failures
+keyed `(ip, selectionId, windowStart)`, and on success a twelve-hour grant
+cookie `arcula_selection_grant_{id}` on `Path=/api/v1`. A password write revokes
+the Selection's grants in the same transaction.
+
+**Media.** A Selection's photo URLs carry `&selection={id}`, and the proxy asks
+a second admission question when the Catalogue verdict refuses: a live, readable
+Selection cut from the key's Catalogue, holding that live work. A scoped
+response is `private, max-age=3600`, even where the Catalogue verdict alone
+would have admitted the photo; documents ignore the scope and stay members-only.
+
+**The public read** answers the Selection document plus `catalogueName`, `skin`,
+`skinOptions`, `kind` and `artworkFields` — the presentation a Selection inherits
+— and never the source Catalogue's id, slug or address, nor its password state.
 
 ## Modules
 

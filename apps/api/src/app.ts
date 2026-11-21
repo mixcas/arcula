@@ -31,6 +31,7 @@ import { invitationRoutes } from "./routes/invitations";
 import { meRoutes } from "./routes/me";
 import { mediaRoutes } from "./routes/media";
 import { pdfRoutes } from "./routes/pdf";
+import { selectionRoutes, publicSelectionRoutes } from "./routes/selections";
 import { spaMiddleware } from "./spa";
 
 export const app = new Hono();
@@ -98,6 +99,8 @@ app.route("/api/v1", invitationRoutes);
 app.route("/api/v1", artworkMediaRoutes);
 app.route("/api/v1", artworkRoutes);
 app.route("/api/v1", connectionRoutes);
+app.route("/api/v1", selectionRoutes);
+app.route("/api/v1", publicSelectionRoutes);
 app.route("/api/v1", pdfRoutes);
 
 // Dev-only indexing guard, after every API mount so it wraps only the SPA.

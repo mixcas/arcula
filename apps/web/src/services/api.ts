@@ -40,7 +40,7 @@ export class ApiRequestError extends Error {
 }
 
 interface ApiRequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** A JSON body. Omitted for reads and for the DELETE routes. */
   body?: unknown;
 }
