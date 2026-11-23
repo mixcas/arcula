@@ -335,8 +335,8 @@ limiter's counter — `(userId, bucket, windowStart)` with the two buckets
 `write` and `import`, claimed by `agentLimiter.ts`. The eight agent-access
 tables are the JWT and OAuth provider plugins', hand-authored against
 `getAuthTables()`; `apps/api/tests/adapter.test.ts` asserts every model and
-field the plugin declares exists. `0011_account_write_windows` and
-`0012_agent_access` are additive and landed alone, ahead of the code that
+field the plugin declares exists. `0012_account_write_windows` and
+`0013_agent_access` are additive and landed alone, ahead of the code that
 reads them.
 `packages/db/migrations/` is generated; hand edits are the documented exception,
 and there are exactly three: a data backfill appended to the generated file, the

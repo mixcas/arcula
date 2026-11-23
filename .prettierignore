@@ -41,9 +41,8 @@ skills-lock.json
 .opencode/skills/
 .opencode/plugins/
 
-# Agent-harness artifacts (the llmstxt installer's CLAUDE.md and .llms/ state):
-# generated content, not repo source, regenerated whenever the installer runs.
-CLAUDE.md
+# Agent-harness artifacts (the llmstxt installer's .llms/ state): generated
+# content, not repo source, regenerated whenever the installer runs.
 .llms/
 
 # Env / secrets. Not a Prettier extension today, but keep them out of any

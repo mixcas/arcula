@@ -79,10 +79,12 @@ formatters.
 of a dependency the package does not declare, a duplicate export, and an export
 nothing references at all.
 
-`check:docs` reports a pointer into the navigation surface — `AGENTS.md`,
-`DESIGN.md`, `GLOSSARY.md` and the docs tree — that resolves to nothing, naming
-the file and the line. Its pointers are markdown links and inline-code spans
-anchored by a leading `/`, `./` or `../` or by a known top-level directory.
+`check:docs` reports a pointer into the navigation surface — the root
+`AGENTS.md`, `README.md`, `DESIGN.md`, `GLOSSARY.md`, the docs tree, and the four
+package instruction files (`apps/api`, `apps/web`, `packages/db` and
+`infra/cdk`) — that resolves to nothing, naming the file and the line. Its
+pointers are markdown links and inline-code spans anchored by a leading `/`,
+`./` or `../` or by a known top-level directory.
 
 Both leave a gap, and both gaps are deliberate. `knip` does not report a symbol
 exported only for its own test, because test usage counts as usage, nor a dead
@@ -97,6 +99,14 @@ one, and `enumMembers`, which are read through their enum — and it keeps
 `scripts/lambda-smoke.mjs` out of the in-repo project because the file is
 analysed inside the staged Lambda package it is copied into. A suppression
 carries a written reason in the config and is not added silently.
+
+`check:docs` also holds every instruction file to a word ceiling: the root
+`AGENTS.md` gets 800 words and each package file — `apps/api`, `apps/web`,
+`packages/db` and `infra/cdk` — gets 400. The ceiling is inclusive, so a
+document at exactly its limit passes; an over-limit document is reported by
+file and count and fails the check. The measure is in
+[`scripts/instructionBudget.ts`](../scripts/instructionBudget.ts) and the file
+list with its ceilings is in [`scripts/checkDocs.ts`](../scripts/checkDocs.ts).
 
 ## Test mechanics
 
