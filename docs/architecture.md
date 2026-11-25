@@ -258,7 +258,7 @@ list, the empty state and the create modal) and `SelectionPage.tsx` (the
 settings block — name, description, Private/Public/Protected and the password —
 and the delete confirmation) over `SelectionWorksList.tsx`: the ordered works,
 each row a thumbnail, title, artist, a Draft badge, a drag handle and a remove
-control, with **Add works** opening a picker over the Catalogue's live works.
+control, with **Add artworks** opening a picker over the Catalogue's live artworks.
 `curationOrder.ts` is the two pure folds both surfaces share — a drag's
 `moveWorkIds` and the checked works' `checkedOrder` — and
 `AddToSelectionModal.tsx` is the checked-works action: the Catalogue's

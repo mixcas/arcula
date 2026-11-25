@@ -1,13 +1,13 @@
 /**
  * One Selection's manage page: its ordered works and its settings block.
  *
- * The works list is the curation surface — add, reorder, remove — and the
- * settings own the name, the description, the visibility (Private, Public,
- * Protected) and the password. The header opens the Selection at its own
- * address and exports its PDF; the Catalogue is credited, never linked. The
- * Works header counts the works that are Drafts, whatever the visibility; the
- * publish warning and its note name the source Catalogue's state. Works leads
- * the layout, with the settings and delete rail beside it.
+ * The ordered artworks list is the curation surface — add, reorder, remove —
+ * and the settings own the name, the description, the visibility (Private,
+ * Public, Protected) and the password. The header opens the Selection at its
+ * own address and exports its PDF; the Catalogue is credited, never linked. The
+ * Artworks header counts the artworks that are Drafts, whatever the visibility;
+ * the publish warning and its note name the source Catalogue's state. Artworks
+ * lead the layout, with the settings and delete rail beside it.
  *
  * Every save or curation re-reads what it changed and only then notifies, so the
  * page is the server's answer rather than a local copy. The delete confirmation
@@ -17,6 +17,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActionIcon,
   Alert,
   Box,
   Button,
@@ -31,9 +32,15 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import {
+  IconArrowBackUp,
+  IconFileTypePdf,
+  IconWorld,
+} from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   catalogueSlug,
@@ -449,7 +456,7 @@ const SelectionPage: React.FC = () => {
       notifications.show({
         color: "green",
         title: "Selection deleted",
-        message: `“${name}” was removed. Its works and photos are untouched.`,
+        message: `“${name}” was removed. Its artworks and photos are untouched.`,
       });
       if (catalogue) {
         void navigate(
@@ -477,7 +484,7 @@ const SelectionPage: React.FC = () => {
       children: (
         <Text size="sm">
           The selection will be removed and its address will stop working. Its
-          works, their photos and the catalogue are untouched.
+          artworks, their photos and the catalogue are untouched.
         </Text>
       ),
       labels: { confirm: "Delete", cancel: "Cancel" },
@@ -517,9 +524,9 @@ const SelectionPage: React.FC = () => {
   // visitor-readable, takes it away with it.
   const note = selection.isPublic ? catalogueRisk(catalogue, works) : null;
 
-  // The Selection's own public address. View and PDF open there in a new tab,
-  // like the Catalogue's header controls; the Catalogue itself is deliberately
-  // not linked — its page is a different gate, often a private one.
+  // The Selection's own public address. The two header icons open there in a
+  // new tab, like the Catalogue's header controls; the Catalogue itself is
+  // deliberately not linked — its page is a different gate, often a private one.
   const selectionPath = `/selection/${selectionSlug(
     selection.name,
     selection.id,
@@ -535,24 +542,35 @@ const SelectionPage: React.FC = () => {
           </Text>
         </Group>
         <Group gap="sm" wrap="wrap">
-          <Button
-            variant="subtle"
-            component="a"
-            href={selectionPath}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View
-          </Button>
-          <Button
-            variant="subtle"
-            component="a"
-            href={`${selectionPath}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            PDF
-          </Button>
+          {/* Icon-only, as on the Catalogue's page: the tooltip is also the
+              accessible name, and Back stays a word because it is the one
+              control here that does not leave the app. */}
+          <Tooltip label="View page" withArrow>
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              component="a"
+              href={selectionPath}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View page"
+            >
+              <IconWorld size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Open PDF" withArrow>
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              component="a"
+              href={`${selectionPath}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open PDF"
+            >
+              <IconFileTypePdf size={18} />
+            </ActionIcon>
+          </Tooltip>
           <Button
             component={Link}
             to={`/manage/catalogue/${catalogueSlug(
@@ -560,6 +578,7 @@ const SelectionPage: React.FC = () => {
               catalogue.id,
             )}/selections`}
             variant="outline"
+            leftSection={<IconArrowBackUp size={16} />}
           >
             Back to selections
           </Button>
@@ -600,7 +619,8 @@ const SelectionPage: React.FC = () => {
                 <Text size="h3">Delete selection</Text>
                 <Text size="sm" c="dimmed">
                   Deleting a selection removes it from this catalogue&rsquo;s
-                  list. Its works, their photos and the catalogue are untouched.
+                  list. Its artworks, their photos and the catalogue are
+                  untouched.
                 </Text>
                 <Group justify="flex-end">
                   <Button

@@ -70,7 +70,7 @@ The feature has two flows:
    in the order I set, with a drag handle, so that the order is the content.
 7. As an Owner or a Collaborator, I want to remove a work from the Selection
    without touching the work itself, so that curation never edits the record.
-8. As an Owner or a Collaborator, I want **Add works** on the Selection's page to
+8. As an Owner or a Collaborator, I want **Add artworks** on the Selection's page to
    pick from the Catalogue's live works, so that I can fill a Selection
    top-down as well as bottom-up.
 9. As an Owner or a Collaborator, I want a Draft work to appear in the Selection
