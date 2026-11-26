@@ -20,7 +20,7 @@ import type { Artwork } from "@arcula/shared";
 
 /**
  * The Selection's ordered works list: the order it renders, the Draft badge,
- * the remove, the drag reorder and **Add works**.
+ * the remove, the drag reorder and **Add artworks**.
  *
  * The harness hands the list a real `works` state and a re-read, exactly as the
  * manage page does, so a test sees the order after the write rather than the
@@ -247,7 +247,7 @@ describe("SelectionWorksList", () => {
     renderList([alpha]);
     getCatalogueArtworks.mockResolvedValue([alpha, bravo, charlie]);
 
-    await userEvent.click(screen.getByRole("button", { name: "Add works" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add artworks" }));
 
     const dialog = await screen.findByRole("dialog");
     expect(
@@ -267,7 +267,7 @@ describe("SelectionWorksList", () => {
     addWorks.mockResolvedValue([alpha, charlie, bravo]);
     getWorks.mockResolvedValue([alpha, charlie, bravo]);
 
-    await userEvent.click(screen.getByRole("button", { name: "Add works" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add artworks" }));
     const dialog = await screen.findByRole("dialog");
     // Checked out of catalogue order on purpose: Charlie is second in the
     // picker, Bravo third, and the append must follow the ticks.
@@ -276,7 +276,7 @@ describe("SelectionWorksList", () => {
     await userEvent.click(within(dialog).getByText("Charlie"));
     await userEvent.click(within(dialog).getByText("Bravo"));
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Add works" }),
+      within(dialog).getByRole("button", { name: "Add artworks" }),
     );
 
     await waitFor(() =>
@@ -296,9 +296,9 @@ describe("SelectionWorksList", () => {
 
   it("says the selection is empty and offers the way to fill it", async () => {
     renderList([]);
-    expect(await screen.findByText("No works yet")).toBeInTheDocument();
+    expect(await screen.findByText("No artworks yet")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Add works" }),
+      screen.getByRole("button", { name: "Add artworks" }),
     ).toBeInTheDocument();
   });
 });

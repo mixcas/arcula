@@ -1206,7 +1206,7 @@ and the password), its ordered works list and its delete confirmation, with
 **View** and **PDF** opening the Selection's own address. `SelectionWorksList.tsx`
 is deliberately not `ArtworksTable`: no sort, no paging, a drag handle and a
 remove control per row, each with an accessible name naming the work and its
-position, and **Add works** opening a picker over the Catalogue's live works.
+position, and **Add artworks** opening a picker over the Catalogue's live artworks.
 `ArtworksList`'s toolbar gains **Add to selection** beside **Delete selected**
 when works are checked; `AddToSelectionModal.tsx` lists the Catalogue's
 Selections plus **New selection** and appends in the checked order, which
@@ -1323,7 +1323,7 @@ under the fetching indicator, a stale answer is discarded, and a failure keeps
 those rows with an inline Alert and Retry; with no previous rows the Alert
 replaces the table. A new query resets the table to page 1 and clears the row
 selection, keeping the chosen sort. The return path is deliberately narrow: row
-Edit links and Add Artwork carry the active query, Cancel on either page returns
+Edit links and Add artwork carry the active query, Cancel on either page returns
 to the same search, and a successful Add carries it into the new work's Edit
 page, whose canonical rewrite preserves it. Settings, Deleted, the public View
 links and the PDF do not carry it — `q` is inert on those pages.

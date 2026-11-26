@@ -22,9 +22,9 @@
  *    `packages/`, `scripts/`, `infra/`, `docs/`, `.github/`, `.agents/`). A
  *    bare name or a directory shorthand (`routes/`, `media/`,
  *    `schemas/artwork.ts`, `src/App.tsx`) is skipped: it has no anchor, so the
- *    gate cannot tell a rename from shorthand, and AGENTS.md's "Where things
- *    live" map deliberately writes those bullets under a heading that names
- *    their base.
+ *    gate cannot tell a rename from shorthand, and AGENTS.md's "Where to look"
+ *    map deliberately writes those bullets under a heading that names their
+ *    base.
  * 3. A markdown link is always a pointer — the author wrote the link — so the
  *    anchor rule above does not apply to it. Only the URL, anchor, fence and
  *    placeholder skips do.
@@ -59,16 +59,24 @@ export interface DeadPointer {
 
 /**
  * The navigation surface, as an explicit decision rather than a directory
- * sweep, so a new always-loaded document is either added here or deliberately
- * left out. `.agents/skills/**` is deliberately excluded: it is vendored,
- * upstream content pinned by `skills-lock.json`, and a pointer into it is not
- * ours to repair.
+ * sweep, so a document a reader is told to follow is either added here or
+ * deliberately left out. The root `AGENTS.md` is always loaded; `README.md` is
+ * the contributor reference, and `DESIGN.md`, `GLOSSARY.md`, `docs/**` and the
+ * four package instruction files are read where they apply.
+ * `.agents/skills/**` is deliberately excluded: it is vendored, upstream
+ * content pinned by `skills-lock.json`, and a pointer into it is not ours to
+ * repair.
  */
 export const DOCS_SURFACE = [
   "AGENTS.md",
+  "README.md",
   "DESIGN.md",
   "GLOSSARY.md",
   "docs/**/*.md",
+  "apps/api/AGENTS.md",
+  "apps/web/AGENTS.md",
+  "packages/db/AGENTS.md",
+  "infra/cdk/AGENTS.md",
 ] as const;
 
 /**

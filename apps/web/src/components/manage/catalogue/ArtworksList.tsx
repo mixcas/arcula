@@ -10,7 +10,7 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconPlus } from "@tabler/icons-react";
+import { IconFilePlus, IconLibraryPlus, IconTrash } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { artworkService } from "@/services/artworkService";
 import ArtworksTable from "@/components/manage/catalogue/ArtworksTable";
@@ -342,7 +342,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
           <Button
             component={Link}
             to={`/manage/catalogue/${catalogueParam}/artwork/add`}
-            leftSection={<IconPlus size={16} />}
+            leftSection={<IconFilePlus size={16} />}
           >
             Add your first artwork
           </Button>
@@ -385,6 +385,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
               color="red"
               variant="light"
               size="compact-sm"
+              leftSection={<IconTrash size={16} />}
               onClick={() =>
                 confirmDelete(
                   selectedIds,
@@ -399,6 +400,7 @@ const ArtworksList: React.FC<ArtworksListProps> = ({
             <Button
               variant="light"
               size="compact-sm"
+              leftSection={<IconLibraryPlus size={16} />}
               onClick={() => setAddToSelectionOpen(true)}
             >
               Add to selection

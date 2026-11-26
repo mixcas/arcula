@@ -12,10 +12,13 @@
 // presigner, the bucket's CORS preflight and rule, and Sharp on the deploy
 // target), a visitor read, and a reset request (the Resend call path). The
 // catalogue cap is covered by the API integration suite, not here: reaching it
-// would mean ten creates per run. One account is created per run under
-// verify-<ts>@example.test; nothing is printed that is a credential — the
-// session token, and the presigned upload URL (a bearer token), are never
-// printed either. Exit code 0 = every step passed.
+// would mean ten creates per run.
+//
+// A verification run WRITES to the environment it targets — treat it as a
+// write, not as a read-only smoke test: it creates a throwaway account,
+// verify-<ts>@example.test, once per run. Nothing is printed that is a
+// credential — the session token, and the presigned upload URL (a bearer
+// token), are never printed either. Exit code 0 = every step passed.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { STAGED_PUT_SIGNED_HEADERS } from "@arcula/shared";

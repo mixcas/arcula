@@ -320,8 +320,8 @@ SEED_NAME=Owner
 SEED_PASSWORD=changeme123
 ```
 
-Never commit real secrets. `infra/cdk/.env` (which holds the production
-`DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
+Never commit real secrets. The `.env` in `infra/cdk/` (which holds the
+production `DATABASE_URL`, `AUTH_SECRET`, `CERT_ARN`, …) is gitignored.
 
 ### Run it
 
@@ -400,17 +400,17 @@ subset only (`sh scripts/stack-up.sh s3 mailpit`):
 
 All from the repo root:
 
-| Command                                                     | Description                                                              |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)             |
-| `bun run stack:up` / `stack:down`                           | The local stack alone                                                    |
-| `bun run build`                                             | Build the web app                                                        |
-| `bun run preview`                                           | Preview the production web build                                         |
-| `bun run check`                                             | Typecheck all packages + ESLint + Prettier — **the gate before a PR**    |
-| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                            |
-| `bun run format` / `format:check`                           | Prettier                                                                 |
-| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk` |
-| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                             |
+| Command                                                     | Description                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `bun run dev`                                               | Bring up the stack, then the API (`:8000`) and web (`:3000`)                                                 |
+| `bun run stack:up` / `stack:down`                           | The local stack alone                                                                                        |
+| `bun run build`                                             | Build the web app                                                                                            |
+| `bun run preview`                                           | Preview the production web build                                                                             |
+| `bun run check`                                             | Typecheck every package and `scripts` + ESLint + Prettier + `check:docs` + `knip` — **the gate before a PR** |
+| `bun run lint` / `lint:fix`                                 | ESLint, with type-aware rules                                                                                |
+| `bun run format` / `format:check`                           | Prettier                                                                                                     |
+| `bun run test`                                              | All suites: `test:shared`, `test:db`, `test:api`, `test:web`, `test:cdk`, `test:scripts`                     |
+| `bun run db:migrate` / `db:reset` / `db:seed` / `db:studio` | Drizzle against the local DB                                                                                 |
 
 `bun run test:api` and `bun run test:web` need the local stack; `test:web` also
 starts an API automatically.
@@ -434,7 +434,14 @@ dropped and rebuilt from the branch.
 `dev` is the integration branch and the repository's default. Changes land
 there first, and a release is a pull request from `dev` into `main`. Merging is
 deploying: CI deploys whichever environment's branch moved, through the same
-scripts you can run yourself. The scripts, not a bare `cdk deploy`:
+scripts you can run yourself, and either deploy workflow can also be dispatched
+by hand to repeat or finish a deploy without a new commit. Dev cancels a run a
+newer push has superseded, so the disposable environment lands on the newest
+commit; production never cancels and never overlaps, so two migrations cannot
+interleave against the production database. Only dev's `/api/health` reports
+the deployed commit; production's does not.
+
+The scripts, not a bare `cdk deploy`:
 
 ```bash
 sh scripts/build-lambda.sh prod   # or: dev — each writes its own artifact
@@ -445,9 +452,12 @@ The two deploy scripts are thin wrappers over one shared sequence
 (`scripts/deploy.sh`): build the environment's CDK app, deploy, resolve the
 URL, apply the migration, seed the owner account, re-deploy with the real
 public URL, and run `deploy-verify` — a full end-to-end pass against the live
-site. Values come from `infra/cdk/.env.<env>` (`infra/cdk/.env` is
+site. Values come from `infra/cdk/.env.<env>` (the `.env` in `infra/cdk/` is
 production's fallback), which is gitignored; see `infra/cdk/README.md` for the
 stack's context values, its outputs and the first-run order.
+
+The build's source-map rule, and what each environment ships, is in
+[Source maps and the dev artifact](infra/cdk/README.md#source-maps-and-the-dev-artifact).
 
 `scripts/provision-cert.mjs <host>` provisions a host's TLS certificate and
 prints the DNS records to publish, `scripts/provision-oidc.mjs` provisions the
@@ -588,10 +598,12 @@ own catalogue, that is a bug worth reporting.
 3. Commit your changes
 4. Push and open a pull request **against `dev`**
 
-Before opening a PR, `bun run check` must pass. It runs `tsc`, ESLint with
-type-aware rules, and Prettier, so a type error, a lint warning, or a formatting
-diff will each fail it. CI runs the same command, so green locally means green
-in the pipeline.
+Before opening a PR, `bun run check` must pass. It runs `tsc` over every package
+and `scripts`, ESLint with type-aware rules, Prettier, the documentation-pointer
+check (`check:docs`) and the dead-code check (`knip`), so a type error, a lint
+warning, a formatting diff, a broken documentation pointer or an unused export
+will each fail it. CI runs the same command, so green locally means green in
+the pipeline.
 
 A change reaches production only by release: a pull request from `dev` into
 `main`, merged by the maintainer. The working rules — branch model, the two

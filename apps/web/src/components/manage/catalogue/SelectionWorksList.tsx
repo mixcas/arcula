@@ -3,8 +3,8 @@
  * artworks Table or Grid.
  *
  * The order is the content, so it is edited directly: a drag handle or the
- * keyboard sensor moves a row, a remove control takes one out, and **Add works**
- * appends from the Catalogue's live works. There is no sorting, no paging and no
+ * keyboard sensor moves a row, a remove control takes one out, and
+ * **Add artworks** appends from the Catalogue's live artworks. There is no sorting, no paging and no
  * per-row link: those belong to the Catalogue's list, and this page is a
  * curation, not a catalogue.
  *
@@ -33,7 +33,11 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconGripVertical, IconPlus, IconTrash } from "@tabler/icons-react";
+import {
+  IconGripVertical,
+  IconLibraryPlus,
+  IconTrash,
+} from "@tabler/icons-react";
 import {
   DndContext,
   KeyboardSensor,
@@ -82,8 +86,8 @@ const DraftBadge: React.FC = () => (
  */
 const draftCountLine = (count: number): string =>
   count === 1
-    ? "1 work in this selection is a draft."
-    : `${count} works in this selection are drafts.`;
+    ? "1 artwork in this selection is a draft."
+    : `${count} artworks in this selection are drafts.`;
 
 const thumbnailSrc = (artwork: Artwork): string | null =>
   primaryPhotoUrl(artwork, "square_sm");
@@ -207,7 +211,7 @@ const AddWorksModal: React.FC<AddWorksModalProps> = (props) => (
   <Modal
     opened={props.opened}
     onClose={props.onClose}
-    title="Add works"
+    title="Add artworks"
     centered
     size="lg"
   >
@@ -240,7 +244,7 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
       .catch((err: unknown) => {
         if (cancelled) return;
         console.error("Error loading the catalogue's works:", err);
-        setError("Could not load this catalogue’s works. Try again.");
+        setError("Could not load this catalogue’s artworks. Try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -262,12 +266,14 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
         title: "Added",
         message:
           chosen.length === 1
-            ? "1 work was added to the selection."
-            : `${chosen.length} works were added to the selection.`,
+            ? "1 artwork was added to the selection."
+            : `${chosen.length} artworks were added to the selection.`,
       });
     } catch (err) {
       console.error("Error adding works to the selection:", err);
-      setError("Could not add those works. Nothing was changed — try again.");
+      setError(
+        "Could not add those artworks. Nothing was changed — try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -276,14 +282,16 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
   return (
     <Stack gap="md">
       <Text size="sm" c="dimmed">
-        These are the catalogue&rsquo;s live works. A draft is added the same
+        These are the catalogue&rsquo;s live artworks. A draft is added the same
         way and shows a badge on this page.
       </Text>
       {error ? <Alert color="red">{error}</Alert> : null}
       {loading ? (
         <Loader />
       ) : options.length === 0 ? (
-        <Text>Every work in this catalogue is already in the selection.</Text>
+        <Text>
+          Every artwork in this catalogue is already in the selection.
+        </Text>
       ) : (
         <ScrollArea.Autosize mah={360} type="auto">
           <Stack gap="xs">
@@ -324,7 +332,7 @@ const AddWorksBody: React.FC<AddWorksModalProps> = ({
           loading={saving}
           disabled={chosen.length === 0 || loading}
         >
-          Add works
+          Add artworks
         </Button>
       </Group>
     </Stack>
@@ -406,20 +414,20 @@ const SelectionWorksList: React.FC<SelectionWorksListProps> = ({
       <Stack gap="md">
         <Group justify="space-between" wrap="wrap" gap="sm">
           <Group gap="sm">
-            <Text size="h3">Works</Text>
+            <Text size="h3">Artworks</Text>
             {works.length > 0 ? (
               <Text size="sm" c="dimmed">
-                {works.length} work{works.length === 1 ? "" : "s"}
+                {works.length} artwork{works.length === 1 ? "" : "s"}
               </Text>
             ) : null}
           </Group>
           {works.length > 0 ? (
             <Button
               variant="light"
-              leftSection={<IconPlus size={16} />}
+              leftSection={<IconLibraryPlus size={16} />}
               onClick={() => setPickerOpen(true)}
             >
-              Add works
+              Add artworks
             </Button>
           ) : null}
         </Group>
@@ -432,18 +440,18 @@ const SelectionWorksList: React.FC<SelectionWorksListProps> = ({
 
         {works.length === 0 ? (
           <Stack gap="xs" py="md">
-            <Text fw={600}>No works yet</Text>
+            <Text fw={600}>No artworks yet</Text>
             <Text size="sm" c="dimmed">
-              Add the works this selection should show. The order here is the
+              Add the artworks this selection should show. The order here is the
               order a reader sees.
             </Text>
             <Group>
               <Button
                 variant="default"
-                leftSection={<IconPlus size={16} />}
+                leftSection={<IconLibraryPlus size={16} />}
                 onClick={() => setPickerOpen(true)}
               >
-                Add works
+                Add artworks
               </Button>
             </Group>
           </Stack>

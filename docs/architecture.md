@@ -258,7 +258,7 @@ list, the empty state and the create modal) and `SelectionPage.tsx` (the
 settings block — name, description, Private/Public/Protected and the password —
 and the delete confirmation) over `SelectionWorksList.tsx`: the ordered works,
 each row a thumbnail, title, artist, a Draft badge, a drag handle and a remove
-control, with **Add works** opening a picker over the Catalogue's live works.
+control, with **Add artworks** opening a picker over the Catalogue's live artworks.
 `curationOrder.ts` is the two pure folds both surfaces share — a drag's
 `moveWorkIds` and the checked works' `checkedOrder` — and
 `AddToSelectionModal.tsx` is the checked-works action: the Catalogue's
@@ -335,8 +335,8 @@ limiter's counter — `(userId, bucket, windowStart)` with the two buckets
 `write` and `import`, claimed by `agentLimiter.ts`. The eight agent-access
 tables are the JWT and OAuth provider plugins', hand-authored against
 `getAuthTables()`; `apps/api/tests/adapter.test.ts` asserts every model and
-field the plugin declares exists. `0011_account_write_windows` and
-`0012_agent_access` are additive and landed alone, ahead of the code that
+field the plugin declares exists. `0012_account_write_windows` and
+`0013_agent_access` are additive and landed alone, ahead of the code that
 reads them.
 `packages/db/migrations/` is generated; hand edits are the documented exception,
 and there are exactly three: a data backfill appended to the generated file, the

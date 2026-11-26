@@ -27,6 +27,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
+import { IconArrowBackUp, IconLibraryPlus } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   catalogueSlug,
@@ -46,8 +47,8 @@ const visibilityWord = (row: SelectionPageRow): string => {
   return row.isPasswordProtected === true ? "Protected" : "Public";
 };
 
-const worksWord = (count: number): string =>
-  count === 1 ? "1 work" : `${count} works`;
+const artworksWord = (count: number): string =>
+  count === 1 ? "1 artwork" : `${count} artworks`;
 
 const SelectionsPage: React.FC = () => {
   const { catalogueId: param } = useParams<{ catalogueId: string }>();
@@ -148,7 +149,7 @@ const SelectionsPage: React.FC = () => {
       notifications.show({
         color: "green",
         title: "Selection created",
-        message: "Add works from the catalogue when you are ready.",
+        message: "Add artworks from the catalogue when you are ready.",
       });
     } catch (err) {
       console.error("Error creating the selection:", err);
@@ -183,8 +184,8 @@ const SelectionsPage: React.FC = () => {
       },
       {
         accessor: "workCount",
-        title: "Works",
-        render: (selection) => <Text>{worksWord(selection.workCount)}</Text>,
+        title: "Artworks",
+        render: (selection) => <Text>{artworksWord(selection.workCount)}</Text>,
       },
       {
         accessor: "updatedAt",
@@ -247,13 +248,19 @@ const SelectionsPage: React.FC = () => {
             component={Link}
             to={`/manage/catalogue/${param ?? ""}`}
             variant="outline"
+            leftSection={<IconArrowBackUp size={16} />}
           >
             Back to catalogue
           </Button>
-          {/* Always present, as the artworks page keeps Add Artwork: the empty
+          {/* Always present, as the artworks page keeps Add artwork: the empty
               state offers its own differently-worded way in, so the two never
               read as the same control to a screen reader. */}
-          <Button onClick={openCreate}>Create selection</Button>
+          <Button
+            onClick={openCreate}
+            leftSection={<IconLibraryPlus size={16} />}
+          >
+            Create selection
+          </Button>
         </Group>
       </Group>
 
@@ -288,10 +295,14 @@ const SelectionsPage: React.FC = () => {
                 <Text size="h3">No selections yet</Text>
                 <Text c="dimmed" maw={520} ta="center">
                   A selection is a curated subset of this catalogue&rsquo;s
-                  works with its own address. Start one, then add works in the
-                  order you want them shown.
+                  artworks with its own address. Start one, then add artworks in
+                  the order you want them shown.
                 </Text>
-                <Button onClick={openCreate} mt="sm">
+                <Button
+                  onClick={openCreate}
+                  mt="sm"
+                  leftSection={<IconLibraryPlus size={16} />}
+                >
                   Create your first selection
                 </Button>
               </Stack>

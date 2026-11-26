@@ -567,7 +567,7 @@ describe("SelectionPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("2 works in this selection are drafts."),
+      await screen.findByText("2 artworks in this selection are drafts."),
     ).toBeInTheDocument();
     // Private is the state the count has to be readable in: it is what the
     // member weighs before the publish, not a warning about a live page.
@@ -585,7 +585,7 @@ describe("SelectionPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("2 works in this selection are drafts."),
+      await screen.findByText("2 artworks in this selection are drafts."),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Remove Alpha" }));
 
@@ -595,7 +595,7 @@ describe("SelectionPage", () => {
       ]),
     );
     expect(
-      await screen.findByText("1 work in this selection is a draft."),
+      await screen.findByText("1 artwork in this selection is a draft."),
     ).toBeInTheDocument();
   });
 
@@ -607,12 +607,12 @@ describe("SelectionPage", () => {
     );
   });
 
-  it("opens View and PDF at the Selection's address, never the Catalogue's", async () => {
+  it("opens View page and Open PDF at the Selection's address, never the Catalogue's", async () => {
     renderPage();
 
-    const view = await screen.findByRole("link", { name: "View" });
+    const view = await screen.findByRole("link", { name: "View page" });
     expect(view).toHaveAttribute("href", `/selection/${SELECTION_SLUG}`);
-    const pdf = screen.getByRole("link", { name: "PDF" });
+    const pdf = screen.getByRole("link", { name: "Open PDF" });
     expect(pdf).toHaveAttribute("href", `/selection/${SELECTION_SLUG}/pdf`);
 
     // The source Catalogue's page is a different gate, often a private one.

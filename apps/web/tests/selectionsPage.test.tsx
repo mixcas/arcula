@@ -157,8 +157,8 @@ describe("SelectionsPage", () => {
 
     expect(await screen.findByText("Fair 2026")).toBeInTheDocument();
     expect(screen.getByText("Gallery shortlist")).toBeInTheDocument();
-    expect(screen.getByText("3 works")).toBeInTheDocument();
-    expect(screen.getByText("1 work")).toBeInTheDocument();
+    expect(screen.getByText("3 artworks")).toBeInTheDocument();
+    expect(screen.getByText("1 artwork")).toBeInTheDocument();
     expect(screen.getAllByText("Private")).toHaveLength(2);
     expect(screen.getAllByText(/ago$/).length).toBe(2);
 
