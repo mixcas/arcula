@@ -264,15 +264,17 @@ describe("a catalogue's nav bar", () => {
     );
 
     // The public page and the PDF have no search of their own: a query there
-    // would be a filter the visitor's page cannot show. "View" is both the
-    // catalogue's address and the row's public work, in that order.
-    const views = screen.getAllByRole("link", { name: "View" });
-    expect(views[0]).toHaveAttribute("href", `/catalogue/${CATALOGUE_PARAM}`);
-    expect(views[1]).toHaveAttribute(
+    // would be a filter the visitor's page cannot show. The header's two
+    // icons are named by their tooltips; the row below keeps its word.
+    expect(screen.getByRole("link", { name: "View page" })).toHaveAttribute(
+      "href",
+      `/catalogue/${CATALOGUE_PARAM}`,
+    );
+    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(
       "href",
       `/catalogue/${CATALOGUE_PARAM}/artwork/blue-nude-a1`,
     );
-    expect(screen.getByRole("link", { name: "PDF" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open PDF" })).toHaveAttribute(
       "href",
       `/catalogue/${CATALOGUE_PARAM}/pdf`,
     );

@@ -8,11 +8,16 @@ import {
   Menu,
   Text,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconDotsVertical,
+  IconFilePlus,
+  IconFileTypePdf,
+  IconListDetails,
   IconTrash,
   IconSettings,
+  IconWorld,
   IconZoom,
 } from "@tabler/icons-react";
 import {
@@ -264,7 +269,7 @@ const CataloguePage: React.FC = () => {
   return (
     <>
       <Group justify="space-between" mb="xl" wrap="wrap">
-        <Group wrap="wrap">
+        <Group wrap="wrap" gap="sm">
           <Text size="h2">{catalogue.name}</Text>
           {/*
             Opens in a new tab, so the owner can check the public page and the
@@ -273,37 +278,53 @@ const CataloguePage: React.FC = () => {
             `noopener` keeps it from reaching back through `window.opener` to
             this session. Neither this link nor the PDF carries the search: a
             visitor's page has no member tooling to filter.
+
+            Both are icon-only, which is a deliberate risk here as it is in the
+            Artworks manage view's toggle: the tooltip is also the accessible
+            name, so a bare glyph is never the whole control. The reading order
+            is unchanged — title, then the document — and the rows and cards
+            below keep their word, because a row's neighbours are Edit and
+            Delete and one glyph among two words would be harder to find.
           */}
-          <Button
-            variant="subtle"
-            component="a"
-            href={`/catalogue/${param ?? ""}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View
-          </Button>
-          <Button
-            variant="subtle"
-            component="a"
-            href={`/catalogue/${catalogueSlug(
-              catalogue.name,
-              catalogue.id,
-            )}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            PDF
-          </Button>
+          <Tooltip label="View page" withArrow>
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              component="a"
+              href={`/catalogue/${param ?? ""}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View page"
+            >
+              <IconWorld size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Open PDF" withArrow>
+            <ActionIcon
+              variant="subtle"
+              size="lg"
+              component="a"
+              href={`/catalogue/${catalogueSlug(
+                catalogue.name,
+                catalogue.id,
+              )}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open PDF"
+            >
+              <IconFileTypePdf size={18} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
         <Group wrap="wrap">
           {/* The Selections list lives in the app, so a router link is right
-              here; View and PDF open the public document in a new tab. It sits
-              between PDF and the search box, as the header's one order is
-              title → document → curation → search → actions. */}
+              here; the two header icons above open the public document in a
+              new tab. It sits between them and the search box, as the header's
+              one order is title → document → curation → search → actions. */}
           <Button
             component={Link}
             to={`/manage/catalogue/${param ?? ""}/selections`}
+            leftSection={<IconListDetails size={16} />}
           >
             Selections
           </Button>
@@ -335,11 +356,12 @@ const CataloguePage: React.FC = () => {
           <Button
             component={Link}
             to={`/manage/catalogue/${param}/artwork/add${searchSuffix}`}
+            leftSection={<IconFilePlus size={16} />}
           >
-            Add Artwork
+            Add artwork
           </Button>
           {/* The two page-level destinations live behind one trigger so the
-              bar has room for the title, the search and Add Artwork on a
+              bar has room for the title, the search and Add artwork on a
               narrow screen. Neither item carries `q`: those pages do not
               search, and a filter they cannot show would be a lie. */}
           <Menu shadow="md" width={180} position="bottom-end">
