@@ -155,9 +155,14 @@ beforeAll(async () => {
     userId: owner.userId,
     mediaNamespaceId: uuid(),
     name: "The Searchable Wall",
-    // A Collection's default has Availability off; these search cases filter
-    // and facet on it, so this Catalogue records it.
-    artworkFields: { availability: true },
+    // These search cases filter and facet on Availability, Serie, Editions and
+    // Place of origin, which a Collection's defaults leave off.
+    artworkFields: {
+      availability: true,
+      serie: true,
+      editions: true,
+      placeOfOrigin: true,
+    },
     isPublic: true,
     createdAt: now,
     updatedAt: now,

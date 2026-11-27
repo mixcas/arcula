@@ -23,7 +23,7 @@ let owner: Awaited<ReturnType<typeof freshUser>>;
 let portfolio: string;
 /** A collection that explicitly switched provenance and medium off. */
 let narrowCollection: string;
-/** A Portfolio that explicitly switched acquisition price back on. */
+/** A Portfolio that explicitly switched acquisition price and provenance on. */
 let acquisitionPortfolio: string;
 
 beforeAll(async () => {
@@ -40,7 +40,7 @@ beforeAll(async () => {
   acquisitionPortfolio = await makeCatalogue(owner.userId, {
     kind: "portfolio",
     isPublic: true,
-    artworkFields: { acquisitionPrice: true },
+    artworkFields: { acquisitionPrice: true, provenance: true },
   });
 });
 

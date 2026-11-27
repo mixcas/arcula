@@ -82,17 +82,25 @@ beforeAll(async () => {
   owner = await freshUser("ArtworkOwner");
   collaborator = await freshUser("ArtworkCollaborator");
   stranger = await freshUser("ArtworkStranger");
-  // An Inventory drops the acquisition pair by default; these cases record the
-  // Add form's whole set, so the Catalogue switches those fields on.
+  // The Kind's defaults are minimal; these cases record the Add form's whole
+  // set, so both Catalogues switch the remaining fields on.
+  const fullWorkFields = {
+    acquisitionDate: true,
+    acquisitionPrice: true,
+    serie: true,
+    editions: true,
+    condition: true,
+    currentValue: true,
+  };
   inventoryId = await makeCatalogue(owner.userId, {
     name: "Agent Inventory",
     kind: "inventory",
-    artworkFields: { acquisitionDate: true, acquisitionPrice: true },
+    artworkFields: fullWorkFields,
   });
   sharedId = await makeCatalogue(owner.userId, {
     name: "Agent Shared",
     kind: "inventory",
-    artworkFields: { acquisitionDate: true, acquisitionPrice: true },
+    artworkFields: fullWorkFields,
   });
   await db
     .insert(collaboratorsTable)
@@ -220,6 +228,7 @@ describe("update_artwork", () => {
     const catalogueId = await makeCatalogue(owner.userId, {
       name: "Fields Turned Off",
       kind: "collection",
+      artworkFields: { serie: true },
     });
     const created = await create(owner.userId, {
       catalogueId,

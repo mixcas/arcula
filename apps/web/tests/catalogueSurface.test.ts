@@ -117,8 +117,8 @@ describe("newArtworkForm", () => {
   });
 
   it("holds no state on a Portfolio that switched Availability off", () => {
-    // The enabled set, not the Kind, decides: a default-on Kind can still say
-    // nothing, because the form that follows it has no control to fill.
+    // The enabled set, not the Kind, decides: a Kind can say nothing, because
+    // the form that follows it has no control to fill.
     expect(
       newArtworkForm(
         "portfolio",

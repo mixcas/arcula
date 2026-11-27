@@ -62,16 +62,16 @@ describe("the General tab's Artwork fields switches", () => {
     const user = userEvent.setup();
     renderTab();
 
-    const provenance = screen.getByRole("switch", { name: "Provenance" });
-    // A Portfolio records provenance by default.
-    expect(provenance).toBeChecked();
+    const medium = screen.getByRole("switch", { name: "Medium" });
+    // A Portfolio records Medium by default.
+    expect(medium).toBeChecked();
 
-    await user.click(provenance);
-    expect(provenance).not.toBeChecked();
+    await user.click(medium);
+    expect(medium).not.toBeChecked();
 
     // The second click is the one whose updater runs after dispatch; reading
     // `currentTarget` there throws.
-    await user.click(provenance);
-    expect(provenance).toBeChecked();
+    await user.click(medium);
+    expect(medium).toBeChecked();
   });
 });

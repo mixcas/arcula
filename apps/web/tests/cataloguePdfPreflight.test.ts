@@ -63,8 +63,13 @@ const catalogue = (overrides: Partial<Catalogue> = {}): Catalogue => ({
   ...overrides,
 });
 
-/** The printed set of a plain Collection: every field on. */
-const printed = () => cataloguePdfFields(catalogue());
+/** Every togglable field on, for a test about layout rather than defaults. */
+const everyFieldOn = (): ArtworkFieldDeviations =>
+  Object.fromEntries(ARTWORK_FIELD_KEYS.map((field) => [field, true]));
+
+/** The printed set of a Catalogue that records every field. */
+const printed = () =>
+  cataloguePdfFields(catalogue({ artworkFields: everyFieldOn() }));
 
 describe("PRINT_BOX_PX", () => {
   it("is the 504 x 580 pt box at 300 dpi: 2100 x 2417 px", () => {
@@ -391,10 +396,11 @@ const everyFieldOff = (): ArtworkFieldDeviations =>
 
 describe("the fields the Catalogue records", () => {
   it("prints the fields the enabled set holds, in the design's order", () => {
-    const enabled: ArtworkFieldStates = resolveArtworkFields("collection", {
+    const enabled: ArtworkFieldStates = {
+      ...resolveArtworkFields("collection", everyFieldOn()).enabled,
       medium: false,
       editions: false,
-    }).enabled;
+    };
 
     expect(printedArtworkFields(enabled)).toEqual({
       left: ["artistName", "serie"],
@@ -404,7 +410,13 @@ describe("the fields the Catalogue records", () => {
 
   it("drops a disabled field's line and keeps the design's order", () => {
     const fields = cataloguePdfFields(
-      catalogue({ artworkFields: { medium: false, editions: false } }),
+      catalogue({
+        artworkFields: {
+          ...everyFieldOn(),
+          medium: false,
+          editions: false,
+        },
+      }),
     );
 
     expect(fields).toEqual({

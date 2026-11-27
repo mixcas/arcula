@@ -28,17 +28,19 @@ import {
   type ArtworkSortable,
 } from "../src/artworkSearch";
 import {
-  resolveArtworkFields,
+  ARTWORK_FIELD_KEYS,
   type ArtworkFieldKey,
   type ArtworkFieldStates,
 } from "../src/artworkFields";
 
 /**
- * A Catalogue's resolved fields, with the named ones turned off. The
- * Collection's defaults are all on, so a test names only what it switches.
+ * Every field on, with the named ones turned off: these tests are about the
+ * matching rule, not the Kind's defaults.
  */
 const fields = (off: readonly ArtworkFieldKey[] = []): ArtworkFieldStates => {
-  const enabled = resolveArtworkFields("collection", null).enabled;
+  const enabled = Object.fromEntries(
+    ARTWORK_FIELD_KEYS.map((field) => [field, true]),
+  ) as ArtworkFieldStates;
   for (const field of off) {
     enabled[field] = false;
   }

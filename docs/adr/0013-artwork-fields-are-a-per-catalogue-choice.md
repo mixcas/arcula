@@ -196,3 +196,12 @@ edit.
   chooser for the manage table, a UI for hidden values that still hold data,
   renaming `currentValue`, and any change to what a skin renders. The Draft/
   Published stamp, the Catalogue's visibility and Selections are untouched.
+
+**Amended by [ADR-0016](0016-artwork-field-defaults-start-minimal.md):** the
+mechanism above stands, but the defaults are no longer almost-everything-on. A
+new Catalogue starts with Date of creation, Medium, Dimensions and Notes on
+every Kind; Serie, Editions, Condition and Current price start off everywhere;
+and the market fields follow the Kind (Portfolio none, Collection the
+acquisition pair and its history, Inventory history and Availability). A
+Catalogue whose map is `null` follows the new defaults, and a member's explicit
+choice still wins.

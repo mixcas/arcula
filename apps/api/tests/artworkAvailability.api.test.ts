@@ -18,9 +18,12 @@ let collection: string;
 
 beforeAll(async () => {
   owner = await freshUser("Availability");
+  // A Portfolio's defaults leave Availability off; these cases are about the
+  // field itself, so this one records it.
   portfolio = await makeCatalogue(owner.userId, {
     kind: "portfolio",
     isPublic: true,
+    artworkFields: { availability: true },
   });
   inventory = await makeCatalogue(owner.userId, {
     kind: "inventory",
@@ -178,8 +181,8 @@ describe("a new work's starting availability", () => {
   });
 
   it("stores no state where the Catalogue's Availability is off", async () => {
-    // A Portfolio starts with Availability on, so switching it off is the
-    // deliberate deviation; a work created in it has no market state to be in.
+    // A Catalogue that leaves the field off gives a new work no market state
+    // to be in.
     const cid = await makeCatalogue(owner.userId, {
       kind: "portfolio",
       isPublic: true,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveArtworkFields } from "../src/artworkFields";
+import {
+  ARTWORK_FIELD_KEYS,
+  resolveArtworkFields,
+  type ArtworkFieldStates,
+} from "../src/artworkFields";
 import {
   buildImportRows,
   enabledImportFields,
@@ -13,10 +17,12 @@ import {
   type ImportRowValues,
 } from "../src/schemas/artworkImport";
 
-// A Collection records every togglable field, so its resolved set is the whole
-// import surface. The disabled cases below use a Portfolio, whose acquisition
-// pair starts off.
-const everyField = resolveArtworkFields("collection", null).enabled;
+// The whole import surface is every togglable field on, whichever the Kind's
+// defaults are. The disabled cases below use a Portfolio, whose market fields
+// start off.
+const everyField = Object.fromEntries(
+  ARTWORK_FIELD_KEYS.map((field) => [field, true]),
+) as ArtworkFieldStates;
 const portfolio = resolveArtworkFields("portfolio", null).enabled;
 
 const row = (overrides: Partial<ImportRowValues>): ImportRowValues => ({
@@ -116,8 +122,11 @@ describe("guessColumnMapping", () => {
 
 describe("enabledImportFields", () => {
   it("offers every field's own key and drops the disabled ones", () => {
+    expect(enabledImportFields(everyField).map((field) => field.key)).toContain(
+      "serie",
+    );
     const offered = enabledImportFields(portfolio).map((field) => field.key);
-    expect(offered).toContain("serie");
+    expect(offered).not.toContain("serie");
     expect(offered).not.toContain("acquisitionPrice");
     expect(offered).not.toContain("acquisitionDate");
   });

@@ -84,6 +84,15 @@ beforeAll(async () => {
   });
   expect(created.status).toBe(201);
   cid = (await json<Catalogue>(created)).id;
+  // This suite writes Serie, which a Collection's defaults leave off.
+  expect(
+    (
+      await req("PATCH", `/api/v1/catalogues/${cid}`, {
+        cookies: owner.cookies,
+        body: { artworkFields: { serie: true } },
+      })
+    ).status,
+  ).toBe(200);
 
   const [row] = await db
     .select()

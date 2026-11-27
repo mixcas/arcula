@@ -273,7 +273,7 @@ export const artworkTools = [
       "unless named). Every Catalogue records a chosen set of fields: a save that " +
       "names one the Catalogue does not record is refused with " +
       "`field-disabled`. Availability is one of those fields — on by default " +
-      "for a Portfolio or an Inventory, off by default for a Collection, and " +
+      "for an Inventory, off by default for a Portfolio and a Collection, and " +
       "either way a choice the member can change. Any member — the Owner or " +
       "a Collaborator — may create " +
       "works; a non-member is refused. Use search_artworks to read a " +
@@ -302,7 +302,7 @@ export const artworkTools = [
       "A text field sent as `null` clears it. Every Catalogue records a chosen " +
       "set of fields: naming one it does not record is refused with " +
       "`field-disabled`. Availability is one of those fields — on by default " +
-      "for a Portfolio or an Inventory, off by default for a Collection. Any " +
+      "for an Inventory, off by default for a Portfolio and a Collection. Any " +
       "member may write; a missing or invisible Artwork answers `not-found`. " +
       "Use search_artworks to find an Artwork's id.",
     inputSchema: updateArtworkInput,

@@ -54,24 +54,44 @@ describe("the registry's field list", () => {
 });
 
 describe("the per-Kind defaults", () => {
-  it("pins the exact table: acquisitions off on a Portfolio and an Inventory, availability off on a Collection", () => {
-    const everythingOn = on();
-
-    expect(ARTWORK_FIELD_DEFAULTS.portfolio).toEqual({
-      ...everythingOn,
+  it("pins the exact table: a minimal core, then each Kind's own shape", () => {
+    // Date of creation, Medium, Dimensions and Notes are the only fields on
+    // everywhere. The literal table is the independent source of truth: a
+    // default that moves must be changed here on purpose.
+    const everyKind = {
+      serie: false,
+      dateOfCreation: true,
+      medium: true,
+      dimensions: true,
+      editions: false,
       acquisitionDate: false,
       acquisitionPrice: false,
-    });
-    expect(ARTWORK_FIELD_DEFAULTS.inventory).toEqual({
-      ...everythingOn,
-      acquisitionDate: false,
-      acquisitionPrice: false,
-    });
-    // A Collection records what the collector owns, so its market state starts
-    // off — a choice the settings card can now reverse.
-    expect(ARTWORK_FIELD_DEFAULTS.collection).toEqual({
-      ...everythingOn,
+      placeOfOrigin: false,
+      provenance: false,
+      notes: true,
+      condition: false,
+      currentValue: false,
       availability: false,
+    } satisfies Record<ArtworkFieldKey, boolean>;
+
+    // An artist's own work rarely carries a market history.
+    expect(ARTWORK_FIELD_DEFAULTS.portfolio).toEqual(everyKind);
+    // A collector bought the work: the acquisition pair and its history stay,
+    // while Availability starts off.
+    expect(ARTWORK_FIELD_DEFAULTS.collection).toEqual({
+      ...everyKind,
+      acquisitionDate: true,
+      acquisitionPrice: true,
+      placeOfOrigin: true,
+      provenance: true,
+    });
+    // A gallery represents rather than owns: no acquisition pair, but the
+    // market state is in play.
+    expect(ARTWORK_FIELD_DEFAULTS.inventory).toEqual({
+      ...everyKind,
+      placeOfOrigin: true,
+      provenance: true,
+      availability: true,
     });
   });
 });
@@ -105,14 +125,14 @@ describe("resolveArtworkFields", () => {
 
     expect(resolved.enabled.provenance).toBe(false);
     // Every other field keeps following the Kind.
-    expect(resolved.enabled.serie).toBe(true);
+    expect(resolved.enabled.medium).toBe(true);
     expect(resolved.customised).toBe(true);
   });
 
   it("is not customised when an entry only restates the Kind's default", () => {
     const resolved = resolveArtworkFields("portfolio", {
       acquisitionDate: false,
-      serie: true,
+      medium: true,
     });
 
     expect(resolved.enabled).toEqual(ARTWORK_FIELD_DEFAULTS.portfolio);
@@ -143,7 +163,7 @@ describe("normaliseArtworkFields", () => {
     expect(
       normaliseArtworkFields("portfolio", {
         acquisitionPrice: true,
-        serie: true,
+        medium: true,
         acquisitionDate: false,
       }),
     ).toEqual({ acquisitionPrice: true });

@@ -624,7 +624,8 @@ describe("Catalogue search", () => {
  */
 describe("the manage view — a work's market state", () => {
   it("shows it for a Catalogue that records Availability", async () => {
-    getCatalogue.mockResolvedValue({ ...catalogue, kind: "portfolio" });
+    // An Inventory records the market state by default.
+    getCatalogue.mockResolvedValue({ ...catalogue, kind: "inventory" });
     getCatalogueArtworks.mockResolvedValue([
       artwork({ id: "a1", title: "Blue Nude", availability: "sold" }),
     ]);
