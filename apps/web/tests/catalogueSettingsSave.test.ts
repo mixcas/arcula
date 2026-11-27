@@ -22,8 +22,7 @@ import {
   type PublicLoadedValues,
 } from "@/components/manage/catalogueSettingsSave";
 
-/** Every switch on — the plainest buffer there is, and a Portfolio's
- *  Availability default. */
+/** Every switch on — the plainest buffer there is, not any Kind's default. */
 const switches = (
   overrides: Partial<ArtworkFieldStates> = {},
 ): ArtworkFieldStates => ({
@@ -43,18 +42,47 @@ const switches = (
   ...overrides,
 });
 
-/** A Collection's exact defaults: everything on, Availability off. */
+/** A Collection's exact defaults: the bought-work history on, the rest off. */
 const collectionSwitches = (
   overrides: Partial<ArtworkFieldStates> = {},
-): ArtworkFieldStates => switches({ availability: false, ...overrides });
+): ArtworkFieldStates =>
+  switches({
+    serie: false,
+    editions: false,
+    condition: false,
+    currentValue: false,
+    availability: false,
+    ...overrides,
+  });
 
-/** A Portfolio's defaults: the acquisition pair is off. */
+/** A Portfolio's defaults: the common core alone. */
 const portfolioSwitches = (
   overrides: Partial<ArtworkFieldStates> = {},
 ): ArtworkFieldStates =>
   switches({
+    serie: false,
+    editions: false,
     acquisitionDate: false,
     acquisitionPrice: false,
+    placeOfOrigin: false,
+    provenance: false,
+    condition: false,
+    currentValue: false,
+    availability: false,
+    ...overrides,
+  });
+
+/** An Inventory's defaults: the represented-work fields and Availability on. */
+const inventorySwitches = (
+  overrides: Partial<ArtworkFieldStates> = {},
+): ArtworkFieldStates =>
+  switches({
+    serie: false,
+    editions: false,
+    acquisitionDate: false,
+    acquisitionPrice: false,
+    condition: false,
+    currentValue: false,
     ...overrides,
   });
 
@@ -289,7 +317,7 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
         kind: "inventory",
         artworkFields: { medium: false, acquisitionPrice: true },
       }),
-      generalEdited({ artworkFields: portfolioSwitches() }),
+      generalEdited({ artworkFields: inventorySwitches() }),
     );
 
     // Reset returns the buffer to the Kind's defaults; `{}` is the wire's
@@ -309,9 +337,8 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
   });
 
   it("resolves the same buffer against the Kind it loaded", () => {
-    // The same all-on buffer is customised on both Kinds, differently: a
-    // Portfolio's acquisition pair starts off, a Collection's Availability
-    // starts off.
+    // The same all-on buffer is customised on both Kinds, differently: the
+    // Portfolio's nine default-off fields become choices, the Collection's five.
     const portfolio = resolveGeneralSave(
       generalLoaded({ kind: "portfolio" }),
       generalEdited({ artworkFields: switches() }),
@@ -319,7 +346,17 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
     expect(portfolio).toEqual(
       decided(
         {
-          artworkFields: { acquisitionDate: true, acquisitionPrice: true },
+          artworkFields: {
+            serie: true,
+            editions: true,
+            acquisitionDate: true,
+            acquisitionPrice: true,
+            placeOfOrigin: true,
+            provenance: true,
+            condition: true,
+            currentValue: true,
+            availability: true,
+          },
         },
         true,
       ),
@@ -330,7 +367,18 @@ describe("resolveGeneralSave — the Artwork fields switches", () => {
       generalEdited({ artworkFields: switches() }),
     );
     expect(collection).toEqual(
-      decided({ artworkFields: { availability: true } }, true),
+      decided(
+        {
+          artworkFields: {
+            serie: true,
+            editions: true,
+            condition: true,
+            currentValue: true,
+            availability: true,
+          },
+        },
+        true,
+      ),
     );
   });
 });

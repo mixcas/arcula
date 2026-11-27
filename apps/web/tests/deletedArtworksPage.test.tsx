@@ -216,8 +216,9 @@ describe("DeletedArtworksPage", () => {
 
   it("badges a deleted work's market state when the catalogue records it", async () => {
     // The Deleted view is a manage view: it shows the same availability badge
-    // the live table does, and the Catalogue's configuration decides it.
-    getCatalogueMock.mockResolvedValue(catalogue("portfolio"));
+    // the live table does, and the Catalogue's configuration decides it. An
+    // Inventory records the field by default.
+    getCatalogueMock.mockResolvedValue(catalogue("inventory"));
     getDeletedMock.mockResolvedValue([
       deletedArtwork({ id: "a", title: "Sold Out", availability: "sold" }),
     ]);
@@ -260,11 +261,10 @@ describe("DeletedArtworksPage", () => {
     expect(screen.queryByText("Sold")).toBeNull();
   });
 
-  it("shows no badge on a Portfolio that switched Availability off", async () => {
-    // The other direction of the same rule: the Kind's default is not enough.
-    getCatalogueMock.mockResolvedValue(
-      catalogue("portfolio", { artworkFields: { availability: false } }),
-    );
+  it("shows no badge on a Portfolio, whose defaults leave Availability off", async () => {
+    // The other direction of the same rule: a Kind whose default is off shows
+    // no badge until the member switches the field on.
+    getCatalogueMock.mockResolvedValue(catalogue("portfolio"));
     getDeletedMock.mockResolvedValue([
       deletedArtwork({ id: "a", title: "Hidden", availability: "sold" }),
     ]);

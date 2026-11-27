@@ -309,8 +309,8 @@ describe("the Edit page — the artist a work records", () => {
  * offered on every Kind (ADR-0010's per-kind list is gone).
  */
 describe("the Edit page — a work's availability", () => {
-  it("defaults a Portfolio work with no stored state to available", async () => {
-    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+  it("defaults an Inventory work with no stored state to available", async () => {
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
     const user = userEvent.setup();
     renderPage();
 
@@ -323,7 +323,7 @@ describe("the Edit page — a work's availability", () => {
   });
 
   it("shows the stored state and sends it without overwriting it", async () => {
-    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    getCatalogue.mockResolvedValue(catalogue("inventory"));
     getArtwork.mockResolvedValue(stored({ availability: "sold" }));
     const user = userEvent.setup();
     renderPage();
@@ -338,8 +338,11 @@ describe("the Edit page — a work's availability", () => {
 
   it("shows a Portfolio's stored on-consignment state", async () => {
     // The visible cost of flattening: a state the old per-kind list did not
-    // offer a Portfolio is now a value it can record and read back.
-    getCatalogue.mockResolvedValue(catalogue("portfolio"));
+    // offer a Portfolio is now a value a Portfolio that records Availability
+    // can read back.
+    getCatalogue.mockResolvedValue(
+      catalogue("portfolio", { artworkFields: { availability: true } }),
+    );
     getArtwork.mockResolvedValue(stored({ availability: "on-consignment" }));
     renderPage();
 

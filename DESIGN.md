@@ -981,7 +981,7 @@ descriptions carry the three rules the schemas cannot:
 - **A Catalogue records a chosen set of Artwork fields.** `create_artwork` and
   `update_artwork` name only fields the Catalogue records; one it has turned off
   is refused with `field-disabled`. Availability is one of those fields — on by
-  default for a Portfolio or an Inventory, off for a Collection — and the
+  default for an Inventory, off for a Portfolio and a Collection — and the
   registry behind the choice (`@arcula/shared`) is the one the forms, the CSV
   import, the PDF and the tools all resolve.
 - **The free tier owns ten Catalogues**, and a `limit-reached` refusal is

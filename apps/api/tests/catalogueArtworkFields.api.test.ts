@@ -71,10 +71,10 @@ describe("PATCH /catalogues — the Artwork fields map", () => {
     const owner = await freshUser("FieldsNormalise");
     const cid = await makeCatalogue(owner.userId, { kind: "collection" });
 
-    // `serie: true` restates a Collection default; only `notes: false` is a
+    // `medium: true` restates a Collection default; only `notes: false` is a
     // choice. The stored map carries the choice alone.
     const saved = await patch(owner.cookies, cid, {
-      artworkFields: { serie: true, notes: false },
+      artworkFields: { medium: true, notes: false },
     });
     expect(saved.status).toBe(200);
     expect((await json<Catalogue>(saved)).artworkFields).toEqual({
@@ -128,14 +128,16 @@ describe("PATCH /catalogues — the Artwork fields map", () => {
       userId: mate.userId,
     });
 
+    // A Portfolio leaves provenance off, so switching it on is the deviation
+    // the collaborator writes.
     const saved = await patch(mate.cookies, cid, {
-      artworkFields: { provenance: false },
+      artworkFields: { provenance: true },
     });
     expect(saved.status).toBe(200);
     expect((await json<Catalogue>(saved)).artworkFields).toEqual({
-      provenance: false,
+      provenance: true,
     });
-    expect(await storedFields(cid)).toEqual({ provenance: false });
+    expect(await storedFields(cid)).toEqual({ provenance: true });
   });
 
   it("writes nothing extra when a Catalogue is created", async () => {
