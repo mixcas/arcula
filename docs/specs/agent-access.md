@@ -99,7 +99,7 @@ The descriptions carry three rules the schema cannot express:
 - **A Catalogue records a chosen set of Artwork fields.** `create_artwork` and
   `update_artwork` name only fields the Catalogue records; one it has turned off
   is refused with `field-disabled`. Availability is one of those fields: on by
-  default for a Portfolio or an Inventory, off for a Collection.
+  default for an Inventory, off for a Portfolio and a Collection.
 - **The free tier owns ten Catalogues**; exceeding it answers `limit-reached`,
   which is terminal and is relayed to the person, not retried.
 

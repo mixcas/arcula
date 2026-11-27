@@ -149,7 +149,12 @@ describe("the shared export run", () => {
     }));
     const read = selectionRead({
       kind: "portfolio",
-      artworkFields: { medium: false, editions: false },
+      artworkFields: {
+        medium: false,
+        editions: false,
+        serie: true,
+        placeOfOrigin: true,
+      },
     });
 
     await exportSelection(read, [artwork("one")]);

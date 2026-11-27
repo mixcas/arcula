@@ -75,7 +75,12 @@ let privateCid: string;
 beforeAll(async () => {
   owner = await freshUser("Save");
   visitor = await freshUser("SaveVisitor");
-  cid = await makeCatalogue(owner.userId, { isPublic: true });
+  // The suite writes the Add form's whole set, so this Catalogue records
+  // Serie, which a Collection leaves off by default.
+  cid = await makeCatalogue(owner.userId, {
+    isPublic: true,
+    artworkFields: { serie: true },
+  });
   privateCid = await makeCatalogue(owner.userId, { isPublic: false });
 });
 

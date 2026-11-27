@@ -101,12 +101,19 @@ export type ArtworkFieldDeviations = Partial<Record<ArtworkFieldKey, boolean>>;
 export type ArtworkFieldStates = Record<ArtworkFieldKey, boolean>;
 
 /**
- * The per-Kind defaults. Portfolio and Inventory drop the acquisition pair — an
- * artist did not acquire their own work, and a gallery records what it
- * represents, which on consignment it never held title to. Availability starts
- * off on a Collection, which records what the collector owns, and on everywhere
- * else. Everything else is on on every Kind: provenance and condition are as
- * useful to an artist as to a collector.
+ * The per-Kind defaults start minimal: Date of creation, Medium, Dimensions and
+ * Notes are on everywhere, because they are what makes a work legible, and
+ * every other field is one switch away in Settings. Serie, Editions, Condition
+ * and Current price start off on every Kind; expansion is the member's move,
+ * and an untouched Catalogue follows a later default change.
+ *
+ * The Kind adds its own shape. A Portfolio drops the market fields a solo artist
+ * rarely records for their own work — the acquisition pair, place of origin,
+ * provenance and availability. A Collection keeps the acquisition pair and the
+ * two fields that give a bought work its history, while Availability starts off
+ * (a collector records what they own, not a market state). An Inventory records
+ * what the gallery represents: place of origin, provenance and Availability,
+ * but not the acquisition pair, because on consignment it never held title.
  *
  * `Record<ArtworkFieldKey, boolean>` makes a field the registry forget a build
  * error, and `Record<CatalogueKind, …>` makes a fourth Kind one too.
@@ -115,48 +122,48 @@ export const ARTWORK_FIELD_DEFAULTS: Readonly<
   Record<CatalogueKind, Readonly<ArtworkFieldStates>>
 > = {
   portfolio: {
-    serie: true,
+    serie: false,
     dateOfCreation: true,
     medium: true,
     dimensions: true,
-    editions: true,
+    editions: false,
     acquisitionDate: false,
     acquisitionPrice: false,
-    placeOfOrigin: true,
-    provenance: true,
+    placeOfOrigin: false,
+    provenance: false,
     notes: true,
-    condition: true,
-    currentValue: true,
-    availability: true,
+    condition: false,
+    currentValue: false,
+    availability: false,
   },
   collection: {
-    serie: true,
+    serie: false,
     dateOfCreation: true,
     medium: true,
     dimensions: true,
-    editions: true,
+    editions: false,
     acquisitionDate: true,
     acquisitionPrice: true,
     placeOfOrigin: true,
     provenance: true,
     notes: true,
-    condition: true,
-    currentValue: true,
+    condition: false,
+    currentValue: false,
     availability: false,
   },
   inventory: {
-    serie: true,
+    serie: false,
     dateOfCreation: true,
     medium: true,
     dimensions: true,
-    editions: true,
+    editions: false,
     acquisitionDate: false,
     acquisitionPrice: false,
     placeOfOrigin: true,
     provenance: true,
     notes: true,
-    condition: true,
-    currentValue: true,
+    condition: false,
+    currentValue: false,
     availability: true,
   },
 };

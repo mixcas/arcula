@@ -524,6 +524,17 @@ describe("PATCH /catalogues/{cid}", () => {
 
 describe("POST /catalogues/{cid}/import/csv", () => {
   it("inserts the valid rows and reports broken ones by index", async () => {
+    // A Collection leaves Serie off by default; this wall records it so the
+    // imported column has a target.
+    expect(
+      (
+        await req("PATCH", `/api/v1/catalogues/${studyWallId}`, {
+          cookies: owner.cookies,
+          body: JSON.stringify({ artworkFields: { serie: true } }),
+        })
+      ).status,
+    ).toBe(200);
+
     const res = await req(
       "POST",
       `/api/v1/catalogues/${studyWallId}/import/csv`,

@@ -119,6 +119,15 @@ beforeAll(async () => {
   });
   expect(created.status).toBe(201);
   catalogueId = String((await json<Record<string, unknown>>(created)).id);
+  // The suite writes Serie, which a Collection's defaults leave off.
+  expect(
+    (
+      await req("PATCH", `/api/v1/catalogues/${catalogueId}`, {
+        cookies: owner.cookies,
+        body: { artworkFields: { serie: true } },
+      })
+    ).status,
+  ).toBe(200);
 
   newestId = await createWork(catalogueId, owner.cookies, {
     title: "Newest Out",
