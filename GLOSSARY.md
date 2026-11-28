@@ -226,6 +226,19 @@ conversation is not a review. The status is the payload's, defaulting to
 Published, so the member's workflow is unchanged.
 _Avoid_: Upload, ingestion, batch, bulk add
 
+**Read**:
+Turning one artwork document — an invoice, a gallery label, a certificate, a
+condition report — into text and values on the member's device, so the artwork
+form arrives filled and the work lands as a Draft. One document to one artwork;
+distinct from **Import**, which is batch work reviewed as a table.
+_Avoid_: Extract, parse, scan, OCR, upload
+
+**Map values**:
+The step of a Read where the document's lines the machine could not place are
+filed by hand: one row per line, each row offering the fields the Catalogue
+records. Distinct from **Map columns**, which files a CSV's columns.
+_Avoid_: Mapping table, mapping step
+
 ### What is seen
 
 **Public**:
